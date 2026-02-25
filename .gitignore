@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Backend local config
+backend/.env
+
+# Flutter / Dart
+mes_client/.dart_tool/
+mes_client/.packages
+mes_client/.flutter-plugins
+mes_client/.flutter-plugins-dependencies
+mes_client/.metadata
+mes_client/build/
+
+# IDE
+.idea/
+.vscode/
