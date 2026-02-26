@@ -31,11 +31,7 @@ class UserItem {
 }
 
 class RoleItem {
-  RoleItem({
-    required this.id,
-    required this.code,
-    required this.name,
-  });
+  RoleItem({required this.id, required this.code, required this.name});
 
   final int id;
   final String code;
@@ -51,11 +47,7 @@ class RoleItem {
 }
 
 class ProcessItem {
-  ProcessItem({
-    required this.id,
-    required this.code,
-    required this.name,
-  });
+  ProcessItem({required this.id, required this.code, required this.name});
 
   final int id;
   final String code;
@@ -71,31 +63,49 @@ class ProcessItem {
 }
 
 class UserListResult {
-  UserListResult({
-    required this.total,
-    required this.items,
-  });
+  UserListResult({required this.total, required this.items});
 
   final int total;
   final List<UserItem> items;
 }
 
 class RoleListResult {
-  RoleListResult({
-    required this.total,
-    required this.items,
-  });
+  RoleListResult({required this.total, required this.items});
 
   final int total;
   final List<RoleItem> items;
 }
 
 class ProcessListResult {
-  ProcessListResult({
-    required this.total,
-    required this.items,
-  });
+  ProcessListResult({required this.total, required this.items});
 
   final int total;
   final List<ProcessItem> items;
+}
+
+class RegistrationRequestItem {
+  RegistrationRequestItem({
+    required this.id,
+    required this.account,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String account;
+  final DateTime createdAt;
+
+  factory RegistrationRequestItem.fromJson(Map<String, dynamic> json) {
+    return RegistrationRequestItem(
+      id: json['id'] as int,
+      account: json['account'] as String,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
+class RegistrationRequestListResult {
+  RegistrationRequestListResult({required this.total, required this.items});
+
+  final int total;
+  final List<RegistrationRequestItem> items;
 }

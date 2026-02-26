@@ -83,9 +83,11 @@ def bootstrap_admin(api_base_url: str) -> None:
             username = data.get("username", "admin")
             created = bool(data.get("created", False))
             role_repaired = bool(data.get("role_repaired", False))
+            normalized_users_count = int(data.get("normalized_users_count", 0) or 0)
             print(
                 "[INFO] Bootstrap admin success: "
-                f"username={username}, created={created}, role_repaired={role_repaired}"
+                f"username={username}, created={created}, role_repaired={role_repaired}, "
+                f"normalized_users_count={normalized_users_count}"
             )
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as error:
         print(f"[WARN] bootstrap admin failed: {error}. Continue starting frontend.")

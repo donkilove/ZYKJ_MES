@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../services/auth_service.dart';
+import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -46,7 +47,9 @@ class _LoginPageState extends State<LoginPage> {
 
   String _normalizeBaseUrl(String value) {
     final trimmed = value.trim();
-    return trimmed.endsWith('/') ? trimmed.substring(0, trimmed.length - 1) : trimmed;
+    return trimmed.endsWith('/')
+        ? trimmed.substring(0, trimmed.length - 1)
+        : trimmed;
   }
 
   String _accountText() => _accountController.text.trim();
@@ -106,13 +109,11 @@ class _LoginPageState extends State<LoginPage> {
         username: account,
         password: _passwordController.text,
       );
-      widget.onLoginSuccess(
-        AppSession(
-          baseUrl: baseUrl,
-          accessToken: token,
-        ),
-      );
+      widget.onLoginSuccess(AppSession(baseUrl: baseUrl, accessToken: token));
     } catch (error) {
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _message = '登录失败：$error';
       });
@@ -125,39 +126,26 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> _submitRegister() async {
-    if (!_formKey.currentState!.validate()) {
+  Future<void> _openRegisterPage() async {
+    final result = await Navigator.of(context).push<RegisterPageResult>(
+      MaterialPageRoute(
+        builder: (_) => RegisterPage(
+          initialBaseUrl: _normalizeBaseUrl(_baseUrlController.text),
+        ),
+      ),
+    );
+
+    if (result == null || !mounted) {
       return;
     }
 
-    final baseUrl = _normalizeBaseUrl(_baseUrlController.text);
-    final account = _accountText();
+    _baseUrlController.text = result.baseUrl;
+    _accountController.text = result.account;
+    _passwordController.clear();
     setState(() {
-      _loading = true;
-      _message = '';
+      _message = '注册申请已提交，请等待系统管理员审批后再登录。';
     });
-
-    try {
-      await _authService.register(
-        baseUrl: baseUrl,
-        account: account,
-        password: _passwordController.text,
-      );
-      setState(() {
-        _message = '注册成功，请使用该账号登录。';
-      });
-      await _loadAccounts();
-    } catch (error) {
-      setState(() {
-        _message = '注册失败：$error';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
-    }
+    await _loadAccounts();
   }
 
   @override
@@ -198,7 +186,8 @@ class _LoginPageState extends State<LoginPage> {
                               if (value == null || value.trim().isEmpty) {
                                 return '请输入接口地址';
                               }
-                              if (!value.startsWith('http://') && !value.startsWith('https://')) {
+                              if (!value.startsWith('http://') &&
+                                  !value.startsWith('https://')) {
                                 return '地址必须以 http:// 或 https:// 开头';
                               }
                               return null;
@@ -214,7 +203,9 @@ class _LoginPageState extends State<LoginPage> {
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Icon(Icons.refresh),
                         ),
@@ -223,45 +214,60 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 12),
                     Autocomplete<String>(
                       optionsBuilder: (textEditingValue) {
-                        final keyword = textEditingValue.text.trim().toLowerCase();
+                        final keyword = textEditingValue.text
+                            .trim()
+                            .toLowerCase();
                         if (keyword.isEmpty) {
                           return _accounts;
                         }
-                        return _accounts.where((account) => account.toLowerCase().contains(keyword));
+                        return _accounts.where(
+                          (account) => account.toLowerCase().contains(keyword),
+                        );
                       },
                       onSelected: (value) {
                         _accountController.text = value;
                       },
-                      fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
-                        if (textEditingController.text != _accountController.text) {
-                          textEditingController.value = TextEditingValue(
-                            text: _accountController.text,
-                            selection: TextSelection.collapsed(offset: _accountController.text.length),
-                          );
-                        }
-                        return TextFormField(
-                          controller: textEditingController,
-                          focusNode: focusNode,
-                          decoration: InputDecoration(
-                            labelText: '账号',
-                            border: const OutlineInputBorder(),
-                            helperText: _accounts.isEmpty ? '可直接输入账号' : '可输入或从下拉列表选择',
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入账号';
+                      fieldViewBuilder:
+                          (
+                            context,
+                            textEditingController,
+                            focusNode,
+                            onFieldSubmitted,
+                          ) {
+                            if (textEditingController.text !=
+                                _accountController.text) {
+                              textEditingController.value = TextEditingValue(
+                                text: _accountController.text,
+                                selection: TextSelection.collapsed(
+                                  offset: _accountController.text.length,
+                                ),
+                              );
                             }
-                            if (value.trim().length < 3) {
-                              return '账号至少 3 个字符';
-                            }
-                            return null;
+                            return TextFormField(
+                              controller: textEditingController,
+                              focusNode: focusNode,
+                              decoration: InputDecoration(
+                                labelText: '账号',
+                                border: const OutlineInputBorder(),
+                                helperText: _accounts.isEmpty
+                                    ? '可直接输入账号'
+                                    : '可输入或从下拉列表选择',
+                              ),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return '请输入账号';
+                                }
+                                if (value.trim().length < 3) {
+                                  return '账号至少 3 个字符';
+                                }
+                                return null;
+                              },
+                              onChanged: (value) {
+                                _accountController.text = value;
+                              },
+                              onFieldSubmitted: (_) => onFieldSubmitted(),
+                            );
                           },
-                          onChanged: (value) {
-                            _accountController.text = value;
-                          },
-                          onFieldSubmitted: (_) => onFieldSubmitted(),
-                        );
-                      },
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -291,7 +297,9 @@ class _LoginPageState extends State<LoginPage> {
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Text('登录'),
                           ),
@@ -299,8 +307,8 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: _loading ? null : _submitRegister,
-                            child: const Text('注册'),
+                            onPressed: _loading ? null : _openRegisterPage,
+                            child: const Text('去注册'),
                           ),
                         ),
                       ],
@@ -310,7 +318,7 @@ class _LoginPageState extends State<LoginPage> {
                       Text(
                         _message,
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          color: _message.startsWith('注册成功')
+                          color: _message.startsWith('注册申请已提交')
                               ? theme.colorScheme.primary
                               : theme.colorScheme.error,
                         ),

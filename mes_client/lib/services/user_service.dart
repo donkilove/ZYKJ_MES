@@ -23,19 +23,21 @@ class UserService {
     required int pageSize,
     String? keyword,
   }) async {
-    final query = <String, String>{
-      'page': '$page',
-      'page_size': '$pageSize',
-    };
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
     }
-    final uri = Uri.parse('${session.baseUrl}/users').replace(queryParameters: query);
+    final uri = Uri.parse(
+      '${session.baseUrl}/users',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
 
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
 
     final data = json['data'] as Map<String, dynamic>;
@@ -46,12 +48,16 @@ class UserService {
   }
 
   Future<RoleListResult> listRoles() async {
-    final uri = Uri.parse('${session.baseUrl}/roles')
-        .replace(queryParameters: const {'page': '1', 'page_size': '50'});
+    final uri = Uri.parse(
+      '${session.baseUrl}/roles',
+    ).replace(queryParameters: const {'page': '1', 'page_size': '50'});
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
 
     final data = json['data'] as Map<String, dynamic>;
@@ -62,12 +68,16 @@ class UserService {
   }
 
   Future<ProcessListResult> listProcesses() async {
-    final uri = Uri.parse('${session.baseUrl}/processes')
-        .replace(queryParameters: const {'page': '1', 'page_size': '200'});
+    final uri = Uri.parse(
+      '${session.baseUrl}/processes',
+    ).replace(queryParameters: const {'page': '1', 'page_size': '200'});
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
 
     final data = json['data'] as Map<String, dynamic>;
@@ -75,6 +85,82 @@ class UserService {
         .map((entry) => ProcessItem.fromJson(entry as Map<String, dynamic>))
         .toList();
     return ProcessListResult(total: data['total'] as int, items: items);
+  }
+
+  Future<RegistrationRequestListResult> listRegistrationRequests({
+    required int page,
+    required int pageSize,
+    String? keyword,
+  }) async {
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+
+    final uri = Uri.parse(
+      '${session.baseUrl}/auth/register-requests',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+
+    final data = json['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>)
+        .map(
+          (entry) =>
+              RegistrationRequestItem.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+    return RegistrationRequestListResult(
+      total: data['total'] as int,
+      items: items,
+    );
+  }
+
+  Future<void> approveRegistrationRequest({
+    required int requestId,
+    required String account,
+    required List<String> roleCodes,
+    required List<String> processCodes,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/auth/register-requests/$requestId/approve',
+    );
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'account': account,
+        'role_codes': roleCodes,
+        'process_codes': processCodes,
+      }),
+    );
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+  }
+
+  Future<void> rejectRegistrationRequest({required int requestId}) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/auth/register-requests/$requestId/reject',
+    );
+    final response = await http.post(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
   }
 
   Future<void> createUser({
@@ -98,7 +184,10 @@ class UserService {
 
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
@@ -132,7 +221,10 @@ class UserService {
     );
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
@@ -141,7 +233,10 @@ class UserService {
     final response = await http.delete(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 

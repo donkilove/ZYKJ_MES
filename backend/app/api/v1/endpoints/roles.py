@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permission
+from app.api.deps import require_role_codes
+from app.core.rbac import ROLE_SYSTEM_ADMIN
 from app.db.session import get_db
 from app.models.role import Role
 from app.models.user import User
@@ -18,7 +19,6 @@ def to_role_item(role: Role) -> RoleItem:
         id=role.id,
         code=role.code,
         name=role.name,
-        permission_codes=sorted(permission.code for permission in role.permissions),
         created_at=role.created_at,
         updated_at=role.updated_at,
     )
@@ -30,7 +30,7 @@ def get_roles(
     page_size: int = Query(default=20, ge=1, le=100),
     keyword: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("role:read")),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
 ) -> ApiResponse[RoleListResult]:
     total, roles = list_roles(db, page, page_size, keyword)
     result = RoleListResult(total=total, items=[to_role_item(role) for role in roles])
@@ -41,10 +41,9 @@ def get_roles(
 def get_role_detail(
     role_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("role:read")),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
 ) -> ApiResponse[RoleItem]:
     role = get_role_by_id(db, role_id)
     if not role:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
     return success_response(to_role_item(role))
-

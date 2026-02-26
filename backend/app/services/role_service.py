@@ -1,13 +1,12 @@
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.models.role import Role
 from app.schemas.role import RoleCreate, RoleUpdate
-from app.services.permission_service import get_permissions_by_codes
 
 
 def query_roles(keyword: str | None):
-    stmt = select(Role).options(selectinload(Role.permissions)).order_by(Role.id.asc())
+    stmt = select(Role).order_by(Role.id.asc())
     if keyword:
         like_pattern = f"%{keyword}%"
         stmt = stmt.where(Role.code.ilike(like_pattern))
@@ -15,12 +14,12 @@ def query_roles(keyword: str | None):
 
 
 def get_role_by_id(db: Session, role_id: int) -> Role | None:
-    stmt = select(Role).options(selectinload(Role.permissions)).where(Role.id == role_id)
+    stmt = select(Role).where(Role.id == role_id)
     return db.execute(stmt).scalars().first()
 
 
 def get_role_by_code(db: Session, code: str) -> Role | None:
-    stmt = select(Role).options(selectinload(Role.permissions)).where(Role.code == code)
+    stmt = select(Role).where(Role.code == code)
     return db.execute(stmt).scalars().first()
 
 
@@ -48,15 +47,10 @@ def list_roles(db: Session, page: int, page_size: int, keyword: str | None) -> t
 
 
 def create_role(db: Session, payload: RoleCreate) -> tuple[Role | None, list[str]]:
-    permissions, missing_codes = get_permissions_by_codes(db, payload.permission_codes)
-    if missing_codes:
-        return None, missing_codes
-
     role = Role(
         code=payload.code,
         name=payload.name,
     )
-    role.permissions = permissions
     db.add(role)
     db.commit()
     db.refresh(role)
@@ -67,13 +61,6 @@ def update_role(db: Session, role: Role, payload: RoleUpdate) -> tuple[Role | No
     if payload.name is not None:
         role.name = payload.name
 
-    if payload.permission_codes is not None:
-        permissions, missing_codes = get_permissions_by_codes(db, payload.permission_codes)
-        if missing_codes:
-            return None, missing_codes
-        role.permissions = permissions
-
     db.commit()
     db.refresh(role)
     return role, []
-

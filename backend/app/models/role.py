@@ -1,7 +1,7 @@
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.associations import role_permissions, user_roles
+from app.models.associations import user_roles
 from app.models.base import Base, TimestampMixin
 
 
@@ -13,5 +13,3 @@ class Role(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
 
     users = relationship("User", secondary=user_roles, back_populates="roles")
-    permissions = relationship("Permission", secondary=role_permissions, back_populates="roles")
-

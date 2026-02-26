@@ -7,7 +7,6 @@ class CurrentUser {
     required this.roleNames,
     required this.processCodes,
     required this.processNames,
-    required this.permissionCodes,
   });
 
   final int id;
@@ -17,7 +16,6 @@ class CurrentUser {
   final List<String> roleNames;
   final List<String> processCodes;
   final List<String> processNames;
-  final List<String> permissionCodes;
 
   String get displayName => (fullName != null && fullName!.trim().isNotEmpty) ? fullName! : username;
 
@@ -30,7 +28,6 @@ class CurrentUser {
       roleNames: (json['role_names'] as List<dynamic>).cast<String>(),
       processCodes: (json['process_codes'] as List<dynamic>).cast<String>(),
       processNames: (json['process_names'] as List<dynamic>).cast<String>(),
-      permissionCodes: (json['permission_codes'] as List<dynamic>).cast<String>(),
     );
   }
 }

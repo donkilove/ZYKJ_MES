@@ -1,7 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permission
+from app.api.deps import require_role_codes
+from app.core.rbac import (
+    ROLE_OPERATOR,
+    ROLE_PRODUCTION_ADMIN,
+    ROLE_QUALITY_ADMIN,
+    ROLE_SYSTEM_ADMIN,
+)
 from app.db.session import get_db
 from app.models.process import Process
 from app.models.user import User
@@ -35,7 +41,11 @@ def get_processes(
     page_size: int = Query(default=50, ge=1, le=200),
     keyword: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("process:read")),
+    _: User = Depends(
+        require_role_codes(
+            [ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_OPERATOR]
+        )
+    ),
 ) -> ApiResponse[ProcessListResult]:
     total, processes = list_processes(db, page, page_size, keyword)
     result = ProcessListResult(
@@ -49,7 +59,7 @@ def get_processes(
 def create_process_api(
     payload: ProcessCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("process:write")),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
 ) -> ApiResponse[ProcessItem]:
     existing = get_process_by_code(db, payload.code)
     if existing:
@@ -63,11 +73,10 @@ def update_process_api(
     process_id: int,
     payload: ProcessUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("process:write")),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
 ) -> ApiResponse[ProcessItem]:
     process = get_process_by_id(db, process_id)
     if not process:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Process not found")
     updated = update_process(db, process, payload)
     return success_response(to_process_item(updated))
-

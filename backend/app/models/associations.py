@@ -11,14 +11,6 @@ user_roles = Table(
 )
 
 
-role_permissions = Table(
-    "sys_role_permission",
-    Base.metadata,
-    Column("role_id", ForeignKey("sys_role.id", ondelete="CASCADE"), primary_key=True),
-    Column("permission_id", ForeignKey("sys_permission.id", ondelete="CASCADE"), primary_key=True),
-)
-
-
 user_processes = Table(
     "sys_user_process",
     Base.metadata,

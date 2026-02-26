@@ -48,15 +48,11 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
     return current_user
 
 
-def require_permission(permission_code: str) -> Callable[[User], User]:
+def require_role_codes(allowed_role_codes: list[str]) -> Callable[[User], User]:
     def dependency(current_user: User = Depends(get_current_active_user)) -> User:
-        permissions = {
-            perm.code
-            for role in current_user.roles
-            for perm in role.permissions
-        }
-        if permission_code not in permissions:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
+        user_role_codes = {role.code for role in current_user.roles}
+        if not user_role_codes.intersection(set(allowed_role_codes)):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
         return current_user
 
     return dependency

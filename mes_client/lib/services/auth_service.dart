@@ -15,15 +15,15 @@ class AuthService {
     final response = await http.post(
       uri,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {
-        'username': username,
-        'password': password,
-      },
+      body: {'username': username, 'password': password},
     );
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(decoded, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(decoded, response.statusCode),
+        response.statusCode,
+      );
     }
 
     final data = decoded['data'] as Map<String, dynamic>?;
@@ -43,21 +43,19 @@ class AuthService {
     final response = await http.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'account': account,
-        'password': password,
-      }),
+      body: jsonEncode({'account': account, 'password': password}),
     );
 
     final decoded = _decodeBody(response.body);
-    if (response.statusCode != 201) {
-      throw ApiException(_extractErrorMessage(decoded, response.statusCode), response.statusCode);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        _extractErrorMessage(decoded, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
-  Future<List<String>> listAccounts({
-    required String baseUrl,
-  }) async {
+  Future<List<String>> listAccounts({required String baseUrl}) async {
     final uri = Uri.parse('$baseUrl/auth/accounts');
     final response = await http.get(
       uri,
@@ -66,14 +64,18 @@ class AuthService {
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(decoded, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(decoded, response.statusCode),
+        response.statusCode,
+      );
     }
 
     final data = decoded['data'] as Map<String, dynamic>?;
     if (data == null) {
       return const [];
     }
-    final accounts = (data['accounts'] as List<dynamic>? ?? const []).cast<String>();
+    final accounts = (data['accounts'] as List<dynamic>? ?? const [])
+        .cast<String>();
     return accounts;
   }
 
@@ -92,7 +94,10 @@ class AuthService {
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(decoded, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(decoded, response.statusCode),
+        response.statusCode,
+      );
     }
 
     final data = decoded['data'] as Map<String, dynamic>?;
