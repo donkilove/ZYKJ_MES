@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/app_session.dart';
 import '../models/user_models.dart';
+import 'api_exception.dart';
 
 class UserService {
   UserService(this.session);
@@ -34,7 +35,7 @@ class UserService {
 
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw Exception(_extractErrorMessage(json, response.statusCode));
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
     }
 
     final data = json['data'] as Map<String, dynamic>;
@@ -50,7 +51,7 @@ class UserService {
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw Exception(_extractErrorMessage(json, response.statusCode));
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
     }
 
     final data = json['data'] as Map<String, dynamic>;
@@ -66,7 +67,7 @@ class UserService {
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw Exception(_extractErrorMessage(json, response.statusCode));
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
     }
 
     final data = json['data'] as Map<String, dynamic>;
@@ -97,7 +98,7 @@ class UserService {
 
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
-      throw Exception(_extractErrorMessage(json, response.statusCode));
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
     }
   }
 
@@ -131,7 +132,7 @@ class UserService {
     );
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw Exception(_extractErrorMessage(json, response.statusCode));
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
     }
   }
 
@@ -140,7 +141,7 @@ class UserService {
     final response = await http.delete(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw Exception(_extractErrorMessage(json, response.statusCode));
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
     }
   }
 

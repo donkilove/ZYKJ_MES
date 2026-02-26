@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'models/app_session.dart';
 import 'pages/login_page.dart';
-import 'pages/user_management_page.dart';
+import 'pages/main_shell_page.dart';
 import 'services/session_store.dart';
 
 void main() {
@@ -89,7 +89,7 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
       return LoginPage(onLoginSuccess: _handleLoginSuccess);
     }
 
-    return UserManagementPage(
+    return MainShellPage(
       session: _session!,
       onLogout: _handleLogout,
     );

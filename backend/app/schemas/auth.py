@@ -32,3 +32,13 @@ class CurrentUserResult(BaseModel):
     process_codes: list[str]
     process_names: list[str]
     permission_codes: list[str]
+
+
+class BootstrapAdminResult(BaseModel):
+    username: str
+    created: bool
+    role_repaired: bool
+
+
+class AccountListResult(BaseModel):
+    accounts: list[str]

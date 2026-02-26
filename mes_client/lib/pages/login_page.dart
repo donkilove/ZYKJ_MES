@@ -20,17 +20,20 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _baseUrlController;
-  final _accountController = TextEditingController(text: 'admin');
-  final _passwordController = TextEditingController(text: 'Admin@123456');
-  final _authService = AuthService();
+  final TextEditingController _accountController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
 
   bool _loading = false;
+  bool _loadingAccounts = false;
   String _message = '';
+  List<String> _accounts = const [];
 
   @override
   void initState() {
     super.initState();
     _baseUrlController = TextEditingController(text: widget.defaultBaseUrl);
+    _loadAccounts();
   }
 
   @override
@@ -47,6 +50,43 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   String _accountText() => _accountController.text.trim();
+
+  Future<void> _loadAccounts() async {
+    final baseUrl = _normalizeBaseUrl(_baseUrlController.text);
+    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _loadingAccounts = true;
+    });
+
+    try {
+      final accounts = await _authService.listAccounts(baseUrl: baseUrl);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _accounts = accounts;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _message = '加载账号列表失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingAccounts = false;
+        });
+      }
+    }
+  }
 
   Future<void> _submitLogin() async {
     if (!_formKey.currentState!.validate()) {
@@ -104,8 +144,9 @@ class _LoginPageState extends State<LoginPage> {
         password: _passwordController.text,
       );
       setState(() {
-        _message = '注册成功，请使用该账号登录';
+        _message = '注册成功，请使用该账号登录。';
       });
+      await _loadAccounts();
     } catch (error) {
       setState(() {
         _message = '注册失败：$error';
@@ -144,37 +185,82 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    TextFormField(
-                      controller: _baseUrlController,
-                      decoration: const InputDecoration(
-                        labelText: '接口地址',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return '请输入接口地址';
-                        }
-                        if (!value.startsWith('http://') && !value.startsWith('https://')) {
-                          return '地址必须以 http:// 或 https:// 开头';
-                        }
-                        return null;
-                      },
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _baseUrlController,
+                            decoration: const InputDecoration(
+                              labelText: '接口地址',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return '请输入接口地址';
+                              }
+                              if (!value.startsWith('http://') && !value.startsWith('https://')) {
+                                return '地址必须以 http:// 或 https:// 开头';
+                              }
+                              return null;
+                            },
+                            onFieldSubmitted: (_) => _loadAccounts(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: '刷新账号列表',
+                          onPressed: _loadingAccounts ? null : _loadAccounts,
+                          icon: _loadingAccounts
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.refresh),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _accountController,
-                      decoration: const InputDecoration(
-                        labelText: '账号（用户名与姓名统一）',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return '请输入账号';
+                    Autocomplete<String>(
+                      optionsBuilder: (textEditingValue) {
+                        final keyword = textEditingValue.text.trim().toLowerCase();
+                        if (keyword.isEmpty) {
+                          return _accounts;
                         }
-                        if (value.trim().length < 3) {
-                          return '账号至少 3 个字符';
+                        return _accounts.where((account) => account.toLowerCase().contains(keyword));
+                      },
+                      onSelected: (value) {
+                        _accountController.text = value;
+                      },
+                      fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                        if (textEditingController.text != _accountController.text) {
+                          textEditingController.value = TextEditingValue(
+                            text: _accountController.text,
+                            selection: TextSelection.collapsed(offset: _accountController.text.length),
+                          );
                         }
-                        return null;
+                        return TextFormField(
+                          controller: textEditingController,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            labelText: '账号',
+                            border: const OutlineInputBorder(),
+                            helperText: _accounts.isEmpty ? '可直接输入账号' : '可输入或从下拉列表选择',
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return '请输入账号';
+                            }
+                            if (value.trim().length < 3) {
+                              return '账号至少 3 个字符';
+                            }
+                            return null;
+                          },
+                          onChanged: (value) {
+                            _accountController.text = value;
+                          },
+                          onFieldSubmitted: (_) => onFieldSubmitted(),
+                        );
                       },
                     ),
                     const SizedBox(height: 12),
@@ -240,4 +326,3 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-

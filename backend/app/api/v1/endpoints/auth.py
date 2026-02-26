@@ -8,13 +8,20 @@ from app.core.security import create_access_token, verify_password
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import (
+    AccountListResult,
+    BootstrapAdminResult,
     CurrentUserResult,
     LoginResult,
     RegisterRequest,
     RegisterResult,
 )
 from app.schemas.common import ApiResponse, success_response
-from app.services.user_service import get_user_by_username, register_user
+from app.services.user_service import (
+    ensure_admin_account,
+    get_user_by_username,
+    list_all_usernames,
+    register_user,
+)
 
 
 router = APIRouter()
@@ -60,6 +67,39 @@ def register(
         ),
         message="registered",
     )
+
+
+@router.post("/bootstrap-admin", response_model=ApiResponse[BootstrapAdminResult])
+def bootstrap_admin_account(
+    db: Session = Depends(get_db),
+) -> ApiResponse[BootstrapAdminResult]:
+    try:
+        user, created, role_repaired = ensure_admin_account(
+            db,
+            password="123456",
+            repair_role=True,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to bootstrap admin")
+
+    return success_response(
+        BootstrapAdminResult(
+            username=user.username,
+            created=created,
+            role_repaired=role_repaired,
+        ),
+        message="bootstrapped",
+    )
+
+
+@router.get("/accounts", response_model=ApiResponse[AccountListResult])
+def list_accounts(
+    db: Session = Depends(get_db),
+) -> ApiResponse[AccountListResult]:
+    accounts = list_all_usernames(db)
+    return success_response(AccountListResult(accounts=accounts))
 
 
 @router.get("/me", response_model=ApiResponse[CurrentUserResult])

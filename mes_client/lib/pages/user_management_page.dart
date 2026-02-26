@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/user_models.dart';
+import '../services/api_exception.dart';
 import '../services/user_service.dart';
 
 class UserManagementPage extends StatefulWidget {
@@ -44,6 +45,21 @@ class _UserManagementPageState extends State<UserManagementPage> {
     super.dispose();
   }
 
+  bool _isUnauthorized(Object error) {
+    return error is ApiException && error.statusCode == 401;
+  }
+
+  bool _isForbidden(Object error) {
+    return error is ApiException && error.statusCode == 403;
+  }
+
+  String _errorMessage(Object error) {
+    if (error is ApiException) {
+      return error.message;
+    }
+    return error.toString();
+  }
+
   Future<void> _loadInitialData() async {
     setState(() {
       _loading = true;
@@ -51,18 +67,22 @@ class _UserManagementPageState extends State<UserManagementPage> {
     });
 
     try {
-      final rolesFuture = _userService.listRoles();
-      final processesFuture = _userService.listProcesses();
-      final usersFuture = _userService.listUsers(
-        page: 1,
-        pageSize: 50,
-        keyword: _keywordController.text.trim(),
-      );
+      final result = await Future.wait<dynamic>([
+        _userService.listRoles(),
+        _userService.listProcesses(),
+        _userService.listUsers(
+          page: 1,
+          pageSize: 50,
+          keyword: _keywordController.text.trim(),
+        ),
+      ]);
+      final roles = result[0] as RoleListResult;
+      final processes = result[1] as ProcessListResult;
+      final users = result[2] as UserListResult;
 
-      final roles = await rolesFuture;
-      final processes = await processesFuture;
-      final users = await usersFuture;
-
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _roles = roles.items;
         _processes = processes.items;
@@ -70,8 +90,17 @@ class _UserManagementPageState extends State<UserManagementPage> {
         _total = users.total;
       });
     } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
       setState(() {
-        _message = '加载数据失败：$error';
+        _message = _isForbidden(error)
+            ? '当前账号没有用户管理权限，请使用有权限账号登录。'
+            : '加载数据失败：${_errorMessage(error)}';
       });
     } finally {
       if (mounted) {
@@ -87,19 +116,32 @@ class _UserManagementPageState extends State<UserManagementPage> {
       _loading = true;
       _message = '';
     });
+
     try {
       final result = await _userService.listUsers(
         page: 1,
         pageSize: 50,
         keyword: _keywordController.text.trim(),
       );
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _users = result.items;
         _total = result.total;
       });
     } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
       setState(() {
-        _message = '加载用户失败：$error';
+        _message = _isForbidden(error)
+            ? '当前账号没有用户查询权限。'
+            : '加载用户失败：${_errorMessage(error)}';
       });
     } finally {
       if (mounted) {
@@ -262,9 +304,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         Navigator.of(context).pop(true);
                       }
                     } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('创建用户失败：$error')),
+                          SnackBar(content: Text('创建用户失败：${_errorMessage(error)}')),
                         );
                       }
                     }
@@ -438,9 +484,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         Navigator.of(context).pop(true);
                       }
                     } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('更新用户失败：$error')),
+                          SnackBar(content: Text('更新用户失败：${_errorMessage(error)}')),
                         );
                       }
                     }
@@ -496,117 +546,120 @@ class _UserManagementPageState extends State<UserManagementPage> {
       }
       await _loadUsers();
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _message = '删除用户失败：$error';
-        });
+      if (!mounted) {
+        return;
       }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '删除用户失败：${_errorMessage(error)}';
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('用户管理'),
-        actions: [
-          IconButton(
-            tooltip: '刷新',
-            onPressed: _loading ? null : _loadInitialData,
-            icon: const Icon(Icons.refresh),
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                '用户管理',
+                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: '刷新',
+                onPressed: _loading ? null : _loadInitialData,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
           ),
-          TextButton.icon(
-            onPressed: widget.onLogout,
-            icon: const Icon(Icons.logout),
-            label: const Text('退出登录'),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _keywordController,
-                    decoration: const InputDecoration(
-                      labelText: '按账号搜索',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _loadUsers(),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _keywordController,
+                  decoration: const InputDecoration(
+                    labelText: '按账号搜索',
+                    border: OutlineInputBorder(),
                   ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton.icon(
-                  onPressed: _loading ? null : _loadUsers,
-                  icon: const Icon(Icons.search),
-                  label: const Text('查询'),
-                ),
-                const SizedBox(width: 12),
-                FilledButton.icon(
-                  onPressed: _loading ? null : _showCreateUserDialog,
-                  icon: const Icon(Icons.person_add),
-                  label: const Text('新建用户'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '总数：$_total',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            if (_message.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  _message,
-                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
+                  onSubmitted: (_) => _loadUsers(),
                 ),
               ),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _users.isEmpty
-                      ? const Center(child: Text('暂无用户'))
-                      : Card(
-                          child: ListView.separated(
-                            itemCount: _users.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final user = _users[index];
-                              return ListTile(
-                                title: Text(user.username),
-                                subtitle: Text(
-                                  '角色：${user.roleNames.isEmpty ? '-' : user.roleNames.join('、')}'
-                                  '\n工序：${user.processNames.isEmpty ? '-' : user.processNames.join('、')}',
-                                ),
-                                isThreeLine: true,
-                                trailing: Wrap(
-                                  spacing: 8,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () => _showEditUserDialog(user),
-                                      child: const Text('编辑'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => _confirmDeleteUser(user),
-                                      child: const Text('删除'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: _loading ? null : _loadUsers,
+                icon: const Icon(Icons.search),
+                label: const Text('查询'),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: _loading ? null : _showCreateUserDialog,
+                icon: const Icon(Icons.person_add),
+                label: const Text('新建用户'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '总数：$_total',
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 12),
+          if (_message.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _message,
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
+              ),
             ),
-          ],
-        ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _users.isEmpty
+                    ? const Center(child: Text('暂无用户'))
+                    : Card(
+                        child: ListView.separated(
+                          itemCount: _users.length,
+                          separatorBuilder: (context, index) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final user = _users[index];
+                            return ListTile(
+                              title: Text(user.username),
+                              subtitle: Text(
+                                '角色：${user.roleNames.isEmpty ? '-' : user.roleNames.join('、')}'
+                                '\n工序：${user.processNames.isEmpty ? '-' : user.processNames.join('、')}',
+                              ),
+                              isThreeLine: true,
+                              trailing: Wrap(
+                                spacing: 8,
+                                children: [
+                                  TextButton(
+                                    onPressed: () => _showEditUserDialog(user),
+                                    child: const Text('编辑'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _confirmDeleteUser(user),
+                                    child: const Text('删除'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+          ),
+        ],
       ),
     );
   }

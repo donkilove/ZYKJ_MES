@@ -1,7 +1,7 @@
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.rbac import ROLE_OPERATOR, VALID_ROLE_CODES
+from app.core.rbac import ROLE_OPERATOR, ROLE_SYSTEM_ADMIN, VALID_ROLE_CODES
 from app.core.security import get_password_hash
 from app.models.process import Process
 from app.models.role import Role
@@ -60,6 +60,12 @@ def get_user_by_username(db: Session, username: str) -> User | None:
     return db.execute(stmt).scalars().first()
 
 
+def list_all_usernames(db: Session) -> list[str]:
+    stmt = select(User.username).order_by(User.username.asc())
+    usernames = db.execute(stmt).scalars().all()
+    return sorted({username for username in usernames if username})
+
+
 def list_users(db: Session, page: int, page_size: int, keyword: str | None) -> tuple[int, list[User]]:
     base_stmt = query_users(keyword)
     total_stmt = select(func.count()).select_from(base_stmt.subquery())
@@ -104,6 +110,49 @@ def _resolve_processes(
     if missing_process_codes:
         return None, f"Process codes not found: {', '.join(missing_process_codes)}"
     return processes, None
+
+
+def ensure_admin_account(
+    db: Session,
+    password: str = "123456",
+    repair_role: bool = True,
+) -> tuple[User, bool, bool]:
+    roles, missing_role_codes = get_roles_by_codes(db, [ROLE_SYSTEM_ADMIN])
+    if missing_role_codes or not roles:
+        raise ValueError("System admin role is not initialized")
+    system_admin_role = roles[0]
+
+    created = False
+    role_repaired = False
+    should_commit = False
+
+    admin_user = get_user_by_username(db, "admin")
+    if not admin_user:
+        admin_user = User(
+            username="admin",
+            full_name="system admin",
+            password_hash=get_password_hash(password),
+            is_active=True,
+            is_superuser=False,
+        )
+        admin_user.roles = [system_admin_role]
+        admin_user.processes = []
+        db.add(admin_user)
+        created = True
+        should_commit = True
+    elif repair_role:
+        role_map = {role.code: role for role in admin_user.roles}
+        if ROLE_SYSTEM_ADMIN not in role_map:
+            role_map[ROLE_SYSTEM_ADMIN] = system_admin_role
+            admin_user.roles = list(role_map.values())
+            role_repaired = True
+            should_commit = True
+
+    if should_commit:
+        db.commit()
+        db.refresh(admin_user)
+
+    return admin_user, created, role_repaired
 
 
 def create_user(db: Session, payload: UserCreate) -> tuple[User | None, str | None]:
