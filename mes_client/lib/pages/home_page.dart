@@ -60,7 +60,7 @@ class HomePage extends StatelessWidget {
                     SizedBox(height: 6),
                     Text('2. 菜单会按账号权限自动显示。'),
                     SizedBox(height: 6),
-                    Text('3. 当前版本已开放“用户管理”能力。'),
+                    Text('3. 当前版本已开放“用户”和“产品”模块能力。'),
                   ],
                 ),
               ),

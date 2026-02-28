@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.user import UserCreate, UserItem, UserListResult, UserUpdate
+from app.services.online_status_service import get_user_online_snapshot
 from app.services.user_service import (
     create_user,
     delete_user,
@@ -21,10 +22,13 @@ router = APIRouter()
 
 
 def to_user_item(user: User) -> UserItem:
+    is_online, last_seen_at = get_user_online_snapshot(user.id)
     return UserItem(
         id=user.id,
         username=user.username,
         full_name=user.full_name,
+        is_online=is_online,
+        last_seen_at=last_seen_at,
         role_codes=sorted(role.code for role in user.roles),
         role_names=sorted(role.name for role in user.roles),
         process_codes=sorted(process.code for process in user.processes),

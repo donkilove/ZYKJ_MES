@@ -22,6 +22,7 @@ from app.schemas.auth import (
     RegisterResult,
 )
 from app.schemas.common import ApiResponse, success_response
+from app.services.online_status_service import touch_user
 from app.services.user_service import (
     approve_registration_request,
     ensure_admin_account,
@@ -63,6 +64,7 @@ def login(
             detail="Incorrect username or password",
         )
 
+    touch_user(user.id)
     token = create_access_token(subject=str(user.id))
     return success_response(
         LoginResult(

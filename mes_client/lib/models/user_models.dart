@@ -3,6 +3,8 @@ class UserItem {
     required this.id,
     required this.username,
     required this.fullName,
+    required this.isOnline,
+    required this.lastSeenAt,
     required this.roleCodes,
     required this.roleNames,
     required this.processCodes,
@@ -12,6 +14,8 @@ class UserItem {
   final int id;
   final String username;
   final String? fullName;
+  final bool isOnline;
+  final DateTime? lastSeenAt;
   final List<String> roleCodes;
   final List<String> roleNames;
   final List<String> processCodes;
@@ -22,6 +26,10 @@ class UserItem {
       id: json['id'] as int,
       username: json['username'] as String,
       fullName: json['full_name'] as String?,
+      isOnline: json['is_online'] as bool? ?? false,
+      lastSeenAt: json['last_seen_at'] == null
+          ? null
+          : DateTime.parse(json['last_seen_at'] as String),
       roleCodes: (json['role_codes'] as List<dynamic>).cast<String>(),
       roleNames: (json['role_names'] as List<dynamic>).cast<String>(),
       processCodes: (json['process_codes'] as List<dynamic>).cast<String>(),

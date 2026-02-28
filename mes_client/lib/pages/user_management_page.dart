@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -34,6 +36,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   late final UserService _userService;
   final TextEditingController _keywordController = TextEditingController();
+  Timer? _onlineStatusTimer;
+  static const Duration _onlineRefreshInterval = Duration(seconds: 5);
+  bool _onlineRefreshInFlight = false;
 
   bool _loading = false;
   String _message = '';
@@ -46,11 +51,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
   void initState() {
     super.initState();
     _userService = UserService(widget.session);
+    _startOnlineStatusRefresh();
     _loadInitialData();
   }
 
   @override
   void dispose() {
+    _stopOnlineStatusRefresh();
     _keywordController.dispose();
     super.dispose();
   }
@@ -91,6 +98,34 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   bool _isOperator(String? roleCode) => roleCode == _roleOperator;
+
+  void _startOnlineStatusRefresh() {
+    _onlineStatusTimer?.cancel();
+    _onlineStatusTimer = Timer.periodic(_onlineRefreshInterval, (_) {
+      if (!mounted || _onlineRefreshInFlight) {
+        return;
+      }
+      _onlineRefreshInFlight = true;
+      _loadUsers(silent: true).whenComplete(() {
+        _onlineRefreshInFlight = false;
+      });
+    });
+  }
+
+  void _stopOnlineStatusRefresh() {
+    _onlineStatusTimer?.cancel();
+    _onlineStatusTimer = null;
+    _onlineRefreshInFlight = false;
+  }
+
+  String _formatLastSeen(DateTime? value) {
+    if (value == null) {
+      return '-';
+    }
+    final local = value.toLocal();
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return '${twoDigits(local.hour)}:${twoDigits(local.minute)}:${twoDigits(local.second)}';
+  }
 
   Future<void> _loadInitialData() async {
     setState(() {
@@ -143,11 +178,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
-  Future<void> _loadUsers() async {
-    setState(() {
-      _loading = true;
-      _message = '';
-    });
+  Future<void> _loadUsers({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _message = '';
+      });
+    }
 
     try {
       final result = await _userService.listUsers(
@@ -170,13 +207,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
         widget.onLogout();
         return;
       }
-      setState(() {
-        _message = _isForbidden(error)
-            ? '当前账号没有用户查询权限。'
-            : '加载用户失败：${_errorMessage(error)}';
-      });
+      if (!silent) {
+        setState(() {
+          _message = _isForbidden(error)
+              ? '当前账号没有用户查询权限。'
+              : '加载用户失败：${_errorMessage(error)}';
+        });
+      }
     } finally {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _loading = false;
         });
@@ -714,8 +753,44 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final user = _users[index];
+                        final statusLabel = user.isOnline
+                            ? 'Online'
+                            : 'Offline ${_formatLastSeen(user.lastSeenAt)}';
+                        final statusColor = user.isOnline
+                            ? Colors.green
+                            : theme.colorScheme.outline;
                         return ListTile(
-                          title: Text(user.username),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  user.username,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: statusColor.withValues(alpha: 0.45),
+                                  ),
+                                ),
+                                child: Text(
+                                  statusLabel,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                           subtitle: Text(
                             '角色：${user.roleNames.isEmpty ? '-' : user.roleNames.join('、')}'
                             '\n工序：${user.processNames.isEmpty ? '-' : user.processNames.join('、')}',

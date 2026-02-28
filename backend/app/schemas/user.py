@@ -26,6 +26,8 @@ class UserItem(BaseModel):
     id: int
     username: str
     full_name: str | None
+    is_online: bool
+    last_seen_at: datetime | None = None
     role_codes: list[str]
     role_names: list[str]
     process_codes: list[str]

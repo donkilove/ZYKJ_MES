@@ -9,6 +9,7 @@ from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import TokenPayload
+from app.services.online_status_service import touch_user
 from app.services.user_service import get_user_by_id
 
 
@@ -41,6 +42,7 @@ def get_current_user(
     user = get_user_by_id(db, user_id)
     if not user:
         raise credentials_error
+    touch_user(user.id)
     return user
 
 

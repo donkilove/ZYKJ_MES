@@ -9,10 +9,12 @@ import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 import '../services/page_visibility_service.dart';
 import 'home_page.dart';
+import 'product_page.dart';
 import 'user_page.dart';
 
 const String _homePageCode = 'home';
 const String _userPageCode = 'user';
+const String _productPageCode = 'product';
 const Duration _visibilityRefreshInterval = Duration(seconds: 15);
 
 class _ShellMenuItem {
@@ -97,6 +99,8 @@ class _MainShellPageState extends State<MainShellPage>
         return Icons.home_rounded;
       case _userPageCode:
         return Icons.group_rounded;
+      case _productPageCode:
+        return Icons.inventory_2_rounded;
       default:
         return Icons.article_outlined;
     }
@@ -292,6 +296,12 @@ class _MainShellPageState extends State<MainShellPage>
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
+  List<String> _visibleProductTabCodes() {
+    final tabCodes = _tabCodesByParent[_productPageCode] ?? const <String>[];
+    final catalogCodes = _catalog.map((item) => item.code).toSet();
+    return tabCodes.where(catalogCodes.contains).toList();
+  }
+
   Widget _buildContent(String pageCode) {
     switch (pageCode) {
       case _homePageCode:
@@ -302,6 +312,13 @@ class _MainShellPageState extends State<MainShellPage>
           onLogout: widget.onLogout,
           visibleTabCodes: _visibleUserTabCodes(),
           onVisibilityConfigSaved: _handleVisibilityConfigSaved,
+        );
+      case _productPageCode:
+        return ProductPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          visibleTabCodes: _visibleProductTabCodes(),
+          currentRoleCodes: _currentUser!.roleCodes,
         );
       default:
         return Center(child: Text('页面暂未实现：$pageCode'));

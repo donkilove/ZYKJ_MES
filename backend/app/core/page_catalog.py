@@ -16,6 +16,10 @@ PAGE_USER = "user"
 PAGE_USER_MANAGEMENT = "user_management"
 PAGE_REGISTRATION_APPROVAL = "registration_approval"
 PAGE_VISIBILITY_CONFIG = "page_visibility_config"
+PAGE_PRODUCT = "product"
+PAGE_PRODUCT_MANAGEMENT = "product_management"
+PAGE_PRODUCT_PARAMETER_MANAGEMENT = "product_parameter_management"
+PAGE_PRODUCT_PARAMETER_QUERY = "product_parameter_query"
 
 
 PAGE_CATALOG = [
@@ -59,6 +63,38 @@ PAGE_CATALOG = [
         "always_visible": False,
         "sort_order": 23,
     },
+    {
+        "code": PAGE_PRODUCT,
+        "name": "产品",
+        "page_type": PAGE_TYPE_SIDEBAR,
+        "parent_code": None,
+        "always_visible": False,
+        "sort_order": 30,
+    },
+    {
+        "code": PAGE_PRODUCT_MANAGEMENT,
+        "name": "产品管理",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCT,
+        "always_visible": False,
+        "sort_order": 31,
+    },
+    {
+        "code": PAGE_PRODUCT_PARAMETER_MANAGEMENT,
+        "name": "产品参数管理",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCT,
+        "always_visible": False,
+        "sort_order": 32,
+    },
+    {
+        "code": PAGE_PRODUCT_PARAMETER_QUERY,
+        "name": "产品参数查询",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCT,
+        "always_visible": False,
+        "sort_order": 33,
+    },
 ]
 
 
@@ -78,8 +114,18 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_USER_MANAGEMENT,
         PAGE_REGISTRATION_APPROVAL,
         PAGE_VISIBILITY_CONFIG,
+        PAGE_PRODUCT,
+        PAGE_PRODUCT_MANAGEMENT,
+        PAGE_PRODUCT_PARAMETER_MANAGEMENT,
+        PAGE_PRODUCT_PARAMETER_QUERY,
     },
-    ROLE_PRODUCTION_ADMIN: {PAGE_HOME},
+    ROLE_PRODUCTION_ADMIN: {
+        PAGE_HOME,
+        PAGE_PRODUCT,
+        PAGE_PRODUCT_MANAGEMENT,
+        PAGE_PRODUCT_PARAMETER_MANAGEMENT,
+        PAGE_PRODUCT_PARAMETER_QUERY,
+    },
     ROLE_QUALITY_ADMIN: {PAGE_HOME},
     ROLE_OPERATOR: {PAGE_HOME},
 }
