@@ -7,7 +7,7 @@ __pycache__/
 .pytest_cache/
 
 # Backend local config
-backend/.env
+# backend/.env
 
 # Flutter / Dart
 mes_client/.dart_tool/

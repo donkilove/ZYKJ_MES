@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     db_user: str = "mes_user"
     db_password: str = "mes_password"
 
+    bootstrap_on_startup: bool = True
+    db_bootstrap_host: str = "127.0.0.1"
+    db_bootstrap_port: int = 5432
+    db_bootstrap_user: str = "postgres"
+    db_bootstrap_password: str = ""
+    db_bootstrap_maintenance_db: str = "postgres"
+
+    bootstrap_admin_username: str = "admin"
+    bootstrap_admin_password: str = "Admin@123456"
+
     jwt_secret_key: str = "replace_with_a_strong_secret"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 120
@@ -40,4 +50,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-

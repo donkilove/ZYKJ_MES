@@ -99,7 +99,7 @@ def bootstrap_admin_account(
     try:
         user, created, role_repaired = ensure_admin_account(
             db,
-            password="123456",
+            password=settings.bootstrap_admin_password,
             repair_role=True,
         )
         normalized_users_count = normalize_users_to_single_role(db)

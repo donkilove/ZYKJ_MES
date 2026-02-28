@@ -41,22 +41,26 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
   @override
   void initState() {
     super.initState();
-    _loadSession();
+    _resetSessionAtStartup();
   }
 
-  Future<void> _loadSession() async {
-    final session = await _sessionStore.load();
+  Future<void> _resetSessionAtStartup() async {
+    try {
+      await _sessionStore.clear();
+    } catch (_) {
+      // Ignore clear failure and continue forcing login flow.
+    }
+
     if (!mounted) {
       return;
     }
     setState(() {
-      _session = session;
+      _session = null;
       _loading = false;
     });
   }
 
-  Future<void> _handleLoginSuccess(AppSession session) async {
-    await _sessionStore.save(session);
+  void _handleLoginSuccess(AppSession session) {
     if (!mounted) {
       return;
     }
