@@ -71,12 +71,12 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
       if (reloadOptions) {
         final equipmentResult = await _equipmentService.listEquipment(
           page: 1,
-          pageSize: 500,
+          pageSize: 200,
           enabled: true,
         );
         final itemResult = await _equipmentService.listMaintenanceItems(
           page: 1,
-          pageSize: 500,
+          pageSize: 200,
           enabled: true,
         );
         _equipmentOptions = equipmentResult.items;
