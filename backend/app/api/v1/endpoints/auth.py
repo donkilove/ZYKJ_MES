@@ -22,7 +22,7 @@ from app.schemas.auth import (
     RegisterResult,
 )
 from app.schemas.common import ApiResponse, success_response
-from app.services.online_status_service import touch_user
+from app.services.online_status_service import clear_user, touch_user
 from app.services.user_service import (
     approve_registration_request,
     ensure_admin_account,
@@ -73,6 +73,14 @@ def login(
             expires_in=settings.jwt_expire_minutes * 60,
         )
     )
+
+
+@router.post("/logout", response_model=ApiResponse[dict[str, bool]])
+def logout(
+    current_user: User = Depends(get_current_active_user),
+) -> ApiResponse[dict[str, bool]]:
+    clear_user(current_user.id)
+    return success_response({"logged_out": True}, message="logged_out")
 
 
 @router.post("/register", response_model=ApiResponse[RegisterResult], status_code=status.HTTP_202_ACCEPTED)

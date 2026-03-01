@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'models/app_session.dart';
 import 'pages/login_page.dart';
 import 'pages/main_shell_page.dart';
+import 'services/auth_service.dart';
 import 'services/session_store.dart';
 
 void main() {
@@ -43,6 +44,7 @@ class AppBootstrapPage extends StatefulWidget {
 
 class _AppBootstrapPageState extends State<AppBootstrapPage> {
   final SessionStore _sessionStore = SessionStore();
+  final AuthService _authService = AuthService();
   AppSession? _session;
   bool _loading = true;
 
@@ -78,6 +80,17 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
   }
 
   Future<void> _handleLogout() async {
+    final session = _session;
+    if (session != null) {
+      try {
+        await _authService.logout(
+          baseUrl: session.baseUrl,
+          accessToken: session.accessToken,
+        );
+      } catch (_) {
+        // Fallback to local logout if backend logout fails.
+      }
+    }
     await _sessionStore.clear();
     if (!mounted) {
       return;

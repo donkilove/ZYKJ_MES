@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     bootstrap_admin_username: str = "admin"
     bootstrap_admin_password: str = "Admin@123456"
     online_status_ttl_seconds: int = 90
+    maintenance_auto_generate_enabled: bool = True
+    maintenance_auto_generate_time: str = "00:05"
+    maintenance_auto_generate_timezone: str = "Asia/Shanghai"
 
     jwt_secret_key: str = "replace_with_a_strong_secret"
     jwt_algorithm: str = "HS256"

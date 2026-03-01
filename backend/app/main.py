@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -7,12 +8,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.bootstrap import run_startup_bootstrap
 from app.core.config import settings
+from app.services.maintenance_scheduler_service import run_maintenance_auto_generate_loop
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    scheduler_task: asyncio.Task[None] | None = None
     run_startup_bootstrap()
+    if settings.maintenance_auto_generate_enabled:
+        scheduler_task = asyncio.create_task(run_maintenance_auto_generate_loop())
     yield
+    if scheduler_task:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(

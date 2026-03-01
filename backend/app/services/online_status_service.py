@@ -23,6 +23,11 @@ def touch_user(user_id: int) -> None:
         _last_seen_by_user_id[user_id] = _now_utc()
 
 
+def clear_user(user_id: int) -> None:
+    with _lock:
+        _last_seen_by_user_id.pop(user_id, None)
+
+
 def _prune_expired(now: datetime) -> None:
     cutoff = now - _online_ttl()
     expired_user_ids = [user_id for user_id, last_seen in _last_seen_by_user_id.items() if last_seen < cutoff]

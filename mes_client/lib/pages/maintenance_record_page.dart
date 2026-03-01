@@ -27,7 +27,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   bool _loading = false;
   String _message = '';
   int _total = 0;
-  List<MaintenanceWorkOrderItem> _items = const [];
+  List<MaintenanceRecordItem> _items = const [];
   DateTime? _startDate;
   DateTime? _endDate;
 
@@ -257,16 +257,12 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                           return DataRow(
                             cells: [
                               DataCell(
-                                Text(
-                                  item.completedAt == null
-                                      ? '-'
-                                      : _formatDateTime(item.completedAt!),
-                                ),
+                                Text(_formatDateTime(item.completedAt)),
                               ),
                               DataCell(Text(item.equipmentName)),
                               DataCell(Text(item.itemName)),
                               DataCell(Text(item.executorUsername ?? '-')),
-                              DataCell(Text(item.resultSummary ?? '-')),
+                              DataCell(Text(item.resultSummary)),
                               DataCell(Text(item.resultRemark ?? '-')),
                             ],
                           );

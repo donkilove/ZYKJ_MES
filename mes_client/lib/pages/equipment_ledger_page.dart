@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/equipment_models.dart';
@@ -23,6 +23,13 @@ class EquipmentLedgerPage extends StatefulWidget {
 }
 
 class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
+  static const List<String> _locationOptions = <String>[
+    '激光打标',
+    '产品测试',
+    '产品组装',
+    '产品包装',
+  ];
+
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
 
@@ -30,12 +37,13 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   String _message = '';
   int _total = 0;
   List<EquipmentLedgerItem> _items = const [];
+  List<EquipmentOwnerOption> _ownerOptions = const [];
 
   @override
   void initState() {
     super.initState();
     _equipmentService = EquipmentService(widget.session);
-    _loadItems();
+    _loadItems(reloadOwners: true);
   }
 
   @override
@@ -65,7 +73,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
-  Future<void> _loadItems() async {
+  Future<void> _loadItems({bool reloadOwners = false}) async {
     if (!mounted) {
       return;
     }
@@ -74,6 +82,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
       _message = '';
     });
     try {
+      if (widget.canWrite && (reloadOwners || _ownerOptions.isEmpty)) {
+        _ownerOptions = await _equipmentService.listAdminOwners();
+      }
       final result = await _equipmentService.listEquipment(
         page: 1,
         pageSize: 100,
@@ -95,7 +106,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
         return;
       }
       setState(() {
-        _message = '加载设备台账失败：${_errorMessage(error)}';
+        _message = '加载设备台账失败: ${_errorMessage(error)}';
       });
     } finally {
       if (mounted) {
@@ -112,136 +123,203 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     }
     final pageContext = context;
     final isCreate = item == null;
+    final codeController = TextEditingController(text: item?.code ?? '');
     final nameController = TextEditingController(text: item?.name ?? '');
     final modelController = TextEditingController(text: item?.model ?? '');
-    final locationController = TextEditingController(text: item?.location ?? '');
-    final ownerController = TextEditingController(text: item?.ownerName ?? '');
     final formKey = GlobalKey<FormState>();
+    var selectedLocation = (item?.location ?? '').trim();
+    if (selectedLocation.isNotEmpty && !_locationOptions.contains(selectedLocation)) {
+      selectedLocation = '';
+    }
+    var selectedOwner = (item?.ownerName ?? '').trim();
+    final ownerNames = _ownerOptions.map((owner) => owner.username).toSet();
+    if (selectedOwner.isNotEmpty && !ownerNames.contains(selectedOwner)) {
+      selectedOwner = '';
+    }
 
     final saved = await showDialog<bool>(
       context: pageContext,
       barrierDismissible: false,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(isCreate ? '新增设备' : '编辑设备'),
-          content: SizedBox(
-            width: 520,
-            child: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: '设备名称',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return '请输入设备名称';
-                        }
-                        return null;
-                      },
+        return StatefulBuilder(
+          builder: (innerContext, setInnerState) {
+            return AlertDialog(
+              title: Text(isCreate ? '新增设备' : '编辑设备'),
+              content: SizedBox(
+                width: 560,
+                child: Form(
+                  key: formKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          controller: codeController,
+                          decoration: const InputDecoration(
+                            labelText: '设备编号',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return '请输入设备编号';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: nameController,
+                          decoration: const InputDecoration(
+                            labelText: '设备名称',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return '请输入设备名称';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: modelController,
+                          decoration: const InputDecoration(
+                            labelText: '型号',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedLocation.isEmpty ? null : selectedLocation,
+                          items: _locationOptions
+                              .map(
+                                (entry) => DropdownMenuItem<String>(
+                                  value: entry,
+                                  child: Text(entry),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            setInnerState(() {
+                              selectedLocation = value ?? '';
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            labelText: '位置',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if ((value ?? '').trim().isEmpty) {
+                              return '请选择位置';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedOwner.isEmpty ? null : selectedOwner,
+                          items: _ownerOptions
+                              .map(
+                                (entry) => DropdownMenuItem<String>(
+                                  value: entry.username,
+                                  child: Text(entry.displayName),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            setInnerState(() {
+                              selectedOwner = value ?? '';
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            labelText: '负责人',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if ((value ?? '').trim().isEmpty) {
+                              return '请选择负责人';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: modelController,
-                      decoration: const InputDecoration(
-                        labelText: '型号',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: locationController,
-                      decoration: const InputDecoration(
-                        labelText: '位置',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: ownerController,
-                      decoration: const InputDecoration(
-                        labelText: '负责人',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) {
-                  return;
-                }
-                try {
-                  if (isCreate) {
-                    await _equipmentService.createEquipment(
-                      name: nameController.text.trim(),
-                      model: modelController.text.trim(),
-                      location: locationController.text.trim(),
-                      ownerName: ownerController.text.trim(),
-                    );
-                  } else {
-                    await _equipmentService.updateEquipment(
-                      equipmentId: item.id,
-                      name: nameController.text.trim(),
-                      model: modelController.text.trim(),
-                      location: locationController.text.trim(),
-                      ownerName: ownerController.text.trim(),
-                    );
-                  }
-                  if (dialogContext.mounted) {
-                    Navigator.of(dialogContext).pop(true);
-                  }
-                } catch (error) {
-                  if (_isUnauthorized(error)) {
-                    widget.onLogout();
-                    return;
-                  }
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('保存设备失败：${_errorMessage(error)}')),
-                    );
-                  }
-                }
-              },
-              child: const Text('保存'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) {
+                      return;
+                    }
+                    try {
+                      if (isCreate) {
+                        await _equipmentService.createEquipment(
+                          code: codeController.text.trim(),
+                          name: nameController.text.trim(),
+                          model: modelController.text.trim(),
+                          location: selectedLocation,
+                          ownerName: selectedOwner,
+                        );
+                      } else {
+                        await _equipmentService.updateEquipment(
+                          equipmentId: item.id,
+                          code: codeController.text.trim(),
+                          name: nameController.text.trim(),
+                          model: modelController.text.trim(),
+                          location: selectedLocation,
+                          ownerName: selectedOwner,
+                        );
+                      }
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop(true);
+                      }
+                    } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('保存设备失败: ${_errorMessage(error)}')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
 
+    codeController.dispose();
     nameController.dispose();
     modelController.dispose();
-    locationController.dispose();
-    ownerController.dispose();
 
     if (saved == true) {
       await _loadItems();
     }
   }
 
-  Future<void> _disableItem(EquipmentLedgerItem item) async {
+  Future<void> _toggleItem(EquipmentLedgerItem item) async {
+    final nextEnabled = !item.isEnabled;
+    final action = nextEnabled ? '启用' : '停用';
     if (!mounted) {
       return;
     }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('停用设备'),
-        content: Text('确认停用设备“${item.name}”吗？'),
+        title: Text('$action设备'),
+        content: Text('确认$action设备“${item.name}”吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -258,10 +336,13 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
       return;
     }
     try {
-      await _equipmentService.disableEquipment(equipmentId: item.id);
+      await _equipmentService.toggleEquipment(
+        equipmentId: item.id,
+        enabled: nextEnabled,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('设备已停用')),
+          SnackBar(content: Text('设备已$action')),
         );
       }
       await _loadItems();
@@ -274,7 +355,53 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('停用设备失败：${_errorMessage(error)}')),
+        SnackBar(content: Text('$action设备失败: ${_errorMessage(error)}')),
+      );
+    }
+  }
+
+  Future<void> _deleteItem(EquipmentLedgerItem item) async {
+    if (!mounted) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除设备'),
+        content: Text('确认删除设备“${item.name}”吗？此操作不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      await _equipmentService.deleteEquipment(equipmentId: item.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('设备已删除')),
+        );
+      }
+      await _loadItems();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('删除设备失败: ${_errorMessage(error)}')),
       );
     }
   }
@@ -299,7 +426,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
               const Spacer(),
               IconButton(
                 tooltip: '刷新',
-                onPressed: _loading ? null : _loadItems,
+                onPressed: _loading
+                    ? null
+                    : () => _loadItems(reloadOwners: widget.canWrite),
                 icon: const Icon(Icons.refresh),
               ),
             ],
@@ -311,7 +440,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                 child: TextField(
                   controller: _keywordController,
                   decoration: const InputDecoration(
-                    labelText: '搜索设备名称/型号/位置/负责人',
+                    labelText: '搜索设备编号/名称/型号/位置/负责人',
                     border: OutlineInputBorder(),
                   ),
                   onSubmitted: (_) => _loadItems(),
@@ -334,7 +463,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
+          Text('总数: $_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -355,6 +484,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                     child: AdaptiveTableContainer(
                       child: DataTable(
                         columns: const [
+                          DataColumn(label: Text('设备编号')),
                           DataColumn(label: Text('设备名称')),
                           DataColumn(label: Text('型号')),
                           DataColumn(label: Text('位置')),
@@ -367,6 +497,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                         rows: _items.map((item) {
                           return DataRow(
                             cells: [
+                              DataCell(Text(item.code)),
                               DataCell(Text(item.name)),
                               DataCell(Text(item.model.isEmpty ? '-' : item.model)),
                               DataCell(Text(item.location.isEmpty ? '-' : item.location)),
@@ -375,8 +506,8 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                               DataCell(Text(_formatDateTime(item.createdAt))),
                               DataCell(Text(_formatDateTime(item.updatedAt))),
                               DataCell(
-                                Wrap(
-                                  spacing: 8,
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     TextButton(
                                       onPressed: widget.canWrite
@@ -384,11 +515,19 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                                           : null,
                                       child: const Text('编辑'),
                                     ),
+                                    const SizedBox(width: 8),
                                     TextButton(
-                                      onPressed: (widget.canWrite && item.isEnabled)
-                                          ? () => _disableItem(item)
+                                      onPressed: widget.canWrite
+                                          ? () => _toggleItem(item)
                                           : null,
-                                      child: const Text('停用'),
+                                      child: Text(item.isEnabled ? '停用' : '启用'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: widget.canWrite
+                                          ? () => _deleteItem(item)
+                                          : null,
+                                      child: const Text('删除'),
                                     ),
                                   ],
                                 ),

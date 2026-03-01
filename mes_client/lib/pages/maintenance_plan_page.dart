@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/equipment_models.dart';
@@ -114,7 +114,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         return;
       }
       setState(() {
-        _message = '加载保养计划失败：${_errorMessage(error)}';
+        _message = '加载保养计划失败: ${_errorMessage(error)}';
       });
     } finally {
       if (mounted) {
@@ -123,22 +123,6 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         });
       }
     }
-  }
-
-  Future<DateTime?> _pickDate({
-    required DateTime initialDate,
-    DateTime? firstDate,
-    DateTime? lastDate,
-  }) async {
-    return showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: firstDate ?? DateTime(2000, 1, 1),
-      lastDate: lastDate ?? DateTime(2100, 12, 31),
-      helpText: '选择日期',
-      cancelText: '取消',
-      confirmText: '确定',
-    );
   }
 
   Future<void> _showPlanEditDialog({MaintenancePlanItem? plan}) async {
@@ -155,16 +139,15 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
 
     final isCreate = plan == null;
     final formKey = GlobalKey<FormState>();
-    final cycleController = TextEditingController(
-      text: (plan?.cycleDays ?? 30).toString(),
-    );
-    final durationController = TextEditingController(
-      text: (plan?.estimatedDurationMinutes ?? 60).toString(),
-    );
     var selectedEquipmentId = plan?.equipmentId ?? _equipmentOptions.first.id;
     var selectedItemId = plan?.itemId ?? _itemOptions.first.id;
-    var startDate = plan?.startDate ?? DateTime.now();
-    var nextDueDate = plan?.nextDueDate;
+    var selectedExecutionProcessCode = plan?.executionProcessCode ?? processCodeLaserMarking;
+    if (!maintenanceExecutionProcessOrder.contains(selectedExecutionProcessCode)) {
+      selectedExecutionProcessCode = processCodeLaserMarking;
+    }
+    final startDate = plan?.startDate ?? DateTime.now();
+    final nextDueDate = plan?.nextDueDate;
+    final estimatedDurationMinutes = plan?.estimatedDurationMinutes;
 
     final saved = await showDialog<bool>(
       context: pageContext,
@@ -172,6 +155,10 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (innerContext, setInnerState) {
+            final selectedItem = _itemOptions.firstWhere(
+              (entry) => entry.id == selectedItemId,
+              orElse: () => _itemOptions.first,
+            );
             return AlertDialog(
               title: Text(isCreate ? '新增保养计划' : '编辑保养计划'),
               content: SizedBox(
@@ -183,15 +170,12 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         DropdownButtonFormField<int>(
-                          key: ValueKey(
-                            'eq-$selectedEquipmentId-${_equipmentOptions.length}',
-                          ),
                           initialValue: selectedEquipmentId,
                           items: _equipmentOptions
                               .map(
                                 (entry) => DropdownMenuItem<int>(
                                   value: entry.id,
-                                  child: Text(entry.name),
+                                  child: Text('${entry.code} - ${entry.name}'),
                                 ),
                               )
                               .toList(),
@@ -210,9 +194,6 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<int>(
-                          key: ValueKey(
-                            'item-$selectedItemId-${_itemOptions.length}',
-                          ),
                           initialValue: selectedItemId,
                           items: _itemOptions
                               .map(
@@ -236,86 +217,39 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: cycleController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: '周期(天)',
-                                  border: OutlineInputBorder(),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedExecutionProcessCode,
+                          items: maintenanceExecutionProcessOrder
+                              .map(
+                                (code) => DropdownMenuItem<String>(
+                                  value: code,
+                                  child: Text(maintenanceExecutionProcessName(code)),
                                 ),
-                                validator: (value) {
-                                  final parsed = int.tryParse((value ?? '').trim());
-                                  if (parsed == null || parsed <= 0) {
-                                    return '请输入正整数';
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                controller: durationController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: '预计时长(分钟)',
-                                  border: OutlineInputBorder(),
-                                ),
-                                validator: (value) {
-                                  final parsed = int.tryParse((value ?? '').trim());
-                                  if (parsed == null || parsed <= 0) {
-                                    return '请输入正整数';
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ),
-                          ],
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setInnerState(() {
+                              selectedExecutionProcessCode = value;
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            labelText: '执行工序',
+                            border: OutlineInputBorder(),
+                          ),
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  final picked = await _pickDate(
-                                    initialDate: startDate,
-                                  );
-                                  if (picked != null) {
-                                    setInnerState(() {
-                                      startDate = picked;
-                                      nextDueDate ??= picked;
-                                    });
-                                  }
-                                },
-                                icon: const Icon(Icons.calendar_today),
-                                label: Text('起始日期：${_formatDate(startDate)}'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  final initial = nextDueDate ?? startDate;
-                                  final picked = await _pickDate(
-                                    initialDate: initial,
-                                  );
-                                  if (picked != null) {
-                                    setInnerState(() {
-                                      nextDueDate = picked;
-                                    });
-                                  }
-                                },
-                                icon: const Icon(Icons.event_available),
-                                label: Text(
-                                  '下次到期：${nextDueDate == null ? '-' : _formatDate(nextDueDate!)}',
-                                ),
-                              ),
-                            ),
-                          ],
+                        TextFormField(
+                          key: ValueKey<int>(selectedItem.id),
+                          initialValue: '${selectedItem.defaultCycleDays}',
+                          readOnly: true,
+                          enabled: false,
+                          decoration: const InputDecoration(
+                            labelText: '项目周期(天)',
+                            border: OutlineInputBorder(),
+                          ),
                         ),
                       ],
                     ),
@@ -333,17 +267,13 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                       return;
                     }
                     try {
-                      final cycleDays = int.parse(cycleController.text.trim());
-                      final durationMinutes = int.parse(
-                        durationController.text.trim(),
-                      );
                       if (isCreate) {
                         await _equipmentService.createMaintenancePlan(
                           equipmentId: selectedEquipmentId,
                           itemId: selectedItemId,
-                          cycleDays: cycleDays,
+                          executionProcessCode: selectedExecutionProcessCode,
                           startDate: startDate,
-                          estimatedDurationMinutes: durationMinutes,
+                          estimatedDurationMinutes: null,
                           nextDueDate: nextDueDate,
                           defaultExecutorUserId: null,
                         );
@@ -352,9 +282,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                           planId: plan.id,
                           equipmentId: selectedEquipmentId,
                           itemId: selectedItemId,
-                          cycleDays: cycleDays,
+                          executionProcessCode: selectedExecutionProcessCode,
                           startDate: startDate,
-                          estimatedDurationMinutes: durationMinutes,
+                          estimatedDurationMinutes: estimatedDurationMinutes,
                           nextDueDate: nextDueDate,
                           defaultExecutorUserId: null,
                         );
@@ -369,7 +299,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                       }
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('保存保养计划失败：${_errorMessage(error)}')),
+                          SnackBar(content: Text('保存保养计划失败: ${_errorMessage(error)}')),
                         );
                       }
                     }
@@ -382,9 +312,6 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         );
       },
     );
-
-    cycleController.dispose();
-    durationController.dispose();
 
     if (saved == true) {
       await _loadAll();
@@ -412,7 +339,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('更新计划状态失败：${_errorMessage(error)}')),
+        SnackBar(content: Text('更新计划状态失败: ${_errorMessage(error)}')),
       );
     }
   }
@@ -427,8 +354,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
           SnackBar(
             content: Text(
               result.created
-                  ? '执行单已生成（ID: ${result.workOrderId}）'
-                  : '已存在待执行单（ID: ${result.workOrderId}）',
+                  ? '执行单已生成 (ID: ${result.workOrderId})'
+                  : '已存在待执行单 (ID: ${result.workOrderId})',
             ),
           ),
         );
@@ -443,7 +370,53 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('生成执行单失败：${_errorMessage(error)}')),
+        SnackBar(content: Text('生成执行单失败: ${_errorMessage(error)}')),
+      );
+    }
+  }
+
+  Future<void> _deletePlan(MaintenancePlanItem plan) async {
+    if (!mounted) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除保养计划'),
+        content: Text('确认删除计划“${plan.equipmentName} / ${plan.itemName}”吗？此操作不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      await _equipmentService.deleteMaintenancePlan(planId: plan.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('保养计划已删除')),
+        );
+      }
+      await _loadAll();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('删除保养计划失败: ${_errorMessage(error)}')),
       );
     }
   }
@@ -477,7 +450,6 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<int?>(
-                  key: ValueKey('filter-eq-${_equipmentFilterId ?? 0}-${_equipmentOptions.length}'),
                   initialValue: _equipmentFilterId,
                   items: [
                     const DropdownMenuItem<int?>(
@@ -487,7 +459,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                     ..._equipmentOptions.map(
                       (entry) => DropdownMenuItem<int?>(
                         value: entry.id,
-                        child: Text(entry.name),
+                        child: Text('${entry.code} - ${entry.name}'),
                       ),
                     ),
                   ],
@@ -505,7 +477,6 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: DropdownButtonFormField<int?>(
-                  key: ValueKey('filter-item-${_itemFilterId ?? 0}-${_itemOptions.length}'),
                   initialValue: _itemFilterId,
                   items: [
                     const DropdownMenuItem<int?>(
@@ -547,7 +518,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
+          Text('总数: $_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -570,6 +541,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                         columns: const [
                           DataColumn(label: Text('设备')),
                           DataColumn(label: Text('项目')),
+                          DataColumn(label: Text('执行工序')),
                           DataColumn(label: Text('周期(天)')),
                           DataColumn(label: Text('起始日期')),
                           DataColumn(label: Text('下次到期')),
@@ -582,14 +554,15 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                             cells: [
                               DataCell(Text(plan.equipmentName)),
                               DataCell(Text(plan.itemName)),
+                              DataCell(Text(plan.executionProcessName)),
                               DataCell(Text('${plan.cycleDays}')),
                               DataCell(Text(_formatDate(plan.startDate))),
                               DataCell(Text(_formatDate(plan.nextDueDate))),
                               DataCell(Text(plan.defaultExecutorUsername ?? '-')),
                               DataCell(Text(plan.isEnabled ? '启用' : '停用')),
                               DataCell(
-                                Wrap(
-                                  spacing: 8,
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     TextButton(
                                       onPressed: widget.canWrite
@@ -597,12 +570,21 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                                           : null,
                                       child: const Text('编辑'),
                                     ),
+                                    const SizedBox(width: 8),
                                     TextButton(
                                       onPressed: widget.canWrite
                                           ? () => _togglePlan(plan)
                                           : null,
                                       child: Text(plan.isEnabled ? '停用' : '启用'),
                                     ),
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: widget.canWrite
+                                          ? () => _deletePlan(plan)
+                                          : null,
+                                      child: const Text('删除'),
+                                    ),
+                                    const SizedBox(width: 8),
                                     TextButton(
                                       onPressed: (widget.canWrite && plan.isEnabled)
                                           ? () => _generateWorkOrder(plan)

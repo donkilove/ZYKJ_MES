@@ -20,6 +20,22 @@ class EquipmentService {
 
   String get _basePath => '${session.baseUrl}/equipment';
 
+  Future<List<EquipmentOwnerOption>> listAdminOwners() async {
+    final uri = Uri.parse('$_basePath/admin-owners');
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    return (data['items'] as List<dynamic>? ?? const [])
+        .map((entry) => EquipmentOwnerOption.fromJson(entry as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<EquipmentLedgerListResult> listEquipment({
     required int page,
     required int pageSize,
@@ -33,9 +49,7 @@ class EquipmentService {
     if (enabled != null) {
       query['enabled'] = '$enabled';
     }
-    final uri = Uri.parse(
-      '$_basePath/ledger',
-    ).replace(queryParameters: query);
+    final uri = Uri.parse('$_basePath/ledger').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -55,6 +69,7 @@ class EquipmentService {
   }
 
   Future<void> createEquipment({
+    required String code,
     required String name,
     required String model,
     required String location,
@@ -65,6 +80,7 @@ class EquipmentService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({
+        'code': code,
         'name': name,
         'model': model,
         'location': location,
@@ -82,6 +98,7 @@ class EquipmentService {
 
   Future<void> updateEquipment({
     required int equipmentId,
+    required String code,
     required String name,
     required String model,
     required String location,
@@ -92,6 +109,7 @@ class EquipmentService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({
+        'code': code,
         'name': name,
         'model': model,
         'location': location,
@@ -107,9 +125,32 @@ class EquipmentService {
     }
   }
 
+  Future<void> toggleEquipment({
+    required int equipmentId,
+    required bool enabled,
+  }) async {
+    final uri = Uri.parse('$_basePath/ledger/$equipmentId/toggle');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'enabled': enabled}),
+    );
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+  }
+
   Future<void> disableEquipment({required int equipmentId}) async {
-    final uri = Uri.parse('$_basePath/ledger/$equipmentId/disable');
-    final response = await http.post(uri, headers: _authHeaders);
+    await toggleEquipment(equipmentId: equipmentId, enabled: false);
+  }
+
+  Future<void> deleteEquipment({required int equipmentId}) async {
+    final uri = Uri.parse('$_basePath/ledger/$equipmentId');
+    final response = await http.delete(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -153,9 +194,7 @@ class EquipmentService {
 
   Future<void> createMaintenanceItem({
     required String name,
-    required String category,
     required int defaultCycleDays,
-    required int defaultDurationMinutes,
   }) async {
     final uri = Uri.parse('$_basePath/items');
     final response = await http.post(
@@ -163,9 +202,7 @@ class EquipmentService {
       headers: _authHeaders,
       body: jsonEncode({
         'name': name,
-        'category': category,
         'default_cycle_days': defaultCycleDays,
-        'default_duration_minutes': defaultDurationMinutes,
       }),
     );
     final json = _decodeBody(response);
@@ -180,9 +217,7 @@ class EquipmentService {
   Future<void> updateMaintenanceItem({
     required int itemId,
     required String name,
-    required String category,
     required int defaultCycleDays,
-    required int defaultDurationMinutes,
   }) async {
     final uri = Uri.parse('$_basePath/items/$itemId');
     final response = await http.put(
@@ -190,9 +225,7 @@ class EquipmentService {
       headers: _authHeaders,
       body: jsonEncode({
         'name': name,
-        'category': category,
         'default_cycle_days': defaultCycleDays,
-        'default_duration_minutes': defaultDurationMinutes,
       }),
     );
     final json = _decodeBody(response);
@@ -204,9 +237,32 @@ class EquipmentService {
     }
   }
 
+  Future<void> toggleMaintenanceItem({
+    required int itemId,
+    required bool enabled,
+  }) async {
+    final uri = Uri.parse('$_basePath/items/$itemId/toggle');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'enabled': enabled}),
+    );
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+  }
+
   Future<void> disableMaintenanceItem({required int itemId}) async {
-    final uri = Uri.parse('$_basePath/items/$itemId/disable');
-    final response = await http.post(uri, headers: _authHeaders);
+    await toggleMaintenanceItem(itemId: itemId, enabled: false);
+  }
+
+  Future<void> deleteMaintenanceItem({required int itemId}) async {
+    final uri = Uri.parse('$_basePath/items/$itemId');
+    final response = await http.delete(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -255,7 +311,7 @@ class EquipmentService {
   Future<void> createMaintenancePlan({
     required int equipmentId,
     required int itemId,
-    required int cycleDays,
+    required String executionProcessCode,
     required DateTime startDate,
     required int? estimatedDurationMinutes,
     required DateTime? nextDueDate,
@@ -268,7 +324,7 @@ class EquipmentService {
       body: jsonEncode({
         'equipment_id': equipmentId,
         'item_id': itemId,
-        'cycle_days': cycleDays,
+        'execution_process_code': executionProcessCode,
         'estimated_duration_minutes': estimatedDurationMinutes,
         'start_date': _formatDate(startDate),
         'next_due_date': nextDueDate == null ? null : _formatDate(nextDueDate),
@@ -288,7 +344,7 @@ class EquipmentService {
     required int planId,
     required int equipmentId,
     required int itemId,
-    required int cycleDays,
+    required String executionProcessCode,
     required DateTime startDate,
     required int? estimatedDurationMinutes,
     required DateTime? nextDueDate,
@@ -301,7 +357,7 @@ class EquipmentService {
       body: jsonEncode({
         'equipment_id': equipmentId,
         'item_id': itemId,
-        'cycle_days': cycleDays,
+        'execution_process_code': executionProcessCode,
         'estimated_duration_minutes': estimatedDurationMinutes,
         'start_date': _formatDate(startDate),
         'next_due_date': nextDueDate == null ? null : _formatDate(nextDueDate),
@@ -336,6 +392,18 @@ class EquipmentService {
     }
   }
 
+  Future<void> deleteMaintenancePlan({required int planId}) async {
+    final uri = Uri.parse('$_basePath/plans/$planId');
+    final response = await http.delete(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+  }
+
   Future<MaintenancePlanGenerateResult> generateMaintenancePlan({
     required int planId,
   }) async {
@@ -355,18 +423,12 @@ class EquipmentService {
   Future<MaintenanceWorkOrderListResult> listExecutions({
     required int page,
     required int pageSize,
-    String? status,
     String? keyword,
-    bool mine = false,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
-    if (status != null && status.trim().isNotEmpty) {
-      query['status'] = status.trim();
-    }
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
     }
-    query['mine'] = '$mine';
     final uri = Uri.parse('$_basePath/executions').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
@@ -402,7 +464,6 @@ class EquipmentService {
     required int workOrderId,
     required String resultSummary,
     String? resultRemark,
-    String? attachmentLink,
   }) async {
     final uri = Uri.parse('$_basePath/executions/$workOrderId/complete');
     final response = await http.post(
@@ -411,7 +472,6 @@ class EquipmentService {
       body: jsonEncode({
         'result_summary': resultSummary,
         'result_remark': resultRemark,
-        'attachment_link': attachmentLink,
       }),
     );
     final json = _decodeBody(response);
@@ -423,7 +483,7 @@ class EquipmentService {
     }
   }
 
-  Future<MaintenanceWorkOrderListResult> listRecords({
+  Future<MaintenanceRecordListResult> listRecords({
     required int page,
     required int pageSize,
     String? keyword,
@@ -455,9 +515,9 @@ class EquipmentService {
     }
     final data = json['data'] as Map<String, dynamic>;
     final items = (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => MaintenanceWorkOrderItem.fromJson(entry as Map<String, dynamic>))
+        .map((entry) => MaintenanceRecordItem.fromJson(entry as Map<String, dynamic>))
         .toList();
-    return MaintenanceWorkOrderListResult(
+    return MaintenanceRecordListResult(
       total: (data['total'] as int?) ?? 0,
       items: items,
     );
@@ -479,7 +539,7 @@ class EquipmentService {
     if (message is String && message.isNotEmpty) {
       return message;
     }
-    return '请求失败，状态码 $statusCode';
+    return 'Request failed ($statusCode)';
   }
 
   String _formatDate(DateTime value) {

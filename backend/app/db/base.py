@@ -2,6 +2,7 @@ from app.models.base import Base
 from app.models.equipment import Equipment
 from app.models.maintenance_item import MaintenanceItem
 from app.models.maintenance_plan import MaintenancePlan
+from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.page_visibility import PageVisibility
 from app.models.product import Product
@@ -22,6 +23,7 @@ __all__ = [
     "Equipment",
     "MaintenanceItem",
     "MaintenancePlan",
+    "MaintenanceRecord",
     "MaintenanceWorkOrder",
     "Product",
     "ProductParameter",

@@ -29,20 +29,35 @@ class MaintenanceWorkOrder(Base, TimestampMixin):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    plan_id: Mapped[int] = mapped_column(
-        ForeignKey("mes_maintenance_plan.id", ondelete="CASCADE"),
+    plan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_maintenance_plan.id", ondelete="SET NULL"),
         index=True,
-        nullable=False,
+        nullable=True,
     )
-    equipment_id: Mapped[int] = mapped_column(
-        ForeignKey("mes_equipment.id", ondelete="RESTRICT"),
+    equipment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_equipment.id", ondelete="SET NULL"),
         index=True,
-        nullable=False,
+        nullable=True,
     )
-    item_id: Mapped[int] = mapped_column(
-        ForeignKey("mes_maintenance_item.id", ondelete="RESTRICT"),
+    item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_maintenance_item.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    source_plan_id: Mapped[int | None] = mapped_column(index=True, nullable=True)
+    source_plan_cycle_days: Mapped[int | None] = mapped_column(nullable=True)
+    source_plan_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_equipment_id: Mapped[int | None] = mapped_column(index=True, nullable=True)
+    source_equipment_code: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    source_equipment_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    source_item_id: Mapped[int | None] = mapped_column(index=True, nullable=True)
+    source_item_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    source_execution_process_code: Mapped[str] = mapped_column(
+        String(64),
         index=True,
         nullable=False,
+        default="laser_marking",
+        server_default=text("'laser_marking'"),
     )
     due_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     status: Mapped[str] = mapped_column(

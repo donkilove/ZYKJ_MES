@@ -107,6 +107,28 @@ class AuthService {
     return CurrentUser.fromJson(data);
   }
 
+  Future<void> logout({
+    required String baseUrl,
+    required String accessToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/auth/logout');
+    final response = await http.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    final decoded = _decodeBody(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        _extractErrorMessage(decoded, response.statusCode),
+        response.statusCode,
+      );
+    }
+  }
+
   Map<String, dynamic> _decodeBody(String body) {
     if (body.isEmpty) {
       return {};

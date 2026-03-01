@@ -23,6 +23,13 @@ class MaintenanceItemPage extends StatefulWidget {
 }
 
 class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
+  static const List<_ExecutionRuleOption> _executionRules = [
+    _ExecutionRuleOption(label: '每周五执行', cycleDays: maintenanceCycleWeekly),
+    _ExecutionRuleOption(label: '每月执行', cycleDays: maintenanceCycleMonthly),
+    _ExecutionRuleOption(label: '每季度执行', cycleDays: maintenanceCycleQuarterly),
+    _ExecutionRuleOption(label: '每年执行', cycleDays: maintenanceCycleYearly),
+  ];
+
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
 
@@ -95,7 +102,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
         return;
       }
       setState(() {
-        _message = '加载保养项目失败：${_errorMessage(error)}';
+        _message = '加载保养项目失败: ${_errorMessage(error)}';
       });
     } finally {
       if (mounted) {
@@ -113,165 +120,148 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     final pageContext = context;
     final isCreate = item == null;
     final nameController = TextEditingController(text: item?.name ?? '');
-    final categoryController = TextEditingController(text: item?.category ?? '');
-    final cycleController = TextEditingController(
-      text: (item?.defaultCycleDays ?? 30).toString(),
-    );
-    final durationController = TextEditingController(
-      text: (item?.defaultDurationMinutes ?? 60).toString(),
-    );
     final formKey = GlobalKey<FormState>();
+    _ExecutionRuleOption selectedRule = _executionRules.first;
+    if (item != null) {
+      selectedRule = _executionRules.firstWhere(
+        (rule) => rule.cycleDays == item.defaultCycleDays,
+        orElse: () => _ExecutionRuleOption(
+          label: '自定义(${item.defaultCycleDays}天)',
+          cycleDays: item.defaultCycleDays,
+        ),
+      );
+    }
 
     final saved = await showDialog<bool>(
       context: pageContext,
       barrierDismissible: false,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(isCreate ? '新增保养项目' : '编辑保养项目'),
-          content: SizedBox(
-            width: 520,
-            child: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: '项目名称',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return '请输入项目名称';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: categoryController,
-                      decoration: const InputDecoration(
-                        labelText: '项目分类',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
+        return StatefulBuilder(
+          builder: (innerContext, setInnerState) {
+            final ruleOptions = <_ExecutionRuleOption>[
+              ..._executionRules,
+              if (_executionRules.every((rule) => rule.cycleDays != selectedRule.cycleDays))
+                selectedRule,
+            ];
+            return AlertDialog(
+              title: Text(isCreate ? '新增保养项目' : '编辑保养项目'),
+              content: SizedBox(
+                width: 520,
+                child: Form(
+                  key: formKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: cycleController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: '默认周期(天)',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              final parsed = int.tryParse((value ?? '').trim());
-                              if (parsed == null || parsed <= 0) {
-                                return '请输入正整数';
-                              }
-                              return null;
-                            },
+                        TextFormField(
+                          controller: nameController,
+                          decoration: const InputDecoration(
+                            labelText: '项目名称',
+                            border: OutlineInputBorder(),
                           ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return '请输入项目名称';
+                            }
+                            return null;
+                          },
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: durationController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: '默认时长(分钟)',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              final parsed = int.tryParse((value ?? '').trim());
-                              if (parsed == null || parsed <= 0) {
-                                return '请输入正整数';
-                              }
-                              return null;
-                            },
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int>(
+                          initialValue: selectedRule.cycleDays,
+                          items: ruleOptions
+                              .map(
+                                (option) => DropdownMenuItem<int>(
+                                  value: option.cycleDays,
+                                  child: Text(option.label),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setInnerState(() {
+                              selectedRule = ruleOptions.firstWhere(
+                                (option) => option.cycleDays == value,
+                              );
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            labelText: '执行日期',
+                            border: OutlineInputBorder(),
                           ),
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) {
-                  return;
-                }
-                final cycle = int.parse(cycleController.text.trim());
-                final duration = int.parse(durationController.text.trim());
-                try {
-                  if (isCreate) {
-                    await _equipmentService.createMaintenanceItem(
-                      name: nameController.text.trim(),
-                      category: categoryController.text.trim(),
-                      defaultCycleDays: cycle,
-                      defaultDurationMinutes: duration,
-                    );
-                  } else {
-                    await _equipmentService.updateMaintenanceItem(
-                      itemId: item.id,
-                      name: nameController.text.trim(),
-                      category: categoryController.text.trim(),
-                      defaultCycleDays: cycle,
-                      defaultDurationMinutes: duration,
-                    );
-                  }
-                  if (dialogContext.mounted) {
-                    Navigator.of(dialogContext).pop(true);
-                  }
-                } catch (error) {
-                  if (_isUnauthorized(error)) {
-                    widget.onLogout();
-                    return;
-                  }
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('保存保养项目失败：${_errorMessage(error)}')),
-                    );
-                  }
-                }
-              },
-              child: const Text('保存'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) {
+                      return;
+                    }
+                    try {
+                      if (isCreate) {
+                        await _equipmentService.createMaintenanceItem(
+                          name: nameController.text.trim(),
+                          defaultCycleDays: selectedRule.cycleDays,
+                        );
+                      } else {
+                        await _equipmentService.updateMaintenanceItem(
+                          itemId: item.id,
+                          name: nameController.text.trim(),
+                          defaultCycleDays: selectedRule.cycleDays,
+                        );
+                      }
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop(true);
+                      }
+                    } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('保存保养项目失败: ${_errorMessage(error)}')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
 
     nameController.dispose();
-    categoryController.dispose();
-    cycleController.dispose();
-    durationController.dispose();
 
     if (saved == true) {
       await _loadItems();
     }
   }
 
-  Future<void> _disableItem(MaintenanceItemEntry item) async {
+  Future<void> _toggleItem(MaintenanceItemEntry item) async {
+    final nextEnabled = !item.isEnabled;
+    final action = nextEnabled ? '启用' : '停用';
     if (!mounted) {
       return;
     }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('停用保养项目'),
-        content: Text('确认停用项目“${item.name}”吗？'),
+        title: Text('$action保养项目'),
+        content: Text('确认$action项目“${item.name}”吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -288,10 +278,13 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
       return;
     }
     try {
-      await _equipmentService.disableMaintenanceItem(itemId: item.id);
+      await _equipmentService.toggleMaintenanceItem(
+        itemId: item.id,
+        enabled: nextEnabled,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保养项目已停用')),
+          SnackBar(content: Text('保养项目已$action')),
         );
       }
       await _loadItems();
@@ -304,7 +297,53 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('停用保养项目失败：${_errorMessage(error)}')),
+        SnackBar(content: Text('$action保养项目失败: ${_errorMessage(error)}')),
+      );
+    }
+  }
+
+  Future<void> _deleteItem(MaintenanceItemEntry item) async {
+    if (!mounted) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除保养项目'),
+        content: Text('确认删除项目“${item.name}”吗？此操作不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      await _equipmentService.deleteMaintenanceItem(itemId: item.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('保养项目已删除')),
+        );
+      }
+      await _loadItems();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('删除保养项目失败: ${_errorMessage(error)}')),
       );
     }
   }
@@ -340,7 +379,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                 child: TextField(
                   controller: _keywordController,
                   decoration: const InputDecoration(
-                    labelText: '搜索项目名称/分类',
+                    labelText: '搜索项目名称',
                     border: OutlineInputBorder(),
                   ),
                   onSubmitted: (_) => _loadItems(),
@@ -363,7 +402,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
+          Text('总数: $_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -385,9 +424,8 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                       child: DataTable(
                         columns: const [
                           DataColumn(label: Text('项目名称')),
-                          DataColumn(label: Text('分类')),
-                          DataColumn(label: Text('默认周期(天)')),
-                          DataColumn(label: Text('默认时长(分钟)')),
+                          DataColumn(label: Text('执行日期')),
+                          DataColumn(label: Text('周期(天)')),
                           DataColumn(label: Text('状态')),
                           DataColumn(label: Text('最后修改时间')),
                           DataColumn(label: Text('操作')),
@@ -396,9 +434,8 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                           return DataRow(
                             cells: [
                               DataCell(Text(item.name)),
-                              DataCell(Text(item.category.isEmpty ? '-' : item.category)),
+                              DataCell(Text(item.executionDateLabel)),
                               DataCell(Text('${item.defaultCycleDays}')),
-                              DataCell(Text('${item.defaultDurationMinutes}')),
                               DataCell(Text(item.isEnabled ? '启用' : '停用')),
                               DataCell(Text(_formatDateTime(item.updatedAt))),
                               DataCell(
@@ -412,10 +449,16 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                                       child: const Text('编辑'),
                                     ),
                                     TextButton(
-                                      onPressed: (widget.canWrite && item.isEnabled)
-                                          ? () => _disableItem(item)
+                                      onPressed: widget.canWrite
+                                          ? () => _toggleItem(item)
                                           : null,
-                                      child: const Text('停用'),
+                                      child: Text(item.isEnabled ? '停用' : '启用'),
+                                    ),
+                                    TextButton(
+                                      onPressed: widget.canWrite
+                                          ? () => _deleteItem(item)
+                                          : null,
+                                      child: const Text('删除'),
                                     ),
                                   ],
                                 ),
@@ -431,4 +474,14 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
       ),
     );
   }
+}
+
+class _ExecutionRuleOption {
+  const _ExecutionRuleOption({
+    required this.label,
+    required this.cycleDays,
+  });
+
+  final String label;
+  final int cycleDays;
 }

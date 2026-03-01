@@ -6,6 +6,7 @@ from sqlalchemy import (
     Date,
     ForeignKey,
     Integer,
+    String,
     UniqueConstraint,
     text,
 )
@@ -27,6 +28,10 @@ class MaintenancePlan(Base, TimestampMixin):
             "estimated_duration_minutes IS NULL OR estimated_duration_minutes > 0",
             name="ck_mes_maintenance_plan_duration_positive",
         ),
+        CheckConstraint(
+            "execution_process_code IN ('laser_marking', 'product_testing', 'product_assembly', 'product_packaging')",
+            name="ck_mes_maintenance_plan_execution_process_code_allowed",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -41,6 +46,13 @@ class MaintenancePlan(Base, TimestampMixin):
         nullable=False,
     )
     cycle_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    execution_process_code: Mapped[str] = mapped_column(
+        String(64),
+        index=True,
+        nullable=False,
+        default="laser_marking",
+        server_default=text("'laser_marking'"),
+    )
     estimated_duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     next_due_date: Mapped[date] = mapped_column(Date, nullable=False)
