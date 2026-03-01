@@ -1,3 +1,7 @@
+from app.models.equipment import Equipment
+from app.models.maintenance_item import MaintenanceItem
+from app.models.maintenance_plan import MaintenancePlan
+from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.page_visibility import PageVisibility
 from app.models.product import Product
 from app.models.product_parameter import ProductParameter
@@ -13,6 +17,10 @@ __all__ = [
     "Process",
     "RegistrationRequest",
     "PageVisibility",
+    "Equipment",
+    "MaintenanceItem",
+    "MaintenancePlan",
+    "MaintenanceWorkOrder",
     "Product",
     "ProductParameter",
     "ProductParameterHistory",

@@ -8,6 +8,7 @@ import '../models/page_visibility_models.dart';
 import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 import '../services/page_visibility_service.dart';
+import 'equipment_page.dart';
 import 'home_page.dart';
 import 'product_page.dart';
 import 'user_page.dart';
@@ -15,6 +16,7 @@ import 'user_page.dart';
 const String _homePageCode = 'home';
 const String _userPageCode = 'user';
 const String _productPageCode = 'product';
+const String _equipmentPageCode = 'equipment';
 const Duration _visibilityRefreshInterval = Duration(seconds: 15);
 
 class _ShellMenuItem {
@@ -101,6 +103,8 @@ class _MainShellPageState extends State<MainShellPage>
         return Icons.group_rounded;
       case _productPageCode:
         return Icons.inventory_2_rounded;
+      case _equipmentPageCode:
+        return Icons.precision_manufacturing_rounded;
       default:
         return Icons.article_outlined;
     }
@@ -302,6 +306,12 @@ class _MainShellPageState extends State<MainShellPage>
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
+  List<String> _visibleEquipmentTabCodes() {
+    final tabCodes = _tabCodesByParent[_equipmentPageCode] ?? const <String>[];
+    final catalogCodes = _catalog.map((item) => item.code).toSet();
+    return tabCodes.where(catalogCodes.contains).toList();
+  }
+
   Widget _buildContent(String pageCode) {
     switch (pageCode) {
       case _homePageCode:
@@ -318,6 +328,13 @@ class _MainShellPageState extends State<MainShellPage>
           session: widget.session,
           onLogout: widget.onLogout,
           visibleTabCodes: _visibleProductTabCodes(),
+          currentRoleCodes: _currentUser!.roleCodes,
+        );
+      case _equipmentPageCode:
+        return EquipmentPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          visibleTabCodes: _visibleEquipmentTabCodes(),
           currentRoleCodes: _currentUser!.roleCodes,
         );
       default:

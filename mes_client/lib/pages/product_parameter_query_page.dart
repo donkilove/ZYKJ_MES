@@ -17,12 +17,14 @@ class ProductParameterQueryPage extends StatefulWidget {
     required this.onLogout,
     required this.tabCode,
     this.jumpCommand,
+    this.onJumpHandled,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final String tabCode;
   final ProductJumpCommand? jumpCommand;
+  final ValueChanged<int>? onJumpHandled;
 
   @override
   State<ProductParameterQueryPage> createState() =>
@@ -147,6 +149,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       final product = _findProductById(command.productId);
       if (product != null) {
         await _showParametersDialog(product);
+        if (mounted) {
+          widget.onJumpHandled?.call(command.seq);
+        }
       }
     }
   }

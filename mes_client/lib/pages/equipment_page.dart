@@ -2,23 +2,28 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
-import '../models/product_models.dart';
-import 'product_management_page.dart';
-import 'product_parameter_management_page.dart';
-import 'product_parameter_query_page.dart';
+import 'equipment_ledger_page.dart';
+import 'maintenance_execution_page.dart';
+import 'maintenance_item_page.dart';
+import 'maintenance_plan_page.dart';
+import 'maintenance_record_page.dart';
 
-const String productManagementTabCode = 'product_management';
-const String productParameterManagementTabCode = 'product_parameter_management';
-const String productParameterQueryTabCode = 'product_parameter_query';
+const String equipmentLedgerTabCode = 'equipment_ledger';
+const String maintenanceItemTabCode = 'maintenance_item';
+const String maintenancePlanTabCode = 'maintenance_plan';
+const String maintenanceExecutionTabCode = 'maintenance_execution';
+const String maintenanceRecordTabCode = 'maintenance_record';
 
 const List<String> _defaultTabOrder = [
-  productManagementTabCode,
-  productParameterManagementTabCode,
-  productParameterQueryTabCode,
+  equipmentLedgerTabCode,
+  maintenanceItemTabCode,
+  maintenancePlanTabCode,
+  maintenanceExecutionTabCode,
+  maintenanceRecordTabCode,
 ];
 
-class ProductPage extends StatefulWidget {
-  const ProductPage({
+class EquipmentPage extends StatefulWidget {
+  const EquipmentPage({
     super.key,
     required this.session,
     required this.onLogout,
@@ -32,16 +37,13 @@ class ProductPage extends StatefulWidget {
   final List<String> currentRoleCodes;
 
   @override
-  State<ProductPage> createState() => _ProductPageState();
+  State<EquipmentPage> createState() => _EquipmentPageState();
 }
 
-class _ProductPageState extends State<ProductPage>
+class _EquipmentPageState extends State<EquipmentPage>
     with SingleTickerProviderStateMixin {
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
-
-  ProductJumpCommand? _jumpCommand;
-  int _jumpSeq = 0;
 
   @override
   void initState() {
@@ -51,7 +53,7 @@ class _ProductPageState extends State<ProductPage>
   }
 
   @override
-  void didUpdateWidget(covariant ProductPage oldWidget) {
+  void didUpdateWidget(covariant EquipmentPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     final updatedCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
     if (listEquals(updatedCodes, _orderedVisibleTabCodes)) {
@@ -67,6 +69,15 @@ class _ProductPageState extends State<ProductPage>
     _tabController?.dispose();
     super.dispose();
   }
+
+  bool get _canWrite =>
+      widget.currentRoleCodes.contains('system_admin') ||
+      widget.currentRoleCodes.contains('production_admin');
+
+  bool get _canExecute =>
+      widget.currentRoleCodes.contains('system_admin') ||
+      widget.currentRoleCodes.contains('production_admin') ||
+      widget.currentRoleCodes.contains('operator');
 
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
     final visibleSet = tabCodes.toSet();
@@ -112,47 +123,18 @@ class _ProductPageState extends State<ProductPage>
     );
   }
 
-  void _dispatchJump({
-    required String targetTabCode,
-    required String action,
-    required ProductItem product,
-  }) {
-    final targetIndex = _orderedVisibleTabCodes.indexOf(targetTabCode);
-    if (targetIndex < 0) {
-      return;
-    }
-
-    setState(() {
-      _jumpSeq += 1;
-      _jumpCommand = ProductJumpCommand(
-        seq: _jumpSeq,
-        targetTabCode: targetTabCode,
-        action: action,
-        productId: product.id,
-        productName: product.name,
-      );
-    });
-    _tabController?.animateTo(targetIndex);
-  }
-
-  void _handleJumpConsumed(int seq) {
-    final current = _jumpCommand;
-    if (current == null || current.seq != seq) {
-      return;
-    }
-    setState(() {
-      _jumpCommand = null;
-    });
-  }
-
   String _tabTitle(String code) {
     switch (code) {
-      case productManagementTabCode:
-        return '产品管理';
-      case productParameterManagementTabCode:
-        return '产品参数管理';
-      case productParameterQueryTabCode:
-        return '产品参数查询';
+      case equipmentLedgerTabCode:
+        return '设备台账';
+      case maintenanceItemTabCode:
+        return '保养项目';
+      case maintenancePlanTabCode:
+        return '保养计划';
+      case maintenanceExecutionTabCode:
+        return '保养执行';
+      case maintenanceRecordTabCode:
+        return '保养记录';
       default:
         return code;
     }
@@ -160,41 +142,34 @@ class _ProductPageState extends State<ProductPage>
 
   Widget _buildTabContent(String code) {
     switch (code) {
-      case productManagementTabCode:
-        return ProductManagementPage(
+      case equipmentLedgerTabCode:
+        return EquipmentLedgerPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          isSystemAdmin: widget.currentRoleCodes.contains('system_admin'),
-          onViewParameters: (product) {
-            _dispatchJump(
-              targetTabCode: productParameterQueryTabCode,
-              action: 'view',
-              product: product,
-            );
-          },
-          onEditParameters: (product) {
-            _dispatchJump(
-              targetTabCode: productParameterManagementTabCode,
-              action: 'edit',
-              product: product,
-            );
-          },
+          canWrite: _canWrite,
         );
-      case productParameterManagementTabCode:
-        return ProductParameterManagementPage(
+      case maintenanceItemTabCode:
+        return MaintenanceItemPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          tabCode: productParameterManagementTabCode,
-          jumpCommand: _jumpCommand,
-          onJumpHandled: _handleJumpConsumed,
+          canWrite: _canWrite,
         );
-      case productParameterQueryTabCode:
-        return ProductParameterQueryPage(
+      case maintenancePlanTabCode:
+        return MaintenancePlanPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          tabCode: productParameterQueryTabCode,
-          jumpCommand: _jumpCommand,
-          onJumpHandled: _handleJumpConsumed,
+          canWrite: _canWrite,
+        );
+      case maintenanceExecutionTabCode:
+        return MaintenanceExecutionPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          canExecute: _canExecute,
+        );
+      case maintenanceRecordTabCode:
+        return MaintenanceRecordPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));
@@ -204,7 +179,7 @@ class _ProductPageState extends State<ProductPage>
   @override
   Widget build(BuildContext context) {
     if (_orderedVisibleTabCodes.isEmpty || _tabController == null) {
-      return const Center(child: Text('当前账号没有可访问的产品模块页面。'));
+      return const Center(child: Text('当前账号没有可访问的设备模块页面。'));
     }
 
     return Column(

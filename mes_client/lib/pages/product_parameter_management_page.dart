@@ -16,12 +16,14 @@ class ProductParameterManagementPage extends StatefulWidget {
     required this.onLogout,
     required this.tabCode,
     this.jumpCommand,
+    this.onJumpHandled,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final String tabCode;
   final ProductJumpCommand? jumpCommand;
+  final ValueChanged<int>? onJumpHandled;
 
   @override
   State<ProductParameterManagementPage> createState() =>
@@ -31,6 +33,14 @@ class ProductParameterManagementPage extends StatefulWidget {
 class _ProductParameterManagementPageState
     extends State<ProductParameterManagementPage> {
   static const String _productNameParameterKey = '产品名称';
+  static const List<String> _presetCategorySuggestions = [
+    '基础参数',
+    '激光打标参数',
+    '产品测试参数',
+    '产品组装参数',
+    '产品包装参数',
+    '自定义参数',
+  ];
   static const double _rowActionButtonSize = 36.0;
   static const double _rowActionGap = 4.0;
   static const double _rowActionColumnWidth =
@@ -137,6 +147,30 @@ class _ProductParameterManagementPageState
     return _isProductNameParameterName(row.nameController.text);
   }
 
+  void _attachCategoryDirtyListener(_ParameterEditorRow row) {
+    if (row.categoryListenerBound) {
+      return;
+    }
+    row.categoryController.addListener(() {
+      if (!mounted || _editorLoading) {
+        return;
+      }
+      _markDirty();
+    });
+    row.categoryListenerBound = true;
+  }
+
+  List<String> _buildCategorySuggestions() {
+    final suggestions = <String>{..._presetCategorySuggestions};
+    for (final row in _editorRows) {
+      final category = row.categoryController.text.trim();
+      if (category.isNotEmpty) {
+        suggestions.add(category);
+      }
+    }
+    return suggestions.toList();
+  }
+
   int _nextEditorRowId() {
     final id = _editorRowIdSeed;
     _editorRowIdSeed += 1;
@@ -208,6 +242,9 @@ class _ProductParameterManagementPageState
       final product = _findProductById(command.productId);
       if (product != null) {
         await _enterEditor(product);
+        if (mounted && _editingProduct?.id == command.productId) {
+          widget.onJumpHandled?.call(command.seq);
+        }
       }
     }
   }
@@ -368,17 +405,17 @@ class _ProductParameterManagementPageState
       return;
     }
 
-    final rows = result.items
-        .map(
-          (item) => _ParameterEditorRow.initial(
-            rowId: _nextEditorRowId(),
-            name: item.name,
-            category: item.category,
-            parameterType: item.type,
-            value: item.value,
-          ),
-        )
-        .toList();
+    final rows = result.items.map((item) {
+      final row = _ParameterEditorRow.initial(
+        rowId: _nextEditorRowId(),
+        name: item.name,
+        category: item.category,
+        parameterType: item.type,
+        value: item.value,
+      );
+      _attachCategoryDirtyListener(row);
+      return row;
+    }).toList();
 
     if (!mounted) {
       for (final row in rows) {
@@ -543,6 +580,25 @@ class _ProductParameterManagementPageState
     );
   }
 
+  Widget _buildCategoryInput(_ParameterEditorRow row) {
+    _attachCategoryDirtyListener(row);
+    return DropdownMenu<String>(
+      controller: row.categoryController,
+      enabled: !_editorSubmitting,
+      enableFilter: true,
+      requestFocusOnTap: true,
+      expandedInsets: EdgeInsets.zero,
+      inputDecorationTheme: const InputDecorationTheme(
+        border: OutlineInputBorder(),
+        isDense: true,
+      ),
+      dropdownMenuEntries: _buildCategorySuggestions()
+          .map((value) => DropdownMenuEntry<String>(value: value, label: value))
+          .toList(),
+      onSelected: (_) => _markDirty(),
+    );
+  }
+
   Widget _buildDragHandle({required int index}) {
     final iconColor = _editorSubmitting
         ? Theme.of(context).disabledColor
@@ -585,17 +641,7 @@ class _ProductParameterManagementPageState
           ),
         ),
         const SizedBox(width: 8),
-        Expanded(
-          flex: 3,
-          child: TextField(
-            controller: row.categoryController,
-            onChanged: (_) => _markDirty(),
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-          ),
-        ),
+        Expanded(flex: 3, child: _buildCategoryInput(row)),
         const SizedBox(width: 8),
         Expanded(
           flex: 2,
@@ -840,12 +886,11 @@ class _ProductParameterManagementPageState
                           ? null
                           : () {
                               setState(() {
-                                _editorRows = [
-                                  ..._editorRows,
-                                  _ParameterEditorRow.empty(
-                                    rowId: _nextEditorRowId(),
-                                  ),
-                                ];
+                                final row = _ParameterEditorRow.empty(
+                                  rowId: _nextEditorRowId(),
+                                );
+                                _attachCategoryDirtyListener(row);
+                                _editorRows = [..._editorRows, row];
                               });
                               _markDirty();
                             },
@@ -1009,6 +1054,7 @@ class _ParameterEditorRow {
   final TextEditingController categoryController;
   final TextEditingController valueController;
   String parameterType;
+  bool categoryListenerBound = false;
 
   void dispose() {
     nameController.dispose();

@@ -20,6 +20,12 @@ PAGE_PRODUCT = "product"
 PAGE_PRODUCT_MANAGEMENT = "product_management"
 PAGE_PRODUCT_PARAMETER_MANAGEMENT = "product_parameter_management"
 PAGE_PRODUCT_PARAMETER_QUERY = "product_parameter_query"
+PAGE_EQUIPMENT = "equipment"
+PAGE_EQUIPMENT_LEDGER = "equipment_ledger"
+PAGE_MAINTENANCE_ITEM = "maintenance_item"
+PAGE_MAINTENANCE_PLAN = "maintenance_plan"
+PAGE_MAINTENANCE_EXECUTION = "maintenance_execution"
+PAGE_MAINTENANCE_RECORD = "maintenance_record"
 
 
 PAGE_CATALOG = [
@@ -95,6 +101,54 @@ PAGE_CATALOG = [
         "always_visible": False,
         "sort_order": 33,
     },
+    {
+        "code": PAGE_EQUIPMENT,
+        "name": "设备",
+        "page_type": PAGE_TYPE_SIDEBAR,
+        "parent_code": None,
+        "always_visible": False,
+        "sort_order": 40,
+    },
+    {
+        "code": PAGE_EQUIPMENT_LEDGER,
+        "name": "设备台账",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_EQUIPMENT,
+        "always_visible": False,
+        "sort_order": 41,
+    },
+    {
+        "code": PAGE_MAINTENANCE_ITEM,
+        "name": "保养项目",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_EQUIPMENT,
+        "always_visible": False,
+        "sort_order": 42,
+    },
+    {
+        "code": PAGE_MAINTENANCE_PLAN,
+        "name": "保养计划",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_EQUIPMENT,
+        "always_visible": False,
+        "sort_order": 43,
+    },
+    {
+        "code": PAGE_MAINTENANCE_EXECUTION,
+        "name": "保养执行",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_EQUIPMENT,
+        "always_visible": False,
+        "sort_order": 44,
+    },
+    {
+        "code": PAGE_MAINTENANCE_RECORD,
+        "name": "保养记录",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_EQUIPMENT,
+        "always_visible": False,
+        "sort_order": 45,
+    },
 ]
 
 
@@ -118,6 +172,12 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCT_MANAGEMENT,
         PAGE_PRODUCT_PARAMETER_MANAGEMENT,
         PAGE_PRODUCT_PARAMETER_QUERY,
+        PAGE_EQUIPMENT,
+        PAGE_EQUIPMENT_LEDGER,
+        PAGE_MAINTENANCE_ITEM,
+        PAGE_MAINTENANCE_PLAN,
+        PAGE_MAINTENANCE_EXECUTION,
+        PAGE_MAINTENANCE_RECORD,
     },
     ROLE_PRODUCTION_ADMIN: {
         PAGE_HOME,
@@ -125,9 +185,24 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCT_MANAGEMENT,
         PAGE_PRODUCT_PARAMETER_MANAGEMENT,
         PAGE_PRODUCT_PARAMETER_QUERY,
+        PAGE_EQUIPMENT,
+        PAGE_EQUIPMENT_LEDGER,
+        PAGE_MAINTENANCE_ITEM,
+        PAGE_MAINTENANCE_PLAN,
+        PAGE_MAINTENANCE_EXECUTION,
+        PAGE_MAINTENANCE_RECORD,
     },
-    ROLE_QUALITY_ADMIN: {PAGE_HOME},
-    ROLE_OPERATOR: {PAGE_HOME},
+    ROLE_QUALITY_ADMIN: {
+        PAGE_HOME,
+        PAGE_EQUIPMENT,
+        PAGE_MAINTENANCE_RECORD,
+    },
+    ROLE_OPERATOR: {
+        PAGE_HOME,
+        PAGE_EQUIPMENT,
+        PAGE_MAINTENANCE_EXECUTION,
+        PAGE_MAINTENANCE_RECORD,
+    },
 }
 
 

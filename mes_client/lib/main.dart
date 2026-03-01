@@ -20,6 +20,14 @@ class MesClientApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF006A67)),
         useMaterial3: true,
+        fontFamily: 'Microsoft YaHei',
+        fontFamilyFallback: const [
+          '微软雅黑',
+          'Microsoft YaHei',
+          'PingFang SC',
+          'Noto Sans CJK SC',
+          'sans-serif',
+        ],
       ),
       home: const AppBootstrapPage(),
     );
@@ -82,20 +90,13 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_session == null) {
       return LoginPage(onLoginSuccess: _handleLoginSuccess);
     }
 
-    return MainShellPage(
-      session: _session!,
-      onLogout: _handleLogout,
-    );
+    return MainShellPage(session: _session!, onLogout: _handleLogout);
   }
 }
