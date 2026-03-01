@@ -24,6 +24,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   static const String _operatorRoleCode = 'operator';
 
   late final UserService _userService;
+  final ScrollController _requestListScrollController = ScrollController();
 
   bool _loading = false;
   String _message = '';
@@ -37,6 +38,12 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     super.initState();
     _userService = UserService(widget.session);
     _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _requestListScrollController.dispose();
+    super.dispose();
   }
 
   bool _isUnauthorized(Object error) {
@@ -242,8 +249,8 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                             if (value == null || value.trim().isEmpty) {
                               return '请输入入库账号';
                             }
-                            if (value.trim().length < 3) {
-                              return '账号至少 3 个字符';
+                            if (value.trim().length < 2) {
+                              return '账号至少 2 个字符';
                             }
                             return null;
                           },
@@ -465,30 +472,39 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                 : _items.isEmpty
                 ? const Center(child: Text('暂无待审批注册申请'))
                 : Card(
-                    child: ListView.separated(
-                      itemCount: _items.length,
-                      separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final item = _items[index];
-                        return ListTile(
-                          title: Text(item.account),
-                          subtitle: Text('提交时间：${_formatTime(item.createdAt)}'),
-                          trailing: Wrap(
-                            spacing: 8,
-                            children: [
-                              TextButton(
-                                onPressed: () => _openApproveDialog(item),
-                                child: const Text('通过'),
+                    child: SizedBox.expand(
+                      child: Scrollbar(
+                        controller: _requestListScrollController,
+                        thumbVisibility: true,
+                        child: ListView.separated(
+                          controller: _requestListScrollController,
+                          itemCount: _items.length,
+                          separatorBuilder: (context, index) =>
+                              const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final item = _items[index];
+                            return ListTile(
+                              title: Text(item.account),
+                              subtitle: Text(
+                                '提交时间：${_formatTime(item.createdAt)}',
                               ),
-                              TextButton(
-                                onPressed: () => _confirmReject(item),
-                                child: const Text('驳回'),
+                              trailing: Wrap(
+                                spacing: 8,
+                                children: [
+                                  TextButton(
+                                    onPressed: () => _openApproveDialog(item),
+                                    child: const Text('通过'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _confirmReject(item),
+                                    child: const Text('驳回'),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        );
-                      },
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
           ),

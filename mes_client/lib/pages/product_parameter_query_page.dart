@@ -1,11 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/app_session.dart';
 import '../models/product_models.dart';
 import '../services/api_exception.dart';
 import '../services/product_service.dart';
+import '../widgets/adaptive_table_container.dart';
 
 class ProductParameterQueryPage extends StatefulWidget {
   const ProductParameterQueryPage({
@@ -148,10 +151,66 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     }
   }
 
+  String _linkDisplayName(String rawValue) {
+    final value = rawValue.trim();
+    if (value.isEmpty) {
+      return '-';
+    }
+    final uri = Uri.tryParse(value);
+    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      final pathSegment = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+      if (pathSegment.isNotEmpty) {
+        return Uri.decodeComponent(pathSegment);
+      }
+      return uri.host.isEmpty ? value : uri.host;
+    }
+    final filename = p.basename(value);
+    return filename.isEmpty ? value : filename;
+  }
+
+  Future<void> _openLink(String rawValue) async {
+    final value = rawValue.trim();
+    if (value.isEmpty) {
+      return;
+    }
+
+    Uri uri;
+    final parsed = Uri.tryParse(value);
+    if (parsed != null &&
+        (parsed.scheme == 'http' || parsed.scheme == 'https')) {
+      uri = parsed;
+    } else {
+      uri = Uri.file(value, windows: true);
+    }
+
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('无法打开链接：$value')));
+    }
+  }
+
+  Widget _buildParameterValueCell(ProductParameterItem item) {
+    final value = item.value.trim();
+    if (item.type != 'Link') {
+      return Text(value.isEmpty ? '-' : value);
+    }
+    if (value.isEmpty) {
+      return const Text('-');
+    }
+    return TextButton(
+      onPressed: () => _openLink(value),
+      child: Text(_linkDisplayName(value), overflow: TextOverflow.ellipsis),
+    );
+  }
+
   Future<void> _showParametersDialog(ProductItem product) async {
     ProductParameterListResult result;
     try {
-      result = await _productService.listProductParameters(productId: product.id);
+      result = await _productService.listProductParameters(
+        productId: product.id,
+      );
     } catch (error) {
       if (_isUnauthorized(error)) {
         widget.onLogout();
@@ -175,20 +234,25 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
         return AlertDialog(
           title: Text('产品参数 - ${product.name}'),
           content: SizedBox(
-            width: 680,
+            width: 900,
+            height: 520,
             child: result.items.isEmpty
                 ? const Center(child: Text('该产品暂无参数'))
-                : SingleChildScrollView(
+                : AdaptiveTableContainer(
                     child: DataTable(
                       columns: const [
-                        DataColumn(label: Text('参数名')),
+                        DataColumn(label: Text('参数名称')),
+                        DataColumn(label: Text('参数分类')),
+                        DataColumn(label: Text('参数类型')),
                         DataColumn(label: Text('参数值')),
                       ],
                       rows: result.items.map((item) {
                         return DataRow(
                           cells: [
-                            DataCell(Text(item.key)),
-                            DataCell(Text(item.value)),
+                            DataCell(Text(item.name)),
+                            DataCell(Text(item.category)),
+                            DataCell(Text(item.type)),
+                            DataCell(_buildParameterValueCell(item)),
                           ],
                         );
                       }).toList(),
@@ -271,33 +335,30 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                 : _products.isEmpty
                 ? const Center(child: Text('暂无产品'))
                 : Card(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SingleChildScrollView(
-                        child: DataTable(
-                          columns: const [
-                            DataColumn(label: Text('产品名称')),
-                            DataColumn(label: Text('创建时间')),
-                            DataColumn(label: Text('最后修改时间')),
-                            DataColumn(label: Text('查看产品参数')),
-                          ],
-                          rows: _products.map((product) {
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(product.name)),
-                                DataCell(Text(_formatTime(product.createdAt))),
-                                DataCell(Text(_formatTime(product.updatedAt))),
-                                DataCell(
-                                  TextButton(
-                                    onPressed: () =>
-                                        _showParametersDialog(product),
-                                    child: const Text('查看参数'),
-                                  ),
+                    child: AdaptiveTableContainer(
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('产品名称')),
+                          DataColumn(label: Text('创建时间')),
+                          DataColumn(label: Text('最后修改时间')),
+                          DataColumn(label: Text('查看产品参数')),
+                        ],
+                        rows: _products.map((product) {
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(product.name)),
+                              DataCell(Text(_formatTime(product.createdAt))),
+                              DataCell(Text(_formatTime(product.updatedAt))),
+                              DataCell(
+                                TextButton(
+                                  onPressed: () =>
+                                      _showParametersDialog(product),
+                                  child: const Text('查看参数'),
                                 ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
                       ),
                     ),
                   ),

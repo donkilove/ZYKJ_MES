@@ -32,16 +32,49 @@ class ProductListResult {
 }
 
 class ProductParameterItem {
-  ProductParameterItem({required this.key, required this.value});
+  ProductParameterItem({
+    required this.name,
+    required this.category,
+    required this.type,
+    required this.value,
+    required this.sortOrder,
+    required this.isPreset,
+  });
 
-  final String key;
+  final String name;
+  final String category;
+  final String type;
   final String value;
+  final int sortOrder;
+  final bool isPreset;
 
   factory ProductParameterItem.fromJson(Map<String, dynamic> json) {
     return ProductParameterItem(
-      key: json['key'] as String,
-      value: json['value'] as String,
+      name: json['name'] as String,
+      category: (json['category'] as String?) ?? '',
+      type: (json['type'] as String?) ?? 'Text',
+      value: (json['value'] as String?) ?? '',
+      sortOrder: (json['sort_order'] as int?) ?? 0,
+      isPreset: (json['is_preset'] as bool?) ?? false,
     );
+  }
+}
+
+class ProductParameterUpdateItem {
+  ProductParameterUpdateItem({
+    required this.name,
+    required this.category,
+    required this.type,
+    required this.value,
+  });
+
+  final String name;
+  final String category;
+  final String type;
+  final String value;
+
+  Map<String, dynamic> toJson() {
+    return {'name': name, 'category': category, 'type': type, 'value': value};
   }
 }
 
@@ -92,8 +125,8 @@ class ProductParameterHistoryItem {
     return ProductParameterHistoryItem(
       id: json['id'] as int,
       remark: json['remark'] as String,
-      changedKeys:
-          (json['changed_keys'] as List<dynamic>? ?? const []).cast<String>(),
+      changedKeys: (json['changed_keys'] as List<dynamic>? ?? const [])
+          .cast<String>(),
       operatorUsername: json['operator_username'] as String? ?? '-',
       createdAt: DateTime.parse(json['created_at'] as String),
     );
@@ -119,8 +152,8 @@ class ProductParameterUpdateResult {
   factory ProductParameterUpdateResult.fromJson(Map<String, dynamic> json) {
     return ProductParameterUpdateResult(
       updatedCount: (json['updated_count'] as int?) ?? 0,
-      changedKeys:
-          (json['changed_keys'] as List<dynamic>? ?? const []).cast<String>(),
+      changedKeys: (json['changed_keys'] as List<dynamic>? ?? const [])
+          .cast<String>(),
     );
   }
 }

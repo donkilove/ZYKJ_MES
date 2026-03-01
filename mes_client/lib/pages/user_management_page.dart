@@ -36,6 +36,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   late final UserService _userService;
   final TextEditingController _keywordController = TextEditingController();
+  final ScrollController _userListScrollController = ScrollController();
   Timer? _onlineStatusTimer;
   static const Duration _onlineRefreshInterval = Duration(seconds: 5);
   bool _onlineRefreshInFlight = false;
@@ -59,6 +60,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
   void dispose() {
     _stopOnlineStatusRefresh();
     _keywordController.dispose();
+    _userListScrollController.dispose();
     super.dispose();
   }
 
@@ -257,8 +259,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             if (value == null || value.trim().isEmpty) {
                               return '请输入账号';
                             }
-                            if (value.trim().length < 3) {
-                              return '账号至少 3 个字符';
+                            if (value.trim().length < 2) {
+                              return '账号至少 2 个字符';
                             }
                             return null;
                           },
@@ -464,8 +466,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             if (value == null || value.trim().isEmpty) {
                               return '请输入账号';
                             }
-                            if (value.trim().length < 3) {
-                              return '账号至少 3 个字符';
+                            if (value.trim().length < 2) {
+                              return '账号至少 2 个字符';
                             }
                             return null;
                           },
@@ -747,70 +749,81 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 : _users.isEmpty
                 ? const Center(child: Text('暂无用户'))
                 : Card(
-                    child: ListView.separated(
-                      itemCount: _users.length,
-                      separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final user = _users[index];
-                        final statusLabel = user.isOnline
-                            ? 'Online'
-                            : 'Offline ${_formatLastSeen(user.lastSeenAt)}';
-                        final statusColor = user.isOnline
-                            ? Colors.green
-                            : theme.colorScheme.outline;
-                        return ListTile(
-                          title: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  user.username,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: statusColor.withValues(alpha: 0.45),
+                    child: SizedBox.expand(
+                      child: Scrollbar(
+                        controller: _userListScrollController,
+                        thumbVisibility: true,
+                        child: ListView.separated(
+                          controller: _userListScrollController,
+                          itemCount: _users.length,
+                          separatorBuilder: (context, index) =>
+                              const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final user = _users[index];
+                            final statusLabel = user.isOnline
+                                ? 'Online'
+                                : 'Offline ${_formatLastSeen(user.lastSeenAt)}';
+                            final statusColor = user.isOnline
+                                ? Colors.green
+                                : theme.colorScheme.outline;
+                            return ListTile(
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      user.username,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                ),
-                                child: Text(
-                                  statusLabel,
-                                  style: TextStyle(
-                                    color: statusColor,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: statusColor.withValues(
+                                        alpha: 0.14,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: statusColor.withValues(
+                                          alpha: 0.45,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      statusLabel,
+                                      style: TextStyle(
+                                        color: statusColor,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
-                          subtitle: Text(
-                            '角色：${user.roleNames.isEmpty ? '-' : user.roleNames.join('、')}'
-                            '\n工序：${user.processNames.isEmpty ? '-' : user.processNames.join('、')}',
-                          ),
-                          isThreeLine: true,
-                          trailing: Wrap(
-                            spacing: 8,
-                            children: [
-                              TextButton(
-                                onPressed: () => _showEditUserDialog(user),
-                                child: const Text('编辑'),
+                              subtitle: Text(
+                                '角色：${user.roleNames.isEmpty ? '-' : user.roleNames.join('、')}'
+                                '\n工序：${user.processNames.isEmpty ? '-' : user.processNames.join('、')}',
                               ),
-                              TextButton(
-                                onPressed: () => _confirmDeleteUser(user),
-                                child: const Text('删除'),
+                              isThreeLine: true,
+                              trailing: Wrap(
+                                spacing: 8,
+                                children: [
+                                  TextButton(
+                                    onPressed: () => _showEditUserDialog(user),
+                                    child: const Text('编辑'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _confirmDeleteUser(user),
+                                    child: const Text('删除'),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        );
-                      },
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
           ),

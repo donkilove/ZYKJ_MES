@@ -100,7 +100,7 @@ class ProductService {
   Future<ProductParameterUpdateResult> updateProductParameters({
     required int productId,
     required String remark,
-    required List<ProductParameterItem> items,
+    required List<ProductParameterUpdateItem> items,
   }) async {
     final uri = Uri.parse('${session.baseUrl}/products/$productId/parameters');
     final response = await http.put(
@@ -108,9 +108,7 @@ class ProductService {
       headers: _authHeaders,
       body: jsonEncode({
         'remark': remark,
-        'items': items
-            .map((entry) => {'key': entry.key, 'value': entry.value})
-            .toList(),
+        'items': items.map((entry) => entry.toJson()).toList(),
       }),
     );
     final json = _decodeBody(response);
@@ -131,9 +129,7 @@ class ProductService {
   }) async {
     final uri = Uri.parse(
       '${session.baseUrl}/products/$productId/parameter-history',
-    ).replace(
-      queryParameters: {'page': '$page', 'page_size': '$pageSize'},
-    );
+    ).replace(queryParameters: {'page': '$page', 'page_size': '$pageSize'});
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {

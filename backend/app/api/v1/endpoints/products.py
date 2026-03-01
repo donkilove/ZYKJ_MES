@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role_codes
-from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
+from app.core.rbac import (
+    ROLE_OPERATOR,
+    ROLE_PRODUCTION_ADMIN,
+    ROLE_QUALITY_ADMIN,
+    ROLE_SYSTEM_ADMIN,
+)
 from app.core.security import verify_password
 from app.db.session import get_db
 from app.models.product import Product
@@ -24,6 +29,7 @@ from app.schemas.product import (
 from app.services.product_service import (
     create_product,
     delete_product,
+    ensure_product_parameter_template_initialized,
     get_product_by_id,
     get_product_by_name,
     list_parameter_history,
@@ -36,7 +42,13 @@ from app.services.product_service import (
 
 router = APIRouter()
 
-PRODUCT_READ_WRITE_ROLE_CODES = [ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN]
+PRODUCT_READ_ROLE_CODES = [
+    ROLE_SYSTEM_ADMIN,
+    ROLE_PRODUCTION_ADMIN,
+    ROLE_QUALITY_ADMIN,
+    ROLE_OPERATOR,
+]
+PRODUCT_WRITE_ROLE_CODES = [ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN]
 
 
 def to_product_item(
@@ -65,7 +77,7 @@ def get_products(
     page_size: int = Query(default=50, ge=1, le=200),
     keyword: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_READ_WRITE_ROLE_CODES)),
+    _: User = Depends(require_role_codes(PRODUCT_READ_ROLE_CODES)),
 ) -> ApiResponse[ProductListResult]:
     total, products, latest_map = list_products(db, page, page_size, keyword)
     return success_response(
@@ -80,7 +92,7 @@ def get_products(
 def create_product_api(
     payload: ProductCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_READ_WRITE_ROLE_CODES)),
+    _: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
 ) -> ApiResponse[ProductItem]:
     normalized_name = payload.name.strip()
     existing = get_product_by_name(db, normalized_name)
@@ -117,15 +129,23 @@ def delete_product_api(
 def get_product_parameters(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_READ_WRITE_ROLE_CODES)),
+    _: User = Depends(require_role_codes(PRODUCT_READ_ROLE_CODES)),
 ) -> ApiResponse[ProductParameterListResult]:
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
+    ensure_product_parameter_template_initialized(db, product)
     parameters = list_product_parameters(db, product.id)
     items = [
-        ProductParameterItem(key=parameter.param_key, value=parameter.param_value)
+        ProductParameterItem(
+            name=parameter.param_key,
+            category=parameter.param_category,
+            type=parameter.param_type,
+            value=parameter.param_value,
+            sort_order=parameter.sort_order,
+            is_preset=parameter.is_preset,
+        )
         for parameter in parameters
     ]
     return success_response(
@@ -143,17 +163,18 @@ def update_parameters(
     product_id: int,
     payload: ProductParameterUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(PRODUCT_READ_WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
 ) -> ApiResponse[ProductParameterUpdateResult]:
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
+    ensure_product_parameter_template_initialized(db, product)
     try:
         changed_keys = update_product_parameters(
             db,
             product=product,
-            items=[(item.key, item.value) for item in payload.items],
+            items=[(item.name, item.category, item.type, item.value) for item in payload.items],
             remark=payload.remark,
             operator=current_user,
         )
@@ -178,7 +199,7 @@ def get_parameter_history(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_READ_WRITE_ROLE_CODES)),
+    _: User = Depends(require_role_codes(PRODUCT_READ_ROLE_CODES)),
 ) -> ApiResponse[ProductParameterHistoryListResult]:
     product = get_product_by_id(db, product_id)
     if not product:

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -25,13 +26,19 @@ class ProductListResult(BaseModel):
 
 
 class ProductParameterInputItem(BaseModel):
-    key: str = Field(min_length=1, max_length=128)
+    name: str = Field(min_length=1, max_length=128)
+    category: str = Field(min_length=1, max_length=128)
+    type: Literal["Text", "Link"]
     value: str = Field(min_length=0, max_length=1024)
 
 
 class ProductParameterItem(BaseModel):
-    key: str
+    name: str
+    category: str
+    type: Literal["Text", "Link"]
     value: str
+    sort_order: int
+    is_preset: bool
 
 
 class ProductParameterListResult(BaseModel):

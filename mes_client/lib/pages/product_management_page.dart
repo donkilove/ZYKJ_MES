@@ -4,6 +4,7 @@ import '../models/app_session.dart';
 import '../models/product_models.dart';
 import '../services/api_exception.dart';
 import '../services/product_service.dart';
+import '../widgets/adaptive_table_container.dart';
 
 class ProductManagementPage extends StatefulWidget {
   const ProductManagementPage({
@@ -336,50 +337,45 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                 : _products.isEmpty
                 ? const Center(child: Text('暂无产品'))
                 : Card(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SingleChildScrollView(
-                        child: DataTable(
-                          columns: const [
-                            DataColumn(label: Text('产品名称')),
-                            DataColumn(label: Text('创建时间')),
-                            DataColumn(label: Text('最后修改时间')),
-                            DataColumn(label: Text('查看参数')),
-                            DataColumn(label: Text('编辑参数')),
-                            DataColumn(label: Text('删除产品')),
-                          ],
-                          rows: _products.map((product) {
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(product.name)),
-                                DataCell(Text(_formatTime(product.createdAt))),
-                                DataCell(Text(_formatTime(product.updatedAt))),
-                                DataCell(
-                                  TextButton(
-                                    onPressed: () {
-                                      widget.onViewParameters(product);
-                                    },
-                                    child: const Text('查看参数'),
-                                  ),
+                    child: AdaptiveTableContainer(
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('产品名称')),
+                          DataColumn(label: Text('创建时间')),
+                          DataColumn(label: Text('最后修改时间')),
+                          DataColumn(label: Text('查看参数')),
+                          DataColumn(label: Text('编辑参数')),
+                          DataColumn(label: Text('删除产品')),
+                        ],
+                        rows: _products.map((product) {
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(product.name)),
+                              DataCell(Text(_formatTime(product.createdAt))),
+                              DataCell(Text(_formatTime(product.updatedAt))),
+                              DataCell(
+                                TextButton(
+                                  onPressed: () =>
+                                      widget.onViewParameters(product),
+                                  child: const Text('查看参数'),
                                 ),
-                                DataCell(
-                                  TextButton(
-                                    onPressed: () {
-                                      widget.onEditParameters(product);
-                                    },
-                                    child: const Text('编辑参数'),
-                                  ),
+                              ),
+                              DataCell(
+                                TextButton(
+                                  onPressed: () =>
+                                      widget.onEditParameters(product),
+                                  child: const Text('编辑参数'),
                                 ),
-                                DataCell(
-                                  TextButton(
-                                    onPressed: () => _deleteProduct(product),
-                                    child: const Text('删除'),
-                                  ),
+                              ),
+                              DataCell(
+                                TextButton(
+                                  onPressed: () => _deleteProduct(product),
+                                  child: const Text('删除'),
                                 ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
                       ),
                     ),
                   ),

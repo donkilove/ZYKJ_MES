@@ -257,8 +257,8 @@ class _LoginPageState extends State<LoginPage> {
                                 if (value == null || value.trim().isEmpty) {
                                   return '请输入账号';
                                 }
-                                if (value.trim().length < 3) {
-                                  return '账号至少 3 个字符';
+                                if (value.trim().length < 2) {
+                                  return '账号至少 2 个字符';
                                 }
                                 return null;
                               },
