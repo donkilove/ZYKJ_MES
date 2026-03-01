@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 from app.core.product_parameter_template import (
     ALLOWED_PARAMETER_TYPES,
     PARAMETER_TYPE_TEXT,
+    PRODUCT_NAME_PARAMETER_CATEGORY,
+    PRODUCT_NAME_PARAMETER_KEY,
+    PRODUCT_NAME_PARAMETER_TYPE,
     PRODUCT_PARAMETER_TEMPLATE,
     PRODUCT_PARAMETER_TEMPLATE_NAME_SET,
 )
@@ -110,7 +113,11 @@ def create_product(db: Session, name: str) -> Product:
                 param_key=template.name,
                 param_category=template.category,
                 param_type=template.parameter_type,
-                param_value="",
+                param_value=(
+                    normalized_name
+                    if template.name == PRODUCT_NAME_PARAMETER_KEY
+                    else ""
+                ),
                 sort_order=template.sort_order,
                 is_preset=True,
             )
@@ -127,8 +134,54 @@ def delete_product(db: Session, product: Product) -> None:
 
 
 def ensure_product_parameter_template_initialized(db: Session, product: Product) -> bool:
+    # Always keep the key product-name parameter aligned, even when template is initialized.
     if product.parameter_template_initialized:
-        return False
+        parameters = list_product_parameters(db, product.id)
+        product_name_parameter = next(
+            (
+                item
+                for item in parameters
+                if item.param_key == PRODUCT_NAME_PARAMETER_KEY
+            ),
+            None,
+        )
+        changed = False
+        if product_name_parameter is None:
+            db.add(
+                ProductParameter(
+                    product_id=product.id,
+                    param_key=PRODUCT_NAME_PARAMETER_KEY,
+                    param_category=PRODUCT_NAME_PARAMETER_CATEGORY,
+                    param_type=PRODUCT_NAME_PARAMETER_TYPE,
+                    param_value=product.name,
+                    sort_order=1,
+                    is_preset=True,
+                )
+            )
+            changed = True
+        else:
+            if (
+                product_name_parameter.param_category
+                != PRODUCT_NAME_PARAMETER_CATEGORY
+            ):
+                product_name_parameter.param_category = (
+                    PRODUCT_NAME_PARAMETER_CATEGORY
+                )
+                changed = True
+            if product_name_parameter.param_type != PRODUCT_NAME_PARAMETER_TYPE:
+                product_name_parameter.param_type = PRODUCT_NAME_PARAMETER_TYPE
+                changed = True
+            if product_name_parameter.param_value != product.name:
+                product_name_parameter.param_value = product.name
+                changed = True
+            if not product_name_parameter.is_preset:
+                product_name_parameter.is_preset = True
+                changed = True
+
+        if changed:
+            db.commit()
+            db.refresh(product)
+        return changed
 
     parameters = list_product_parameters(db, product.id)
     current_by_key = {item.param_key: item for item in parameters}
@@ -142,7 +195,11 @@ def ensure_product_parameter_template_initialized(db: Session, product: Product)
                     param_key=template.name,
                     param_category=template.category,
                     param_type=template.parameter_type,
-                    param_value="",
+                    param_value=(
+                        product.name
+                        if template.name == PRODUCT_NAME_PARAMETER_KEY
+                        else ""
+                    ),
                     sort_order=template.sort_order,
                     is_preset=True,
                 )
@@ -153,6 +210,8 @@ def ensure_product_parameter_template_initialized(db: Session, product: Product)
         existing.param_type = template.parameter_type
         existing.sort_order = template.sort_order
         existing.is_preset = True
+        if template.name == PRODUCT_NAME_PARAMETER_KEY:
+            existing.param_value = product.name
 
     next_sort_order = len(PRODUCT_PARAMETER_TEMPLATE) + 1
     for parameter in parameters:
@@ -198,6 +257,17 @@ def update_product_parameters(
         str(item["name"]): item
         for item in normalized_items
     }
+    product_name_item = normalized_by_name.get(PRODUCT_NAME_PARAMETER_KEY)
+    if product_name_item is None:
+        raise ValueError("Product name parameter cannot be deleted")
+    product_name_item["category"] = PRODUCT_NAME_PARAMETER_CATEGORY
+    product_name_item["type"] = PRODUCT_NAME_PARAMETER_TYPE
+    candidate_product_name = _normalize_product_name(str(product_name_item["value"]))
+    product_name_item["value"] = candidate_product_name
+
+    existing_product = get_product_by_name(db, candidate_product_name)
+    if existing_product and existing_product.id != product.id:
+        raise ValueError("Product name already exists")
 
     current_parameters = list_product_parameters(db, product.id)
     current_by_name = {item.param_key: item for item in current_parameters}
@@ -260,6 +330,7 @@ def update_product_parameters(
             changed_keys=changed_keys,
         )
     )
+    product.name = candidate_product_name
     product.updated_at = datetime.now(UTC)
 
     db.commit()
@@ -309,4 +380,3 @@ def get_latest_history_map_by_product_ids(
         if row.product_id not in latest_map:
             latest_map[row.product_id] = row
     return latest_map
-

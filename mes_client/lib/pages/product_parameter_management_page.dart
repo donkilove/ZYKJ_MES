@@ -30,6 +30,7 @@ class ProductParameterManagementPage extends StatefulWidget {
 
 class _ProductParameterManagementPageState
     extends State<ProductParameterManagementPage> {
+  static const String _productNameParameterKey = '产品名称';
   static const double _rowActionButtonSize = 36.0;
   static const double _rowActionGap = 4.0;
   static const double _rowActionColumnWidth =
@@ -126,6 +127,14 @@ class _ProductParameterManagementPageState
       }
     }
     return null;
+  }
+
+  bool _isProductNameParameterName(String name) {
+    return name.trim() == _productNameParameterKey;
+  }
+
+  bool _isProductNameRow(_ParameterEditorRow row) {
+    return _isProductNameParameterName(row.nameController.text);
   }
 
   int _nextEditorRowId() {
@@ -413,6 +422,7 @@ class _ProductParameterManagementPageState
 
     final items = <ProductParameterUpdateItem>[];
     final nameSet = <String>{};
+    var hasProductNameParameter = false;
     for (final row in _editorRows) {
       final name = row.nameController.text.trim();
       final category = row.categoryController.text.trim();
@@ -435,6 +445,9 @@ class _ProductParameterManagementPageState
         _showSnackBar('参数名称重复：$name');
         return;
       }
+      if (_isProductNameParameterName(name)) {
+        hasProductNameParameter = true;
+      }
       nameSet.add(name);
       items.add(
         ProductParameterUpdateItem(
@@ -444,6 +457,10 @@ class _ProductParameterManagementPageState
           value: value,
         ),
       );
+    }
+    if (!hasProductNameParameter) {
+      _showSnackBar('产品名称参数不可删除');
+      return;
     }
 
     if (!mounted) {
@@ -551,6 +568,7 @@ class _ProductParameterManagementPageState
     required int index,
     required _ParameterEditorRow row,
   }) {
+    final isProductNameRow = _isProductNameRow(row);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -558,7 +576,8 @@ class _ProductParameterManagementPageState
           flex: 3,
           child: TextField(
             controller: row.nameController,
-            onChanged: (_) => _markDirty(),
+            readOnly: isProductNameRow,
+            onChanged: isProductNameRow ? null : (_) => _markDirty(),
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               isDense: true,
@@ -649,8 +668,8 @@ class _ProductParameterManagementPageState
               const SizedBox(width: _rowActionGap),
               _buildRowActionIconButton(
                 icon: Icons.delete_outline,
-                tooltip: '删除',
-                onPressed: _editorSubmitting
+                tooltip: isProductNameRow ? '产品名称参数不可删除' : '删除',
+                onPressed: _editorSubmitting || isProductNameRow
                     ? null
                     : () {
                         setState(() {
