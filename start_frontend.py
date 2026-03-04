@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -12,6 +14,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = ROOT_DIR / "mes_client"
 DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api/v1"
+LOCAL_NO_PROXY_ENTRIES = ("localhost", "127.0.0.1", "::1")
 
 
 def resolve_flutter() -> str | None:
@@ -28,6 +31,37 @@ def resolve_flutter() -> str | None:
         if candidate.exists():
             return str(candidate)
     return None
+
+
+def _merge_no_proxy(existing: str | None) -> str:
+    entries: list[str] = []
+    if existing:
+        normalized = existing.replace(";", ",")
+        entries.extend(part.strip() for part in normalized.split(",") if part.strip())
+    entries.extend(LOCAL_NO_PROXY_ENTRIES)
+
+    merged: list[str] = []
+    seen: set[str] = set()
+    for entry in entries:
+        key = entry.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(entry)
+    return ",".join(merged)
+
+
+def build_subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    merged_no_proxy = _merge_no_proxy(env.get("NO_PROXY") or env.get("no_proxy"))
+    env["NO_PROXY"] = merged_no_proxy
+    env["no_proxy"] = merged_no_proxy
+    return env
+
+
+def _is_local_host_url(url: str) -> bool:
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    return host in {"localhost", "127.0.0.1", "::1"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,10 +94,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_command(command: list[str], cwd: Path) -> int:
+def run_command(command: list[str], cwd: Path, env: dict[str, str]) -> int:
     print(f"[INFO] Working directory: {cwd}")
     print(f"[INFO] Command: {' '.join(command)}")
-    result = subprocess.run(command, cwd=cwd, check=False)
+    result = subprocess.run(command, cwd=cwd, check=False, env=env)
     return result.returncode
 
 
@@ -75,8 +109,12 @@ def bootstrap_admin(api_base_url: str) -> None:
         headers={"Content-Type": "application/json"},
         data=b"{}",
     )
+    open_url = urllib.request.urlopen
+    if _is_local_host_url(api_base_url):
+        print("[INFO] bootstrap admin uses direct localhost connection (proxy bypass).")
+        open_url = urllib.request.build_opener(urllib.request.ProxyHandler({})).open
     try:
-        with urllib.request.urlopen(request, timeout=8) as response:
+        with open_url(request, timeout=8) as response:
             raw = response.read().decode("utf-8", errors="replace")
             payload = json.loads(raw) if raw else {}
             data = payload.get("data", {}) if isinstance(payload, dict) else {}
@@ -105,20 +143,25 @@ def main() -> int:
         print("[ERROR] Flutter executable not found. Add flutter to PATH or install to C:/tools/flutter.")
         return 1
 
+    env = build_subprocess_env()
+    os.environ["NO_PROXY"] = env["NO_PROXY"]
+    os.environ["no_proxy"] = env["no_proxy"]
+    print(f"[INFO] Local addresses bypass proxy via NO_PROXY: {env['NO_PROXY']}")
+
     if args.skip_bootstrap_admin:
         print("[INFO] Skip bootstrap admin by argument.")
     else:
         bootstrap_admin(args.api_base_url)
 
     if not args.skip_pub_get:
-        pub_get_code = run_command([flutter, "pub", "get"], FRONTEND_DIR)
+        pub_get_code = run_command([flutter, "pub", "get"], FRONTEND_DIR, env)
         if pub_get_code != 0:
             return pub_get_code
 
     run_args = [flutter, "run", "-d", args.device]
     if args.release:
         run_args.append("--release")
-    return run_command(run_args, FRONTEND_DIR)
+    return run_command(run_args, FRONTEND_DIR, env)
 
 
 if __name__ == "__main__":

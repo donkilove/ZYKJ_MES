@@ -14,6 +14,18 @@ Backend startup now performs bootstrap automatically:
 - run `alembic upgrade head`
 - seed roles/processes/admin user
 
+## Local Proxy Note
+
+If your environment sets `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`, local
+requests to `127.0.0.1` may be forwarded to the proxy and fail with `502`.
+
+`start_backend.py` and `start_frontend.py` now auto-merge:
+
+`NO_PROXY` and `no_proxy` => `localhost,127.0.0.1,::1`
+
+for spawned subprocesses so localhost traffic bypasses the proxy. If you start
+services manually, set `NO_PROXY` yourself.
+
 Manual seed command remains available:
 
 ```powershell
