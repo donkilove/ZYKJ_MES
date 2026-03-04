@@ -8,7 +8,6 @@ class ProductionOrderProcess(Base, TimestampMixin):
     __tablename__ = "mes_order_process"
     __table_args__ = (
         UniqueConstraint("order_id", "process_order", name="uq_mes_order_process_order_id_process_order"),
-        UniqueConstraint("order_id", "process_code", name="uq_mes_order_process_order_id_process_code"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -22,6 +21,13 @@ class ProductionOrderProcess(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
+    stage_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_process_stage.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    stage_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    stage_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     process_code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     process_name: Mapped[str] = mapped_column(String(128), nullable=False)
     process_order: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -30,6 +36,7 @@ class ProductionOrderProcess(Base, TimestampMixin):
     completed_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     order = relationship("ProductionOrder", back_populates="processes")
+    stage = relationship("ProcessStage")
     process = relationship("Process")
     sub_orders = relationship(
         "ProductionSubOrder",

@@ -20,7 +20,10 @@ from app.core.production_constants import (
 )
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.process import Process
+from app.models.process_stage import ProcessStage
 from app.models.product import Product
+from app.models.product_process_template import ProductProcessTemplate
+from app.models.product_process_template_step import ProductProcessTemplateStep
 from app.models.production_record import ProductionRecord
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
@@ -46,12 +49,128 @@ def _normalize_process_codes(process_codes: Iterable[str]) -> list[str]:
 def _resolve_processes_by_codes(db: Session, process_codes: list[str]) -> tuple[list[Process], list[str]]:
     if not process_codes:
         return [], []
-    stmt = select(Process).where(Process.code.in_(process_codes))
+    stmt = select(Process).where(Process.code.in_(process_codes)).options(selectinload(Process.stage))
     rows = db.execute(stmt).scalars().all()
     by_code = {row.code: row for row in rows}
     missing = [code for code in process_codes if code not in by_code]
     ordered = [by_code[code] for code in process_codes if code in by_code]
     return ordered, missing
+
+
+def _resolve_template(
+    db: Session,
+    *,
+    template_id: int,
+    product_id: int,
+) -> ProductProcessTemplate:
+    template = (
+        db.execute(
+            select(ProductProcessTemplate)
+            .where(ProductProcessTemplate.id == template_id)
+            .options(selectinload(ProductProcessTemplate.steps))
+        )
+        .scalars()
+        .first()
+    )
+    if not template:
+        raise ValueError("Template not found")
+    if template.product_id != product_id:
+        raise ValueError("Template does not belong to selected product")
+    if not template.is_enabled:
+        raise ValueError("Template is disabled")
+    return template
+
+
+def _resolve_steps_from_payload(
+    db: Session,
+    *,
+    process_steps: list[dict[str, int]],
+) -> list[tuple[ProcessStage, Process]]:
+    if not process_steps:
+        return []
+    ordered_steps = sorted(process_steps, key=lambda item: int(item["step_order"]))
+    stage_ids = {int(item["stage_id"]) for item in ordered_steps}
+    process_ids = {int(item["process_id"]) for item in ordered_steps}
+    stage_rows = db.execute(select(ProcessStage).where(ProcessStage.id.in_(stage_ids))).scalars().all()
+    process_rows = (
+        db.execute(select(Process).where(Process.id.in_(process_ids)).options(selectinload(Process.stage))).scalars().all()
+    )
+    stage_by_id = {row.id: row for row in stage_rows}
+    process_by_id = {row.id: row for row in process_rows}
+
+    results: list[tuple[ProcessStage, Process]] = []
+    for row in ordered_steps:
+        stage_id = int(row["stage_id"])
+        process_id = int(row["process_id"])
+        stage = stage_by_id.get(stage_id)
+        process = process_by_id.get(process_id)
+        if not stage:
+            raise ValueError(f"Stage not found: {stage_id}")
+        if not process:
+            raise ValueError(f"Process not found: {process_id}")
+        if process.stage_id != stage.id:
+            raise ValueError(f"Process {process.code} does not belong to stage {stage.code}")
+        if not stage.is_enabled:
+            raise ValueError(f"Stage disabled: {stage.code}")
+        if not process.is_enabled:
+            raise ValueError(f"Process disabled: {process.code}")
+        results.append((stage, process))
+    return results
+
+
+def _resolve_route_steps(
+    db: Session,
+    *,
+    product_id: int,
+    template_id: int | None,
+    process_steps: list[dict[str, int]] | None,
+    process_codes: list[str],
+) -> tuple[list[tuple[ProcessStage, Process]], ProductProcessTemplate | None]:
+    if process_steps:
+        resolved = _resolve_steps_from_payload(db, process_steps=process_steps)
+        if not resolved:
+            raise ValueError("At least one process is required")
+        template = _resolve_template(db, template_id=template_id, product_id=product_id) if template_id else None
+        return resolved, template
+
+    if template_id:
+        template = _resolve_template(db, template_id=template_id, product_id=product_id)
+        stage_by_code = {
+            row.code: row
+            for row in db.execute(
+                select(ProcessStage).where(ProcessStage.is_enabled.is_(True))
+            )
+            .scalars()
+            .all()
+        }
+        process_codes_in_template = [item.process_code for item in sorted(template.steps, key=lambda item: item.step_order)]
+        processes, missing_codes = _resolve_processes_by_codes(db, process_codes_in_template)
+        if missing_codes:
+            raise ValueError(f"Template process codes not found: {', '.join(missing_codes)}")
+        process_by_code = {row.code: row for row in processes}
+        results: list[tuple[ProcessStage, Process]] = []
+        for step in sorted(template.steps, key=lambda item: item.step_order):
+            process = process_by_code.get(step.process_code)
+            stage = stage_by_code.get(step.stage_code)
+            if not process or not stage:
+                raise ValueError("Template contains invalid stage/process")
+            results.append((stage, process))
+        if not results:
+            raise ValueError("Template contains no process steps")
+        return results, template
+
+    normalized_codes = _normalize_process_codes(process_codes)
+    if not normalized_codes:
+        raise ValueError("At least one process is required")
+    processes, missing_codes = _resolve_processes_by_codes(db, normalized_codes)
+    if missing_codes:
+        raise ValueError(f"Process codes not found: {', '.join(missing_codes)}")
+    results: list[tuple[ProcessStage, Process]] = []
+    for process in processes:
+        if not process.stage:
+            raise ValueError(f"Process stage missing: {process.code}")
+        results.append((process.stage, process))
+    return results, None
 
 
 def _list_operator_users_by_process_code(db: Session, process_code: str) -> list[User]:
@@ -296,19 +415,19 @@ def _build_order_process_rows(
     db: Session,
     *,
     order: ProductionOrder,
-    process_codes: list[str],
+    route_steps: list[tuple[ProcessStage, Process]],
 ) -> list[ProductionOrderProcess]:
-    processes, missing_codes = _resolve_processes_by_codes(db, process_codes)
-    if missing_codes:
-        raise ValueError(f"Process codes not found: {', '.join(missing_codes)}")
-    if not processes:
+    if not route_steps:
         raise ValueError("At least one process is required")
 
     rows: list[ProductionOrderProcess] = []
-    for idx, process in enumerate(processes):
+    for idx, (stage, process) in enumerate(route_steps):
         row = ProductionOrderProcess(
             order_id=order.id,
             process_id=process.id,
+            stage_id=stage.id,
+            stage_code=stage.code,
+            stage_name=stage.name,
             process_code=process.code,
             process_name=process.name,
             process_order=idx + 1,
@@ -322,6 +441,139 @@ def _build_order_process_rows(
     return rows
 
 
+def _route_process_codes(route_steps: list[tuple[ProcessStage, Process]]) -> list[str]:
+    return [process.code for _, process in route_steps]
+
+
+def _is_template_route_match(
+    *,
+    route_steps: list[tuple[ProcessStage, Process]],
+    template: ProductProcessTemplate,
+) -> bool:
+    template_steps = sorted(template.steps, key=lambda item: item.step_order)
+    if len(template_steps) != len(route_steps):
+        return False
+    for template_step, (stage, process) in zip(template_steps, route_steps, strict=True):
+        if template_step.stage_code != stage.code:
+            return False
+        if template_step.process_code != process.code:
+            return False
+    return True
+
+
+def _set_order_template_snapshot(
+    *,
+    order: ProductionOrder,
+    template: ProductProcessTemplate | None,
+) -> None:
+    if template is None:
+        order.process_template_id = None
+        order.process_template_name = None
+        order.process_template_version = None
+        return
+    order.process_template_id = template.id
+    order.process_template_name = template.template_name
+    order.process_template_version = template.version
+
+
+def _normalize_template_name(value: str | None) -> str:
+    normalized = (value or "").strip()
+    if not normalized:
+        raise ValueError("New template name is required when save_as_template is enabled")
+    return normalized
+
+
+def _save_route_as_template(
+    db: Session,
+    *,
+    product_id: int,
+    route_steps: list[tuple[ProcessStage, Process]],
+    template_name: str,
+    set_default: bool,
+    operator: User,
+) -> ProductProcessTemplate:
+    normalized_template_name = _normalize_template_name(template_name)
+    duplicate_template = (
+        db.execute(
+            select(ProductProcessTemplate.id).where(
+                ProductProcessTemplate.product_id == product_id,
+                ProductProcessTemplate.template_name == normalized_template_name,
+                ProductProcessTemplate.is_enabled.is_(True),
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if duplicate_template is not None:
+        raise ValueError("Template name already exists under selected product")
+
+    next_version = (
+        db.execute(
+            select(func.max(ProductProcessTemplate.version)).where(
+                ProductProcessTemplate.product_id == product_id,
+                ProductProcessTemplate.template_name == normalized_template_name,
+            )
+        ).scalar_one_or_none()
+        or 0
+    ) + 1
+
+    template = ProductProcessTemplate(
+        product_id=product_id,
+        template_name=normalized_template_name,
+        version=next_version,
+        is_default=set_default,
+        is_enabled=True,
+        created_by_user_id=operator.id,
+        updated_by_user_id=operator.id,
+    )
+    db.add(template)
+    db.flush()
+
+    for idx, (stage, process) in enumerate(route_steps, start=1):
+        template.steps.append(
+            ProductProcessTemplateStep(
+                step_order=idx,
+                stage_id=stage.id,
+                stage_code=stage.code,
+                stage_name=stage.name,
+                process_id=process.id,
+                process_code=process.code,
+                process_name=process.name,
+            )
+        )
+    db.flush()
+
+    if set_default:
+        enabled_templates = (
+            db.execute(
+                select(ProductProcessTemplate).where(
+                    ProductProcessTemplate.product_id == product_id,
+                    ProductProcessTemplate.is_enabled.is_(True),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for row in enabled_templates:
+            row.is_default = row.id == template.id
+    else:
+        has_default = (
+            db.execute(
+                select(ProductProcessTemplate.id).where(
+                    ProductProcessTemplate.product_id == product_id,
+                    ProductProcessTemplate.is_enabled.is_(True),
+                    ProductProcessTemplate.is_default.is_(True),
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if has_default is None:
+            template.is_default = True
+    db.flush()
+    return template
+
+
 def create_order(
     db: Session,
     *,
@@ -332,6 +584,11 @@ def create_order(
     due_date: date | None,
     remark: str | None,
     process_codes: list[str],
+    template_id: int | None,
+    process_steps: list[dict[str, int]] | None,
+    save_as_template: bool,
+    new_template_name: str | None,
+    new_template_set_default: bool,
     operator: User,
 ) -> ProductionOrder:
     normalized_order_code = order_code.strip()
@@ -345,28 +602,46 @@ def create_order(
     if not product:
         raise ValueError("Product not found")
 
-    normalized_process_codes = _normalize_process_codes(process_codes)
-    if not normalized_process_codes:
-        raise ValueError("At least one process is required")
+    route_steps, selected_template = _resolve_route_steps(
+        db,
+        product_id=product_id,
+        template_id=template_id,
+        process_steps=process_steps,
+        process_codes=process_codes,
+    )
+    final_template = selected_template
+    if process_steps and selected_template and not _is_template_route_match(route_steps=route_steps, template=selected_template):
+        final_template = None
+    if save_as_template:
+        final_template = _save_route_as_template(
+            db,
+            product_id=product_id,
+            route_steps=route_steps,
+            template_name=new_template_name,
+            set_default=new_template_set_default,
+            operator=operator,
+        )
+    resolved_process_codes = _route_process_codes(route_steps)
 
     order = ProductionOrder(
         order_code=normalized_order_code,
         product_id=product_id,
         quantity=quantity,
         status=ORDER_STATUS_PENDING,
-        current_process_code=normalized_process_codes[0],
+        current_process_code=resolved_process_codes[0],
         start_date=start_date,
         due_date=due_date,
         remark=(remark or "").strip() or None,
         created_by_user_id=operator.id,
     )
+    _set_order_template_snapshot(order=order, template=final_template)
     db.add(order)
     db.flush()
 
     process_rows = _build_order_process_rows(
         db,
         order=order,
-        process_codes=normalized_process_codes,
+        route_steps=route_steps,
     )
     for row in process_rows:
         ensure_sub_orders_visible_quantity(
@@ -385,7 +660,8 @@ def create_order(
         payload={
             "order_code": order.order_code,
             "quantity": order.quantity,
-            "process_codes": normalized_process_codes,
+            "process_codes": resolved_process_codes,
+            "process_template_id": order.process_template_id,
         },
     )
     db.commit()
@@ -403,6 +679,11 @@ def update_order(
     due_date: date | None,
     remark: str | None,
     process_codes: list[str],
+    template_id: int | None,
+    process_steps: list[dict[str, int]] | None,
+    save_as_template: bool,
+    new_template_name: str | None,
+    new_template_set_default: bool,
     operator: User,
 ) -> ProductionOrder:
     if order.status != ORDER_STATUS_PENDING:
@@ -413,9 +694,26 @@ def update_order(
     if not product:
         raise ValueError("Product not found")
 
-    normalized_process_codes = _normalize_process_codes(process_codes)
-    if not normalized_process_codes:
-        raise ValueError("At least one process is required")
+    route_steps, selected_template = _resolve_route_steps(
+        db,
+        product_id=product_id,
+        template_id=template_id,
+        process_steps=process_steps,
+        process_codes=process_codes,
+    )
+    final_template = selected_template
+    if process_steps and selected_template and not _is_template_route_match(route_steps=route_steps, template=selected_template):
+        final_template = None
+    if save_as_template:
+        final_template = _save_route_as_template(
+            db,
+            product_id=product_id,
+            route_steps=route_steps,
+            template_name=new_template_name,
+            set_default=new_template_set_default,
+            operator=operator,
+        )
+    resolved_process_codes = _route_process_codes(route_steps)
 
     # Rebuild process/sub-order assignment for pending orders.
     db.execute(select(ProductionOrderProcess).where(ProductionOrderProcess.order_id == order.id).with_for_update())
@@ -428,12 +726,13 @@ def update_order(
     order.due_date = due_date
     order.remark = (remark or "").strip() or None
     order.status = ORDER_STATUS_PENDING
-    order.current_process_code = normalized_process_codes[0]
+    order.current_process_code = resolved_process_codes[0]
+    _set_order_template_snapshot(order=order, template=final_template)
 
     process_rows = _build_order_process_rows(
         db,
         order=order,
-        process_codes=normalized_process_codes,
+        route_steps=route_steps,
     )
     for row in process_rows:
         ensure_sub_orders_visible_quantity(
@@ -451,7 +750,8 @@ def update_order(
         operator_user_id=operator.id,
         payload={
             "quantity": order.quantity,
-            "process_codes": normalized_process_codes,
+            "process_codes": resolved_process_codes,
+            "process_template_id": order.process_template_id,
         },
     )
     db.commit()
@@ -549,6 +849,9 @@ def _build_my_order_item(
         "quantity": order.quantity,
         "order_status": order.status,
         "current_process_id": process_row.id,
+        "current_stage_id": process_row.stage_id,
+        "current_stage_code": process_row.stage_code,
+        "current_stage_name": process_row.stage_name,
         "current_process_code": process_row.process_code,
         "current_process_name": process_row.process_name,
         "current_process_order": process_row.process_order,

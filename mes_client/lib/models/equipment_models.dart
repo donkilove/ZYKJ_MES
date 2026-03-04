@@ -3,33 +3,6 @@ const int maintenanceCycleMonthly = 30;
 const int maintenanceCycleQuarterly = 90;
 const int maintenanceCycleYearly = 365;
 
-const String processCodeLaserMarking = 'laser_marking';
-const String processCodeProductTesting = 'product_testing';
-const String processCodeProductAssembly = 'product_assembly';
-const String processCodeProductPackaging = 'product_packaging';
-
-const List<String> maintenanceExecutionProcessOrder = <String>[
-  processCodeLaserMarking,
-  processCodeProductTesting,
-  processCodeProductAssembly,
-  processCodeProductPackaging,
-];
-
-String maintenanceExecutionProcessName(String code) {
-  switch (code) {
-    case processCodeLaserMarking:
-      return '激光打标';
-    case processCodeProductTesting:
-      return '产品测试';
-    case processCodeProductAssembly:
-      return '产品组装';
-    case processCodeProductPackaging:
-      return '产品包装';
-    default:
-      return code;
-  }
-}
-
 class EquipmentLedgerItem {
   EquipmentLedgerItem({
     required this.id,
@@ -192,13 +165,10 @@ class MaintenancePlanItem {
       itemId: json['item_id'] as int,
       itemName: (json['item_name'] as String?) ?? '',
       cycleDays: (json['cycle_days'] as int?) ?? 1,
-      executionProcessCode:
-          (json['execution_process_code'] as String?) ?? processCodeLaserMarking,
+      executionProcessCode: (json['execution_process_code'] as String?) ?? '',
       executionProcessName:
           (json['execution_process_name'] as String?) ??
-          maintenanceExecutionProcessName(
-            (json['execution_process_code'] as String?) ?? processCodeLaserMarking,
-          ),
+          ((json['execution_process_code'] as String?) ?? ''),
       estimatedDurationMinutes: json['estimated_duration_minutes'] as int?,
       startDate: DateTime.parse(json['start_date'] as String),
       nextDueDate: DateTime.parse(json['next_due_date'] as String),

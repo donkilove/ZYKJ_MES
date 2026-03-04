@@ -44,12 +44,10 @@
 - `POST /processes`：创建工序
 - `PUT /processes/{id}`：更新工序名称
 
-默认工序（初始化脚本自动创建）：
+工艺模块 V1 兼容说明：
 
-- `laser_marking`：激光打标
-- `product_testing`：产品测试
-- `product_assembly`：产品组装
-- `product_packaging`：产品包装
+- `GET /processes` 继续保留，但返回语义升级为“小工序列表（包含 `stage_id/stage_code/stage_name`）”。
+- 系统不再在启动时自动灌入默认工序，工段与小工序由工艺模块页面维护。
 
 ## 5. 用户接口（Sprint 1 已实现）
 
@@ -123,3 +121,59 @@
 - V1 quality module uses only existing first-article/verification/order/production tables.
 - No defect/scrap/repair models in this version.
 - Result/status code values remain English in API output; frontend maps them to Chinese labels.
+
+## 工艺模块 V1（工段 + 小工序 + 产品多模板）
+
+### 新增页面 code（目录可见性）
+
+- `craft`（sidebar）
+- `process_management`（tab，parent=`craft`）
+- `production_process_config`（tab，parent=`craft`）
+
+默认可见角色：
+
+- `system_admin`
+- `production_admin`
+
+### 新增 API（`/api/v1/craft`）
+
+- `GET /craft/stages`
+- `POST /craft/stages`
+- `PUT /craft/stages/{stage_id}`
+- `DELETE /craft/stages/{stage_id}`
+- `GET /craft/processes`
+- `POST /craft/processes`
+- `PUT /craft/processes/{process_id}`
+- `DELETE /craft/processes/{process_id}`
+- `GET /craft/templates`
+- `POST /craft/templates`
+- `GET /craft/templates/{template_id}`
+- `PUT /craft/templates/{template_id}`
+- `DELETE /craft/templates/{template_id}`
+
+### 生产接口升级（兼容）
+
+- `POST /production/orders`、`PUT /production/orders/{order_id}` 新增字段：
+  - `template_id`
+  - `process_steps`（每步包含 `step_order/stage_id/process_id`）
+  - `save_as_template`
+  - `new_template_name`
+  - `new_template_set_default`
+- `process_codes` 保留一个版本周期作为兼容输入。
+- `GET /production/orders/{order_id}`、`GET /production/my-orders` 每道工序新增：
+  - `stage_code`
+  - `stage_name`
+
+### 模板同步规则
+
+- `PUT /craft/templates/{template_id}` 支持 `sync_orders=true/false`。
+- 同步范围为该模板关联的未完成订单：
+  - `pending`：整单流程重建
+  - `in_progress`：仅重建当前工序之后
+- 若出现冲突（如当前工序无法对齐或后续已有报工记录），返回 `409`，并在响应中带 `sync_result.total/synced/skipped/reasons`。
+
+### 迁移策略（清空后重建）
+
+- 新增工段、模板、模板步骤表，并扩展订单/工序表的 stage 与模板快照字段。
+- 生产域及工艺域数据按方案执行清空重建（不保留历史生产数据）。
+- 设备保养 `execution_process_code` 语义升级为“工段 code”，由工艺配置驱动。

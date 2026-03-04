@@ -1,12 +1,29 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import '../models/craft_models.dart';
 import '../models/production_models.dart';
 import '../services/api_exception.dart';
+import '../services/craft_service.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
 
 enum _ManagementOrderAction { detail, edit, delete, complete }
+
+class _OrderProcessStepDraft {
+  _OrderProcessStepDraft({required this.stageId, required this.processId});
+
+  int stageId;
+  int processId;
+}
+
+class _StageOption {
+  _StageOption({required this.id, required this.code, required this.name});
+
+  final int id;
+  final String code;
+  final String name;
+}
 
 class ProductionOrderManagementPage extends StatefulWidget {
   const ProductionOrderManagementPage({
@@ -28,6 +45,7 @@ class ProductionOrderManagementPage extends StatefulWidget {
 class _ProductionOrderManagementPageState
     extends State<ProductionOrderManagementPage> {
   late final ProductionService _service;
+  late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
@@ -37,11 +55,14 @@ class _ProductionOrderManagementPageState
   List<ProductionOrderItem> _items = const [];
   List<ProductionProductOption> _products = const [];
   List<ProductionProcessOption> _processes = const [];
+  List<CraftTemplateItem> _templates = const [];
+  final Map<int, CraftTemplateDetail> _templateDetailCache = {};
 
   @override
   void initState() {
     super.initState();
     _service = ProductionService(widget.session);
+    _craftService = CraftService(widget.session);
     _loadReferenceData();
     _loadOrders();
   }
@@ -50,6 +71,83 @@ class _ProductionOrderManagementPageState
   void dispose() {
     _keywordController.dispose();
     super.dispose();
+  }
+
+  List<_StageOption> _stageOptions() {
+    final byId = <int, _StageOption>{};
+    for (final process in _processes) {
+      if (process.stageId == null ||
+          process.stageName == null ||
+          process.stageName!.trim().isEmpty ||
+          process.stageCode == null ||
+          process.stageCode!.trim().isEmpty) {
+        continue;
+      }
+      byId.putIfAbsent(
+        process.stageId!,
+        () => _StageOption(
+          id: process.stageId!,
+          code: process.stageCode!,
+          name: process.stageName!,
+        ),
+      );
+    }
+    final items = byId.values.toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return items;
+  }
+
+  List<ProductionProcessOption> _processesByStage(int stageId) {
+    final items = _processes.where((item) => item.stageId == stageId).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return items;
+  }
+
+  List<CraftTemplateItem> _templatesByProduct(int productId) {
+    final items =
+        _templates
+            .where((item) => item.productId == productId && item.isEnabled)
+            .toList()
+          ..sort((a, b) {
+            if (a.isDefault && !b.isDefault) {
+              return -1;
+            }
+            if (!a.isDefault && b.isDefault) {
+              return 1;
+            }
+            return b.updatedAt.compareTo(a.updatedAt);
+          });
+    return items;
+  }
+
+  List<_OrderProcessStepDraft> _buildStepsFromProcessCodes(List<String> codes) {
+    final steps = <_OrderProcessStepDraft>[];
+    for (final code in codes) {
+      final index = _processes.indexWhere((item) => item.code == code);
+      if (index < 0) {
+        continue;
+      }
+      final row = _processes[index];
+      if (row.stageId == null) {
+        continue;
+      }
+      steps.add(
+        _OrderProcessStepDraft(stageId: row.stageId!, processId: row.id),
+      );
+    }
+    return steps;
+  }
+
+  Future<CraftTemplateDetail> _loadTemplateDetail(int templateId) async {
+    final cached = _templateDetailCache[templateId];
+    if (cached != null) {
+      return cached;
+    }
+    final detail = await _craftService.getTemplateDetail(
+      templateId: templateId,
+    );
+    _templateDetailCache[templateId] = detail;
+    return detail;
   }
 
   bool _isUnauthorized(Object error) {
@@ -168,12 +266,18 @@ class _ProductionOrderManagementPageState
     try {
       final products = await _service.listProductOptions();
       final processes = await _service.listProcessOptions();
+      final templates = await _craftService.listTemplates(
+        page: 1,
+        pageSize: 500,
+        enabled: null,
+      );
       if (!mounted) {
         return;
       }
       setState(() {
         _products = products;
         _processes = processes;
+        _templates = templates.items;
       });
     } catch (error) {
       if (!mounted) {
@@ -240,7 +344,7 @@ class _ProductionOrderManagementPageState
       initialDate: initial,
       helpText: '选择日期',
       cancelText: '取消',
-      confirmText: '确定',
+      confirmText: '纭畾',
     );
     if (picked != null) {
       onChanged(picked);
@@ -260,8 +364,20 @@ class _ProductionOrderManagementPageState
         return;
       }
     }
+    if (!mounted) {
+      return;
+    }
+
+    final stageOptions = _stageOptions();
+    if (stageOptions.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先配置工段与小工序。')));
+      return;
+    }
 
     final isEdit = existing != null;
+    final existingOrderId = existing?.id;
     final orderCodeController = TextEditingController(
       text: existing?.orderCode ?? '',
     );
@@ -271,22 +387,37 @@ class _ProductionOrderManagementPageState
     final remarkController = TextEditingController(
       text: existing?.remark ?? '',
     );
+    final newTemplateNameController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     DateTime? startDate = existing?.startDate;
     DateTime? dueDate = existing?.dueDate;
     int selectedProductId = existing?.productId ?? _products.first.id;
-    List<String> selectedProcessCodes = _processes
-        .take(1)
-        .map((e) => e.code)
-        .toList();
+    int? selectedTemplateId = existing?.processTemplateId;
+    bool saveAsTemplate = false;
+    bool newTemplateSetDefault = false;
+    bool applyingTemplate = false;
+    List<_OrderProcessStepDraft> routeSteps = const [];
+
+    List<_OrderProcessStepDraft> mapTemplateSteps(CraftTemplateDetail detail) {
+      return detail.steps
+          .map(
+            (item) => _OrderProcessStepDraft(
+              stageId: item.stageId,
+              processId: item.processId,
+            ),
+          )
+          .toList();
+    }
 
     if (isEdit) {
       try {
-        final detail = await _service.getOrderDetail(orderId: existing.id);
+        final detail = await _service.getOrderDetail(orderId: existingOrderId!);
         final sorted = detail.processes.toList()
           ..sort((a, b) => a.processOrder.compareTo(b.processOrder));
-        selectedProcessCodes = sorted.map((e) => e.processCode).toList();
+        final processCodes = sorted.map((e) => e.processCode).toList();
+        routeSteps = _buildStepsFromProcessCodes(processCodes);
+        selectedTemplateId = detail.order.processTemplateId;
       } catch (error) {
         if (_isUnauthorized(error)) {
           widget.onLogout();
@@ -299,6 +430,34 @@ class _ProductionOrderManagementPageState
         }
         return;
       }
+    } else {
+      final templates = _templatesByProduct(selectedProductId);
+      if (templates.isNotEmpty) {
+        final defaultTemplate =
+            templates.where((item) => item.isDefault).isNotEmpty
+            ? templates.firstWhere((item) => item.isDefault)
+            : templates.first;
+        selectedTemplateId = defaultTemplate.id;
+        try {
+          final detail = await _loadTemplateDetail(defaultTemplate.id);
+          routeSteps = mapTemplateSteps(detail);
+        } catch (_) {
+          selectedTemplateId = null;
+        }
+      }
+    }
+
+    if (routeSteps.isEmpty) {
+      final firstStage = stageOptions.first;
+      final firstStageProcesses = _processesByStage(firstStage.id);
+      if (firstStageProcesses.isNotEmpty) {
+        routeSteps = [
+          _OrderProcessStepDraft(
+            stageId: firstStage.id,
+            processId: firstStageProcesses.first.id,
+          ),
+        ];
+      }
     }
 
     if (!mounted) {
@@ -310,10 +469,56 @@ class _ProductionOrderManagementPageState
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            Future<void> applyTemplateById(int templateId) async {
+              setDialogState(() {
+                applyingTemplate = true;
+              });
+              try {
+                final detail = await _loadTemplateDetail(templateId);
+                if (!context.mounted) {
+                  return;
+                }
+                setDialogState(() {
+                  routeSteps = mapTemplateSteps(detail);
+                });
+              } catch (error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('加载模板失败：${_errorMessage(error)}')),
+                  );
+                }
+              } finally {
+                if (context.mounted) {
+                  setDialogState(() {
+                    applyingTemplate = false;
+                  });
+                }
+              }
+            }
+
+            void addStep() {
+              final stage = stageOptions.first;
+              final processRows = _processesByStage(stage.id);
+              if (processRows.isEmpty) {
+                return;
+              }
+              setDialogState(() {
+                routeSteps = [
+                  ...routeSteps,
+                  _OrderProcessStepDraft(
+                    stageId: stage.id,
+                    processId: processRows.first.id,
+                  ),
+                ];
+              });
+            }
+
+            final productTemplates = _templatesByProduct(selectedProductId);
+
             return AlertDialog(
               title: Text(isEdit ? '编辑订单' : '创建订单'),
               content: SizedBox(
-                width: 680,
+                width: 860,
                 child: Form(
                   key: formKey,
                   child: SingleChildScrollView(
@@ -353,15 +558,68 @@ class _ProductionOrderManagementPageState
                                 ),
                               )
                               .toList(),
-                          onChanged: (value) {
+                          onChanged: (value) async {
                             if (value == null) {
                               return;
                             }
                             setDialogState(() {
                               selectedProductId = value;
+                              selectedTemplateId = null;
                             });
+                            final nextTemplates = _templatesByProduct(value);
+                            if (nextTemplates.isEmpty) {
+                              return;
+                            }
+                            final defaultTemplate =
+                                nextTemplates
+                                    .where((item) => item.isDefault)
+                                    .isNotEmpty
+                                ? nextTemplates.firstWhere(
+                                    (item) => item.isDefault,
+                                  )
+                                : nextTemplates.first;
+                            setDialogState(() {
+                              selectedTemplateId = defaultTemplate.id;
+                            });
+                            await applyTemplateById(defaultTemplate.id);
                           },
                         ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int?>(
+                          initialValue: selectedTemplateId,
+                          decoration: const InputDecoration(
+                            labelText: '工序模板',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem<int?>(
+                              value: null,
+                              child: Text('不使用模板（手动配置）'),
+                            ),
+                            ...productTemplates.map(
+                              (item) => DropdownMenuItem<int?>(
+                                value: item.id,
+                                child: Text(
+                                  '${item.templateName} v${item.version}${item.isDefault ? '（默认）' : ''}',
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) async {
+                            setDialogState(() {
+                              selectedTemplateId = value;
+                            });
+                            if (value == null) {
+                              return;
+                            }
+                            await applyTemplateById(value);
+                          },
+                        ),
+                        if (applyingTemplate)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: LinearProgressIndicator(minHeight: 2),
+                          ),
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: quantityController,
@@ -420,58 +678,175 @@ class _ProductionOrderManagementPageState
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Text(
-                          '工序路线',
-                          style: Theme.of(context).textTheme.titleMedium,
+                        Row(
+                          children: [
+                            Text(
+                              '工序路线（工段 -> 小工序）',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const Spacer(),
+                            OutlinedButton.icon(
+                              onPressed: addStep,
+                              icon: const Icon(Icons.add),
+                              label: const Text('新增步骤'),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
-                        Container(
-                          constraints: const BoxConstraints(maxHeight: 220),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.outlineVariant,
+                        ...List.generate(routeSteps.length, (index) {
+                          final step = routeSteps[index];
+                          final processRows = _processesByStage(step.stageId);
+                          if (processRows.isNotEmpty &&
+                              !processRows.any(
+                                (item) => item.id == step.processId,
+                              )) {
+                            step.processId = processRows.first.id;
+                          }
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 48,
+                                    child: Text('#${index + 1}'),
+                                  ),
+                                  Expanded(
+                                    child: DropdownButtonFormField<int>(
+                                      initialValue: step.stageId,
+                                      decoration: const InputDecoration(
+                                        labelText: '工段',
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                      ),
+                                      items: stageOptions
+                                          .map(
+                                            (stage) => DropdownMenuItem<int>(
+                                              value: stage.id,
+                                              child: Text(
+                                                '${stage.name} (${stage.code})',
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (value) {
+                                        if (value == null) {
+                                          return;
+                                        }
+                                        final nextRows = _processesByStage(
+                                          value,
+                                        );
+                                        setDialogState(() {
+                                          step.stageId = value;
+                                          if (nextRows.isNotEmpty) {
+                                            step.processId = nextRows.first.id;
+                                          }
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: DropdownButtonFormField<int>(
+                                      initialValue: processRows.isEmpty
+                                          ? null
+                                          : (processRows.any(
+                                                  (item) =>
+                                                      item.id == step.processId,
+                                                )
+                                                ? step.processId
+                                                : processRows.first.id),
+                                      decoration: const InputDecoration(
+                                        labelText: '小工序',
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                      ),
+                                      items: processRows
+                                          .map(
+                                            (item) => DropdownMenuItem<int>(
+                                              value: item.id,
+                                              child: Text(
+                                                '${item.name} (${item.code})',
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: processRows.isEmpty
+                                          ? null
+                                          : (value) {
+                                              if (value == null) {
+                                                return;
+                                              }
+                                              setDialogState(() {
+                                                step.processId = value;
+                                              });
+                                            },
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: '删除',
+                                    onPressed: routeSteps.length <= 1
+                                        ? null
+                                        : () {
+                                            setDialogState(() {
+                                              routeSteps = [...routeSteps]
+                                                ..removeAt(index);
+                                            });
+                                          },
+                                    icon: const Icon(Icons.delete_outline),
+                                  ),
+                                ],
+                              ),
                             ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ListView(
-                            shrinkWrap: true,
-                            children: _processes.map((process) {
-                              final checked = selectedProcessCodes.contains(
-                                process.code,
-                              );
-                              return CheckboxListTile(
-                                dense: true,
-                                title: Text(
-                                  '${process.name} (${process.code})',
-                                ),
-                                value: checked,
-                                onChanged: (value) {
-                                  setDialogState(() {
-                                    if (value == true) {
-                                      if (!selectedProcessCodes.contains(
-                                        process.code,
-                                      )) {
-                                        selectedProcessCodes = [
-                                          ...selectedProcessCodes,
-                                          process.code,
-                                        ];
-                                      }
-                                    } else {
-                                      selectedProcessCodes =
-                                          selectedProcessCodes
-                                              .where(
-                                                (code) => code != process.code,
-                                              )
-                                              .toList();
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
+                          );
+                        }),
+                        const SizedBox(height: 8),
+                        CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: const Text('将当前流程另存为新模板'),
+                          value: saveAsTemplate,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              saveAsTemplate = value ?? false;
+                              if (!saveAsTemplate) {
+                                newTemplateNameController.clear();
+                                newTemplateSetDefault = false;
+                              }
+                            });
+                          },
                         ),
+                        if (saveAsTemplate) ...[
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: newTemplateNameController,
+                            decoration: const InputDecoration(
+                              labelText: '新模板名称',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              if (!saveAsTemplate) {
+                                return null;
+                              }
+                              if (value == null || value.trim().isEmpty) {
+                                return '请输入新模板名称';
+                              }
+                              return null;
+                            },
+                          ),
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            title: const Text('设为该产品默认模板'),
+                            value: newTemplateSetDefault,
+                            onChanged: (value) {
+                              setDialogState(() {
+                                newTemplateSetDefault = value ?? false;
+                              });
+                            },
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -483,58 +858,102 @@ class _ProductionOrderManagementPageState
                   child: const Text('取消'),
                 ),
                 FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    if (selectedProcessCodes.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('至少选择一道工序。')),
-                      );
-                      return;
-                    }
-                    final quantity = int.parse(quantityController.text.trim());
-                    try {
-                      if (isEdit) {
-                        await _service.updateOrder(
-                          orderId: existing.id,
-                          productId: selectedProductId,
-                          quantity: quantity,
-                          processCodes: selectedProcessCodes,
-                          startDate: startDate,
-                          dueDate: dueDate,
-                          remark: remarkController.text.trim().isEmpty
-                              ? null
-                              : remarkController.text.trim(),
-                        );
-                      } else {
-                        await _service.createOrder(
-                          orderCode: orderCodeController.text.trim(),
-                          productId: selectedProductId,
-                          quantity: quantity,
-                          processCodes: selectedProcessCodes,
-                          startDate: startDate,
-                          dueDate: dueDate,
-                          remark: remarkController.text.trim().isEmpty
-                              ? null
-                              : remarkController.text.trim(),
-                        );
-                      }
-                      if (context.mounted) {
-                        Navigator.of(context).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(_errorMessage(error))),
-                        );
-                      }
-                    }
-                  },
+                  onPressed: applyingTemplate
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) {
+                            return;
+                          }
+                          if (routeSteps.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('至少选择一道工序。')),
+                            );
+                            return;
+                          }
+                          final payloadSteps =
+                              <ProductionOrderProcessStepInput>[];
+                          final processCodes = <String>[];
+                          for (var i = 0; i < routeSteps.length; i++) {
+                            final step = routeSteps[i];
+                            final processIndex = _processes.indexWhere(
+                              (item) => item.id == step.processId,
+                            );
+                            if (processIndex < 0) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('存在无效工序，请重新选择。')),
+                              );
+                              return;
+                            }
+                            final process = _processes[processIndex];
+                            payloadSteps.add(
+                              ProductionOrderProcessStepInput(
+                                stepOrder: i + 1,
+                                stageId: step.stageId,
+                                processId: step.processId,
+                              ),
+                            );
+                            processCodes.add(process.code);
+                          }
+                          final quantity = int.parse(
+                            quantityController.text.trim(),
+                          );
+                          final normalizedTemplateName =
+                              newTemplateNameController.text.trim();
+                          try {
+                            if (isEdit) {
+                              await _service.updateOrder(
+                                orderId: existingOrderId!,
+                                productId: selectedProductId,
+                                quantity: quantity,
+                                processCodes: processCodes,
+                                templateId: selectedTemplateId,
+                                processSteps: payloadSteps,
+                                saveAsTemplate: saveAsTemplate,
+                                newTemplateName: saveAsTemplate
+                                    ? normalizedTemplateName
+                                    : null,
+                                newTemplateSetDefault: newTemplateSetDefault,
+                                startDate: startDate,
+                                dueDate: dueDate,
+                                remark: remarkController.text.trim().isEmpty
+                                    ? null
+                                    : remarkController.text.trim(),
+                              );
+                            } else {
+                              await _service.createOrder(
+                                orderCode: orderCodeController.text.trim(),
+                                productId: selectedProductId,
+                                quantity: quantity,
+                                processCodes: processCodes,
+                                templateId: selectedTemplateId,
+                                processSteps: payloadSteps,
+                                saveAsTemplate: saveAsTemplate,
+                                newTemplateName: saveAsTemplate
+                                    ? normalizedTemplateName
+                                    : null,
+                                newTemplateSetDefault: newTemplateSetDefault,
+                                startDate: startDate,
+                                dueDate: dueDate,
+                                remark: remarkController.text.trim().isEmpty
+                                    ? null
+                                    : remarkController.text.trim(),
+                              );
+                            }
+                            if (context.mounted) {
+                              Navigator.of(context).pop(true);
+                            }
+                          } catch (error) {
+                            if (_isUnauthorized(error)) {
+                              widget.onLogout();
+                              return;
+                            }
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(_errorMessage(error))),
+                              );
+                            }
+                          }
+                        },
                   child: Text(isEdit ? '保存' : '创建'),
                 ),
               ],
@@ -547,8 +966,10 @@ class _ProductionOrderManagementPageState
     orderCodeController.dispose();
     quantityController.dispose();
     remarkController.dispose();
+    newTemplateNameController.dispose();
 
     if (saved == true) {
+      await _loadReferenceData();
       await _loadOrders();
     }
   }
@@ -787,11 +1208,11 @@ class _ProductionOrderManagementPageState
                                       child: AdaptiveTableContainer(
                                         child: DataTable(
                                           columns: const [
-                                            DataColumn(label: Text('时间')),
+                                            DataColumn(label: Text('鏃堕棿')),
                                             DataColumn(label: Text('工序')),
                                             DataColumn(label: Text('操作员')),
-                                            DataColumn(label: Text('类型')),
-                                            DataColumn(label: Text('数量')),
+                                            DataColumn(label: Text('绫诲瀷')),
+                                            DataColumn(label: Text('鏁伴噺')),
                                           ],
                                           rows: detail.records.map((item) {
                                             return DataRow(

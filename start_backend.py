@@ -91,6 +91,11 @@ def main() -> int:
 
     try:
         result = subprocess.run(command, cwd=BACKEND_DIR, check=False, env=env)
+        if result.returncode != 0:
+            print(
+                f"[ERROR] Backend process exited with code {result.returncode}. "
+                "If startup stopped at migration, check alembic errors in the traceback above."
+            )
         return result.returncode
     except KeyboardInterrupt:
         print("\n[INFO] Backend server stopped.")

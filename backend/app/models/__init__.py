@@ -15,6 +15,9 @@ from app.models.production_sub_order import ProductionSubOrder
 from app.models.product_parameter import ProductParameter
 from app.models.product_parameter_history import ProductParameterHistory
 from app.models.process import Process
+from app.models.process_stage import ProcessStage
+from app.models.product_process_template import ProductProcessTemplate
+from app.models.product_process_template_step import ProductProcessTemplateStep
 from app.models.registration_request import RegistrationRequest
 from app.models.role import Role
 from app.models.user import User
@@ -23,6 +26,9 @@ __all__ = [
     "User",
     "Role",
     "Process",
+    "ProcessStage",
+    "ProductProcessTemplate",
+    "ProductProcessTemplateStep",
     "RegistrationRequest",
     "PageVisibility",
     "Equipment",

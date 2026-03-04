@@ -7,6 +7,12 @@ class ProcessConfigItem(BaseModel):
     process_code: str = Field(min_length=2, max_length=64)
 
 
+class OrderProcessStepPayload(BaseModel):
+    step_order: int = Field(gt=0)
+    stage_id: int = Field(gt=0)
+    process_id: int = Field(gt=0)
+
+
 class OrderCreate(BaseModel):
     order_code: str = Field(min_length=2, max_length=64)
     product_id: int = Field(gt=0)
@@ -14,7 +20,12 @@ class OrderCreate(BaseModel):
     start_date: date | None = None
     due_date: date | None = None
     remark: str | None = Field(default=None, max_length=1024)
-    process_codes: list[str] = Field(default_factory=list, min_length=1)
+    template_id: int | None = Field(default=None, gt=0)
+    process_steps: list[OrderProcessStepPayload] | None = None
+    process_codes: list[str] = Field(default_factory=list)
+    save_as_template: bool = False
+    new_template_name: str | None = Field(default=None, max_length=128)
+    new_template_set_default: bool = False
 
     @field_validator("process_codes")
     @classmethod
@@ -23,9 +34,17 @@ class OrderCreate(BaseModel):
         deduplicated = list(dict.fromkeys(normalized))
         if len(deduplicated) != len(normalized):
             raise ValueError("Process codes cannot contain duplicates")
-        if not deduplicated:
-            raise ValueError("At least one process is required")
         return deduplicated
+
+    @field_validator("process_steps")
+    @classmethod
+    def validate_process_steps(cls, value: list[OrderProcessStepPayload] | None) -> list[OrderProcessStepPayload] | None:
+        if value is None:
+            return value
+        step_orders = [item.step_order for item in value]
+        if len(step_orders) != len(set(step_orders)):
+            raise ValueError("step_order cannot be duplicated")
+        return value
 
 
 class OrderUpdate(BaseModel):
@@ -34,7 +53,12 @@ class OrderUpdate(BaseModel):
     start_date: date | None = None
     due_date: date | None = None
     remark: str | None = Field(default=None, max_length=1024)
-    process_codes: list[str] = Field(default_factory=list, min_length=1)
+    template_id: int | None = Field(default=None, gt=0)
+    process_steps: list[OrderProcessStepPayload] | None = None
+    process_codes: list[str] = Field(default_factory=list)
+    save_as_template: bool = False
+    new_template_name: str | None = Field(default=None, max_length=128)
+    new_template_set_default: bool = False
 
     @field_validator("process_codes")
     @classmethod
@@ -43,13 +67,24 @@ class OrderUpdate(BaseModel):
         deduplicated = list(dict.fromkeys(normalized))
         if len(deduplicated) != len(normalized):
             raise ValueError("Process codes cannot contain duplicates")
-        if not deduplicated:
-            raise ValueError("At least one process is required")
         return deduplicated
+
+    @field_validator("process_steps")
+    @classmethod
+    def validate_process_steps(cls, value: list[OrderProcessStepPayload] | None) -> list[OrderProcessStepPayload] | None:
+        if value is None:
+            return value
+        step_orders = [item.step_order for item in value]
+        if len(step_orders) != len(set(step_orders)):
+            raise ValueError("step_order cannot be duplicated")
+        return value
 
 
 class ProductionOrderProcessItem(BaseModel):
     id: int
+    stage_id: int | None = None
+    stage_code: str | None = None
+    stage_name: str | None = None
     process_code: str
     process_name: str
     process_order: int
@@ -110,6 +145,9 @@ class OrderItem(BaseModel):
     start_date: date | None = None
     due_date: date | None = None
     remark: str | None = None
+    process_template_id: int | None = None
+    process_template_name: str | None = None
+    process_template_version: int | None = None
     created_by_user_id: int | None = None
     created_by_username: str | None = None
     created_at: datetime
@@ -143,6 +181,9 @@ class MyOrderItem(BaseModel):
     quantity: int
     order_status: str
     current_process_id: int
+    current_stage_id: int | None = None
+    current_stage_code: str | None = None
+    current_stage_name: str | None = None
     current_process_code: str
     current_process_name: str
     current_process_order: int

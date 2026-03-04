@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -64,6 +65,35 @@ def _is_local_host_url(url: str) -> bool:
     return host in {"localhost", "127.0.0.1", "::1"}
 
 
+def _build_backend_health_url(api_base_url: str) -> str | None:
+    parsed = urllib.parse.urlparse(api_base_url.rstrip("/"))
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, "/health", "", "", ""))
+
+
+def wait_backend_ready(api_base_url: str, timeout_seconds: int) -> bool:
+    health_url = _build_backend_health_url(api_base_url)
+    if not health_url:
+        return False
+
+    request = urllib.request.Request(url=health_url, method="GET")
+    open_url = urllib.request.urlopen
+    if _is_local_host_url(api_base_url):
+        open_url = urllib.request.build_opener(urllib.request.ProxyHandler({})).open
+
+    deadline = time.monotonic() + max(0, timeout_seconds)
+    while time.monotonic() <= deadline:
+        try:
+            with open_url(request, timeout=3) as response:
+                if response.status == 200:
+                    return True
+        except (urllib.error.URLError, TimeoutError):
+            pass
+        time.sleep(1.0)
+    return False
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Start Flutter frontend app.")
     parser.add_argument(
@@ -90,6 +120,12 @@ def parse_args() -> argparse.Namespace:
         "--skip-bootstrap-admin",
         action="store_true",
         help="Skip calling bootstrap admin endpoint before startup.",
+    )
+    parser.add_argument(
+        "--wait-backend-seconds",
+        type=int,
+        default=45,
+        help="Seconds to wait for local backend /health before bootstrap, default: 45",
     )
     return parser.parse_args()
 
@@ -151,6 +187,16 @@ def main() -> int:
     if args.skip_bootstrap_admin:
         print("[INFO] Skip bootstrap admin by argument.")
     else:
+        if _is_local_host_url(args.api_base_url):
+            print(
+                f"[INFO] Waiting backend health before bootstrap (timeout: {args.wait_backend_seconds}s)."
+            )
+            if wait_backend_ready(args.api_base_url, args.wait_backend_seconds):
+                print("[INFO] Backend health check passed.")
+            else:
+                print(
+                    "[WARN] Backend health check timeout. Bootstrap will still be attempted."
+                )
         bootstrap_admin(args.api_base_url)
 
     if not args.skip_pub_get:

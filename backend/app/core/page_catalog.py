@@ -33,6 +33,9 @@ PAGE_PRODUCTION_DATA_QUERY = "production_data_query"
 PAGE_QUALITY = "quality"
 PAGE_FIRST_ARTICLE_MANAGEMENT = "first_article_management"
 PAGE_QUALITY_DATA_QUERY = "quality_data_query"
+PAGE_CRAFT = "craft"
+PAGE_PROCESS_MANAGEMENT = "process_management"
+PAGE_PRODUCTION_PROCESS_CONFIG = "production_process_config"
 
 
 PAGE_CATALOG = [
@@ -212,6 +215,30 @@ PAGE_CATALOG = [
         "always_visible": False,
         "sort_order": 62,
     },
+    {
+        "code": PAGE_CRAFT,
+        "name": "工艺",
+        "page_type": PAGE_TYPE_SIDEBAR,
+        "parent_code": None,
+        "always_visible": False,
+        "sort_order": 70,
+    },
+    {
+        "code": PAGE_PROCESS_MANAGEMENT,
+        "name": "工序管理",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_CRAFT,
+        "always_visible": False,
+        "sort_order": 71,
+    },
+    {
+        "code": PAGE_PRODUCTION_PROCESS_CONFIG,
+        "name": "生产工序配置",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_CRAFT,
+        "always_visible": False,
+        "sort_order": 72,
+    },
 ]
 
 
@@ -248,6 +275,9 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,
+        PAGE_CRAFT,
+        PAGE_PROCESS_MANAGEMENT,
+        PAGE_PRODUCTION_PROCESS_CONFIG,
     },
     ROLE_PRODUCTION_ADMIN: {
         PAGE_HOME,
@@ -268,6 +298,9 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,
+        PAGE_CRAFT,
+        PAGE_PROCESS_MANAGEMENT,
+        PAGE_PRODUCTION_PROCESS_CONFIG,
     },
     ROLE_QUALITY_ADMIN: {
         PAGE_HOME,

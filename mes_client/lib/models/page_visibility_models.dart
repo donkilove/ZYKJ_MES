@@ -1,27 +1,42 @@
 class PageCatalogItem {
   const PageCatalogItem({
     required this.code,
+
     required this.name,
+
     required this.pageType,
+
     required this.parentCode,
+
     required this.alwaysVisible,
+
     required this.sortOrder,
   });
 
   final String code;
+
   final String name;
+
   final String pageType;
+
   final String? parentCode;
+
   final bool alwaysVisible;
+
   final int sortOrder;
 
   factory PageCatalogItem.fromJson(Map<String, dynamic> json) {
     return PageCatalogItem(
       code: json['code'] as String,
+
       name: json['name'] as String,
+
       pageType: json['page_type'] as String,
+
       parentCode: json['parent_code'] as String?,
+
       alwaysVisible: (json['always_visible'] as bool?) ?? false,
+
       sortOrder: (json['sort_order'] as int?) ?? 0,
     );
   }
@@ -30,23 +45,30 @@ class PageCatalogItem {
 class PageVisibilityMeResult {
   PageVisibilityMeResult({
     required this.sidebarCodes,
+
     required this.tabCodesByParent,
   });
 
   final List<String> sidebarCodes;
+
   final Map<String, List<String>> tabCodesByParent;
 
   factory PageVisibilityMeResult.fromJson(Map<String, dynamic> json) {
     final rawMap =
         (json['tab_codes_by_parent'] as Map<String, dynamic>? ?? const {});
+
     final mapped = <String, List<String>>{};
+
     rawMap.forEach((key, value) {
       final list = (value as List<dynamic>? ?? const []).cast<String>();
+
       mapped[key] = list;
     });
+
     return PageVisibilityMeResult(
       sidebarCodes: (json['sidebar_codes'] as List<dynamic>? ?? const [])
           .cast<String>(),
+
       tabCodesByParent: mapped,
     );
   }
@@ -55,36 +77,60 @@ class PageVisibilityMeResult {
 class PageVisibilityConfigItem {
   PageVisibilityConfigItem({
     required this.roleCode,
+
     required this.roleName,
+
     required this.pageCode,
+
     required this.pageName,
+
     required this.pageType,
+
     required this.parentCode,
+
     required this.editable,
+
     required this.isVisible,
+
     required this.alwaysVisible,
   });
 
   final String roleCode;
+
   final String roleName;
+
   final String pageCode;
+
   final String pageName;
+
   final String pageType;
+
   final String? parentCode;
+
   final bool editable;
+
   final bool isVisible;
+
   final bool alwaysVisible;
 
   factory PageVisibilityConfigItem.fromJson(Map<String, dynamic> json) {
     return PageVisibilityConfigItem(
       roleCode: json['role_code'] as String,
+
       roleName: json['role_name'] as String,
+
       pageCode: json['page_code'] as String,
+
       pageName: json['page_name'] as String,
+
       pageType: json['page_type'] as String,
+
       parentCode: json['parent_code'] as String?,
+
       editable: (json['editable'] as bool?) ?? false,
+
       isVisible: (json['is_visible'] as bool?) ?? false,
+
       alwaysVisible: (json['always_visible'] as bool?) ?? false,
     );
   }
@@ -93,18 +139,24 @@ class PageVisibilityConfigItem {
 class PageVisibilityConfigUpdateItem {
   const PageVisibilityConfigUpdateItem({
     required this.roleCode,
+
     required this.pageCode,
+
     required this.isVisible,
   });
 
   final String roleCode;
+
   final String pageCode;
+
   final bool isVisible;
 
   Map<String, dynamic> toJson() {
     return {
       'role_code': roleCode,
+
       'page_code': pageCode,
+
       'is_visible': isVisible,
     };
   }
@@ -113,178 +165,351 @@ class PageVisibilityConfigUpdateItem {
 const fallbackPageCatalog = <PageCatalogItem>[
   PageCatalogItem(
     code: 'home',
+
     name: '首页',
+
     pageType: 'sidebar',
+
     parentCode: null,
+
     alwaysVisible: true,
+
     sortOrder: 10,
   ),
+
   PageCatalogItem(
     code: 'user',
+
     name: '用户',
+
     pageType: 'sidebar',
+
     parentCode: null,
+
     alwaysVisible: false,
+
     sortOrder: 20,
   ),
+
   PageCatalogItem(
     code: 'user_management',
+
     name: '用户管理',
+
     pageType: 'tab',
+
     parentCode: 'user',
+
     alwaysVisible: false,
+
     sortOrder: 21,
   ),
+
   PageCatalogItem(
     code: 'registration_approval',
+
     name: '注册审批',
+
     pageType: 'tab',
+
     parentCode: 'user',
+
     alwaysVisible: false,
+
     sortOrder: 22,
   ),
+
   PageCatalogItem(
     code: 'page_visibility_config',
+
     name: '页面可见性配置',
+
     pageType: 'tab',
+
     parentCode: 'user',
+
     alwaysVisible: false,
+
     sortOrder: 23,
   ),
+
   PageCatalogItem(
     code: 'product',
+
     name: '产品',
+
     pageType: 'sidebar',
+
     parentCode: null,
+
     alwaysVisible: false,
+
     sortOrder: 30,
   ),
+
   PageCatalogItem(
     code: 'product_management',
+
     name: '产品管理',
+
     pageType: 'tab',
+
     parentCode: 'product',
+
     alwaysVisible: false,
+
     sortOrder: 31,
   ),
+
   PageCatalogItem(
     code: 'product_parameter_management',
+
     name: '产品参数管理',
+
     pageType: 'tab',
+
     parentCode: 'product',
+
     alwaysVisible: false,
+
     sortOrder: 32,
   ),
+
   PageCatalogItem(
     code: 'product_parameter_query',
+
     name: '产品参数查询',
+
     pageType: 'tab',
+
     parentCode: 'product',
+
     alwaysVisible: false,
+
     sortOrder: 33,
   ),
+
   PageCatalogItem(
     code: 'equipment',
+
     name: '设备',
+
     pageType: 'sidebar',
+
     parentCode: null,
+
     alwaysVisible: false,
+
     sortOrder: 40,
   ),
+
   PageCatalogItem(
     code: 'equipment_ledger',
+
     name: '设备台账',
+
     pageType: 'tab',
+
     parentCode: 'equipment',
+
     alwaysVisible: false,
+
     sortOrder: 41,
   ),
+
   PageCatalogItem(
     code: 'maintenance_item',
+
     name: '保养项目',
+
     pageType: 'tab',
+
     parentCode: 'equipment',
+
     alwaysVisible: false,
+
     sortOrder: 42,
   ),
+
   PageCatalogItem(
     code: 'maintenance_plan',
+
     name: '保养计划',
+
     pageType: 'tab',
+
     parentCode: 'equipment',
+
     alwaysVisible: false,
+
     sortOrder: 43,
   ),
+
   PageCatalogItem(
     code: 'maintenance_execution',
+
     name: '保养执行',
+
     pageType: 'tab',
+
     parentCode: 'equipment',
+
     alwaysVisible: false,
+
     sortOrder: 44,
   ),
+
   PageCatalogItem(
     code: 'maintenance_record',
+
     name: '保养记录',
+
     pageType: 'tab',
+
     parentCode: 'equipment',
+
     alwaysVisible: false,
+
     sortOrder: 45,
   ),
+
   PageCatalogItem(
     code: 'production',
+
     name: '生产',
+
     pageType: 'sidebar',
+
     parentCode: null,
+
     alwaysVisible: false,
+
     sortOrder: 50,
   ),
+
   PageCatalogItem(
     code: 'production_order_management',
+
     name: '订单管理',
+
     pageType: 'tab',
+
     parentCode: 'production',
+
     alwaysVisible: false,
+
     sortOrder: 51,
   ),
+
   PageCatalogItem(
     code: 'production_order_query',
+
     name: '订单查询',
+
     pageType: 'tab',
+
     parentCode: 'production',
+
     alwaysVisible: false,
+
     sortOrder: 52,
   ),
+
   PageCatalogItem(
     code: 'production_data_query',
+
     name: '生产数据',
+
     pageType: 'tab',
+
     parentCode: 'production',
+
     alwaysVisible: false,
+
     sortOrder: 53,
   ),
+
   PageCatalogItem(
     code: 'quality',
+
     name: '品质',
+
     pageType: 'sidebar',
+
     parentCode: null,
+
     alwaysVisible: false,
+
     sortOrder: 60,
   ),
+
   PageCatalogItem(
     code: 'first_article_management',
+
     name: '每日首件',
+
     pageType: 'tab',
+
     parentCode: 'quality',
+
     alwaysVisible: false,
+
     sortOrder: 61,
   ),
+
   PageCatalogItem(
     code: 'quality_data_query',
+
     name: '品质数据',
+
     pageType: 'tab',
+
     parentCode: 'quality',
+
     alwaysVisible: false,
+
     sortOrder: 62,
+  ),
+
+  PageCatalogItem(
+    code: 'craft',
+
+    name: '工艺',
+
+    pageType: 'sidebar',
+
+    parentCode: null,
+
+    alwaysVisible: false,
+
+    sortOrder: 70,
+  ),
+
+  PageCatalogItem(
+    code: 'process_management',
+
+    name: '工序管理',
+
+    pageType: 'tab',
+
+    parentCode: 'craft',
+
+    alwaysVisible: false,
+
+    sortOrder: 71,
+  ),
+
+  PageCatalogItem(
+    code: 'production_process_config',
+
+    name: '生产工序配置',
+
+    pageType: 'tab',
+
+    parentCode: 'craft',
+
+    alwaysVisible: false,
+
+    sortOrder: 72,
   ),
 ];

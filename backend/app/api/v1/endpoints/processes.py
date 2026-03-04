@@ -26,10 +26,15 @@ router = APIRouter()
 
 
 def to_process_item(process: Process) -> ProcessItem:
+    stage = process.stage
     return ProcessItem(
         id=process.id,
         code=process.code,
         name=process.name,
+        stage_id=process.stage_id,
+        stage_code=stage.code if stage else None,
+        stage_name=stage.name if stage else None,
+        is_enabled=process.is_enabled,
         created_at=process.created_at,
         updated_at=process.updated_at,
     )

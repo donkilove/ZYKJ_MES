@@ -1,0 +1,725 @@
+import 'package:flutter/material.dart';
+
+import '../models/app_session.dart';
+import '../models/craft_models.dart';
+import '../services/api_exception.dart';
+import '../services/craft_service.dart';
+import '../widgets/adaptive_table_container.dart';
+
+enum _StageAction { edit, toggle, delete }
+enum _ProcessAction { edit, toggle, delete }
+
+class ProcessManagementPage extends StatefulWidget {
+  const ProcessManagementPage({
+    super.key,
+    required this.session,
+    required this.onLogout,
+  });
+
+  final AppSession session;
+  final VoidCallback onLogout;
+
+  @override
+  State<ProcessManagementPage> createState() => _ProcessManagementPageState();
+}
+
+class _ProcessManagementPageState extends State<ProcessManagementPage> {
+  late final CraftService _service;
+
+  bool _loading = false;
+  String _message = '';
+  List<CraftStageItem> _stages = const [];
+  List<CraftProcessItem> _processes = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _service = CraftService(widget.session);
+    _loadData();
+  }
+
+  bool _isUnauthorized(Object error) {
+    return error is ApiException && error.statusCode == 401;
+  }
+
+  String _errorMessage(Object error) {
+    if (error is ApiException) {
+      return error.message;
+    }
+    return error.toString();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _message = '';
+    });
+    try {
+      final stageResult = await _service.listStages(pageSize: 500, enabled: null);
+      final processResult = await _service.listProcesses(pageSize: 500, enabled: null);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _stages = [...stageResult.items]
+          ..sort((a, b) {
+            final orderCompare = a.sortOrder.compareTo(b.sortOrder);
+            if (orderCompare != 0) {
+              return orderCompare;
+            }
+            return a.id.compareTo(b.id);
+          });
+        _processes = [...processResult.items]
+          ..sort((a, b) {
+            final stageCompare = (a.stageName ?? '').compareTo(b.stageName ?? '');
+            if (stageCompare != 0) {
+              return stageCompare;
+            }
+            return a.id.compareTo(b.id);
+          });
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '加载工艺数据失败：${_errorMessage(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showStageDialog({CraftStageItem? existing}) async {
+    final isEdit = existing != null;
+    final codeController = TextEditingController(text: existing?.code ?? '');
+    final nameController = TextEditingController(text: existing?.name ?? '');
+    final sortController = TextEditingController(
+      text: (existing?.sortOrder ?? 0).toString(),
+    );
+    bool isEnabled = existing?.isEnabled ?? true;
+    final formKey = GlobalKey<FormState>();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(isEdit ? '编辑工段' : '新增工段'),
+              content: SizedBox(
+                width: 420,
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: codeController,
+                        readOnly: isEdit,
+                        decoration: const InputDecoration(
+                          labelText: '工段编码',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入工段编码';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: '工段名称',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入工段名称';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: sortController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: '排序',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (int.tryParse(value?.trim() ?? '') == null) {
+                            return '排序必须为数字';
+                          }
+                          return null;
+                        },
+                      ),
+                      if (isEdit) ...[
+                        const SizedBox(height: 12),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('启用'),
+                          value: isEnabled,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              isEnabled = value;
+                            });
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) {
+                      return;
+                    }
+                    final sortOrder = int.parse(sortController.text.trim());
+                    try {
+                      if (isEdit) {
+                        await _service.updateStage(
+                          stageId: existing.id,
+                          name: nameController.text.trim(),
+                          sortOrder: sortOrder,
+                          isEnabled: isEnabled,
+                        );
+                      } else {
+                        await _service.createStage(
+                          code: codeController.text.trim(),
+                          name: nameController.text.trim(),
+                          sortOrder: sortOrder,
+                        );
+                      }
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop(true);
+                      }
+                    } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
+                      if (dialogContext.mounted) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(content: Text(_errorMessage(error))),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    codeController.dispose();
+    nameController.dispose();
+    sortController.dispose();
+
+    if (saved == true) {
+      await _loadData();
+    }
+  }
+
+  Future<void> _showProcessDialog({CraftProcessItem? existing}) async {
+    if (_stages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先新增工段')), 
+      );
+      return;
+    }
+
+    final isEdit = existing != null;
+    final codeController = TextEditingController(text: existing?.code ?? '');
+    final nameController = TextEditingController(text: existing?.name ?? '');
+    var selectedStageId = existing?.stageId ?? _stages.first.id;
+    bool isEnabled = existing?.isEnabled ?? true;
+    final formKey = GlobalKey<FormState>();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(isEdit ? '编辑小工序' : '新增小工序'),
+              content: SizedBox(
+                width: 420,
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: codeController,
+                        readOnly: isEdit,
+                        decoration: const InputDecoration(
+                          labelText: '小工序编码',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入小工序编码';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: '小工序名称',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入小工序名称';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        initialValue: selectedStageId,
+                        decoration: const InputDecoration(
+                          labelText: '所属工段',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _stages
+                            .map(
+                              (entry) => DropdownMenuItem<int>(
+                                value: entry.id,
+                                child: Text('${entry.name} (${entry.code})'),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setDialogState(() {
+                            selectedStageId = value;
+                          });
+                        },
+                      ),
+                      if (isEdit) ...[
+                        const SizedBox(height: 12),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('启用'),
+                          value: isEnabled,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              isEnabled = value;
+                            });
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) {
+                      return;
+                    }
+                    try {
+                      if (isEdit) {
+                        await _service.updateProcess(
+                          processId: existing.id,
+                          name: nameController.text.trim(),
+                          stageId: selectedStageId,
+                          isEnabled: isEnabled,
+                        );
+                      } else {
+                        await _service.createProcess(
+                          code: codeController.text.trim(),
+                          name: nameController.text.trim(),
+                          stageId: selectedStageId,
+                        );
+                      }
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop(true);
+                      }
+                    } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
+                      if (dialogContext.mounted) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(content: Text(_errorMessage(error))),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    codeController.dispose();
+    nameController.dispose();
+
+    if (saved == true) {
+      await _loadData();
+    }
+  }
+
+  Future<void> _handleStageAction(_StageAction action, CraftStageItem item) async {
+    switch (action) {
+      case _StageAction.edit:
+        await _showStageDialog(existing: item);
+        return;
+      case _StageAction.toggle:
+        try {
+          await _service.updateStage(
+            stageId: item.id,
+            name: item.name,
+            sortOrder: item.sortOrder,
+            isEnabled: !item.isEnabled,
+          );
+          await _loadData();
+        } catch (error) {
+          if (_isUnauthorized(error)) {
+            widget.onLogout();
+            return;
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(_errorMessage(error))),
+            );
+          }
+        }
+        return;
+      case _StageAction.delete:
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('删除工段'),
+            content: Text('确认删除工段 ${item.name} 吗？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('删除'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) {
+          return;
+        }
+        try {
+          await _service.deleteStage(stageId: item.id);
+          await _loadData();
+        } catch (error) {
+          if (_isUnauthorized(error)) {
+            widget.onLogout();
+            return;
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(_errorMessage(error))),
+            );
+          }
+        }
+        return;
+    }
+  }
+
+  Future<void> _handleProcessAction(
+    _ProcessAction action,
+    CraftProcessItem item,
+  ) async {
+    switch (action) {
+      case _ProcessAction.edit:
+        await _showProcessDialog(existing: item);
+        return;
+      case _ProcessAction.toggle:
+        try {
+          await _service.updateProcess(
+            processId: item.id,
+            name: item.name,
+            stageId: item.stageId ?? 0,
+            isEnabled: !item.isEnabled,
+          );
+          await _loadData();
+        } catch (error) {
+          if (_isUnauthorized(error)) {
+            widget.onLogout();
+            return;
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(_errorMessage(error))),
+            );
+          }
+        }
+        return;
+      case _ProcessAction.delete:
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('删除小工序'),
+            content: Text('确认删除小工序 ${item.name} 吗？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('删除'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) {
+          return;
+        }
+        try {
+          await _service.deleteProcess(processId: item.id);
+          await _loadData();
+        } catch (error) {
+          if (_isUnauthorized(error)) {
+            widget.onLogout();
+            return;
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(_errorMessage(error))),
+            );
+          }
+        }
+        return;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                '工序管理',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: _loading ? null : () => _showStageDialog(),
+                icon: const Icon(Icons.add),
+                label: const Text('新增工段'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _loading ? null : () => _showProcessDialog(),
+                icon: const Icon(Icons.add),
+                label: const Text('新增小工序'),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: '刷新',
+                onPressed: _loading ? null : _loadData,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_message.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : Row(
+                    children: [
+                      Expanded(
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '工段列表',
+                                  style: theme.textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 8),
+                                Expanded(
+                                  child: _stages.isEmpty
+                                      ? const Center(child: Text('暂无工段'))
+                                      : AdaptiveTableContainer(
+                                          child: DataTable(
+                                            columns: const [
+                                              DataColumn(label: Text('编码')),
+                                              DataColumn(label: Text('名称')),
+                                              DataColumn(label: Text('排序')),
+                                              DataColumn(label: Text('状态')),
+                                              DataColumn(label: Text('操作')),
+                                            ],
+                                            rows: _stages.map((item) {
+                                              return DataRow(
+                                                cells: [
+                                                  DataCell(Text(item.code)),
+                                                  DataCell(Text(item.name)),
+                                                  DataCell(Text('${item.sortOrder}')),
+                                                  DataCell(
+                                                    Text(item.isEnabled ? '启用' : '停用'),
+                                                  ),
+                                                  DataCell(
+                                                    PopupMenuButton<_StageAction>(
+                                                      onSelected: (action) {
+                                                        _handleStageAction(action, item);
+                                                      },
+                                                      itemBuilder: (context) => [
+                                                        const PopupMenuItem(
+                                                          value: _StageAction.edit,
+                                                          child: Text('编辑'),
+                                                        ),
+                                                        PopupMenuItem(
+                                                          value: _StageAction.toggle,
+                                                          child: Text(item.isEnabled ? '停用' : '启用'),
+                                                        ),
+                                                        const PopupMenuItem(
+                                                          value: _StageAction.delete,
+                                                          child: Text('删除'),
+                                                        ),
+                                                      ],
+                                                      child: const Text('操作'),
+                                                    ),
+                                                  ),
+                                                ],
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '小工序列表',
+                                  style: theme.textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 8),
+                                Expanded(
+                                  child: _processes.isEmpty
+                                      ? const Center(child: Text('暂无小工序'))
+                                      : AdaptiveTableContainer(
+                                          child: DataTable(
+                                            columns: const [
+                                              DataColumn(label: Text('工段')),
+                                              DataColumn(label: Text('编码')),
+                                              DataColumn(label: Text('名称')),
+                                              DataColumn(label: Text('状态')),
+                                              DataColumn(label: Text('操作')),
+                                            ],
+                                            rows: _processes.map((item) {
+                                              return DataRow(
+                                                cells: [
+                                                  DataCell(Text(item.stageName ?? '-')),
+                                                  DataCell(Text(item.code)),
+                                                  DataCell(Text(item.name)),
+                                                  DataCell(
+                                                    Text(item.isEnabled ? '启用' : '停用'),
+                                                  ),
+                                                  DataCell(
+                                                    PopupMenuButton<_ProcessAction>(
+                                                      onSelected: (action) {
+                                                        _handleProcessAction(action, item);
+                                                      },
+                                                      itemBuilder: (context) => [
+                                                        const PopupMenuItem(
+                                                          value: _ProcessAction.edit,
+                                                          child: Text('编辑'),
+                                                        ),
+                                                        PopupMenuItem(
+                                                          value: _ProcessAction.toggle,
+                                                          child: Text(item.isEnabled ? '停用' : '启用'),
+                                                        ),
+                                                        const PopupMenuItem(
+                                                          value: _ProcessAction.delete,
+                                                          child: Text('删除'),
+                                                        ),
+                                                      ],
+                                                      child: const Text('操作'),
+                                                    ),
+                                                  ),
+                                                ],
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}

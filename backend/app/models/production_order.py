@@ -18,6 +18,13 @@ class ProductionOrder(Base, TimestampMixin):
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    process_template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_product_process_template.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    process_template_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    process_template_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("sys_user.id", ondelete="SET NULL"),
         nullable=True,
@@ -26,6 +33,7 @@ class ProductionOrder(Base, TimestampMixin):
 
     product = relationship("Product")
     created_by = relationship("User")
+    process_template = relationship("ProductProcessTemplate")
     processes = relationship(
         "ProductionOrderProcess",
         back_populates="order",

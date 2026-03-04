@@ -63,6 +63,9 @@ class ProductionOrderItem {
     required this.startDate,
     required this.dueDate,
     required this.remark,
+    required this.processTemplateId,
+    required this.processTemplateName,
+    required this.processTemplateVersion,
     required this.createdByUserId,
     required this.createdByUsername,
     required this.createdAt,
@@ -80,6 +83,9 @@ class ProductionOrderItem {
   final DateTime? startDate;
   final DateTime? dueDate;
   final String? remark;
+  final int? processTemplateId;
+  final String? processTemplateName;
+  final int? processTemplateVersion;
   final int? createdByUserId;
   final String? createdByUsername;
   final DateTime createdAt;
@@ -98,6 +104,9 @@ class ProductionOrderItem {
       startDate: _parseDateOrNull(json['start_date']),
       dueDate: _parseDateOrNull(json['due_date']),
       remark: json['remark'] as String?,
+      processTemplateId: json['process_template_id'] as int?,
+      processTemplateName: json['process_template_name'] as String?,
+      processTemplateVersion: json['process_template_version'] as int?,
       createdByUserId: json['created_by_user_id'] as int?,
       createdByUsername: json['created_by_username'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
@@ -116,6 +125,9 @@ class ProductionOrderListResult {
 class ProductionOrderProcessItem {
   ProductionOrderProcessItem({
     required this.id,
+    required this.stageId,
+    required this.stageCode,
+    required this.stageName,
     required this.processCode,
     required this.processName,
     required this.processOrder,
@@ -127,6 +139,9 @@ class ProductionOrderProcessItem {
   });
 
   final int id;
+  final int? stageId;
+  final String? stageCode;
+  final String? stageName;
   final String processCode;
   final String processName;
   final int processOrder;
@@ -139,6 +154,9 @@ class ProductionOrderProcessItem {
   factory ProductionOrderProcessItem.fromJson(Map<String, dynamic> json) {
     return ProductionOrderProcessItem(
       id: json['id'] as int,
+      stageId: json['stage_id'] as int?,
+      stageCode: json['stage_code'] as String?,
+      stageName: json['stage_name'] as String?,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
       processOrder: (json['process_order'] as int?) ?? 0,
@@ -329,6 +347,9 @@ class MyOrderItem {
     required this.quantity,
     required this.orderStatus,
     required this.currentProcessId,
+    required this.currentStageId,
+    required this.currentStageCode,
+    required this.currentStageName,
     required this.currentProcessCode,
     required this.currentProcessName,
     required this.currentProcessOrder,
@@ -351,6 +372,9 @@ class MyOrderItem {
   final int quantity;
   final String orderStatus;
   final int currentProcessId;
+  final int? currentStageId;
+  final String? currentStageCode;
+  final String? currentStageName;
   final String currentProcessCode;
   final String currentProcessName;
   final int currentProcessOrder;
@@ -374,6 +398,9 @@ class MyOrderItem {
       quantity: (json['quantity'] as int?) ?? 0,
       orderStatus: (json['order_status'] as String?) ?? 'pending',
       currentProcessId: (json['current_process_id'] as int?) ?? 0,
+      currentStageId: json['current_stage_id'] as int?,
+      currentStageCode: json['current_stage_code'] as String?,
+      currentStageName: json['current_stage_name'] as String?,
       currentProcessCode: (json['current_process_code'] as String?) ?? '',
       currentProcessName: (json['current_process_name'] as String?) ?? '',
       currentProcessOrder: (json['current_process_order'] as int?) ?? 0,
@@ -537,17 +564,46 @@ class ProductionProcessOption {
     required this.id,
     required this.code,
     required this.name,
+    required this.stageId,
+    required this.stageCode,
+    required this.stageName,
   });
 
   final int id;
   final String code;
   final String name;
+  final int? stageId;
+  final String? stageCode;
+  final String? stageName;
 
   factory ProductionProcessOption.fromJson(Map<String, dynamic> json) {
     return ProductionProcessOption(
       id: json['id'] as int,
       code: (json['code'] as String?) ?? '',
       name: (json['name'] as String?) ?? '',
+      stageId: json['stage_id'] as int?,
+      stageCode: json['stage_code'] as String?,
+      stageName: json['stage_name'] as String?,
     );
+  }
+}
+
+class ProductionOrderProcessStepInput {
+  const ProductionOrderProcessStepInput({
+    required this.stepOrder,
+    required this.stageId,
+    required this.processId,
+  });
+
+  final int stepOrder;
+  final int stageId;
+  final int processId;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'step_order': stepOrder,
+      'stage_id': stageId,
+      'process_id': processId,
+    };
   }
 }

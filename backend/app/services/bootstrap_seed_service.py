@@ -5,9 +5,8 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.rbac import DEFAULT_PROCESS_DEFINITIONS, ROLE_DEFINITIONS, ROLE_SYSTEM_ADMIN
+from app.core.rbac import ROLE_DEFINITIONS, ROLE_SYSTEM_ADMIN
 from app.core.security import get_password_hash
-from app.models.process import Process
 from app.models.role import Role
 from app.models.user import User
 
@@ -43,19 +42,6 @@ def _ensure_roles(db: Session) -> dict[str, Role]:
             role.name = name
 
     return roles_by_code
-
-
-def _ensure_processes(db: Session) -> None:
-    for item in DEFAULT_PROCESS_DEFINITIONS:
-        code = item["code"]
-        name = item["name"]
-        process = db.execute(select(Process).where(Process.code == code)).scalars().first()
-        if not process:
-            process = Process(code=code, name=name)
-            db.add(process)
-            db.flush()
-        else:
-            process.name = name
 
 
 def _ensure_admin_user(
@@ -101,7 +87,6 @@ def seed_initial_data(
     admin_password: str,
 ) -> SeedResult:
     roles_by_code = _ensure_roles(db)
-    _ensure_processes(db)
     admin_user, admin_created, role_repaired = _ensure_admin_user(
         db,
         roles_by_code,

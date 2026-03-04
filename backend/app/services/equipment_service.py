@@ -5,10 +5,6 @@ from datetime import UTC, date, datetime, time, timedelta
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.equipment_process import (
-    is_valid_equipment_process_code,
-    map_location_to_process_code,
-)
 from app.core.rbac import (
     ROLE_PRODUCTION_ADMIN,
     ROLE_QUALITY_ADMIN,
@@ -21,6 +17,7 @@ from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.role import Role
 from app.models.user import User
+from app.services.craft_service import is_valid_stage_code, list_enabled_stage_options
 
 WORK_ORDER_STATUS_PENDING = "pending"
 WORK_ORDER_STATUS_IN_PROGRESS = "in_progress"
@@ -66,13 +63,20 @@ def _normalize_optional_text(value: str | None) -> str:
     return value.strip()
 
 
-def _normalize_execution_process_code(code: str) -> str:
+def _normalize_execution_process_code(db: Session, code: str) -> str:
     normalized = code.strip()
     if not normalized:
         raise ValueError("Execution process is required")
-    if not is_valid_equipment_process_code(normalized):
+    if not is_valid_stage_code(db, normalized):
         raise ValueError("Execution process is invalid")
     return normalized
+
+
+def _fallback_execution_stage_code(db: Session) -> str:
+    rows = list_enabled_stage_options(db)
+    if not rows:
+        raise ValueError("No enabled stage is configured")
+    return rows[0].code
 
 
 def _resolve_plan_cycle_days(item: MaintenanceItem) -> int:
@@ -102,15 +106,15 @@ def _ensure_work_order_process_permission(
     *,
     row: MaintenanceWorkOrder,
     current_user_role_codes: set[str],
-    current_user_process_codes: set[str],
+    current_user_stage_codes: set[str],
 ) -> None:
     if _can_execute_all_work_orders(current_user_role_codes):
         return
 
-    process_code = (row.source_execution_process_code or "").strip()
-    if not process_code:
+    stage_code = (row.source_execution_process_code or "").strip()
+    if not stage_code:
         raise ValueError("Work order process is missing")
-    if process_code not in current_user_process_codes:
+    if stage_code not in current_user_stage_codes:
         raise ValueError("Access denied")
 
 
@@ -494,7 +498,7 @@ def create_maintenance_plan(
 ) -> MaintenancePlan:
     _, item = _validate_plan_relations(db, equipment_id=equipment_id, item_id=item_id)
     cycle_days = _resolve_plan_cycle_days(item)
-    normalized_process_code = _normalize_execution_process_code(execution_process_code)
+    normalized_process_code = _normalize_execution_process_code(db, execution_process_code)
     if estimated_duration_minutes is not None and estimated_duration_minutes <= 0:
         raise ValueError("Estimated duration minutes must be greater than 0")
 
@@ -549,7 +553,7 @@ def update_maintenance_plan(
 ) -> MaintenancePlan:
     _, item = _validate_plan_relations(db, equipment_id=equipment_id, item_id=item_id)
     cycle_days = _resolve_plan_cycle_days(item)
-    normalized_process_code = _normalize_execution_process_code(execution_process_code)
+    normalized_process_code = _normalize_execution_process_code(db, execution_process_code)
     if estimated_duration_minutes is not None and estimated_duration_minutes <= 0:
         raise ValueError("Estimated duration minutes must be greater than 0")
 
@@ -677,8 +681,8 @@ def generate_work_order_for_plan(
         raise ValueError("Maintenance item not found")
     current_cycle_days = _resolve_plan_cycle_days(item)
     row.cycle_days = current_cycle_days
-    if not is_valid_equipment_process_code(row.execution_process_code):
-        row.execution_process_code = map_location_to_process_code(equipment.location)
+    if not is_valid_stage_code(db, row.execution_process_code):
+        row.execution_process_code = _fallback_execution_stage_code(db)
 
     same_due_existing = db.execute(
         select(MaintenanceWorkOrder).where(
@@ -756,7 +760,7 @@ def list_work_orders(
     mine: bool,
     current_user_id: int | None,
     current_user_role_codes: list[str],
-    current_user_process_codes: list[str],
+    current_user_stage_codes: list[str],
     done_only: bool,
     executor_user_id: int | None,
     start_date: date | None,
@@ -766,12 +770,12 @@ def list_work_orders(
 
     filters = []
     role_code_set = {code.strip() for code in current_user_role_codes if code and code.strip()}
-    process_code_set = {code.strip() for code in current_user_process_codes if code and code.strip()}
+    stage_code_set = {code.strip() for code in current_user_stage_codes if code and code.strip()}
 
     if not _can_view_all_work_orders(role_code_set):
-        if not process_code_set:
+        if not stage_code_set:
             return 0, []
-        filters.append(MaintenanceWorkOrder.source_execution_process_code.in_(process_code_set))
+        filters.append(MaintenanceWorkOrder.source_execution_process_code.in_(stage_code_set))
 
     if done_only:
         filters.append(MaintenanceWorkOrder.status == WORK_ORDER_STATUS_DONE)
@@ -896,7 +900,7 @@ def start_work_order(
     row: MaintenanceWorkOrder,
     operator: User,
     current_user_role_codes: list[str],
-    current_user_process_codes: list[str],
+    current_user_stage_codes: list[str],
 ) -> MaintenanceWorkOrder:
     refresh_overdue_work_orders(db)
     db.refresh(row)
@@ -906,8 +910,8 @@ def start_work_order(
         current_user_role_codes={
             code.strip() for code in current_user_role_codes if code and code.strip()
         },
-        current_user_process_codes={
-            code.strip() for code in current_user_process_codes if code and code.strip()
+        current_user_stage_codes={
+            code.strip() for code in current_user_stage_codes if code and code.strip()
         },
     )
 
@@ -929,7 +933,7 @@ def complete_work_order(
     row: MaintenanceWorkOrder,
     operator: User,
     current_user_role_codes: list[str],
-    current_user_process_codes: list[str],
+    current_user_stage_codes: list[str],
     result_summary: str,
     result_remark: str | None,
     attachment_link: str | None,
@@ -954,8 +958,8 @@ def complete_work_order(
         current_user_role_codes={
             code.strip() for code in current_user_role_codes if code and code.strip()
         },
-        current_user_process_codes={
-            code.strip() for code in current_user_process_codes if code and code.strip()
+        current_user_stage_codes={
+            code.strip() for code in current_user_stage_codes if code and code.strip()
         },
     )
 

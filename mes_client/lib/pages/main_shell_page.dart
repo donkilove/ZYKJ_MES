@@ -3,46 +3,74 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+
 import '../models/current_user.dart';
+
 import '../models/page_visibility_models.dart';
+
 import '../services/api_exception.dart';
+
 import '../services/auth_service.dart';
+
 import '../services/page_visibility_service.dart';
+
+import 'craft_page.dart';
+
 import 'equipment_page.dart';
+
 import 'home_page.dart';
+
 import 'product_page.dart';
+
 import 'production_page.dart';
+
 import 'quality_page.dart';
+
 import 'user_page.dart';
 
 const String _homePageCode = 'home';
+
 const String _userPageCode = 'user';
+
 const String _productPageCode = 'product';
+
 const String _equipmentPageCode = 'equipment';
+
 const String _productionPageCode = 'production';
+
 const String _qualityPageCode = 'quality';
+
+const String _craftPageCode = 'craft';
+
 const Duration _visibilityRefreshInterval = Duration(seconds: 15);
 
 class _ShellMenuItem {
   const _ShellMenuItem({
     required this.code,
+
     required this.title,
+
     required this.icon,
   });
 
   final String code;
+
   final String title;
+
   final IconData icon;
 }
 
 class MainShellPage extends StatefulWidget {
   const MainShellPage({
     super.key,
+
     required this.session,
+
     required this.onLogout,
   });
 
   final AppSession session;
+
   final VoidCallback onLogout;
 
   @override
@@ -52,32 +80,46 @@ class MainShellPage extends StatefulWidget {
 class _MainShellPageState extends State<MainShellPage>
     with WidgetsBindingObserver {
   final AuthService _authService = AuthService();
+
   late final PageVisibilityService _pageVisibilityService;
 
   Timer? _visibilityTimer;
+
   bool _refreshingVisibility = false;
 
   bool _loading = true;
+
   String _message = '';
+
   CurrentUser? _currentUser;
+
   List<PageCatalogItem> _catalog = fallbackPageCatalog;
+
   Map<String, List<String>> _tabCodesByParent = const {};
+
   List<_ShellMenuItem> _menus = const [];
+
   String _selectedPageCode = _homePageCode;
 
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addObserver(this);
+
     _pageVisibilityService = PageVisibilityService(widget.session);
+
     _loadCurrentUserAndVisibility();
+
     _startVisibilityPolling();
   }
 
   @override
   void dispose() {
     _visibilityTimer?.cancel();
+
     WidgetsBinding.instance.removeObserver(this);
+
     super.dispose();
   }
 
@@ -96,6 +138,7 @@ class _MainShellPageState extends State<MainShellPage>
     if (error is ApiException) {
       return error.message;
     }
+
     return error.toString();
   }
 
@@ -103,16 +146,25 @@ class _MainShellPageState extends State<MainShellPage>
     switch (pageCode) {
       case _homePageCode:
         return Icons.home_rounded;
+
       case _userPageCode:
         return Icons.group_rounded;
+
       case _productPageCode:
         return Icons.inventory_2_rounded;
+
       case _equipmentPageCode:
         return Icons.precision_manufacturing_rounded;
+
       case _productionPageCode:
         return Icons.factory_rounded;
+
       case _qualityPageCode:
         return Icons.verified_user_rounded;
+
+      case _craftPageCode:
+        return Icons.route_rounded;
+
       default:
         return Icons.article_outlined;
     }
@@ -120,22 +172,28 @@ class _MainShellPageState extends State<MainShellPage>
 
   List<_ShellMenuItem> _buildMenus({
     required List<PageCatalogItem> catalog,
+
     required List<String> visibleSidebarCodes,
   }) {
     final visibleCodeSet = visibleSidebarCodes.toSet();
+
     final sidebarPages =
         catalog.where((item) => item.pageType == 'sidebar').toList()
           ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
     final items = <_ShellMenuItem>[];
+
     for (final page in sidebarPages) {
       if (!page.alwaysVisible && !visibleCodeSet.contains(page.code)) {
         continue;
       }
+
       items.add(
         _ShellMenuItem(
           code: page.code,
+
           title: page.name,
+
           icon: _iconForPage(page.code),
         ),
       );
@@ -144,9 +202,12 @@ class _MainShellPageState extends State<MainShellPage>
     if (!items.any((item) => item.code == _homePageCode)) {
       items.insert(
         0,
+
         _ShellMenuItem(
           code: _homePageCode,
+
           title: '首页',
+
           icon: _iconForPage(_homePageCode),
         ),
       );
@@ -157,6 +218,7 @@ class _MainShellPageState extends State<MainShellPage>
 
   Map<String, List<String>> _sortTabsByCatalog(
     Map<String, List<String>> tabCodesByParent,
+
     List<PageCatalogItem> catalog,
   ) {
     final sortOrderByCode = <String, int>{
@@ -164,16 +226,21 @@ class _MainShellPageState extends State<MainShellPage>
     };
 
     final result = <String, List<String>>{};
+
     tabCodesByParent.forEach((parentCode, tabCodes) {
       final sorted = [...tabCodes]
         ..sort((a, b) {
           final orderA = sortOrderByCode[a] ?? 9999;
+
           final orderB = sortOrderByCode[b] ?? 9999;
+
           if (orderA != orderB) {
             return orderA.compareTo(orderB);
           }
+
           return a.compareTo(b);
         });
+
       result[parentCode] = sorted;
     });
 
@@ -182,6 +249,7 @@ class _MainShellPageState extends State<MainShellPage>
 
   void _startVisibilityPolling() {
     _visibilityTimer?.cancel();
+
     _visibilityTimer = Timer.periodic(_visibilityRefreshInterval, (_) {
       _refreshVisibility(silent: true);
     });
@@ -190,14 +258,17 @@ class _MainShellPageState extends State<MainShellPage>
   Future<void> _loadCurrentUserAndVisibility() async {
     setState(() {
       _loading = true;
+
       _message = '';
     });
 
     try {
       final currentUser = await _authService.getCurrentUser(
         baseUrl: widget.session.baseUrl,
+
         accessToken: widget.session.accessToken,
       );
+
       if (!mounted) {
         return;
       }
@@ -205,15 +276,19 @@ class _MainShellPageState extends State<MainShellPage>
       setState(() {
         _currentUser = currentUser;
       });
+
       await _refreshVisibility(loadCatalog: true);
     } catch (error) {
       if (!mounted) {
         return;
       }
+
       if (_isUnauthorized(error)) {
         widget.onLogout();
+
         return;
       }
+
       setState(() {
         _message = '加载当前用户失败：${_errorMessage(error)}';
       });
@@ -228,15 +303,18 @@ class _MainShellPageState extends State<MainShellPage>
 
   Future<void> _refreshVisibility({
     bool loadCatalog = false,
+
     bool silent = false,
   }) async {
     if (_refreshingVisibility) {
       return;
     }
+
     _refreshingVisibility = true;
 
     try {
       var catalog = _catalog;
+
       var usedFallbackCatalog = false;
 
       if (loadCatalog || catalog.isEmpty) {
@@ -244,19 +322,25 @@ class _MainShellPageState extends State<MainShellPage>
           catalog = await _pageVisibilityService.listPageCatalog();
         } catch (_) {
           catalog = fallbackPageCatalog;
+
           usedFallbackCatalog = true;
         }
       }
 
       final visibility = await _pageVisibilityService.getMyVisibility();
+
       final sortedCatalog = [...catalog]
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
       final sortedTabCodes = _sortTabsByCatalog(
         visibility.tabCodesByParent,
+
         sortedCatalog,
       );
+
       final menus = _buildMenus(
         catalog: sortedCatalog,
+
         visibleSidebarCodes: visibility.sidebarCodes,
       );
 
@@ -266,8 +350,11 @@ class _MainShellPageState extends State<MainShellPage>
 
       setState(() {
         _catalog = sortedCatalog;
+
         _tabCodesByParent = sortedTabCodes;
+
         _menus = menus;
+
         if (_menus.isEmpty) {
           _selectedPageCode = _homePageCode;
         } else if (!_menus.any((item) => item.code == _selectedPageCode)) {
@@ -275,7 +362,7 @@ class _MainShellPageState extends State<MainShellPage>
         }
 
         if (usedFallbackCatalog) {
-          _message = '后端页面目录不可用，已使用本地目录。';
+          _message = '页面目录加载失败，已使用本地兜底配置。';
         } else if (!silent) {
           _message = '';
         }
@@ -284,10 +371,13 @@ class _MainShellPageState extends State<MainShellPage>
       if (!mounted) {
         return;
       }
+
       if (_isUnauthorized(error)) {
         widget.onLogout();
+
         return;
       }
+
       if (!silent) {
         setState(() {
           _message = '加载页面可见性失败：${_errorMessage(error)}';
@@ -304,31 +394,49 @@ class _MainShellPageState extends State<MainShellPage>
 
   List<String> _visibleUserTabCodes() {
     final tabCodes = _tabCodesByParent[_userPageCode] ?? const <String>[];
+
     final catalogCodes = _catalog.map((item) => item.code).toSet();
+
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
   List<String> _visibleProductTabCodes() {
     final tabCodes = _tabCodesByParent[_productPageCode] ?? const <String>[];
+
     final catalogCodes = _catalog.map((item) => item.code).toSet();
+
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
   List<String> _visibleEquipmentTabCodes() {
     final tabCodes = _tabCodesByParent[_equipmentPageCode] ?? const <String>[];
+
     final catalogCodes = _catalog.map((item) => item.code).toSet();
+
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
   List<String> _visibleProductionTabCodes() {
     final tabCodes = _tabCodesByParent[_productionPageCode] ?? const <String>[];
+
     final catalogCodes = _catalog.map((item) => item.code).toSet();
+
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
   List<String> _visibleQualityTabCodes() {
     final tabCodes = _tabCodesByParent[_qualityPageCode] ?? const <String>[];
+
     final catalogCodes = _catalog.map((item) => item.code).toSet();
+
+    return tabCodes.where(catalogCodes.contains).toList();
+  }
+
+  List<String> _visibleCraftTabCodes() {
+    final tabCodes = _tabCodesByParent[_craftPageCode] ?? const <String>[];
+
+    final catalogCodes = _catalog.map((item) => item.code).toSet();
+
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
@@ -336,40 +444,69 @@ class _MainShellPageState extends State<MainShellPage>
     switch (pageCode) {
       case _homePageCode:
         return HomePage(currentUser: _currentUser!);
+
       case _userPageCode:
         return UserPage(
           session: widget.session,
+
           onLogout: widget.onLogout,
+
           visibleTabCodes: _visibleUserTabCodes(),
+
           onVisibilityConfigSaved: _handleVisibilityConfigSaved,
         );
+
       case _productPageCode:
         return ProductPage(
           session: widget.session,
+
           onLogout: widget.onLogout,
+
           visibleTabCodes: _visibleProductTabCodes(),
+
           currentRoleCodes: _currentUser!.roleCodes,
         );
+
       case _equipmentPageCode:
         return EquipmentPage(
           session: widget.session,
+
           onLogout: widget.onLogout,
+
           visibleTabCodes: _visibleEquipmentTabCodes(),
+
           currentRoleCodes: _currentUser!.roleCodes,
         );
+
       case _productionPageCode:
         return ProductionPage(
           session: widget.session,
+
           onLogout: widget.onLogout,
+
           visibleTabCodes: _visibleProductionTabCodes(),
+
           currentRoleCodes: _currentUser!.roleCodes,
         );
+
       case _qualityPageCode:
         return QualityPage(
           session: widget.session,
+
           onLogout: widget.onLogout,
+
           visibleTabCodes: _visibleQualityTabCodes(),
         );
+
+      case _craftPageCode:
+        return CraftPage(
+          session: widget.session,
+
+          onLogout: widget.onLogout,
+
+          visibleTabCodes: _visibleCraftTabCodes(),
+        );
+
       default:
         return Center(child: Text('页面暂未实现：$pageCode'));
     }
@@ -379,30 +516,43 @@ class _MainShellPageState extends State<MainShellPage>
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
+
         child: Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
+
             child: Column(
               mainAxisSize: MainAxisSize.min,
+
               children: [
                 const Icon(Icons.block, size: 40),
+
                 const SizedBox(height: 12),
-                const Text('当前账号没有可访问页面。'),
+
+                const Text('当前账号暂无可访问页面'),
+
                 const SizedBox(height: 8),
-                const Text('请联系系统管理员调整页面可见性。'),
+
+                const Text('请联系系统管理员分配页面可见权限'),
+
                 const SizedBox(height: 16),
+
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () => _refreshVisibility(),
+
                         child: const Text('刷新'),
                       ),
                     ),
+
                     const SizedBox(width: 12),
+
                     Expanded(
                       child: FilledButton(
                         onPressed: widget.onLogout,
+
                         child: const Text('退出登录'),
                       ),
                     ),
@@ -420,28 +570,39 @@ class _MainShellPageState extends State<MainShellPage>
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
+
         child: Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
+
             child: Column(
               mainAxisSize: MainAxisSize.min,
+
               children: [
                 const Icon(Icons.error_outline, size: 40),
+
                 const SizedBox(height: 12),
+
                 Text(_message.isEmpty ? '加载失败' : _message),
+
                 const SizedBox(height: 16),
+
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
                         onPressed: widget.onLogout,
+
                         child: const Text('退出登录'),
                       ),
                     ),
+
                     const SizedBox(width: 12),
+
                     Expanded(
                       child: FilledButton(
                         onPressed: _loadCurrentUserAndVisibility,
+
                         child: const Text('重试'),
                       ),
                     ),
@@ -474,7 +635,9 @@ class _MainShellPageState extends State<MainShellPage>
     final selectedIndex = _menus.indexWhere(
       (menu) => menu.code == _selectedPageCode,
     );
+
     final safeSelectedIndex = selectedIndex >= 0 ? selectedIndex : 0;
+
     final selectedMenuCode = _menus[safeSelectedIndex].code;
 
     return Scaffold(
@@ -482,45 +645,63 @@ class _MainShellPageState extends State<MainShellPage>
         children: [
           Container(
             width: 240,
+
             color: theme.colorScheme.surfaceContainerHighest,
+
             child: SafeArea(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
+
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+
                       children: [
                         Text(
                           'ZYKJ MES',
+
                           style: theme.textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
+
                         const SizedBox(height: 4),
+
                         Text(
                           _currentUser!.displayName,
+
                           style: theme.textTheme.bodyMedium,
                         ),
                       ],
                     ),
                   ),
+
                   const Divider(height: 1),
+
                   Expanded(
                     child: ListView.builder(
                       itemCount: _menus.length,
+
                       itemBuilder: (context, index) {
                         final menu = _menus[index];
+
                         final selected = menu.code == selectedMenuCode;
+
                         return ListTile(
                           selected: selected,
+
                           leading: Icon(menu.icon),
+
                           title: Text(menu.title),
+
                           onTap: () {
                             if (_selectedPageCode == menu.code) {
                               return;
                             }
+
                             setState(() {
                               _selectedPageCode = menu.code;
                             });
@@ -529,18 +710,25 @@ class _MainShellPageState extends State<MainShellPage>
                       },
                     ),
                   ),
+
                   const Divider(height: 1),
+
                   ListTile(
                     leading: const Icon(Icons.logout),
+
                     title: const Text('退出登录'),
+
                     onTap: widget.onLogout,
                   ),
+
                   const SizedBox(height: 8),
                 ],
               ),
             ),
           ),
+
           const VerticalDivider(width: 1),
+
           Expanded(
             child: SafeArea(
               child: Column(
@@ -548,16 +736,22 @@ class _MainShellPageState extends State<MainShellPage>
                   if (_message.isNotEmpty)
                     Container(
                       width: double.infinity,
+
                       color: theme.colorScheme.surfaceContainer,
+
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
+
                         vertical: 8,
                       ),
+
                       child: Text(_message, style: theme.textTheme.bodyMedium),
                     ),
+
                   Expanded(
                     child: IndexedStack(
                       index: safeSelectedIndex,
+
                       children: _menus
                           .map((menu) => _buildContent(menu.code))
                           .toList(),

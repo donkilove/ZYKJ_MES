@@ -91,15 +91,88 @@ class _UserManagementPageState extends State<UserManagementPage> {
     return null;
   }
 
-  String? _pickPreferredProcessCode(List<String> processCodes) {
-    if (processCodes.isEmpty) {
-      return null;
+  bool _isOperator(String? roleCode) => roleCode == _roleOperator;
+
+  Map<String, List<ProcessItem>> _groupProcessesByStage() {
+    final sorted = [..._processes]
+      ..sort((a, b) {
+        final stageCompare = (a.stageName ?? '').compareTo(b.stageName ?? '');
+        if (stageCompare != 0) {
+          return stageCompare;
+        }
+        final nameCompare = a.name.compareTo(b.name);
+        if (nameCompare != 0) {
+          return nameCompare;
+        }
+        return a.code.compareTo(b.code);
+      });
+    final groups = <String, List<ProcessItem>>{};
+    for (final process in sorted) {
+      final stageName = (process.stageName ?? '').trim();
+      final stageCode = (process.stageCode ?? '').trim();
+      final label = stageName.isEmpty
+          ? '未分组'
+          : (stageCode.isEmpty ? stageName : '$stageName ($stageCode)');
+      groups.putIfAbsent(label, () => <ProcessItem>[]).add(process);
     }
-    final sorted = [...processCodes]..sort();
-    return sorted.first;
+    return groups;
   }
 
-  bool _isOperator(String? roleCode) => roleCode == _roleOperator;
+  Widget _buildProcessSelection({
+    required BuildContext context,
+    required bool enabled,
+    required Set<String> selectedCodes,
+    required void Function(String processCode, bool checked) onChanged,
+  }) {
+    final groups = _groupProcessesByStage();
+    if (groups.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Text('暂无可分配工序'),
+      );
+    }
+    return Opacity(
+      opacity: enabled ? 1 : 0.5,
+      child: IgnorePointer(
+        ignoring: !enabled,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: groups.entries.map((entry) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2, bottom: 2),
+                    child: Text(
+                      entry.key,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  ...entry.value.map((process) {
+                    return CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Text(process.name),
+                      subtitle: Text(process.code),
+                      value: selectedCodes.contains(process.code),
+                      onChanged: (value) {
+                        onChanged(process.code, value ?? false);
+                      },
+                    );
+                  }),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
 
   void _startOnlineStatusRefresh() {
     _onlineStatusTimer?.cancel();
@@ -230,7 +303,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final passwordController = TextEditingController(text: 'User@123456');
     final formKey = GlobalKey<FormState>();
     String? selectedRoleCode;
-    String? selectedProcessCode;
+    Set<String> selectedProcessCodes = <String>{};
 
     final created = await showDialog<bool>(
       context: context,
@@ -240,7 +313,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
             final isOperatorSelected = _isOperator(selectedRoleCode);
 
             return AlertDialog(
-              title: const Text('新建用户'),
+              title: const Text('鏂板缓鐢ㄦ埛'),
               content: SizedBox(
                 width: 520,
                 child: SingleChildScrollView(
@@ -291,7 +364,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             setDialogState(() {
                               selectedRoleCode = value;
                               if (!_isOperator(selectedRoleCode)) {
-                                selectedProcessCode = null;
+                                selectedProcessCodes = <String>{};
                               }
                             });
                           },
@@ -317,40 +390,34 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           ),
                         const SizedBox(height: 12),
                         const Text(
-                          '工序分配（单选，仅操作员角色可选）',
+                          '工序分配（多选，仅操作员角色可选）',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
-                        Opacity(
-                          opacity: isOperatorSelected ? 1 : 0.5,
-                          child: IgnorePointer(
-                            ignoring: !isOperatorSelected,
-                            child: RadioGroup<String>(
-                              groupValue: selectedProcessCode,
-                              onChanged: (value) {
-                                setDialogState(() {
-                                  selectedProcessCode = value;
-                                });
-                              },
-                              child: Column(
-                                children: _processes.map((process) {
-                                  return RadioListTile<String>(
-                                    dense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                    title: Text(process.name),
-                                    subtitle: Text(process.code),
-                                    value: process.code,
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                          ),
+                        _buildProcessSelection(
+                          context: context,
+                          enabled: isOperatorSelected,
+                          selectedCodes: selectedProcessCodes,
+                          onChanged: (processCode, checked) {
+                            setDialogState(() {
+                              if (checked) {
+                                selectedProcessCodes = {
+                                  ...selectedProcessCodes,
+                                  processCode,
+                                };
+                              } else {
+                                selectedProcessCodes = selectedProcessCodes
+                                    .where((code) => code != processCode)
+                                    .toSet();
+                              }
+                            });
+                          },
                         ),
-                        if (isOperatorSelected && selectedProcessCode == null)
+                        if (isOperatorSelected && selectedProcessCodes.isEmpty)
                           const Padding(
                             padding: EdgeInsets.only(top: 4),
                             child: Text(
-                              '操作员角色必须分配一个工序',
+                              '操作员角色必须至少分配一个工序',
                               style: TextStyle(color: Colors.red),
                             ),
                           ),
@@ -373,18 +440,18 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       return;
                     }
                     if (_isOperator(selectedRoleCode) &&
-                        selectedProcessCode == null) {
+                        selectedProcessCodes.isEmpty) {
                       return;
                     }
 
+                    final orderedProcessCodes = selectedProcessCodes.toList()
+                      ..sort();
                     try {
                       await _userService.createUser(
                         account: accountController.text.trim(),
                         password: passwordController.text,
                         roleCodes: [selectedRoleCode!],
-                        processCodes: selectedProcessCode == null
-                            ? const []
-                            : [selectedProcessCode!],
+                        processCodes: orderedProcessCodes,
                       );
                       if (context.mounted) {
                         Navigator.of(context).pop(true);
@@ -425,11 +492,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final passwordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
     final hasLegacyMultiRoles = user.roleCodes.length > 1;
-    final hasLegacyMultiProcesses = user.processCodes.length > 1;
     String? selectedRoleCode = _pickPreferredRoleCode(user.roleCodes);
-    String? selectedProcessCode = _isOperator(selectedRoleCode)
-        ? _pickPreferredProcessCode(user.processCodes)
-        : null;
+    Set<String> selectedProcessCodes = _isOperator(selectedRoleCode)
+        ? user.processCodes.toSet()
+        : <String>{};
 
     final updated = await showDialog<bool>(
       context: context,
@@ -449,11 +515,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (hasLegacyMultiRoles || hasLegacyMultiProcesses)
+                        if (hasLegacyMultiRoles)
                           const Padding(
                             padding: EdgeInsets.only(bottom: 10),
                             child: Text(
-                              '检测到该用户存在历史多选分配数据，保存后将收敛为单选规则。',
+                              '检测到该用户存在历史多角色分配数据，保存后将收敛为单角色规则。',
                               style: TextStyle(color: Colors.orange),
                             ),
                           ),
@@ -499,7 +565,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             setDialogState(() {
                               selectedRoleCode = value;
                               if (!_isOperator(selectedRoleCode)) {
-                                selectedProcessCode = null;
+                                selectedProcessCodes = <String>{};
                               }
                             });
                           },
@@ -525,40 +591,34 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           ),
                         const SizedBox(height: 12),
                         const Text(
-                          '工序分配（单选，仅操作员角色可选）',
+                          '工序分配（多选，仅操作员角色可选）',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
-                        Opacity(
-                          opacity: isOperatorSelected ? 1 : 0.5,
-                          child: IgnorePointer(
-                            ignoring: !isOperatorSelected,
-                            child: RadioGroup<String>(
-                              groupValue: selectedProcessCode,
-                              onChanged: (value) {
-                                setDialogState(() {
-                                  selectedProcessCode = value;
-                                });
-                              },
-                              child: Column(
-                                children: _processes.map((process) {
-                                  return RadioListTile<String>(
-                                    dense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                    title: Text(process.name),
-                                    subtitle: Text(process.code),
-                                    value: process.code,
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                          ),
+                        _buildProcessSelection(
+                          context: context,
+                          enabled: isOperatorSelected,
+                          selectedCodes: selectedProcessCodes,
+                          onChanged: (processCode, checked) {
+                            setDialogState(() {
+                              if (checked) {
+                                selectedProcessCodes = {
+                                  ...selectedProcessCodes,
+                                  processCode,
+                                };
+                              } else {
+                                selectedProcessCodes = selectedProcessCodes
+                                    .where((code) => code != processCode)
+                                    .toSet();
+                              }
+                            });
+                          },
                         ),
-                        if (isOperatorSelected && selectedProcessCode == null)
+                        if (isOperatorSelected && selectedProcessCodes.isEmpty)
                           const Padding(
                             padding: EdgeInsets.only(top: 4),
                             child: Text(
-                              '操作员角色必须分配一个工序',
+                              '操作员角色必须至少分配一个工序',
                               style: TextStyle(color: Colors.red),
                             ),
                           ),
@@ -581,10 +641,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       return;
                     }
                     if (_isOperator(selectedRoleCode) &&
-                        selectedProcessCode == null) {
+                        selectedProcessCodes.isEmpty) {
                       return;
                     }
 
+                    final orderedProcessCodes = selectedProcessCodes.toList()
+                      ..sort();
                     try {
                       await _userService.updateUser(
                         userId: user.id,
@@ -593,9 +655,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             ? null
                             : passwordController.text.trim(),
                         roleCodes: [selectedRoleCode!],
-                        processCodes: selectedProcessCode == null
-                            ? const []
-                            : [selectedProcessCode!],
+                        processCodes: orderedProcessCodes,
                       );
                       if (context.mounted) {
                         Navigator.of(context).pop(true);
@@ -614,7 +674,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       }
                     }
                   },
-                  child: const Text('保存'),
+                  child: const Text('淇濆瓨'),
                 ),
               ],
             );

@@ -28,10 +28,6 @@ class MaintenancePlan(Base, TimestampMixin):
             "estimated_duration_minutes IS NULL OR estimated_duration_minutes > 0",
             name="ck_mes_maintenance_plan_duration_positive",
         ),
-        CheckConstraint(
-            "execution_process_code IN ('laser_marking', 'product_testing', 'product_assembly', 'product_packaging')",
-            name="ck_mes_maintenance_plan_execution_process_code_allowed",
-        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)

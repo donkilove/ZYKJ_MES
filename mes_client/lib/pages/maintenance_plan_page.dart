@@ -1,8 +1,10 @@
 ﻿import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import '../models/craft_models.dart';
 import '../models/equipment_models.dart';
 import '../services/api_exception.dart';
+import '../services/craft_service.dart';
 import '../services/equipment_service.dart';
 import '../widgets/adaptive_table_container.dart';
 
@@ -24,6 +26,7 @@ class MaintenancePlanPage extends StatefulWidget {
 
 class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   late final EquipmentService _equipmentService;
+  late final CraftService _craftService;
 
   bool _loading = false;
   String _message = '';
@@ -31,6 +34,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   List<MaintenancePlanItem> _plans = const [];
   List<EquipmentLedgerItem> _equipmentOptions = const [];
   List<MaintenanceItemEntry> _itemOptions = const [];
+  List<CraftStageItem> _stageOptions = const [];
   int? _equipmentFilterId;
   int? _itemFilterId;
 
@@ -38,6 +42,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   void initState() {
     super.initState();
     _equipmentService = EquipmentService(widget.session);
+    _craftService = CraftService(widget.session);
     _loadAll(reloadOptions: true);
   }
 
@@ -79,8 +84,21 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
           pageSize: 200,
           enabled: true,
         );
+        final stageResult = await _craftService.listStages(
+          page: 1,
+          pageSize: 500,
+          enabled: true,
+        );
         _equipmentOptions = equipmentResult.items;
         _itemOptions = itemResult.items;
+        _stageOptions = [...stageResult.items]
+          ..sort((a, b) {
+            final orderCompare = a.sortOrder.compareTo(b.sortOrder);
+            if (orderCompare != 0) {
+              return orderCompare;
+            }
+            return a.id.compareTo(b.id);
+          });
 
         if (_equipmentFilterId != null &&
             !_equipmentOptions.any((e) => e.id == _equipmentFilterId)) {
@@ -130,9 +148,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
       return;
     }
     final pageContext = context;
-    if (_equipmentOptions.isEmpty || _itemOptions.isEmpty) {
+    if (_equipmentOptions.isEmpty || _itemOptions.isEmpty || _stageOptions.isEmpty) {
       ScaffoldMessenger.of(pageContext).showSnackBar(
-        const SnackBar(content: Text('请先维护设备台账和保养项目')),
+        const SnackBar(content: Text('请先维护设备台账、保养项目和工艺工段')),
       );
       return;
     }
@@ -141,9 +159,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     final formKey = GlobalKey<FormState>();
     var selectedEquipmentId = plan?.equipmentId ?? _equipmentOptions.first.id;
     var selectedItemId = plan?.itemId ?? _itemOptions.first.id;
-    var selectedExecutionProcessCode = plan?.executionProcessCode ?? processCodeLaserMarking;
-    if (!maintenanceExecutionProcessOrder.contains(selectedExecutionProcessCode)) {
-      selectedExecutionProcessCode = processCodeLaserMarking;
+    var selectedExecutionProcessCode = plan?.executionProcessCode ?? _stageOptions.first.code;
+    if (!_stageOptions.any((stage) => stage.code == selectedExecutionProcessCode)) {
+      selectedExecutionProcessCode = _stageOptions.first.code;
     }
     final startDate = plan?.startDate ?? DateTime.now();
     final nextDueDate = plan?.nextDueDate;
@@ -219,11 +237,11 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           initialValue: selectedExecutionProcessCode,
-                          items: maintenanceExecutionProcessOrder
+                          items: _stageOptions
                               .map(
-                                (code) => DropdownMenuItem<String>(
-                                  value: code,
-                                  child: Text(maintenanceExecutionProcessName(code)),
+                                (stage) => DropdownMenuItem<String>(
+                                  value: stage.code,
+                                  child: Text('${stage.name} (${stage.code})'),
                                 ),
                               )
                               .toList(),

@@ -1,0 +1,366 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+import '../models/app_session.dart';
+import '../models/craft_models.dart';
+import 'api_exception.dart';
+
+class CraftService {
+  CraftService(this.session);
+
+  final AppSession session;
+
+  String get _basePath => '${session.baseUrl}/craft';
+
+  Map<String, String> get _authHeaders {
+    return {
+      'Authorization': 'Bearer ${session.accessToken}',
+      'Content-Type': 'application/json',
+    };
+  }
+
+  Future<CraftStageListResult> listStages({
+    int page = 1,
+    int pageSize = 200,
+    String? keyword,
+    bool? enabled,
+  }) async {
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (enabled != null) {
+      query['enabled'] = '$enabled';
+    }
+    final uri = Uri.parse('$_basePath/stages').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map((entry) => CraftStageItem.fromJson(entry as Map<String, dynamic>))
+        .toList();
+    return CraftStageListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<CraftStageItem> createStage({
+    required String code,
+    required String name,
+    required int sortOrder,
+  }) async {
+    final uri = Uri.parse('$_basePath/stages');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'code': code, 'name': name, 'sort_order': sortOrder}),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftStageItem.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<CraftStageItem> updateStage({
+    required int stageId,
+    required String name,
+    required int sortOrder,
+    required bool isEnabled,
+  }) async {
+    final uri = Uri.parse('$_basePath/stages/$stageId');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'name': name,
+        'sort_order': sortOrder,
+        'is_enabled': isEnabled,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftStageItem.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<void> deleteStage({required int stageId}) async {
+    final uri = Uri.parse('$_basePath/stages/$stageId');
+    final response = await http.delete(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+  }
+
+  Future<CraftProcessListResult> listProcesses({
+    int page = 1,
+    int pageSize = 500,
+    String? keyword,
+    int? stageId,
+    bool? enabled,
+  }) async {
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (stageId != null) {
+      query['stage_id'] = '$stageId';
+    }
+    if (enabled != null) {
+      query['enabled'] = '$enabled';
+    }
+    final uri = Uri.parse(
+      '$_basePath/processes',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) => CraftProcessItem.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+    return CraftProcessListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<CraftProcessItem> createProcess({
+    required String code,
+    required String name,
+    required int stageId,
+  }) async {
+    final uri = Uri.parse('$_basePath/processes');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'code': code, 'name': name, 'stage_id': stageId}),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftProcessItem.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<CraftProcessItem> updateProcess({
+    required int processId,
+    required String name,
+    required int stageId,
+    required bool isEnabled,
+  }) async {
+    final uri = Uri.parse('$_basePath/processes/$processId');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'name': name,
+        'stage_id': stageId,
+        'is_enabled': isEnabled,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftProcessItem.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<void> deleteProcess({required int processId}) async {
+    final uri = Uri.parse('$_basePath/processes/$processId');
+    final response = await http.delete(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+  }
+
+  Future<CraftTemplateListResult> listTemplates({
+    int page = 1,
+    int pageSize = 500,
+    int? productId,
+    String? keyword,
+    bool? enabled = true,
+  }) async {
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (productId != null) {
+      query['product_id'] = '$productId';
+    }
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (enabled != null) {
+      query['enabled'] = '$enabled';
+    }
+    final uri = Uri.parse(
+      '$_basePath/templates',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) => CraftTemplateItem.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+    return CraftTemplateListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<CraftTemplateDetail> getTemplateDetail({
+    required int templateId,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<CraftTemplateDetail> createTemplate({
+    required int productId,
+    required String templateName,
+    required bool isDefault,
+    required List<CraftTemplateStepPayload> steps,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'product_id': productId,
+        'template_name': templateName,
+        'is_default': isDefault,
+        'steps': steps.map((item) => item.toJson()).toList(),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<CraftTemplateUpdateResult> updateTemplate({
+    required int templateId,
+    required String templateName,
+    required bool isDefault,
+    required bool isEnabled,
+    required List<CraftTemplateStepPayload> steps,
+    bool syncOrders = true,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'template_name': templateName,
+        'is_default': isDefault,
+        'is_enabled': isEnabled,
+        'steps': steps.map((item) => item.toJson()).toList(),
+        'sync_orders': syncOrders,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateUpdateResult.fromJson(
+      body['data'] as Map<String, dynamic>,
+    );
+  }
+
+  Future<void> deleteTemplate({required int templateId}) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId');
+    final response = await http.delete(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+  }
+
+  Map<String, dynamic> _decodeBody(http.Response response) {
+    if (response.body.isEmpty) {
+      return {};
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {
+    final detail = body['detail'];
+    if (detail is String && detail.isNotEmpty) {
+      return detail;
+    }
+    if (detail is Map<String, dynamic>) {
+      final message = detail['message'];
+      if (message is String && message.isNotEmpty) {
+        return message;
+      }
+    }
+    final message = body['message'];
+    if (message is String && message.isNotEmpty) {
+      return message;
+    }
+    return '请求失败，状态码 $statusCode';
+  }
+}

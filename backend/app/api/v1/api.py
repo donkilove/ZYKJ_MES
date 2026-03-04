@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     auth,
+    craft,
     equipment,
     processes,
     production,
@@ -19,6 +20,7 @@ api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(roles.router, prefix="/roles", tags=["Roles"])
 api_router.include_router(processes.router, prefix="/processes", tags=["Processes"])
 api_router.include_router(products.router, prefix="/products", tags=["Products"])
+api_router.include_router(craft.router, prefix="/craft", tags=["Craft"])
 api_router.include_router(production.router, prefix="/production", tags=["Production"])
 api_router.include_router(quality.router, prefix="/quality", tags=["Quality"])
 api_router.include_router(equipment.router, prefix="/equipment", tags=["Equipment"])

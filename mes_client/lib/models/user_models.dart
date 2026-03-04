@@ -55,17 +55,30 @@ class RoleItem {
 }
 
 class ProcessItem {
-  ProcessItem({required this.id, required this.code, required this.name});
+  ProcessItem({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.stageId,
+    required this.stageCode,
+    required this.stageName,
+  });
 
   final int id;
   final String code;
   final String name;
+  final int? stageId;
+  final String? stageCode;
+  final String? stageName;
 
   factory ProcessItem.fromJson(Map<String, dynamic> json) {
     return ProcessItem(
       id: json['id'] as int,
       code: json['code'] as String,
       name: json['name'] as String,
+      stageId: json['stage_id'] as int?,
+      stageCode: json['stage_code'] as String?,
+      stageName: json['stage_name'] as String?,
     );
   }
 }

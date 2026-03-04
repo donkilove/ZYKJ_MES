@@ -475,3 +475,61 @@ Content-Type: application/json
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
 - OpenAPI JSON: `http://127.0.0.1:8000/openapi.json`
+
+## 11. 工艺模块 V1（工段 + 小工序 + 产品多模板）
+
+### 11.1 新增工艺接口
+
+```http
+GET    /api/v1/craft/stages
+POST   /api/v1/craft/stages
+PUT    /api/v1/craft/stages/{stage_id}
+DELETE /api/v1/craft/stages/{stage_id}
+
+GET    /api/v1/craft/processes
+POST   /api/v1/craft/processes
+PUT    /api/v1/craft/processes/{process_id}
+DELETE /api/v1/craft/processes/{process_id}
+
+GET    /api/v1/craft/templates
+POST   /api/v1/craft/templates
+GET    /api/v1/craft/templates/{template_id}
+PUT    /api/v1/craft/templates/{template_id}
+DELETE /api/v1/craft/templates/{template_id}
+```
+
+权限：
+
+- `system_admin`、`production_admin`：可读写
+- `quality_admin`、`operator`：无权限（403）
+
+### 11.2 生产订单接口升级
+
+`POST /api/v1/production/orders` 与 `PUT /api/v1/production/orders/{order_id}` 新增入参：
+
+- `template_id`
+- `process_steps`（步骤内含 `step_order/stage_id/process_id`）
+- `save_as_template`
+- `new_template_name`
+- `new_template_set_default`
+
+兼容说明：
+
+- `process_codes` 仍保留一个版本周期，避免旧前端立即中断。
+
+### 11.3 模板同步未完成订单
+
+更新模板（`PUT /api/v1/craft/templates/{template_id}`）时可带 `sync_orders=true`：
+
+- `pending` 订单：重建全流程
+- `in_progress` 订单：仅重建当前工序之后
+
+冲突返回：
+
+- 状态码 `409`
+- 响应 detail 含 `sync_result.total/synced/skipped/reasons`
+
+### 11.4 过程/保养口径调整
+
+- `GET /api/v1/processes` 语义调整为“小工序列表 + 工段信息”。
+- 保养域 `execution_process_code` 语义调整为“工段 code”。

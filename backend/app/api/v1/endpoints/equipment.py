@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role_codes
-from app.core.equipment_process import get_equipment_process_name
 from app.core.rbac import (
     ROLE_OPERATOR,
     ROLE_PRODUCTION_ADMIN,
@@ -67,6 +66,7 @@ from app.services.equipment_service import (
     update_maintenance_item,
     update_maintenance_plan,
 )
+from app.services.craft_service import get_stage_by_code, resolve_user_stage_codes
 
 
 router = APIRouter()
@@ -113,7 +113,9 @@ def to_maintenance_item(row: MaintenanceItem) -> MaintenanceItemEntry:
     )
 
 
-def to_maintenance_plan_item(row: MaintenancePlan) -> MaintenancePlanItem:
+def to_maintenance_plan_item(db: Session, row: MaintenancePlan) -> MaintenancePlanItem:
+    stage = get_stage_by_code(db, row.execution_process_code)
+    execution_process_name = stage.name if stage else row.execution_process_code
     return MaintenancePlanItem(
         id=row.id,
         equipment_id=row.equipment_id,
@@ -122,7 +124,7 @@ def to_maintenance_plan_item(row: MaintenancePlan) -> MaintenancePlanItem:
         item_name=row.item.name if row.item else "-",
         cycle_days=row.cycle_days,
         execution_process_code=row.execution_process_code,
-        execution_process_name=get_equipment_process_name(row.execution_process_code),
+        execution_process_name=execution_process_name,
         estimated_duration_minutes=row.estimated_duration_minutes,
         start_date=row.start_date,
         next_due_date=row.next_due_date,
@@ -442,7 +444,7 @@ def get_maintenance_plans(
     return success_response(
         MaintenancePlanListResult(
             total=total,
-            items=[to_maintenance_plan_item(row) for row in rows],
+            items=[to_maintenance_plan_item(db, row) for row in rows],
         )
     )
 
@@ -470,7 +472,7 @@ def create_maintenance_plan_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
-    return success_response(to_maintenance_plan_item(row), message="created")
+    return success_response(to_maintenance_plan_item(db, row), message="created")
 
 
 @router.put("/plans/{plan_id}", response_model=ApiResponse[MaintenancePlanItem])
@@ -497,7 +499,7 @@ def update_maintenance_plan_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
-    return success_response(to_maintenance_plan_item(updated), message="updated")
+    return success_response(to_maintenance_plan_item(db, updated), message="updated")
 
 
 @router.post("/plans/{plan_id}/toggle", response_model=ApiResponse[MaintenancePlanItem])
@@ -511,7 +513,7 @@ def toggle_maintenance_plan_api(
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Maintenance plan not found")
     updated = toggle_maintenance_plan(db, row=row, enabled=payload.enabled)
-    return success_response(to_maintenance_plan_item(updated), message="updated")
+    return success_response(to_maintenance_plan_item(db, updated), message="updated")
 
 
 @router.delete("/plans/{plan_id}", response_model=ApiResponse[dict[str, bool]])
@@ -577,7 +579,12 @@ def get_maintenance_executions(
             mine=mine,
             current_user_id=current_user.id,
             current_user_role_codes=[role.code for role in current_user.roles],
-            current_user_process_codes=[process.code for process in current_user.processes],
+            current_user_stage_codes=sorted(
+                resolve_user_stage_codes(
+                    db,
+                    process_codes=[process.code for process in current_user.processes],
+                )
+            ),
             done_only=False,
             executor_user_id=None,
             start_date=None,
@@ -608,7 +615,12 @@ def start_maintenance_execution(
             row=row,
             operator=current_user,
             current_user_role_codes=[role.code for role in current_user.roles],
-            current_user_process_codes=[process.code for process in current_user.processes],
+            current_user_stage_codes=sorted(
+                resolve_user_stage_codes(
+                    db,
+                    process_codes=[process.code for process in current_user.processes],
+                )
+            ),
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -634,7 +646,12 @@ def complete_maintenance_execution(
             row=row,
             operator=current_user,
             current_user_role_codes=[role.code for role in current_user.roles],
-            current_user_process_codes=[process.code for process in current_user.processes],
+            current_user_stage_codes=sorted(
+                resolve_user_stage_codes(
+                    db,
+                    process_codes=[process.code for process in current_user.processes],
+                )
+            ),
             result_summary=payload.result_summary,
             result_remark=payload.result_remark,
             attachment_link=payload.attachment_link,

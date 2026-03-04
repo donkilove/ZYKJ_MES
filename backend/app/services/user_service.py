@@ -114,8 +114,8 @@ def _resolve_processes(
     normalized_process_codes = _normalize_codes(process_codes)
     is_operator = ROLE_OPERATOR in role_codes
 
-    if is_operator and len(normalized_process_codes) != 1:
-        return None, "Operator role must be assigned exactly one process"
+    if is_operator and len(normalized_process_codes) < 1:
+        return None, "Operator role must be assigned at least one process"
 
     if not is_operator:
         if normalized_process_codes:
@@ -167,11 +167,6 @@ def normalize_users_to_single_role(db: Session) -> int:
 
         if not is_operator and user.processes:
             user.processes = []
-            user_changed = True
-
-        if is_operator and len(user.processes) > 1:
-            preferred_process = min(user.processes, key=lambda process: (process.code, process.id))
-            user.processes = [preferred_process]
             user_changed = True
 
         if user_changed:

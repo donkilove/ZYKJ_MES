@@ -74,11 +74,14 @@ def _raise_service_error(error: Exception) -> None:
 
 def _to_order_item(order: ProductionOrder) -> OrderItem:
     current_process = None
-    if order.current_process_code:
-        for row in order.processes:
-            if row.process_code == order.current_process_code:
-                current_process = row
-                break
+    if order.processes:
+        process_rows = sorted(order.processes, key=lambda row: (row.process_order, row.id))
+        current_process = next((row for row in process_rows if row.status != "completed"), None)
+        if current_process is None and order.current_process_code:
+            current_process = next(
+                (row for row in process_rows if row.process_code == order.current_process_code),
+                None,
+            )
     created_by_username = order.created_by.username if order.created_by else None
     return OrderItem(
         id=order.id,
@@ -92,6 +95,9 @@ def _to_order_item(order: ProductionOrder) -> OrderItem:
         start_date=order.start_date,
         due_date=order.due_date,
         remark=order.remark,
+        process_template_id=order.process_template_id,
+        process_template_name=order.process_template_name,
+        process_template_version=order.process_template_version,
         created_by_user_id=order.created_by_user_id,
         created_by_username=created_by_username,
         created_at=order.created_at,
@@ -102,6 +108,9 @@ def _to_order_item(order: ProductionOrder) -> OrderItem:
 def _to_process_item(row: ProductionOrderProcess) -> ProductionOrderProcessItem:
     return ProductionOrderProcessItem(
         id=row.id,
+        stage_id=row.stage_id,
+        stage_code=row.stage_code,
+        stage_name=row.stage_name,
         process_code=row.process_code,
         process_name=row.process_name,
         process_order=row.process_order,
@@ -204,6 +213,11 @@ def create_order_api(
             due_date=payload.due_date,
             remark=payload.remark,
             process_codes=payload.process_codes,
+            template_id=payload.template_id,
+            process_steps=[item.model_dump() for item in payload.process_steps] if payload.process_steps else None,
+            save_as_template=payload.save_as_template,
+            new_template_name=payload.new_template_name,
+            new_template_set_default=payload.new_template_set_default,
             operator=current_user,
         )
     except Exception as error:
@@ -276,6 +290,11 @@ def update_order_api(
             due_date=payload.due_date,
             remark=payload.remark,
             process_codes=payload.process_codes,
+            template_id=payload.template_id,
+            process_steps=[item.model_dump() for item in payload.process_steps] if payload.process_steps else None,
+            save_as_template=payload.save_as_template,
+            new_template_name=payload.new_template_name,
+            new_template_set_default=payload.new_template_set_default,
             operator=current_user,
         )
     except Exception as error:
