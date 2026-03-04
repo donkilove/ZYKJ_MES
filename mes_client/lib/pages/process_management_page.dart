@@ -124,7 +124,6 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                     children: [
                       TextFormField(
                         controller: codeController,
-                        readOnly: isEdit,
                         decoration: const InputDecoration(
                           labelText: '工段编码',
                           border: OutlineInputBorder(),
@@ -197,6 +196,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                       if (isEdit) {
                         await _service.updateStage(
                           stageId: existing.id,
+                          code: codeController.text.trim(),
                           name: nameController.text.trim(),
                           sortOrder: sortOrder,
                           isEnabled: isEnabled,
@@ -272,7 +272,6 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                     children: [
                       TextFormField(
                         controller: codeController,
-                        readOnly: isEdit,
                         decoration: const InputDecoration(
                           labelText: '小工序编码',
                           border: OutlineInputBorder(),
@@ -353,6 +352,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                       if (isEdit) {
                         await _service.updateProcess(
                           processId: existing.id,
+                          code: codeController.text.trim(),
                           name: nameController.text.trim(),
                           stageId: selectedStageId,
                           isEnabled: isEnabled,
@@ -405,6 +405,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         try {
           await _service.updateStage(
             stageId: item.id,
+            code: item.code,
             name: item.name,
             sortOrder: item.sortOrder,
             isEnabled: !item.isEnabled,
@@ -473,6 +474,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         try {
           await _service.updateProcess(
             processId: item.id,
+            code: item.code,
             name: item.name,
             stageId: item.stageId ?? 0,
             isEnabled: !item.isEnabled,

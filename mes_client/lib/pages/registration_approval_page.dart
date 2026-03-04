@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import '../models/craft_models.dart';
 import '../models/user_models.dart';
 import '../services/api_exception.dart';
+import '../services/craft_service.dart';
 import '../services/user_service.dart';
 
 class RegistrationApprovalPage extends StatefulWidget {
@@ -24,6 +26,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   static const String _operatorRoleCode = 'operator';
 
   late final UserService _userService;
+  late final CraftService _craftService;
   final ScrollController _requestListScrollController = ScrollController();
 
   bool _loading = false;
@@ -32,11 +35,13 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   List<RegistrationRequestItem> _items = const [];
   List<RoleItem> _roles = const [];
   List<ProcessItem> _processes = const [];
+  List<CraftStageItem> _stages = const [];
 
   @override
   void initState() {
     super.initState();
     _userService = UserService(widget.session);
+    _craftService = CraftService(widget.session);
     _loadInitialData();
   }
 
@@ -84,85 +89,11 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
 
   bool _isOperator(String? roleCode) => roleCode == _operatorRoleCode;
 
-  Map<String, List<ProcessItem>> _groupProcessesByStage() {
-    final sorted = [..._processes]
-      ..sort((a, b) {
-        final stageCompare = (a.stageName ?? '').compareTo(b.stageName ?? '');
-        if (stageCompare != 0) {
-          return stageCompare;
-        }
-        final nameCompare = a.name.compareTo(b.name);
-        if (nameCompare != 0) {
-          return nameCompare;
-        }
-        return a.code.compareTo(b.code);
-      });
-    final groups = <String, List<ProcessItem>>{};
-    for (final process in sorted) {
-      final stageName = (process.stageName ?? '').trim();
-      final stageCode = (process.stageCode ?? '').trim();
-      final label = stageName.isEmpty
-          ? '未分组'
-          : (stageCode.isEmpty ? stageName : '$stageName ($stageCode)');
-      groups.putIfAbsent(label, () => <ProcessItem>[]).add(process);
-    }
-    return groups;
-  }
-
-  Widget _buildProcessSelection({
-    required BuildContext context,
-    required bool enabled,
-    required Set<String> selectedCodes,
-    required void Function(String processCode, bool checked) onChanged,
-  }) {
-    final groups = _groupProcessesByStage();
-    if (groups.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text('暂无可分配工序'),
-      );
-    }
-    return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: IgnorePointer(
-        ignoring: !enabled,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: groups.entries.map((entry) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 2, bottom: 2),
-                    child: Text(
-                      entry.key,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  ...entry.value.map((process) {
-                    return CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      title: Text(process.name),
-                      subtitle: Text(process.code),
-                      value: selectedCodes.contains(process.code),
-                      onChanged: (value) {
-                        onChanged(process.code, value ?? false);
-                      },
-                    );
-                  }),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
+  List<String> _getProcessCodesByStage(int stageId) {
+    return _processes
+        .where((p) => p.stageId == stageId)
+        .map((p) => p.code)
+        .toList();
   }
 
   Future<void> _loadInitialData() async {
@@ -176,10 +107,12 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         _userService.listRegistrationRequests(page: 1, pageSize: 100),
         _userService.listRoles(),
         _userService.listProcesses(),
+        _craftService.listStages(pageSize: 500, enabled: true),
       ]);
       final requests = result[0] as RegistrationRequestListResult;
       final roles = result[1] as RoleListResult;
       final processes = result[2] as ProcessListResult;
+      final stages = result[3] as CraftStageListResult;
 
       if (!mounted) {
         return;
@@ -189,6 +122,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         _total = requests.total;
         _roles = roles.items;
         _processes = processes.items;
+        _stages = stages.items;
       });
     } catch (error) {
       if (!mounted) {
@@ -299,6 +233,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     final formKey = GlobalKey<FormState>();
     final accountController = TextEditingController(text: item.account);
     String? selectedRoleCode = _defaultRoleCode();
+    int? selectedStageId;
     Set<String> selectedProcessCodes = <String>{};
 
     final approved = await showDialog<bool>(
@@ -347,6 +282,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                             setDialogState(() {
                               selectedRoleCode = value;
                               if (!_isOperator(selectedRoleCode)) {
+                                selectedStageId = null;
                                 selectedProcessCodes = <String>{};
                               }
                             });
@@ -373,33 +309,47 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                           ),
                         const SizedBox(height: 12),
                         const Text(
-                          '工序分配（多选，仅操作员角色可选）',
+                          '工段分配（单选，仅操作员角色可选）',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        _buildProcessSelection(
-                          context: context,
-                          enabled: isOperatorSelected,
-                          selectedCodes: selectedProcessCodes,
-                          onChanged: (processCode, checked) {
-                            setDialogState(() {
-                              if (checked) {
-                                selectedProcessCodes = {
-                                  ...selectedProcessCodes,
-                                  processCode,
-                                };
-                              } else {
-                                selectedProcessCodes = selectedProcessCodes
-                                    .where((code) => code != processCode)
-                                    .toSet();
-                              }
-                            });
-                          },
+                        const SizedBox(height: 8),
+                        Opacity(
+                          opacity: isOperatorSelected ? 1 : 0.5,
+                          child: IgnorePointer(
+                            ignoring: !isOperatorSelected,
+                            child: _stages.isEmpty
+                                ? const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    child: Text('暂无可分配工段'),
+                                  )
+                                : Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: _stages.map((stage) {
+                                      return RadioListTile<int>(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        title: Text(stage.name),
+                                        subtitle: Text(stage.code),
+                                        value: stage.id,
+                                        groupValue: selectedStageId,
+                                        onChanged: (value) {
+                                          if (value != null) {
+                                            setDialogState(() {
+                                              selectedStageId = value;
+                                              selectedProcessCodes = _getProcessCodesByStage(value).toSet();
+                                            });
+                                          }
+                                        },
+                                      );
+                                    }).toList(),
+                                  ),
+                          ),
                         ),
-                        if (isOperatorSelected && selectedProcessCodes.isEmpty)
+                        if (isOperatorSelected && selectedStageId == null)
                           const Padding(
                             padding: EdgeInsets.only(top: 4),
                             child: Text(
-                              '操作员角色必须至少分配一个工序',
+                              '操作员角色必须选择一个工段',
                               style: TextStyle(color: Colors.red),
                             ),
                           ),
@@ -422,7 +372,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                       return;
                     }
                     if (_isOperator(selectedRoleCode) &&
-                        selectedProcessCodes.isEmpty) {
+                        selectedStageId == null) {
                       return;
                     }
                     final orderedProcessCodes = selectedProcessCodes.toList()

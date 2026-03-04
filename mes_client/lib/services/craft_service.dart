@@ -76,6 +76,7 @@ class CraftService {
 
   Future<CraftStageItem> updateStage({
     required int stageId,
+    required String code,
     required String name,
     required int sortOrder,
     required bool isEnabled,
@@ -85,6 +86,7 @@ class CraftService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({
+        'code': code,
         'name': name,
         'sort_order': sortOrder,
         'is_enabled': isEnabled,
@@ -176,6 +178,7 @@ class CraftService {
 
   Future<CraftProcessItem> updateProcess({
     required int processId,
+    required String code,
     required String name,
     required int stageId,
     required bool isEnabled,
@@ -185,6 +188,7 @@ class CraftService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({
+        'code': code,
         'name': name,
         'stage_id': stageId,
         'is_enabled': isEnabled,

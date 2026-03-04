@@ -10,6 +10,7 @@ class ProcessStageCreate(BaseModel):
 
 
 class ProcessStageUpdate(BaseModel):
+    code: str | None = Field(default=None, min_length=2, max_length=64)
     name: str = Field(min_length=1, max_length=128)
     sort_order: int = Field(default=0)
     is_enabled: bool = True
@@ -37,6 +38,7 @@ class CraftProcessCreate(BaseModel):
 
 
 class CraftProcessUpdate(BaseModel):
+    code: str | None = Field(default=None, min_length=2, max_length=64)
     name: str = Field(min_length=1, max_length=128)
     stage_id: int = Field(gt=0)
     is_enabled: bool = True

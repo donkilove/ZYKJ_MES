@@ -178,6 +178,7 @@ def update_stage_api(
             name=payload.name,
             sort_order=payload.sort_order,
             is_enabled=payload.is_enabled,
+            code=payload.code,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -256,6 +257,7 @@ def update_process_api(
             name=payload.name,
             stage_id=payload.stage_id,
             is_enabled=payload.is_enabled,
+            code=payload.code,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))

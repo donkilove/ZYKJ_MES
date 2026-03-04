@@ -121,7 +121,15 @@ def update_stage(
     name: str,
     sort_order: int,
     is_enabled: bool,
+    code: str | None = None,
 ) -> ProcessStage:
+    if code is not None:
+        normalized_code = _normalize_text(code, field_name="Stage code")
+        if normalized_code != row.code:
+            existing = db.execute(select(ProcessStage).where(ProcessStage.code == normalized_code)).scalars().first()
+            if existing:
+                raise ValueError("Stage code already exists")
+            row.code = normalized_code
     row.name = _normalize_text(name, field_name="Stage name")
     row.sort_order = sort_order
     row.is_enabled = is_enabled
@@ -213,7 +221,15 @@ def update_process(
     name: str,
     stage_id: int,
     is_enabled: bool,
+    code: str | None = None,
 ) -> Process:
+    if code is not None:
+        normalized_code = _normalize_text(code, field_name="Process code")
+        if normalized_code != row.code:
+            existing = db.execute(select(Process).where(Process.code == normalized_code)).scalars().first()
+            if existing:
+                raise ValueError("Process code already exists")
+            row.code = normalized_code
     stage = _get_stage_by_id(db, stage_id)
     if not stage:
         raise ValueError("Stage not found")
