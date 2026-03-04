@@ -11,12 +11,14 @@ import '../services/page_visibility_service.dart';
 import 'equipment_page.dart';
 import 'home_page.dart';
 import 'product_page.dart';
+import 'production_page.dart';
 import 'user_page.dart';
 
 const String _homePageCode = 'home';
 const String _userPageCode = 'user';
 const String _productPageCode = 'product';
 const String _equipmentPageCode = 'equipment';
+const String _productionPageCode = 'production';
 const Duration _visibilityRefreshInterval = Duration(seconds: 15);
 
 class _ShellMenuItem {
@@ -105,6 +107,8 @@ class _MainShellPageState extends State<MainShellPage>
         return Icons.inventory_2_rounded;
       case _equipmentPageCode:
         return Icons.precision_manufacturing_rounded;
+      case _productionPageCode:
+        return Icons.factory_rounded;
       default:
         return Icons.article_outlined;
     }
@@ -207,7 +211,7 @@ class _MainShellPageState extends State<MainShellPage>
         return;
       }
       setState(() {
-        _message = '加载当前用户信息失败：${_errorMessage(error)}';
+        _message = '加载当前用户失败：${_errorMessage(error)}';
       });
     } finally {
       if (mounted) {
@@ -267,7 +271,7 @@ class _MainShellPageState extends State<MainShellPage>
         }
 
         if (usedFallbackCatalog) {
-          _message = '后端页面目录不可达，已使用本地目录兜底。';
+          _message = '后端页面目录不可用，已使用本地目录。';
         } else if (!silent) {
           _message = '';
         }
@@ -312,6 +316,12 @@ class _MainShellPageState extends State<MainShellPage>
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
+  List<String> _visibleProductionTabCodes() {
+    final tabCodes = _tabCodesByParent[_productionPageCode] ?? const <String>[];
+    final catalogCodes = _catalog.map((item) => item.code).toSet();
+    return tabCodes.where(catalogCodes.contains).toList();
+  }
+
   Widget _buildContent(String pageCode) {
     switch (pageCode) {
       case _homePageCode:
@@ -337,6 +347,13 @@ class _MainShellPageState extends State<MainShellPage>
           visibleTabCodes: _visibleEquipmentTabCodes(),
           currentRoleCodes: _currentUser!.roleCodes,
         );
+      case _productionPageCode:
+        return ProductionPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          visibleTabCodes: _visibleProductionTabCodes(),
+          currentRoleCodes: _currentUser!.roleCodes,
+        );
       default:
         return Center(child: Text('页面暂未实现：$pageCode'));
     }
@@ -356,7 +373,7 @@ class _MainShellPageState extends State<MainShellPage>
                 const SizedBox(height: 12),
                 const Text('当前账号没有可访问页面。'),
                 const SizedBox(height: 8),
-                const Text('请联系系统管理员调整页面可见性配置。'),
+                const Text('请联系系统管理员调整页面可见性。'),
                 const SizedBox(height: 16),
                 Row(
                   children: [

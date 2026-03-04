@@ -45,8 +45,8 @@ class PageVisibilityMeResult {
       mapped[key] = list;
     });
     return PageVisibilityMeResult(
-      sidebarCodes:
-          (json['sidebar_codes'] as List<dynamic>? ?? const []).cast<String>(),
+      sidebarCodes: (json['sidebar_codes'] as List<dynamic>? ?? const [])
+          .cast<String>(),
       tabCodesByParent: mapped,
     );
   }
@@ -230,5 +230,37 @@ const fallbackPageCatalog = <PageCatalogItem>[
     parentCode: 'equipment',
     alwaysVisible: false,
     sortOrder: 45,
+  ),
+  PageCatalogItem(
+    code: 'production',
+    name: '生产',
+    pageType: 'sidebar',
+    parentCode: null,
+    alwaysVisible: false,
+    sortOrder: 50,
+  ),
+  PageCatalogItem(
+    code: 'production_order_management',
+    name: '订单管理',
+    pageType: 'tab',
+    parentCode: 'production',
+    alwaysVisible: false,
+    sortOrder: 51,
+  ),
+  PageCatalogItem(
+    code: 'production_order_query',
+    name: '订单查询',
+    pageType: 'tab',
+    parentCode: 'production',
+    alwaysVisible: false,
+    sortOrder: 52,
+  ),
+  PageCatalogItem(
+    code: 'production_data_query',
+    name: '生产数据',
+    pageType: 'tab',
+    parentCode: 'production',
+    alwaysVisible: false,
+    sortOrder: 53,
   ),
 ];

@@ -73,3 +73,26 @@
 - 生产订单管理：`/production-orders`
 - 首件管理：`/first-articles`
 - 综合查询：`/queries/*`
+
+## Production Module V1 (No Message Center)
+
+### New APIs (`/api/v1`)
+
+- `GET /production/orders`
+- `POST /production/orders`
+- `GET /production/orders/{order_id}`
+- `PUT /production/orders/{order_id}`
+- `DELETE /production/orders/{order_id}`
+- `POST /production/orders/{order_id}/complete`
+- `GET /production/my-orders`
+- `POST /production/orders/{order_id}/first-article`
+- `POST /production/orders/{order_id}/end-production`
+- `GET /production/stats/overview`
+- `GET /production/stats/processes`
+- `GET /production/stats/operators`
+
+### Scope Notes
+
+- V1 focuses on order management, order query, and production data query.
+- Message center, quality data tab, and repair tab are postponed to V2.
+- Status values are persisted as English code values, and frontend is responsible for display mapping.

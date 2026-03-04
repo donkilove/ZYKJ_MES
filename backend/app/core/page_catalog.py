@@ -26,6 +26,10 @@ PAGE_MAINTENANCE_ITEM = "maintenance_item"
 PAGE_MAINTENANCE_PLAN = "maintenance_plan"
 PAGE_MAINTENANCE_EXECUTION = "maintenance_execution"
 PAGE_MAINTENANCE_RECORD = "maintenance_record"
+PAGE_PRODUCTION = "production"
+PAGE_PRODUCTION_ORDER_MANAGEMENT = "production_order_management"
+PAGE_PRODUCTION_ORDER_QUERY = "production_order_query"
+PAGE_PRODUCTION_DATA_QUERY = "production_data_query"
 
 
 PAGE_CATALOG = [
@@ -149,6 +153,38 @@ PAGE_CATALOG = [
         "always_visible": False,
         "sort_order": 45,
     },
+    {
+        "code": PAGE_PRODUCTION,
+        "name": "生产",
+        "page_type": PAGE_TYPE_SIDEBAR,
+        "parent_code": None,
+        "always_visible": False,
+        "sort_order": 50,
+    },
+    {
+        "code": PAGE_PRODUCTION_ORDER_MANAGEMENT,
+        "name": "订单管理",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCTION,
+        "always_visible": False,
+        "sort_order": 51,
+    },
+    {
+        "code": PAGE_PRODUCTION_ORDER_QUERY,
+        "name": "订单查询",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCTION,
+        "always_visible": False,
+        "sort_order": 52,
+    },
+    {
+        "code": PAGE_PRODUCTION_DATA_QUERY,
+        "name": "生产数据",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCTION,
+        "always_visible": False,
+        "sort_order": 53,
+    },
 ]
 
 
@@ -178,6 +214,10 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_MAINTENANCE_PLAN,
         PAGE_MAINTENANCE_EXECUTION,
         PAGE_MAINTENANCE_RECORD,
+        PAGE_PRODUCTION,
+        PAGE_PRODUCTION_ORDER_MANAGEMENT,
+        PAGE_PRODUCTION_ORDER_QUERY,
+        PAGE_PRODUCTION_DATA_QUERY,
     },
     ROLE_PRODUCTION_ADMIN: {
         PAGE_HOME,
@@ -191,18 +231,27 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_MAINTENANCE_PLAN,
         PAGE_MAINTENANCE_EXECUTION,
         PAGE_MAINTENANCE_RECORD,
+        PAGE_PRODUCTION,
+        PAGE_PRODUCTION_ORDER_MANAGEMENT,
+        PAGE_PRODUCTION_ORDER_QUERY,
+        PAGE_PRODUCTION_DATA_QUERY,
     },
     ROLE_QUALITY_ADMIN: {
         PAGE_HOME,
         PAGE_EQUIPMENT,
         PAGE_MAINTENANCE_EXECUTION,
         PAGE_MAINTENANCE_RECORD,
+        PAGE_PRODUCTION,
+        PAGE_PRODUCTION_ORDER_QUERY,
+        PAGE_PRODUCTION_DATA_QUERY,
     },
     ROLE_OPERATOR: {
         PAGE_HOME,
         PAGE_EQUIPMENT,
         PAGE_MAINTENANCE_EXECUTION,
         PAGE_MAINTENANCE_RECORD,
+        PAGE_PRODUCTION,
+        PAGE_PRODUCTION_ORDER_QUERY,
     },
 }
 
