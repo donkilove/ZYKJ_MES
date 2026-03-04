@@ -244,7 +244,7 @@ const fallbackPageCatalog = <PageCatalogItem>[
 
     alwaysVisible: false,
 
-    sortOrder: 30,
+    sortOrder: 40,
   ),
 
   PageCatalogItem(
@@ -300,7 +300,7 @@ const fallbackPageCatalog = <PageCatalogItem>[
 
     alwaysVisible: false,
 
-    sortOrder: 40,
+    sortOrder: 70,
   ),
 
   PageCatalogItem(
@@ -482,7 +482,7 @@ const fallbackPageCatalog = <PageCatalogItem>[
 
     alwaysVisible: false,
 
-    sortOrder: 70,
+    sortOrder: 30,
   ),
 
   PageCatalogItem(

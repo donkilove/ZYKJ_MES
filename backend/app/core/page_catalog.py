@@ -85,7 +85,7 @@ PAGE_CATALOG = [
         "page_type": PAGE_TYPE_SIDEBAR,
         "parent_code": None,
         "always_visible": False,
-        "sort_order": 30,
+        "sort_order": 40,
     },
     {
         "code": PAGE_PRODUCT_MANAGEMENT,
@@ -117,7 +117,7 @@ PAGE_CATALOG = [
         "page_type": PAGE_TYPE_SIDEBAR,
         "parent_code": None,
         "always_visible": False,
-        "sort_order": 40,
+        "sort_order": 70,
     },
     {
         "code": PAGE_EQUIPMENT_LEDGER,
@@ -221,7 +221,7 @@ PAGE_CATALOG = [
         "page_type": PAGE_TYPE_SIDEBAR,
         "parent_code": None,
         "always_visible": False,
-        "sort_order": 70,
+        "sort_order": 30,
     },
     {
         "code": PAGE_PROCESS_MANAGEMENT,
