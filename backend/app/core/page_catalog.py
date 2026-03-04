@@ -30,6 +30,9 @@ PAGE_PRODUCTION = "production"
 PAGE_PRODUCTION_ORDER_MANAGEMENT = "production_order_management"
 PAGE_PRODUCTION_ORDER_QUERY = "production_order_query"
 PAGE_PRODUCTION_DATA_QUERY = "production_data_query"
+PAGE_QUALITY = "quality"
+PAGE_FIRST_ARTICLE_MANAGEMENT = "first_article_management"
+PAGE_QUALITY_DATA_QUERY = "quality_data_query"
 
 
 PAGE_CATALOG = [
@@ -185,6 +188,30 @@ PAGE_CATALOG = [
         "always_visible": False,
         "sort_order": 53,
     },
+    {
+        "code": PAGE_QUALITY,
+        "name": "品质",
+        "page_type": PAGE_TYPE_SIDEBAR,
+        "parent_code": None,
+        "always_visible": False,
+        "sort_order": 60,
+    },
+    {
+        "code": PAGE_FIRST_ARTICLE_MANAGEMENT,
+        "name": "每日首件",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_QUALITY,
+        "always_visible": False,
+        "sort_order": 61,
+    },
+    {
+        "code": PAGE_QUALITY_DATA_QUERY,
+        "name": "品质数据",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_QUALITY,
+        "always_visible": False,
+        "sort_order": 62,
+    },
 ]
 
 
@@ -218,6 +245,9 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCTION_ORDER_MANAGEMENT,
         PAGE_PRODUCTION_ORDER_QUERY,
         PAGE_PRODUCTION_DATA_QUERY,
+        PAGE_QUALITY,
+        PAGE_FIRST_ARTICLE_MANAGEMENT,
+        PAGE_QUALITY_DATA_QUERY,
     },
     ROLE_PRODUCTION_ADMIN: {
         PAGE_HOME,
@@ -235,6 +265,9 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCTION_ORDER_MANAGEMENT,
         PAGE_PRODUCTION_ORDER_QUERY,
         PAGE_PRODUCTION_DATA_QUERY,
+        PAGE_QUALITY,
+        PAGE_FIRST_ARTICLE_MANAGEMENT,
+        PAGE_QUALITY_DATA_QUERY,
     },
     ROLE_QUALITY_ADMIN: {
         PAGE_HOME,
@@ -244,6 +277,9 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCTION,
         PAGE_PRODUCTION_ORDER_QUERY,
         PAGE_PRODUCTION_DATA_QUERY,
+        PAGE_QUALITY,
+        PAGE_FIRST_ARTICLE_MANAGEMENT,
+        PAGE_QUALITY_DATA_QUERY,
     },
     ROLE_OPERATOR: {
         PAGE_HOME,

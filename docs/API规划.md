@@ -96,3 +96,30 @@
 - V1 focuses on order management, order query, and production data query.
 - Message center, quality data tab, and repair tab are postponed to V2.
 - Status values are persisted as English code values, and frontend is responsible for display mapping.
+
+## Quality Module V1
+
+### New APIs (`/api/v1`)
+
+- `GET /quality/first-articles`
+- `GET /quality/stats/overview`
+- `GET /quality/stats/processes`
+- `GET /quality/stats/operators`
+
+### API Notes
+
+- `GET /quality/first-articles`
+  - Params: `date` (optional), `keyword` (optional), `page`, `page_size<=200`
+  - Returns read-only daily verification code fields:
+    - `query_date`
+    - `verification_code`
+    - `verification_code_source` (`stored` / `default` / `none`)
+- `GET /quality/stats/*`
+  - Params: `start_date` (optional), `end_date` (optional)
+  - `end_date` uses inclusive semantics in business view (SQL uses `< end_date + 1 day`).
+
+### Scope Notes
+
+- V1 quality module uses only existing first-article/verification/order/production tables.
+- No defect/scrap/repair models in this version.
+- Result/status code values remain English in API output; frontend maps them to Chinese labels.

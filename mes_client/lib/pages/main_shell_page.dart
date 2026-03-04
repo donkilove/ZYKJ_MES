@@ -12,6 +12,7 @@ import 'equipment_page.dart';
 import 'home_page.dart';
 import 'product_page.dart';
 import 'production_page.dart';
+import 'quality_page.dart';
 import 'user_page.dart';
 
 const String _homePageCode = 'home';
@@ -19,6 +20,7 @@ const String _userPageCode = 'user';
 const String _productPageCode = 'product';
 const String _equipmentPageCode = 'equipment';
 const String _productionPageCode = 'production';
+const String _qualityPageCode = 'quality';
 const Duration _visibilityRefreshInterval = Duration(seconds: 15);
 
 class _ShellMenuItem {
@@ -109,6 +111,8 @@ class _MainShellPageState extends State<MainShellPage>
         return Icons.precision_manufacturing_rounded;
       case _productionPageCode:
         return Icons.factory_rounded;
+      case _qualityPageCode:
+        return Icons.verified_user_rounded;
       default:
         return Icons.article_outlined;
     }
@@ -322,6 +326,12 @@ class _MainShellPageState extends State<MainShellPage>
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
+  List<String> _visibleQualityTabCodes() {
+    final tabCodes = _tabCodesByParent[_qualityPageCode] ?? const <String>[];
+    final catalogCodes = _catalog.map((item) => item.code).toSet();
+    return tabCodes.where(catalogCodes.contains).toList();
+  }
+
   Widget _buildContent(String pageCode) {
     switch (pageCode) {
       case _homePageCode:
@@ -353,6 +363,12 @@ class _MainShellPageState extends State<MainShellPage>
           onLogout: widget.onLogout,
           visibleTabCodes: _visibleProductionTabCodes(),
           currentRoleCodes: _currentUser!.roleCodes,
+        );
+      case _qualityPageCode:
+        return QualityPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          visibleTabCodes: _visibleQualityTabCodes(),
         );
       default:
         return Center(child: Text('页面暂未实现：$pageCode'));

@@ -263,4 +263,28 @@ const fallbackPageCatalog = <PageCatalogItem>[
     alwaysVisible: false,
     sortOrder: 53,
   ),
+  PageCatalogItem(
+    code: 'quality',
+    name: '品质',
+    pageType: 'sidebar',
+    parentCode: null,
+    alwaysVisible: false,
+    sortOrder: 60,
+  ),
+  PageCatalogItem(
+    code: 'first_article_management',
+    name: '每日首件',
+    pageType: 'tab',
+    parentCode: 'quality',
+    alwaysVisible: false,
+    sortOrder: 61,
+  ),
+  PageCatalogItem(
+    code: 'quality_data_query',
+    name: '品质数据',
+    pageType: 'tab',
+    parentCode: 'quality',
+    alwaysVisible: false,
+    sortOrder: 62,
+  ),
 ];
