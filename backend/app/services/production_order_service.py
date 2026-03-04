@@ -120,7 +120,7 @@ def ensure_sub_orders_visible_quantity(
     *,
     process_row: ProductionOrderProcess,
     target_visible_quantity: int,
-) -> None:
+) -> bool:
     target = max(0, target_visible_quantity)
     rows = (
         db.execute(
@@ -131,6 +131,7 @@ def ensure_sub_orders_visible_quantity(
         .scalars()
         .all()
     )
+    changed = False
 
     if not rows:
         _create_initial_sub_orders_for_process(
@@ -138,7 +139,35 @@ def ensure_sub_orders_visible_quantity(
             process_row=process_row,
             visible_quantity=target,
         )
-        return
+        return True
+
+    # Backfill newly assigned operators for historical orders.
+    existing_operator_ids = {row.operator_user_id for row in rows}
+    operator_users = _list_operator_users_by_process_code(db, process_row.process_code)
+    missing_operator_users = [user for user in operator_users if user.id not in existing_operator_ids]
+    if missing_operator_users:
+        for user in missing_operator_users:
+            db.add(
+                ProductionSubOrder(
+                    order_process_id=process_row.id,
+                    operator_user_id=user.id,
+                    assigned_quantity=0,
+                    completed_quantity=0,
+                    status=SUB_ORDER_STATUS_DONE,
+                    is_visible=False,
+                )
+            )
+        db.flush()
+        rows = (
+            db.execute(
+                select(ProductionSubOrder)
+                .where(ProductionSubOrder.order_process_id == process_row.id)
+                .order_by(ProductionSubOrder.operator_user_id.asc(), ProductionSubOrder.id.asc())
+            )
+            .scalars()
+            .all()
+        )
+        changed = True
 
     assigned_total = sum(row.assigned_quantity for row in rows)
     if target > assigned_total:
@@ -149,8 +178,11 @@ def ensure_sub_orders_visible_quantity(
             if row.status == SUB_ORDER_STATUS_DONE and row.assigned_quantity > row.completed_quantity:
                 row.status = SUB_ORDER_STATUS_PENDING
                 row.is_visible = True
+            changed = True
 
     for row in rows:
+        previous_status = row.status
+        previous_visible = row.is_visible
         if row.completed_quantity >= row.assigned_quantity:
             row.status = SUB_ORDER_STATUS_DONE
             row.is_visible = False
@@ -158,8 +190,47 @@ def ensure_sub_orders_visible_quantity(
             if row.status == SUB_ORDER_STATUS_DONE:
                 row.status = SUB_ORDER_STATUS_PENDING
             row.is_visible = row.assigned_quantity > 0
+        if row.status != previous_status or row.is_visible != previous_visible:
+            changed = True
 
-    db.flush()
+    if changed:
+        db.flush()
+    return changed
+
+
+def _backfill_operator_sub_orders(
+    db: Session,
+    *,
+    current_user: User,
+) -> bool:
+    process_codes = _normalize_process_codes(process.code for process in current_user.processes)
+    if not process_codes:
+        return False
+
+    process_rows = (
+        db.execute(
+            select(ProductionOrderProcess)
+            .join(ProductionOrder, ProductionOrder.id == ProductionOrderProcess.order_id)
+            .where(
+                ProductionOrder.status != ORDER_STATUS_COMPLETED,
+                ProductionOrderProcess.status != PROCESS_STATUS_COMPLETED,
+                ProductionOrderProcess.process_code.in_(process_codes),
+            )
+            .order_by(ProductionOrderProcess.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+    changed = False
+    for process_row in process_rows:
+        if ensure_sub_orders_visible_quantity(
+            db,
+            process_row=process_row,
+            target_visible_quantity=process_row.visible_quantity,
+        ):
+            changed = True
+    return changed
 
 
 def get_order_by_id(db: Session, order_id: int, *, with_relations: bool = False) -> ProductionOrder | None:
@@ -539,6 +610,10 @@ def list_my_orders(
                 )
             )
     else:
+        # Historical orders may have missing sub-order rows if operators were added later.
+        if _backfill_operator_sub_orders(db, current_user=current_user):
+            db.commit()
+
         stmt = (
             select(ProductionSubOrder)
             .join(ProductionSubOrder.order_process)
