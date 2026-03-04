@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../models/current_user.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.currentUser});
+  const HomePage({super.key, required this.currentUser, required this.onNavigateToPage});
 
   final CurrentUser currentUser;
+  final void Function(String pageCode) onNavigateToPage;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -86,7 +87,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _getWelcomeMessage(),
+                      '欢迎使用 ZYKJ MES 系统',
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
                       ),
@@ -121,46 +122,43 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
             const SizedBox(height: 24),
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: _buildStatItem(
-                    context,
-                    icon: Icons.badge_outlined,
-                    label: '角色',
-                    value: '${currentUser.roleNames.length}个',
-                    color: theme.colorScheme.primary,
+                Text(
+                  '角色身份',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    context,
-                    icon: Icons.precision_manufacturing_outlined,
-                    label: '工序',
-                    value: '${currentUser.processNames.length}个',
-                    color: theme.colorScheme.tertiary,
+                const SizedBox(height: 12),
+                if (currentUser.roleNames.isEmpty)
+                  Text(
+                    '暂无角色',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: currentUser.roleNames.map((roleName) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        roleName,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )).toList(),
                   ),
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    context,
-                    icon: Icons.person_outline,
-                    label: '账号',
-                    value: currentUser.username,
-                    color: theme.colorScheme.secondary,
-                    isText: true,
-                  ),
-                ),
               ],
             ),
           ],
@@ -231,42 +229,35 @@ class _HomePageState extends State<HomePage> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         side: BorderSide(
           color: theme.colorScheme.outline.withValues(alpha: 0.1),
         ),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: color, size: 24),
+                child: Icon(icon, color: color, size: 27),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text(
                 title,
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: theme.textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.bold,
+                  fontSize: 15,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                description,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -354,7 +345,7 @@ class _HomePageState extends State<HomePage> {
             _buildWelcomeCard(context),
             const SizedBox(height: 24),
             Text(
-              '快捷操作',
+              '快速跳转',
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -363,278 +354,78 @@ class _HomePageState extends State<HomePage> {
             LayoutBuilder(
               builder: (context, constraints) {
                 final crossAxisCount = constraints.maxWidth > 1200
-                    ? 4
-                    : constraints.maxWidth > 800
-                        ? 3
-                        : 2;
+                    ? 7
+                    : constraints.maxWidth > 900
+                        ? 5
+                        : constraints.maxWidth > 600
+                            ? 4
+                            : 3;
                 return GridView.count(
                   crossAxisCount: crossAxisCount,
                   shrinkWrap: true,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     _buildQuickActionCard(
                       context,
-                      icon: Icons.inventory_2_rounded,
-                      title: '产品管理',
-                      description: '维护产品基础资料与参数',
+                      icon: Icons.home_rounded,
+                      title: '首页',
+                      description: '系统工作台',
                       color: theme.colorScheme.primary,
+                      onTap: () => widget.onNavigateToPage('home'),
+                    ),
+                    _buildQuickActionCard(
+                      context,
+                      icon: Icons.group_rounded,
+                      title: '用户',
+                      description: '用户账号管理',
+                      color: theme.colorScheme.secondary,
+                      onTap: () => widget.onNavigateToPage('user'),
+                    ),
+                    _buildQuickActionCard(
+                      context,
+                      icon: Icons.route_rounded,
+                      title: '工艺',
+                      description: '工序与流程配置',
+                      color: theme.colorScheme.tertiary,
+                      onTap: () => widget.onNavigateToPage('craft'),
+                    ),
+                    _buildQuickActionCard(
+                      context,
+                      icon: Icons.inventory_2_rounded,
+                      title: '产品',
+                      description: '产品基础资料',
+                      color: theme.colorScheme.primary,
+                      onTap: () => widget.onNavigateToPage('product'),
+                    ),
+                    _buildQuickActionCard(
+                      context,
+                      icon: Icons.factory_rounded,
+                      title: '生产',
+                      description: '订单管理与执行',
+                      color: theme.colorScheme.secondary,
+                      onTap: () => widget.onNavigateToPage('production'),
+                    ),
+                    _buildQuickActionCard(
+                      context,
+                      icon: Icons.verified_user_rounded,
+                      title: '品质',
+                      description: '首件与品质数据',
+                      color: theme.colorScheme.tertiary,
+                      onTap: () => widget.onNavigateToPage('quality'),
                     ),
                     _buildQuickActionCard(
                       context,
                       icon: Icons.precision_manufacturing_rounded,
-                      title: '设备管理',
-                      description: '设备台账与保养计划',
-                      color: theme.colorScheme.tertiary,
-                    ),
-                    _buildQuickActionCard(
-                      context,
-                      icon: Icons.groups_rounded,
-                      title: '用户管理',
-                      description: '用户账号与权限配置',
-                      color: theme.colorScheme.secondary,
-                    ),
-                    _buildQuickActionCard(
-                      context,
-                      icon: Icons.description_rounded,
-                      title: '文档中心',
-                      description: '查看操作手册与规范',
-                      color: theme.colorScheme.error,
+                      title: '设备',
+                      description: '设备台账与保养',
+                      color: theme.colorScheme.primary,
+                      onTap: () => widget.onNavigateToPage('equipment'),
                     ),
                   ],
                 );
               },
-            ),
-            const SizedBox(height: 24),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isCompact = constraints.maxWidth < 900;
-                return Column(
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: isCompact ? 1 : 1,
-                          child: Card(
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(
-                                color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.groups_outlined,
-                                        size: 20,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '我的角色',
-                                        style: theme.textTheme.titleMedium?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  if (currentUser.roleNames.isEmpty)
-                                    Text(
-                                      '暂无角色',
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        color: theme.colorScheme.onSurfaceVariant,
-                                      ),
-                                    )
-                                  else
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: currentUser.roleNames
-                                          .map((name) => _buildRoleTag(context, name))
-                                          .toList(),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (!isCompact) const SizedBox(width: 12),
-                        if (!isCompact)
-                          Expanded(
-                            flex: 1,
-                            child: Card(
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(
-                                  color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                                ),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.precision_manufacturing_outlined,
-                                          size: 20,
-                                          color: theme.colorScheme.tertiary,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          '工序权限',
-                                          style: theme.textTheme.titleMedium?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    if (currentUser.processNames.isEmpty)
-                                      Text(
-                                        '暂无工序',
-                                        style: theme.textTheme.bodyMedium?.copyWith(
-                                          color: theme.colorScheme.onSurfaceVariant,
-                                        ),
-                                      )
-                                    else
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: currentUser.processNames
-                                            .map((name) => _buildProcessTag(context, name))
-                                            .toList(),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    if (isCompact) const SizedBox(height: 12),
-                    if (isCompact)
-                      Card(
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(
-                            color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.precision_manufacturing_outlined,
-                                    size: 20,
-                                    color: theme.colorScheme.tertiary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '工序权限',
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              if (currentUser.processNames.isEmpty)
-                                Text(
-                                  '暂无工序',
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                )
-                              else
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: currentUser.processNames
-                                      .map((name) => _buildProcessTag(context, name))
-                                      .toList(),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-            Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(
-                  color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.lightbulb_outline_rounded,
-                          size: 20,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '使用提示',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTipItem(
-                      context,
-                      index: 1,
-                      text: '左侧导航栏用于切换不同功能模块，点击即可跳转',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTipItem(
-                      context,
-                      index: 2,
-                      text: '菜单与页面会根据您的角色权限自动调整',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTipItem(
-                      context,
-                      index: 3,
-                      text: '产品参数支持拖拽排序、历史追溯与快速查询',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTipItem(
-                      context,
-                      index: 4,
-                      text: '设备保养工单会根据计划自动生成，请及时处理',
-                    ),
-                  ],
-                ),
-              ),
             ),
             const SizedBox(height: 24),
           ],

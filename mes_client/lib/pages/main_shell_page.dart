@@ -443,7 +443,14 @@ class _MainShellPageState extends State<MainShellPage>
   Widget _buildContent(String pageCode) {
     switch (pageCode) {
       case _homePageCode:
-        return HomePage(currentUser: _currentUser!);
+        return HomePage(
+          currentUser: _currentUser!,
+          onNavigateToPage: (pageCode) {
+            setState(() {
+              _selectedPageCode = pageCode;
+            });
+          },
+        );
 
       case _userPageCode:
         return UserPage(
