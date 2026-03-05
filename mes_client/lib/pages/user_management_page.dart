@@ -884,16 +884,40 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             final statusColor = user.isOnline
                                 ? Colors.green
                                 : theme.colorScheme.outline;
-                            return ListTile(
-                              title: Row(
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                                horizontal: 16,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Expanded(
-                                    child: Text(
-                                      user.username,
-                                      overflow: TextOverflow.ellipsis,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          user.username,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '角色：${user.roleNames.isEmpty ? '-' : user.roleNames.join('、')}'
+                                          '\n工序：${user.processNames.isEmpty ? '-' : user.processNames.join('、')}',
+                                          style: TextStyle(
+                                            color: theme.colorScheme.onSurfaceVariant,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   Container(
+                                    alignment: Alignment.center,
+                                    margin: const EdgeInsets.symmetric(horizontal: 12),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 8,
                                       vertical: 2,
@@ -918,23 +942,18 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
-                              subtitle: Text(
-                                '角色：${user.roleNames.isEmpty ? '-' : user.roleNames.join('、')}'
-                                '\n工序：${user.processNames.isEmpty ? '-' : user.processNames.join('、')}',
-                              ),
-                              isThreeLine: true,
-                              trailing: Wrap(
-                                spacing: 8,
-                                children: [
-                                  TextButton(
-                                    onPressed: () => _showEditUserDialog(user),
-                                    child: const Text('编辑'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => _confirmDeleteUser(user),
-                                    child: const Text('删除'),
+                                  Wrap(
+                                    spacing: 8,
+                                    children: [
+                                      TextButton(
+                                        onPressed: () => _showEditUserDialog(user),
+                                        child: const Text('编辑'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => _confirmDeleteUser(user),
+                                        child: const Text('删除'),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
