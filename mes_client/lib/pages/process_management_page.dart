@@ -599,50 +599,93 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                 Expanded(
                                   child: _stages.isEmpty
                                       ? const Center(child: Text('暂无工段'))
-                                      : AdaptiveTableContainer(
-                                          child: DataTable(
-                                            columns: const [
-                                              DataColumn(label: Text('编码')),
-                                              DataColumn(label: Text('名称')),
-                                              DataColumn(label: Text('排序')),
-                                              DataColumn(label: Text('状态')),
-                                              DataColumn(label: Text('操作')),
-                                            ],
-                                            rows: _stages.map((item) {
-                                              return DataRow(
-                                                cells: [
-                                                  DataCell(Text(item.code)),
-                                                  DataCell(Text(item.name)),
-                                                  DataCell(Text('${item.sortOrder}')),
-                                                  DataCell(
-                                                    Text(item.isEnabled ? '启用' : '停用'),
+                                      : ListView.separated(
+                                          itemCount: _stages.length,
+                                          separatorBuilder: (context, index) =>
+                                              const Divider(height: 1),
+                                          itemBuilder: (context, index) {
+                                            final item = _stages[index];
+                                            return Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                vertical: 8,
+                                                horizontal: 12,
+                                              ),
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  Expanded(
+                                                    flex: 1,
+                                                    child: Text(item.code),
                                                   ),
-                                                  DataCell(
-                                                    PopupMenuButton<_StageAction>(
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Text(item.name),
+                                                  ),
+                                                  Expanded(
+                                                    flex: 1,
+                                                    child:
+                                                        Text('${item.sortOrder}'),
+                                                  ),
+                                                  Expanded(
+                                                    flex: 1,
+                                                    child: Text(
+                                                        item.isEnabled ? '启用' : '停用'),
+                                                  ),
+                                                  Container(
+                                                    alignment: Alignment.center,
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: theme
+                                                          .colorScheme.primary,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              20),
+                                                    ),
+                                                    child:
+                                                        PopupMenuButton<_StageAction>(
+                                                      color: theme.colorScheme
+                                                          .primaryContainer,
                                                       onSelected: (action) {
-                                                        _handleStageAction(action, item);
+                                                        _handleStageAction(
+                                                            action, item);
                                                       },
-                                                      itemBuilder: (context) => [
-                                                        const PopupMenuItem(
-                                                          value: _StageAction.edit,
+                                                      itemBuilder:
+                                                          (context) => const [
+                                                        PopupMenuItem(
+                                                          value: _StageAction
+                                                              .edit,
                                                           child: Text('编辑'),
                                                         ),
                                                         PopupMenuItem(
-                                                          value: _StageAction.toggle,
-                                                          child: Text(item.isEnabled ? '停用' : '启用'),
+                                                          value: _StageAction
+                                                              .toggle,
+                                                          child: Text('启用/停用'),
                                                         ),
-                                                        const PopupMenuItem(
-                                                          value: _StageAction.delete,
+                                                        PopupMenuItem(
+                                                          value: _StageAction
+                                                              .delete,
                                                           child: Text('删除'),
                                                         ),
                                                       ],
-                                                      child: const Text('操作'),
+                                                      child: Text(
+                                                        '操作',
+                                                        style: TextStyle(
+                                                          color: theme.colorScheme
+                                                              .onPrimary,
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
                                                     ),
                                                   ),
                                                 ],
-                                              );
-                                            }).toList(),
-                                          ),
+                                              ),
+                                            );
+                                          },
                                         ),
                                 ),
                               ],
@@ -666,50 +709,93 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                 Expanded(
                                   child: _processes.isEmpty
                                       ? const Center(child: Text('暂无小工序'))
-                                      : AdaptiveTableContainer(
-                                          child: DataTable(
-                                            columns: const [
-                                              DataColumn(label: Text('工段')),
-                                              DataColumn(label: Text('编码')),
-                                              DataColumn(label: Text('名称')),
-                                              DataColumn(label: Text('状态')),
-                                              DataColumn(label: Text('操作')),
-                                            ],
-                                            rows: _processes.map((item) {
-                                              return DataRow(
-                                                cells: [
-                                                  DataCell(Text(item.stageName ?? '-')),
-                                                  DataCell(Text(item.code)),
-                                                  DataCell(Text(item.name)),
-                                                  DataCell(
-                                                    Text(item.isEnabled ? '启用' : '停用'),
+                                      : ListView.separated(
+                                          itemCount: _processes.length,
+                                          separatorBuilder: (context, index) =>
+                                              const Divider(height: 1),
+                                          itemBuilder: (context, index) {
+                                            final item = _processes[index];
+                                            return Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                vertical: 8,
+                                                horizontal: 12,
+                                              ),
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Text(
+                                                        item.stageName ?? '-'),
                                                   ),
-                                                  DataCell(
-                                                    PopupMenuButton<_ProcessAction>(
+                                                  Expanded(
+                                                    flex: 1,
+                                                    child: Text(item.code),
+                                                  ),
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Text(item.name),
+                                                  ),
+                                                  Expanded(
+                                                    flex: 1,
+                                                    child: Text(
+                                                        item.isEnabled ? '启用' : '停用'),
+                                                  ),
+                                                  Container(
+                                                    alignment: Alignment.center,
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: theme
+                                                          .colorScheme.primary,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              20),
+                                                    ),
+                                                    child:
+                                                        PopupMenuButton<_ProcessAction>(
+                                                      color: theme.colorScheme
+                                                          .primaryContainer,
                                                       onSelected: (action) {
-                                                        _handleProcessAction(action, item);
+                                                        _handleProcessAction(
+                                                            action, item);
                                                       },
-                                                      itemBuilder: (context) => [
-                                                        const PopupMenuItem(
-                                                          value: _ProcessAction.edit,
+                                                      itemBuilder:
+                                                          (context) => const [
+                                                        PopupMenuItem(
+                                                          value: _ProcessAction
+                                                              .edit,
                                                           child: Text('编辑'),
                                                         ),
                                                         PopupMenuItem(
-                                                          value: _ProcessAction.toggle,
-                                                          child: Text(item.isEnabled ? '停用' : '启用'),
+                                                          value: _ProcessAction
+                                                              .toggle,
+                                                          child: Text('启用/停用'),
                                                         ),
-                                                        const PopupMenuItem(
-                                                          value: _ProcessAction.delete,
+                                                        PopupMenuItem(
+                                                          value: _ProcessAction
+                                                              .delete,
                                                           child: Text('删除'),
                                                         ),
                                                       ],
-                                                      child: const Text('操作'),
+                                                      child: Text(
+                                                        '操作',
+                                                        style: TextStyle(
+                                                          color: theme.colorScheme
+                                                              .onPrimary,
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
                                                     ),
                                                   ),
                                                 ],
-                                              );
-                                            }).toList(),
-                                          ),
+                                              ),
+                                            );
+                                          },
                                         ),
                                 ),
                               ],

@@ -9,6 +9,7 @@ class UserItem {
     required this.roleNames,
     required this.processCodes,
     required this.processNames,
+    required this.stageNames,
   });
 
   final int id;
@@ -20,6 +21,7 @@ class UserItem {
   final List<String> roleNames;
   final List<String> processCodes;
   final List<String> processNames;
+  final List<String> stageNames;
 
   factory UserItem.fromJson(Map<String, dynamic> json) {
     return UserItem(
@@ -34,6 +36,7 @@ class UserItem {
       roleNames: (json['role_names'] as List<dynamic>).cast<String>(),
       processCodes: (json['process_codes'] as List<dynamic>).cast<String>(),
       processNames: (json['process_names'] as List<dynamic>).cast<String>(),
+      stageNames: (json['stage_names'] as List<dynamic>?)?.cast<String>() ?? [],
     );
   }
 }

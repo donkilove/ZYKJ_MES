@@ -108,7 +108,7 @@ class _CraftPageState extends State<CraftPage>
       case processManagementTabCode:
         return '工序管理';
       case productionProcessConfigTabCode:
-        return '生产工序配置数据';
+        return '生产工序配置';
       default:
         return code;
     }

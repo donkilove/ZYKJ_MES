@@ -23,6 +23,8 @@ router = APIRouter()
 
 def to_user_item(user: User) -> UserItem:
     is_online, last_seen_at = get_user_online_snapshot(user.id)
+    # 获取工段名称（从工序的 stage 关系中提取）
+    stage_names = sorted(set(process.stage.name for process in user.processes if process.stage))
     return UserItem(
         id=user.id,
         username=user.username,
@@ -33,6 +35,7 @@ def to_user_item(user: User) -> UserItem:
         role_names=sorted(role.name for role in user.roles),
         process_codes=sorted(process.code for process in user.processes),
         process_names=sorted(process.name for process in user.processes),
+        stage_names=stage_names,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )

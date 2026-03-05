@@ -734,7 +734,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       }
                     }
                   },
-                  child: const Text('淇濆瓨'),
+                  child: const Text('保存'),
                 ),
               ],
             );
@@ -917,7 +917,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                         const SizedBox(height: 4),
                                         Text(
                                           '角色：${user.roleNames.isEmpty ? '-' : user.roleNames.join('、')}'
-                                          '\n工序：${user.processNames.isEmpty ? '-' : user.processNames.join('、')}',
+                                          '\n工段：${user.stageNames.isEmpty ? '-' : user.stageNames.join('、')}',
                                           style: TextStyle(
                                             color: theme.colorScheme.onSurfaceVariant,
                                             fontSize: 14,
@@ -937,7 +937,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                       color: statusColor.withValues(
                                         alpha: 0.14,
                                       ),
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
                                         color: statusColor.withValues(
                                           alpha: 0.45,
@@ -962,7 +962,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                     ),
                                     decoration: BoxDecoration(
                                       color: theme.colorScheme.primary,
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: PopupMenuButton<_UserAction>(
                                       color: theme.colorScheme.primaryContainer,

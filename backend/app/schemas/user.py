@@ -32,6 +32,7 @@ class UserItem(BaseModel):
     role_names: list[str]
     process_codes: list[str]
     process_names: list[str]
+    stage_names: list[str]
     created_at: datetime
     updated_at: datetime
 

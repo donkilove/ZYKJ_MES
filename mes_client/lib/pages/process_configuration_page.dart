@@ -518,7 +518,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           Row(
             children: [
               Text(
-                '生产工序配置数据',
+                '生产工序配置',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -585,50 +585,82 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : templates.isEmpty
                 ? const Center(child: Text('暂无模板数据'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('产品')),
-                          DataColumn(label: Text('模板名称')),
-                          DataColumn(label: Text('版本')),
-                          DataColumn(label: Text('默认')),
-                          DataColumn(label: Text('状态')),
-                          DataColumn(label: Text('更新时间')),
-                          DataColumn(label: Text('操作')),
-                        ],
-                        rows: templates.map((item) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(item.productName)),
-                              DataCell(Text(item.templateName)),
-                              DataCell(Text('${item.version}')),
-                              DataCell(Text(item.isDefault ? '是' : '否')),
-                              DataCell(Text(item.isEnabled ? '启用' : '停用')),
-                              DataCell(Text(item.updatedAt.toLocal().toString())),
-                              DataCell(
-                                PopupMenuButton<_TemplateAction>(
-                                  onSelected: (action) {
-                                    _handleTemplateAction(action, item);
-                                  },
-                                  itemBuilder: (context) => const [
-                                    PopupMenuItem(
-                                      value: _TemplateAction.edit,
-                                      child: Text('编辑'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: _TemplateAction.delete,
-                                      child: Text('删除'),
-                                    ),
-                                  ],
-                                  child: const Text('操作'),
+                : ListView.separated(
+                    itemCount: templates.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final item = templates[index];
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 12,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(item.productName),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(item.templateName),
+                            ),
+                            Expanded(
+                              flex: 1,
+                              child: Text('${item.version}'),
+                            ),
+                            Expanded(
+                              flex: 1,
+                              child: Text(item.isDefault ? '是' : '否'),
+                            ),
+                            Expanded(
+                              flex: 1,
+                              child: Text(item.isEnabled ? '启用' : '停用'),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(item.updatedAt.toLocal().toString()),
+                            ),
+                            Container(
+                              alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: PopupMenuButton<_TemplateAction>(
+                                color: theme.colorScheme.primaryContainer,
+                                onSelected: (action) {
+                                  _handleTemplateAction(action, item);
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                    value: _TemplateAction.edit,
+                                    child: Text('编辑'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: _TemplateAction.delete,
+                                    child: Text('删除'),
+                                  ),
+                                ],
+                                child: Text(
+                                  '操作',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.onPrimary,
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
           ),
         ],
