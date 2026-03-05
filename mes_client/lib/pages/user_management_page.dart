@@ -9,6 +9,8 @@ import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/user_service.dart';
 
+enum _UserAction { edit, delete }
+
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({
     super.key,
@@ -796,6 +798,17 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
+  Future<void> _handleUserAction(_UserAction action, UserItem user) async {
+    switch (action) {
+      case _UserAction.edit:
+        await _showEditUserDialog(user);
+        return;
+      case _UserAction.delete:
+        await _confirmDeleteUser(user);
+        return;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -878,9 +891,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                               const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final user = _users[index];
-                            final statusLabel = user.isOnline
-                                ? '在线'
-                                : '离线 ${_formatLastSeen(user.lastSeenAt)}';
+                            final statusLabel = user.isOnline ? '在线' : '离线';
                             final statusColor = user.isOnline
                                 ? Colors.green
                                 : theme.colorScheme.outline;
@@ -942,18 +953,39 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                       ),
                                     ),
                                   ),
-                                  Wrap(
-                                    spacing: 8,
-                                    children: [
-                                      TextButton(
-                                        onPressed: () => _showEditUserDialog(user),
-                                        child: const Text('编辑'),
+                                  Container(
+                                    alignment: Alignment.center,
+                                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: PopupMenuButton<_UserAction>(
+                                      color: theme.colorScheme.primaryContainer,
+                                      onSelected: (action) {
+                                        _handleUserAction(action, user);
+                                      },
+                                      itemBuilder: (context) => const [
+                                        PopupMenuItem(
+                                          value: _UserAction.edit,
+                                          child: Text('编辑'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: _UserAction.delete,
+                                          child: Text('删除'),
+                                        ),
+                                      ],
+                                      child: Text(
+                                        '操作',
+                                        style: TextStyle(
+                                          color: theme.colorScheme.onPrimary,
+                                        ),
                                       ),
-                                      TextButton(
-                                        onPressed: () => _confirmDeleteUser(user),
-                                        child: const Text('删除'),
-                                      ),
-                                    ],
+                                    ),
                                   ),
                                 ],
                               ),

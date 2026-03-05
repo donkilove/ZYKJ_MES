@@ -510,21 +510,86 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                               const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final item = _items[index];
-                            return ListTile(
-                              title: Text(item.account),
-                              subtitle: Text(
-                                '提交时间：${_formatTime(item.createdAt)}',
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                                horizontal: 16,
                               ),
-                              trailing: Wrap(
-                                spacing: 8,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  TextButton(
-                                    onPressed: () => _openApproveDialog(item),
-                                    child: const Text('通过'),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.account,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '提交时间：${_formatTime(item.createdAt)}',
+                                          style: TextStyle(
+                                            color: theme.colorScheme.onSurfaceVariant,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  TextButton(
-                                    onPressed: () => _confirmReject(item),
-                                    child: const Text('驳回'),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      InkWell(
+                                        onTap: () => _openApproveDialog(item),
+                                        borderRadius: BorderRadius.circular(20),
+                                        child: Container(
+                                          alignment: Alignment.center,
+                                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.primary,
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: Text(
+                                            '通过',
+                                            style: TextStyle(
+                                              color: theme.colorScheme.onPrimary,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      InkWell(
+                                        onTap: () => _confirmReject(item),
+                                        borderRadius: BorderRadius.circular(20),
+                                        child: Container(
+                                          alignment: Alignment.center,
+                                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.error,
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: Text(
+                                            '驳回',
+                                            style: TextStyle(
+                                              color: theme.colorScheme.onError,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
