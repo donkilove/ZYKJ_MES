@@ -4,19 +4,19 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 
-class ProductProcessTemplateStep(Base, TimestampMixin):
-    __tablename__ = "mes_product_process_template_step"
+class ProductProcessTemplateRevisionStep(Base, TimestampMixin):
+    __tablename__ = "mes_product_process_template_revision_step"
     __table_args__ = (
         UniqueConstraint(
-            "template_id",
+            "revision_id",
             "step_order",
-            name="uq_mes_product_process_template_step_template_id_step_order",
+            name="uq_ppt_rev_step_revision_id_step_order",
         ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    template_id: Mapped[int] = mapped_column(
-        ForeignKey("mes_product_process_template.id", ondelete="CASCADE"),
+    revision_id: Mapped[int] = mapped_column(
+        ForeignKey("mes_product_process_template_revision.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -35,6 +35,6 @@ class ProductProcessTemplateStep(Base, TimestampMixin):
     )
     process_code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     process_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    template = relationship("ProductProcessTemplate", back_populates="steps")
+    revision = relationship("ProductProcessTemplateRevision", back_populates="steps")
     stage = relationship("ProcessStage")
     process = relationship("Process")

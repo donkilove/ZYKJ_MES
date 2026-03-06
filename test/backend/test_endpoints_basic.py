@@ -173,6 +173,15 @@ def test_products_and_craft_endpoints(db, factory) -> None:
     product_resp = products.create_product_api(ProductCreate(name="接口产品A"), db, current_user=admin)
     product_id = product_resp.data.id
 
+    kanban_empty = craft.get_craft_kanban_process_metrics_api(
+        product_id=product_id,
+        limit=5,
+        db=db,
+        _=admin,
+    )
+    assert kanban_empty.data.product_id == product_id
+    assert kanban_empty.data.items == []
+
     products_list = products.get_products(page=1, page_size=20, keyword=None, db=db, _=admin)
     assert products_list.data.total >= 1
 

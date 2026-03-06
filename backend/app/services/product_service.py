@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import UTC, datetime
 import logging
@@ -118,6 +118,7 @@ def _clone_default_craft_template_for_new_product(
             select(ProductProcessTemplate.id).where(
                 ProductProcessTemplate.product_id == product.id,
                 ProductProcessTemplate.is_enabled.is_(True),
+            ProductProcessTemplate.lifecycle_status == "published",
             )
         )
         .scalars()
@@ -155,6 +156,8 @@ def _clone_default_craft_template_for_new_product(
         product_id=product.id,
         template_name="默认模板",
         version=1,
+        lifecycle_status="published",
+        published_version=1,
         is_default=True,
         is_enabled=True,
         created_by_user_id=operator.id,
@@ -180,6 +183,7 @@ def _clone_default_craft_template_for_new_product(
         select(ProductProcessTemplate).where(
             ProductProcessTemplate.product_id == product.id,
             ProductProcessTemplate.is_enabled.is_(True),
+            ProductProcessTemplate.lifecycle_status == "published",
         )
     ).scalars().all()
     for item in enabled_rows:
@@ -479,3 +483,9 @@ def get_latest_history_map_by_product_ids(
         if row.product_id not in latest_map:
             latest_map[row.product_id] = row
     return latest_map
+
+
+
+
+
+

@@ -36,6 +36,7 @@ PAGE_QUALITY_DATA_QUERY = "quality_data_query"
 PAGE_CRAFT = "craft"
 PAGE_PROCESS_MANAGEMENT = "process_management"
 PAGE_PRODUCTION_PROCESS_CONFIG = "production_process_config"
+PAGE_CRAFT_KANBAN = "craft_kanban"
 
 
 PAGE_CATALOG = [
@@ -193,7 +194,7 @@ PAGE_CATALOG = [
     },
     {
         "code": PAGE_QUALITY,
-        "name": "品质",
+        "name": "质量",
         "page_type": PAGE_TYPE_SIDEBAR,
         "parent_code": None,
         "always_visible": False,
@@ -201,7 +202,7 @@ PAGE_CATALOG = [
     },
     {
         "code": PAGE_FIRST_ARTICLE_MANAGEMENT,
-        "name": "每日首件",
+        "name": "首件管理",
         "page_type": PAGE_TYPE_TAB,
         "parent_code": PAGE_QUALITY,
         "always_visible": False,
@@ -209,7 +210,7 @@ PAGE_CATALOG = [
     },
     {
         "code": PAGE_QUALITY_DATA_QUERY,
-        "name": "品质数据",
+        "name": "质量数据",
         "page_type": PAGE_TYPE_TAB,
         "parent_code": PAGE_QUALITY,
         "always_visible": False,
@@ -238,6 +239,14 @@ PAGE_CATALOG = [
         "parent_code": PAGE_CRAFT,
         "always_visible": False,
         "sort_order": 72,
+    },
+    {
+        "code": PAGE_CRAFT_KANBAN,
+        "name": "工艺看板",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_CRAFT,
+        "always_visible": False,
+        "sort_order": 73,
     },
 ]
 
@@ -278,6 +287,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_CRAFT,
         PAGE_PROCESS_MANAGEMENT,
         PAGE_PRODUCTION_PROCESS_CONFIG,
+        PAGE_CRAFT_KANBAN,
     },
     ROLE_PRODUCTION_ADMIN: {
         PAGE_HOME,
@@ -301,6 +311,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_CRAFT,
         PAGE_PROCESS_MANAGEMENT,
         PAGE_PRODUCTION_PROCESS_CONFIG,
+        PAGE_CRAFT_KANBAN,
     },
     ROLE_QUALITY_ADMIN: {
         PAGE_HOME,

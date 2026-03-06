@@ -23,6 +23,19 @@ class ProductProcessTemplate(Base, TimestampMixin):
     )
     template_name: Mapped[str] = mapped_column(String(128), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="draft",
+        server_default=text("'draft'"),
+        index=True,
+    )
+    published_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
     is_default: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -57,4 +70,11 @@ class ProductProcessTemplate(Base, TimestampMixin):
         cascade="all, delete-orphan",
         passive_deletes=True,
         order_by="ProductProcessTemplateStep.step_order.asc()",
+    )
+    revisions = relationship(
+        "ProductProcessTemplateRevision",
+        back_populates="template",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ProductProcessTemplateRevision.version.desc()",
     )

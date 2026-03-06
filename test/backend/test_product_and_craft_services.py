@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.core.product_parameter_template import PRODUCT_NAME_PARAMETER_KEY
 from app.models.product_parameter_history import ProductParameterHistory
@@ -181,6 +183,157 @@ def test_product_create_auto_clone_master_template(db, factory) -> None:
     assert templates[0].is_default is True
     assert templates[0].is_enabled is True
     assert len(templates[0].steps) == 1
+
+
+def test_craft_kanban_metrics_returns_latest_five_samples(db, factory) -> None:
+    operator = factory.user(username="kanban_operator", role_codes=[ROLE_SYSTEM_ADMIN])
+    stage = craft_service.create_stage(db, code="37", name="工段37", sort_order=1)
+    process = craft_service.create_process(db, code="37-01", name="工序37", stage_id=stage.id)
+    product = factory.product(name="看板产品A")
+
+    base = datetime(2026, 3, 1, 8, 0, tzinfo=UTC)
+    for index in range(6):
+        order = factory.order(
+            product=product,
+            order_code=f"KB-{index + 1}",
+            status="completed",
+        )
+        process_row = factory.order_process(
+            order=order,
+            process=process,
+            stage=stage,
+            process_order=1,
+            status="completed",
+        )
+        first_article = factory.production_record(
+            order=order,
+            process_row=process_row,
+            operator=operator,
+            quantity=0,
+            record_type="first_article",
+        )
+        production_a = factory.production_record(
+            order=order,
+            process_row=process_row,
+            operator=operator,
+            quantity=30 + index,
+            record_type="production",
+        )
+        production_b = factory.production_record(
+            order=order,
+            process_row=process_row,
+            operator=operator,
+            quantity=10 + index,
+            record_type="production",
+        )
+        first_article.created_at = base + timedelta(days=index)
+        production_a.created_at = base + timedelta(days=index, minutes=10)
+        production_b.created_at = base + timedelta(days=index, minutes=30)
+
+    invalid_order = factory.order(product=product, order_code="KB-INVALID", status="completed")
+    invalid_row = factory.order_process(
+        order=invalid_order,
+        process=process,
+        stage=stage,
+        process_order=1,
+        status="completed",
+    )
+    invalid_record = factory.production_record(
+        order=invalid_order,
+        process_row=invalid_row,
+        operator=operator,
+        quantity=0,
+        record_type="production",
+    )
+    invalid_record.created_at = base + timedelta(days=20)
+    db.commit()
+
+    result = craft_service.get_craft_kanban_process_metrics(
+        db,
+        product_id=product.id,
+        limit=5,
+    )
+    assert result.product.id == product.id
+    assert len(result.items) == 1
+
+    samples = result.items[0].samples
+    assert len(samples) == 5
+    assert [item.order_code for item in samples] == ["KB-2", "KB-3", "KB-4", "KB-5", "KB-6"]
+    assert all(item.work_minutes == 30 for item in samples)
+    assert samples[-1].production_qty == 50
+    assert samples[-1].capacity_per_hour == 100.0
+
+
+def test_craft_kanban_metrics_uses_production_fallback_start_time(db, factory) -> None:
+    operator = factory.user(username="kanban_operator_b", role_codes=[ROLE_SYSTEM_ADMIN])
+    stage = craft_service.create_stage(db, code="38", name="工段38", sort_order=1)
+    process = craft_service.create_process(db, code="38-01", name="工序38", stage_id=stage.id)
+    product = factory.product(name="看板产品B")
+
+    base = datetime(2026, 3, 2, 8, 0, tzinfo=UTC)
+    order = factory.order(product=product, order_code="KB-FALLBACK", status="completed")
+    process_row = factory.order_process(
+        order=order,
+        process=process,
+        stage=stage,
+        process_order=1,
+        status="completed",
+    )
+    first_production = factory.production_record(
+        order=order,
+        process_row=process_row,
+        operator=operator,
+        quantity=30,
+        record_type="production",
+    )
+    last_production = factory.production_record(
+        order=order,
+        process_row=process_row,
+        operator=operator,
+        quantity=30,
+        record_type="production",
+    )
+    first_production.created_at = base + timedelta(minutes=5)
+    last_production.created_at = base + timedelta(minutes=65)
+
+    invalid_order = factory.order(product=product, order_code="KB-BAD-INTERVAL", status="completed")
+    invalid_row = factory.order_process(
+        order=invalid_order,
+        process=process,
+        stage=stage,
+        process_order=1,
+        status="completed",
+    )
+    bad_first = factory.production_record(
+        order=invalid_order,
+        process_row=invalid_row,
+        operator=operator,
+        quantity=0,
+        record_type="first_article",
+    )
+    bad_prod = factory.production_record(
+        order=invalid_order,
+        process_row=invalid_row,
+        operator=operator,
+        quantity=20,
+        record_type="production",
+    )
+    bad_first.created_at = base + timedelta(minutes=70)
+    bad_prod.created_at = base + timedelta(minutes=40)
+    db.commit()
+
+    result = craft_service.get_craft_kanban_process_metrics(
+        db,
+        product_id=product.id,
+        limit=5,
+    )
+    assert len(result.items) == 1
+    samples = result.items[0].samples
+    assert len(samples) == 1
+    assert samples[0].order_code == "KB-FALLBACK"
+    assert samples[0].start_at == first_production.created_at.replace(tzinfo=None)
+    assert samples[0].work_minutes == 60
+    assert samples[0].capacity_per_hour == 60.0
 
 
 def test_product_parameters_update_and_history(db, factory) -> None:

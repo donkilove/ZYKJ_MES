@@ -78,6 +78,8 @@ def _resolve_template(
         raise ValueError("Template does not belong to selected product")
     if not template.is_enabled:
         raise ValueError("Template is disabled")
+    if template.lifecycle_status != "published":
+        raise ValueError("Template is not published")
     return template
 
 
@@ -543,12 +545,13 @@ def _save_route_as_template(
         )
     db.flush()
 
-    if set_default:
+    if set_default and template.lifecycle_status == "published":
         enabled_templates = (
             db.execute(
                 select(ProductProcessTemplate).where(
                     ProductProcessTemplate.product_id == product_id,
                     ProductProcessTemplate.is_enabled.is_(True),
+                    ProductProcessTemplate.lifecycle_status == "published",
                 )
             )
             .scalars()
@@ -556,12 +559,13 @@ def _save_route_as_template(
         )
         for row in enabled_templates:
             row.is_default = row.id == template.id
-    else:
+    elif template.lifecycle_status == "published":
         has_default = (
             db.execute(
                 select(ProductProcessTemplate.id).where(
                     ProductProcessTemplate.product_id == product_id,
                     ProductProcessTemplate.is_enabled.is_(True),
+                    ProductProcessTemplate.lifecycle_status == "published",
                     ProductProcessTemplate.is_default.is_(True),
                 )
             )

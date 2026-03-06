@@ -222,6 +222,7 @@ class CraftService {
     int? productId,
     String? keyword,
     bool? enabled = true,
+    String? lifecycleStatus,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (productId != null) {
@@ -232,6 +233,9 @@ class CraftService {
     }
     if (enabled != null) {
       query['enabled'] = '$enabled';
+    }
+    if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
+      query['lifecycle_status'] = lifecycleStatus.trim().toLowerCase();
     }
     final uri = Uri.parse(
       '$_basePath/templates',
@@ -316,6 +320,29 @@ class CraftService {
     );
   }
 
+  Future<CraftKanbanProcessMetricsResult> getCraftKanbanProcessMetrics({
+    required int productId,
+    int limit = 5,
+  }) async {
+    final uri = Uri.parse('$_basePath/kanban/process-metrics').replace(
+      queryParameters: {
+        'product_id': '$productId',
+        'limit': '${limit.clamp(1, 20)}',
+      },
+    );
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftKanbanProcessMetricsResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
   Future<CraftTemplateDetail> getTemplateDetail({
     required int templateId,
   }) async {
@@ -336,6 +363,7 @@ class CraftService {
     required String templateName,
     required bool isDefault,
     required List<CraftTemplateStepPayload> steps,
+    String lifecycleStatus = 'draft',
   }) async {
     final uri = Uri.parse('$_basePath/templates');
     final response = await http.post(
@@ -345,6 +373,7 @@ class CraftService {
         'product_id': productId,
         'template_name': templateName,
         'is_default': isDefault,
+        'lifecycle_status': lifecycleStatus,
         'steps': steps.map((item) => item.toJson()).toList(),
       }),
     );
@@ -387,6 +416,189 @@ class CraftService {
     }
     return CraftTemplateUpdateResult.fromJson(
       body['data'] as Map<String, dynamic>,
+    );
+  }
+
+  Future<CraftTemplateImpactAnalysis> getTemplateImpactAnalysis({
+    required int templateId,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/impact-analysis');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateImpactAnalysis.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  Future<CraftTemplateUpdateResult> publishTemplate({
+    required int templateId,
+    required bool applyOrderSync,
+    required bool confirmed,
+    String? note,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/publish');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'apply_order_sync': applyOrderSync,
+        'confirmed': confirmed,
+        'note': note,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateUpdateResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  Future<CraftTemplateVersionListResult> listTemplateVersions({
+    required int templateId,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/versions');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) =>
+              CraftTemplateVersionItem.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+    return CraftTemplateVersionListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<CraftTemplateVersionCompareResult> compareTemplateVersions({
+    required int templateId,
+    required int fromVersion,
+    required int toVersion,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/versions/compare')
+        .replace(
+          queryParameters: {
+            'from_version': '$fromVersion',
+            'to_version': '$toVersion',
+          },
+        );
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateVersionCompareResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  Future<CraftTemplateUpdateResult> rollbackTemplate({
+    required int templateId,
+    required int targetVersion,
+    required bool applyOrderSync,
+    required bool confirmed,
+    String? note,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/rollback');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'target_version': targetVersion,
+        'apply_order_sync': applyOrderSync,
+        'confirmed': confirmed,
+        'note': note,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateUpdateResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  Future<CraftTemplateBatchExportResult> exportTemplates({
+    int? productId,
+    bool? enabled,
+    String? lifecycleStatus,
+  }) async {
+    final query = <String, String>{};
+    if (productId != null) {
+      query['product_id'] = '$productId';
+    }
+    if (enabled != null) {
+      query['enabled'] = '$enabled';
+    }
+    if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
+      query['lifecycle_status'] = lifecycleStatus.trim().toLowerCase();
+    }
+    final uri = Uri.parse(
+      '$_basePath/templates/export',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateBatchExportResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  Future<CraftTemplateBatchImportResult> importTemplates({
+    required List<CraftTemplateBatchImportItem> items,
+    bool overwriteExisting = false,
+    bool publishAfterImport = false,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/import');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'overwrite_existing': overwriteExisting,
+        'publish_after_import': publishAfterImport,
+        'items': items.map((item) => item.toJson()).toList(),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateBatchImportResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
     );
   }
 

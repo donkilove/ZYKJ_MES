@@ -512,4 +512,18 @@ const fallbackPageCatalog = <PageCatalogItem>[
 
     sortOrder: 72,
   ),
+
+  PageCatalogItem(
+    code: 'craft_kanban',
+
+    name: '工艺看板',
+
+    pageType: 'tab',
+
+    parentCode: 'craft',
+
+    alwaysVisible: false,
+
+    sortOrder: 73,
+  ),
 ];

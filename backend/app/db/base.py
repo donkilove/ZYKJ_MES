@@ -22,6 +22,8 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.product_process_template_step import ProductProcessTemplateStep
+from app.models.product_process_template_revision import ProductProcessTemplateRevision
+from app.models.product_process_template_revision_step import ProductProcessTemplateRevisionStep
 from app.models.craft_system_master_template import CraftSystemMasterTemplate
 from app.models.craft_system_master_template_step import CraftSystemMasterTemplateStep
 
@@ -33,6 +35,8 @@ __all__ = [
     "ProcessStage",
     "ProductProcessTemplate",
     "ProductProcessTemplateStep",
+    "ProductProcessTemplateRevision",
+    "ProductProcessTemplateRevisionStep",
     "CraftSystemMasterTemplate",
     "CraftSystemMasterTemplateStep",
     "RegistrationRequest",

@@ -2,15 +2,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import 'craft_kanban_page.dart';
 import 'process_configuration_page.dart';
 import 'process_management_page.dart';
 
 const String processManagementTabCode = 'process_management';
 const String productionProcessConfigTabCode = 'production_process_config';
+const String craftKanbanTabCode = 'craft_kanban';
 
 const List<String> _defaultTabOrder = [
   processManagementTabCode,
   productionProcessConfigTabCode,
+  craftKanbanTabCode,
 ];
 
 class CraftPage extends StatefulWidget {
@@ -111,6 +114,8 @@ class _CraftPageState extends State<CraftPage>
         return '工序管理';
       case productionProcessConfigTabCode:
         return '生产工序配置';
+      case craftKanbanTabCode:
+        return '工艺看板';
       default:
         return code;
     }
@@ -128,6 +133,11 @@ class _CraftPageState extends State<CraftPage>
           session: widget.session,
           onLogout: widget.onLogout,
           currentRoleCodes: widget.currentRoleCodes,
+        );
+      case craftKanbanTabCode:
+        return CraftKanbanPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));

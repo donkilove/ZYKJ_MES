@@ -2,6 +2,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+TEMPLATE_LIFECYCLE_DRAFT = "draft"
+TEMPLATE_LIFECYCLE_PUBLISHED = "published"
+TEMPLATE_LIFECYCLE_ARCHIVED = "archived"
+TEMPLATE_LIFECYCLE_OPTIONS = {
+    TEMPLATE_LIFECYCLE_DRAFT,
+    TEMPLATE_LIFECYCLE_PUBLISHED,
+    TEMPLATE_LIFECYCLE_ARCHIVED,
+}
+
 
 class ProcessStageCreate(BaseModel):
     code: str = Field(min_length=2, max_length=64)
@@ -71,6 +80,7 @@ class ProductProcessTemplateCreate(BaseModel):
     product_id: int = Field(gt=0)
     template_name: str = Field(min_length=1, max_length=128)
     is_default: bool = False
+    lifecycle_status: str = Field(default=TEMPLATE_LIFECYCLE_DRAFT, min_length=1, max_length=32)
     steps: list[TemplateStepPayload] = Field(default_factory=list, min_length=1)
 
     @field_validator("steps")
@@ -80,6 +90,14 @@ class ProductProcessTemplateCreate(BaseModel):
         if len(step_orders) != len(set(step_orders)):
             raise ValueError("step_order cannot be duplicated")
         return value
+
+    @field_validator("lifecycle_status")
+    @classmethod
+    def validate_lifecycle_status(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in TEMPLATE_LIFECYCLE_OPTIONS:
+            raise ValueError("Invalid lifecycle_status")
+        return normalized
 
 
 class ProductProcessTemplateUpdate(BaseModel):
@@ -117,6 +135,8 @@ class ProductProcessTemplateItem(BaseModel):
     product_name: str
     template_name: str
     version: int
+    lifecycle_status: str
+    published_version: int
     is_default: bool
     is_enabled: bool
     created_by_user_id: int | None = None
@@ -190,3 +210,159 @@ class TemplateSyncResult(BaseModel):
 class ProductProcessTemplateUpdateResult(BaseModel):
     detail: ProductProcessTemplateDetail
     sync_result: TemplateSyncResult
+
+
+class TemplateImpactOrderItem(BaseModel):
+    order_id: int
+    order_code: str
+    order_status: str
+    syncable: bool
+    reason: str | None = None
+
+
+class TemplateImpactAnalysisResult(BaseModel):
+    total_orders: int
+    pending_orders: int
+    in_progress_orders: int
+    syncable_orders: int
+    blocked_orders: int
+    items: list[TemplateImpactOrderItem]
+
+
+class TemplatePublishRequest(BaseModel):
+    apply_order_sync: bool = False
+    confirmed: bool = False
+    note: str | None = Field(default=None, max_length=256)
+
+
+class TemplateVersionItem(BaseModel):
+    version: int
+    action: str
+    note: str | None = None
+    source_version: int | None = None
+    created_by_user_id: int | None = None
+    created_by_username: str | None = None
+    created_at: datetime
+
+
+class TemplateVersionListResult(BaseModel):
+    total: int
+    items: list[TemplateVersionItem]
+
+
+class TemplateVersionDiffItem(BaseModel):
+    step_order: int
+    diff_type: str
+    from_stage_code: str | None = None
+    from_process_code: str | None = None
+    to_stage_code: str | None = None
+    to_process_code: str | None = None
+
+
+class TemplateVersionCompareResult(BaseModel):
+    from_version: int
+    to_version: int
+    added_steps: int
+    removed_steps: int
+    changed_steps: int
+    items: list[TemplateVersionDiffItem]
+
+
+class CraftKanbanSampleItem(BaseModel):
+    order_process_id: int
+    order_id: int
+    order_code: str
+    start_at: datetime
+    end_at: datetime
+    work_minutes: int
+    production_qty: int
+    capacity_per_hour: float
+
+
+class CraftKanbanProcessItem(BaseModel):
+    stage_id: int | None = None
+    stage_code: str | None = None
+    stage_name: str | None = None
+    process_id: int
+    process_code: str
+    process_name: str
+    samples: list[CraftKanbanSampleItem]
+
+
+class CraftKanbanProcessMetricsResult(BaseModel):
+    product_id: int
+    product_name: str
+    items: list[CraftKanbanProcessItem]
+
+
+class TemplateRollbackRequest(BaseModel):
+    target_version: int = Field(gt=0)
+    apply_order_sync: bool = False
+    confirmed: bool = False
+    note: str | None = Field(default=None, max_length=256)
+
+
+class TemplateBatchExportItem(BaseModel):
+    product_id: int
+    product_name: str
+    template_name: str
+    is_default: bool
+    is_enabled: bool
+    lifecycle_status: str
+    steps: list[TemplateStepPayload]
+
+
+class TemplateBatchExportResult(BaseModel):
+    total: int
+    exported_at: datetime
+    items: list[TemplateBatchExportItem]
+
+
+class TemplateBatchImportItem(BaseModel):
+    product_id: int | None = Field(default=None, gt=0)
+    product_name: str | None = Field(default=None, min_length=1, max_length=128)
+    template_name: str = Field(min_length=1, max_length=128)
+    is_default: bool = False
+    is_enabled: bool = True
+    lifecycle_status: str = Field(default=TEMPLATE_LIFECYCLE_DRAFT, min_length=1, max_length=32)
+    steps: list[TemplateStepPayload] = Field(default_factory=list, min_length=1)
+
+    @field_validator("steps")
+    @classmethod
+    def validate_steps(cls, value: list[TemplateStepPayload]) -> list[TemplateStepPayload]:
+        step_orders = [item.step_order for item in value]
+        if len(step_orders) != len(set(step_orders)):
+            raise ValueError("step_order cannot be duplicated")
+        return value
+
+    @field_validator("lifecycle_status")
+    @classmethod
+    def validate_template_lifecycle_status(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in TEMPLATE_LIFECYCLE_OPTIONS:
+            raise ValueError("Invalid lifecycle_status")
+        return normalized
+
+
+class TemplateBatchImportRequest(BaseModel):
+    overwrite_existing: bool = False
+    publish_after_import: bool = False
+    items: list[TemplateBatchImportItem] = Field(default_factory=list, min_length=1)
+
+
+class TemplateBatchImportResultItem(BaseModel):
+    template_id: int
+    product_id: int
+    product_name: str
+    template_name: str
+    action: str
+    lifecycle_status: str
+    published_version: int
+
+
+class TemplateBatchImportResult(BaseModel):
+    total: int
+    created: int
+    updated: int
+    skipped: int
+    items: list[TemplateBatchImportResultItem]

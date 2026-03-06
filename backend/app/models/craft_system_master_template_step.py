@@ -35,7 +35,6 @@ class CraftSystemMasterTemplateStep(Base, TimestampMixin):
     )
     process_code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     process_name: Mapped[str] = mapped_column(String(128), nullable=False)
-
     template = relationship("CraftSystemMasterTemplate", back_populates="steps")
     stage = relationship("ProcessStage")
     process = relationship("Process")

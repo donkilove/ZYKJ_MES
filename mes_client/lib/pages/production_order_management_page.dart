@@ -1209,11 +1209,11 @@ class _ProductionOrderManagementPageState
                                       child: AdaptiveTableContainer(
                                         child: DataTable(
                                           columns: const [
-                                            DataColumn(label: Text('鏃堕棿')),
+                                            DataColumn(label: Text('时间')),
                                             DataColumn(label: Text('工序')),
                                             DataColumn(label: Text('操作员')),
-                                            DataColumn(label: Text('绫诲瀷')),
-                                            DataColumn(label: Text('鏁伴噺')),
+                                            DataColumn(label: Text('类型')),
+                                            DataColumn(label: Text('数量')),
                                           ],
                                           rows: detail.records.map((item) {
                                             return DataRow(
