@@ -1,0 +1,31 @@
+name: encoding-guard
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  utf8_guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt pytest
+
+      - name: Scan backend mojibake
+        run: python backend/scripts/check_chinese_mojibake.py
+
+      - name: Scan frontend mojibake
+        run: python backend/scripts/check_frontend_chinese_mojibake.py
+
+      - name: Run encoding guard tests
+        run: python -m pytest test/backend/test_chinese_mojibake_check.py test/backend/test_frontend_chinese_mojibake_check.py -q
