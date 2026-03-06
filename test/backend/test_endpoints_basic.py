@@ -1,0 +1,397 @@
+﻿from __future__ import annotations
+
+from datetime import date, timedelta
+from types import SimpleNamespace
+
+import pytest
+from fastapi import HTTPException
+
+from app.api.v1.endpoints import auth, craft, equipment, processes, production, products, quality, roles, ui, users
+from app.core.config import settings
+from app.core.production_constants import ORDER_STATUS_IN_PROGRESS
+from app.core.rbac import (
+    ROLE_OPERATOR,
+    ROLE_PRODUCTION_ADMIN,
+    ROLE_QUALITY_ADMIN,
+    ROLE_SYSTEM_ADMIN,
+)
+from app.core.security import get_password_hash
+from app.models.process import Process
+from app.models.role import Role
+from app.models.user import User
+from app.schemas.auth import ApproveRegistrationRequest, RegisterRequest
+from app.schemas.craft import (
+    CraftProcessCreate,
+    ProcessStageCreate,
+    ProductProcessTemplateCreate,
+    ProductProcessTemplateUpdate,
+    SystemMasterTemplateUpsertRequest,
+    TemplateStepPayload,
+)
+from app.schemas.equipment import (
+    EquipmentLedgerUpsertRequest,
+    MaintenanceItemUpsertRequest,
+    MaintenancePlanUpsertRequest,
+    MaintenancePlanToggleRequest,
+    MaintenanceWorkOrderCompleteRequest,
+    ToggleEnabledRequest,
+)
+from app.schemas.process import ProcessCreate, ProcessUpdate
+from app.schemas.product import ProductCreate, ProductDeleteRequest, ProductParameterInputItem, ProductParameterUpdateRequest
+from app.schemas.production import EndProductionRequest, FirstArticleRequest, OrderCreate, OrderUpdate
+from app.schemas.user import UserCreate, UserUpdate
+
+
+def _auth_user(factory, username: str, role_code: str = ROLE_SYSTEM_ADMIN, password: str = "Passw0rd!") -> User:
+    user = factory.user(username=username, role_codes=[role_code], password=password)
+    return user
+
+
+def test_auth_endpoints_login_register_and_me(db, factory) -> None:
+    factory.ensure_default_roles()
+    user = _auth_user(factory, "auth_admin", ROLE_SYSTEM_ADMIN, "Passw0rd!")
+    db.commit()
+
+    login_result = auth.login(SimpleNamespace(username="auth_admin", password="Passw0rd!"), db)
+    assert login_result.data.access_token
+
+    with pytest.raises(HTTPException):
+        auth.login(SimpleNamespace(username="auth_admin", password="bad"), db)
+
+    register_resp = auth.register(RegisterRequest(account="new_account", password="Passw0rd!"), db)
+    assert register_resp.data.status == "pending_approval"
+
+    accounts = auth.list_accounts(db)
+    assert "auth_admin" in accounts.data.accounts
+
+    me = auth.get_current_login_user(user)
+    assert me.data.username == "auth_admin"
+
+
+def test_auth_endpoints_admin_actions(db, factory) -> None:
+    factory.ensure_default_roles()
+    stage = factory.stage(code="71")
+    process = factory.process(stage=stage, code="71-01")
+
+    req = auth.register(RegisterRequest(account="pending_x", password="Passw0rd!"), db)
+    request_id = req.data.account
+    assert request_id == "pending_x"
+
+    list_resp = auth.get_registration_requests(page=1, page_size=20, keyword=None, db=db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
+    assert list_resp.data.total >= 1
+
+    db_req = auth.get_registration_requests(page=1, page_size=20, keyword="pending_x", db=db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
+    target = db_req.data.items[0]
+
+    approved = auth.approve_registration(
+        target.id,
+        ApproveRegistrationRequest(account="pending_x", role_codes=[ROLE_OPERATOR], process_codes=[process.code]),
+        db,
+        _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]),
+    )
+    assert approved.data.approved is True
+
+    req2 = auth.register(RegisterRequest(account="pending_y", password="Passw0rd!"), db)
+    db_req2 = auth.get_registration_requests(page=1, page_size=20, keyword="pending_y", db=db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
+    target2 = db_req2.data.items[0]
+    rejected = auth.reject_registration(target2.id, db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
+    assert rejected.data.approved is False
+
+
+def test_roles_processes_users_ui_endpoints(db, factory) -> None:
+    factory.ensure_default_roles()
+    admin = factory.user(username="ep_admin", role_codes=[ROLE_SYSTEM_ADMIN])
+    stage = factory.stage(code="72", name="阶段")
+    db.commit()
+
+    roles_resp = roles.get_roles(page=1, page_size=50, keyword=None, db=db, _=admin)
+    assert roles_resp.data.total >= 1
+
+    role_id = roles_resp.data.items[0].id
+    role_detail = roles.get_role_detail(role_id, db=db, _=admin)
+    assert role_detail.data.id == role_id
+
+    proc_created = processes.create_process_api(
+        ProcessCreate(code=f"{stage.code}-01", name="P-EP", stage_id=stage.id),
+        db,
+        _=admin,
+    )
+    assert proc_created.data.code == f"{stage.code}-01"
+
+    proc_list = processes.get_processes(page=1, page_size=20, keyword=None, db=db, _=admin)
+    assert proc_list.data.total >= 1
+
+    proc_updated = processes.update_process_api(
+        proc_created.data.id,
+        ProcessUpdate(code=f"{stage.code}-02", name="P-EP2", stage_id=stage.id, is_enabled=True),
+        db,
+        _=admin,
+    )
+    assert proc_updated.data.code == f"{stage.code}-02"
+
+    user_created = users.create_user_api(
+        UserCreate(
+            username="ep_user",
+            full_name="EP User",
+            password="Passw0rd!",
+            role_codes=[ROLE_QUALITY_ADMIN],
+            process_codes=[],
+        ),
+        db,
+        _=admin,
+    )
+    assert user_created.data.username == "ep_user"
+
+    user_list = users.get_users(page=1, page_size=20, keyword=None, db=db, _=admin)
+    assert user_list.data.total >= 1
+
+    user_detail = users.get_user_detail(user_created.data.id, db=db, _=admin)
+    assert user_detail.data.id == user_created.data.id
+
+    user_updated = users.update_user_api(
+        user_created.data.id,
+        UserUpdate(full_name="EP User Updated"),
+        db,
+        _=admin,
+    )
+    assert user_updated.data.full_name == "EP User Updated"
+
+    catalog = ui.get_page_catalog(current_user=admin)
+    assert len(catalog.data.items) > 0
+
+    visibility = ui.get_my_page_visibility(db=db, current_user=admin)
+    assert "home" in visibility.data.sidebar_codes
+
+    config = ui.get_page_visibility_configuration(db=db, _=admin)
+    assert len(config.data.items) > 0
+
+
+def test_products_and_craft_endpoints(db, factory) -> None:
+    factory.ensure_default_roles()
+    admin = factory.user(username="craft_admin", role_codes=[ROLE_SYSTEM_ADMIN])
+
+    product_resp = products.create_product_api(ProductCreate(name="接口产品A"), db, current_user=admin)
+    product_id = product_resp.data.id
+
+    products_list = products.get_products(page=1, page_size=20, keyword=None, db=db, _=admin)
+    assert products_list.data.total >= 1
+
+    param_resp = products.get_product_parameters(product_id, db, _=admin)
+    assert param_resp.data.total >= 1
+
+    updated_params = products.update_parameters(
+        product_id,
+        ProductParameterUpdateRequest(
+            remark="接口更新",
+            items=[
+                ProductParameterInputItem(name=param_resp.data.items[0].name, category="基础参数", type="Text", value="接口产品A2"),
+                ProductParameterInputItem(name="新增参数", category="扩展", type="Text", value="v"),
+            ],
+        ),
+        db,
+        current_user=admin,
+    )
+    assert updated_params.data.updated_count >= 1
+
+    history = products.get_parameter_history(product_id, page=1, page_size=20, db=db, _=admin)
+    assert history.data.total >= 1
+
+    # craft stage/process/template flow
+    stage_resp = craft.create_stage_api(ProcessStageCreate(code="73", name="工段73", sort_order=1), db, _=admin)
+    process_resp = craft.create_process_api(
+        CraftProcessCreate(code="73-01", name="工序73", stage_id=stage_resp.data.id),
+        db,
+        _=admin,
+    )
+
+    master_created = craft.create_system_master_template_api(
+        SystemMasterTemplateUpsertRequest(
+            steps=[TemplateStepPayload(step_order=1, stage_id=stage_resp.data.id, process_id=process_resp.data.id)]
+        ),
+        db,
+        current_user=admin,
+    )
+    assert master_created.data.id == 1
+
+    master_get = craft.get_system_master_template_api(db=db, _=admin)
+    assert master_get.data is not None
+
+    master_updated = craft.update_system_master_template_api(
+        SystemMasterTemplateUpsertRequest(
+            steps=[TemplateStepPayload(step_order=1, stage_id=stage_resp.data.id, process_id=process_resp.data.id)]
+        ),
+        db,
+        current_user=admin,
+    )
+    assert master_updated.data.version >= 2
+
+    tpl_created = craft.create_template_api(
+        ProductProcessTemplateCreate(
+            product_id=product_id,
+            template_name="接口模板",
+            is_default=True,
+            steps=[TemplateStepPayload(step_order=1, stage_id=stage_resp.data.id, process_id=process_resp.data.id)],
+        ),
+        db,
+        current_user=admin,
+    )
+    tpl_id = tpl_created.data.template.id
+
+    tpl_detail = craft.get_template_detail_api(tpl_id, db=db, _=admin)
+    assert tpl_detail.data.template.id == tpl_id
+
+    tpl_updated = craft.update_template_api(
+        tpl_id,
+        ProductProcessTemplateUpdate(
+            template_name="接口模板2",
+            is_default=True,
+            is_enabled=True,
+            steps=[TemplateStepPayload(step_order=1, stage_id=stage_resp.data.id, process_id=process_resp.data.id)],
+            sync_orders=False,
+        ),
+        db,
+        current_user=admin,
+    )
+    assert tpl_updated.data.detail.template.template_name == "接口模板2"
+
+
+def test_production_quality_and_equipment_endpoints(db, factory) -> None:
+    factory.ensure_default_roles()
+    admin = factory.user(username="prod_admin_ep", role_codes=[ROLE_PRODUCTION_ADMIN])
+    qa_admin = factory.user(username="qa_admin_ep", role_codes=[ROLE_QUALITY_ADMIN])
+
+    stage = craft.create_stage_api(ProcessStageCreate(code="74", name="工段74", sort_order=1), db, _=admin)
+    process = craft.create_process_api(
+        CraftProcessCreate(code="74-01", name="工序74", stage_id=stage.data.id),
+        db,
+        _=admin,
+    )
+    operator = factory.user(username="prod_operator_ep", role_codes=[ROLE_OPERATOR], processes=[])
+    # operator uses process assignment by direct model relationship
+    db_process = db.get(Process, process.data.id)
+    assert db_process is not None
+    operator.processes = [db_process]
+    db.commit()
+
+    product_resp = products.create_product_api(ProductCreate(name="生产接口产品"), db, current_user=admin)
+
+    order_resp = production.create_order_api(
+        OrderCreate(
+            order_code="EP-ORD-1",
+            product_id=product_resp.data.id,
+            quantity=5,
+            process_codes=[process.data.code],
+            template_id=None,
+            process_steps=None,
+            save_as_template=False,
+            new_template_name=None,
+            new_template_set_default=False,
+        ),
+        db,
+        current_user=admin,
+    )
+    order_id = order_resp.data.id
+
+    order_list = production.get_orders(page=1, page_size=20, keyword=None, status_text=None, db=db, _=admin)
+    assert order_list.data.total >= 1
+
+    detail = production.get_order_detail_api(order_id, db=db, _=admin)
+    assert detail.data.order.id == order_id
+    process_id = detail.data.processes[0].id
+
+    my_orders = production.get_my_orders_api(keyword=None, page=1, page_size=20, db=db, current_user=operator)
+    assert my_orders.data.total >= 1
+
+    first = production.submit_first_article_api(
+        order_id,
+        FirstArticleRequest(order_process_id=process_id, verification_code=settings.production_default_verification_code, remark=None),
+        db,
+        current_user=operator,
+    )
+    assert first.data.status == ORDER_STATUS_IN_PROGRESS
+
+    end = production.end_production_api(
+        order_id,
+        EndProductionRequest(order_process_id=process_id, quantity=5, remark="done"),
+        db,
+        current_user=operator,
+    )
+    assert end.data.status in {"in_progress", "completed"}
+
+    overview = production.get_overview_stats_api(db=db, _=qa_admin)
+    assert overview.data.total_orders >= 1
+
+    pstats = production.get_process_stats_api(db=db, _=qa_admin)
+    assert len(pstats.data.items) >= 1
+
+    ostats = production.get_operator_stats_api(db=db, _=qa_admin)
+    assert len(ostats.data.items) >= 1
+
+    q_list = quality.get_first_articles_api(query_date=date.today(), keyword=None, page=1, page_size=20, db=db, _=qa_admin)
+    assert q_list.data.total >= 1
+
+    q_overview = quality.get_quality_overview_api(start_date=None, end_date=None, db=db, _=qa_admin)
+    assert q_overview.data.first_article_total >= 1
+
+    q_process = quality.get_quality_process_stats_api(start_date=None, end_date=None, db=db, _=qa_admin)
+    assert len(q_process.data.items) >= 1
+
+    q_operator = quality.get_quality_operator_stats_api(start_date=None, end_date=None, db=db, _=qa_admin)
+    assert len(q_operator.data.items) >= 1
+
+    # equipment flow
+    eq_resp = equipment.create_equipment_ledger(
+        EquipmentLedgerUpsertRequest(code="EQ-EP-1", name="设备EP", model="M", location="L", owner_name="O"),
+        db,
+        _=admin,
+    )
+    item_resp = equipment.create_maintenance_item_api(
+        MaintenanceItemUpsertRequest(name="保养EP", default_cycle_days=7),
+        db,
+        _=admin,
+    )
+    plan_resp = equipment.create_maintenance_plan_api(
+        MaintenancePlanUpsertRequest(
+            equipment_id=eq_resp.data.id,
+            item_id=item_resp.data.id,
+            cycle_days=None,
+            execution_process_code=stage.data.code,
+            estimated_duration_minutes=30,
+            start_date=date.today() - timedelta(days=7),
+            next_due_date=date.today(),
+            default_executor_user_id=None,
+        ),
+        db,
+        _=admin,
+    )
+    plan_id = plan_resp.data.id
+
+    gen_resp = equipment.generate_plan_work_order_api(plan_id, db, _=admin)
+    assert gen_resp.data.work_order_id > 0
+
+    work_list = equipment.get_maintenance_executions(page=1, page_size=20, status_filter=None, keyword=None, mine=False, db=db, current_user=admin)
+    assert work_list.data.total >= 1
+    work_id = work_list.data.items[0].id
+
+    started = equipment.start_maintenance_execution(work_id, db=db, current_user=admin)
+    assert started.data.status == "in_progress"
+
+    completed = equipment.complete_maintenance_execution(
+        work_id,
+        SimpleNamespace(result_summary="瀹屾垚", result_remark="ok", attachment_link=None),
+        db,
+        current_user=admin,
+    )
+    assert completed.data.status == "done"
+
+    records = equipment.get_maintenance_records(
+        page=1,
+        page_size=20,
+        keyword=None,
+        executor_id=None,
+        start_date=date.today() - timedelta(days=1),
+        end_date=date.today() + timedelta(days=1),
+        db=db,
+        current_user=admin,
+    )
+    assert records.data.total >= 1
