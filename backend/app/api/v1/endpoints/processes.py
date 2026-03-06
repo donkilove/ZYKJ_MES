@@ -69,7 +69,10 @@ def create_process_api(
     existing = get_process_by_code(db, payload.code)
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Process code already exists")
-    process = create_process(db, payload)
+    try:
+        process = create_process(db, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     return success_response(to_process_item(process), message="created")
 
 
@@ -83,5 +86,8 @@ def update_process_api(
     process = get_process_by_id(db, process_id)
     if not process:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Process not found")
-    updated = update_process(db, process, payload)
+    try:
+        updated = update_process(db, process, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     return success_response(to_process_item(updated))

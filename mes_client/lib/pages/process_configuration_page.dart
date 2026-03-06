@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -7,7 +6,6 @@ import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/production_service.dart';
-import '../widgets/adaptive_table_container.dart';
 
 class _TemplateStepDraft {
   _TemplateStepDraft({required this.stageId, required this.processId});
@@ -23,10 +21,12 @@ class ProcessConfigurationPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    required this.currentRoleCodes,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final List<String> currentRoleCodes;
 
   @override
   State<ProcessConfigurationPage> createState() =>
@@ -34,6 +34,9 @@ class ProcessConfigurationPage extends StatefulWidget {
 }
 
 class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
+  static const String _roleSystemAdmin = 'system_admin';
+  static const String _roleProductionAdmin = 'production_admin';
+
   late final CraftService _craftService;
   late final ProductionService _productionService;
 
@@ -45,6 +48,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   List<CraftStageItem> _stages = const [];
   List<CraftProcessItem> _processes = const [];
   List<CraftTemplateItem> _templates = const [];
+  CraftSystemMasterTemplateItem? _systemMasterTemplate;
   final Map<int, CraftTemplateDetail> _detailCache = {};
 
   @override
@@ -57,6 +61,11 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
 
   bool _isUnauthorized(Object error) {
     return error is ApiException && error.statusCode == 401;
+  }
+
+  bool get _canManageSystemMasterTemplate {
+    return widget.currentRoleCodes.contains(_roleSystemAdmin) ||
+        widget.currentRoleCodes.contains(_roleProductionAdmin);
   }
 
   String _errorMessage(Object error) {
@@ -73,9 +82,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     });
     try {
       final products = await _productionService.listProductOptions();
-      final stageResult = await _craftService.listStages(pageSize: 500, enabled: true);
-      final processResult = await _craftService.listProcesses(pageSize: 500, enabled: true);
-      final templateResult = await _craftService.listTemplates(pageSize: 500, enabled: null);
+      final stageResult = await _craftService.listStages(
+        pageSize: 500,
+        enabled: true,
+      );
+      final processResult = await _craftService.listProcesses(
+        pageSize: 500,
+        enabled: true,
+      );
+      final templateResult = await _craftService.listTemplates(
+        pageSize: 500,
+        enabled: null,
+      );
+      final systemMasterTemplate = await _craftService
+          .getSystemMasterTemplate();
       if (!mounted) {
         return;
       }
@@ -93,6 +113,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           ..sort((a, b) => a.id.compareTo(b.id));
         _templates = [...templateResult.items]
           ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        _systemMasterTemplate = systemMasterTemplate;
         if (_productFilterId != null &&
             !_products.any((item) => item.id == _productFilterId)) {
           _productFilterId = null;
@@ -122,11 +143,43 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     if (_productFilterId == null) {
       return _templates;
     }
-    return _templates.where((item) => item.productId == _productFilterId).toList();
+    return _templates
+        .where((item) => item.productId == _productFilterId)
+        .toList();
   }
 
   List<CraftProcessItem> _processesByStage(int stageId) {
     return _processes.where((item) => item.stageId == stageId).toList();
+  }
+
+  _TemplateStepDraft? _firstStepDraft() {
+    for (final stage in _stages) {
+      final processRows = _processesByStage(stage.id);
+      if (processRows.isEmpty) {
+        continue;
+      }
+      return _TemplateStepDraft(
+        stageId: stage.id,
+        processId: processRows.first.id,
+      );
+    }
+    return null;
+  }
+
+  List<CraftTemplateStepPayload> _buildPayloadSteps(
+    List<_TemplateStepDraft> steps,
+  ) {
+    final payload = <CraftTemplateStepPayload>[];
+    for (var i = 0; i < steps.length; i++) {
+      payload.add(
+        CraftTemplateStepPayload(
+          stepOrder: i + 1,
+          stageId: steps[i].stageId,
+          processId: steps[i].processId,
+        ),
+      );
+    }
+    return payload;
   }
 
   Future<CraftTemplateDetail> _getTemplateDetail(int templateId) async {
@@ -134,16 +187,18 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     if (cached != null) {
       return cached;
     }
-    final detail = await _craftService.getTemplateDetail(templateId: templateId);
+    final detail = await _craftService.getTemplateDetail(
+      templateId: templateId,
+    );
     _detailCache[templateId] = detail;
     return detail;
-  }
+  }
 
   Future<void> _showTemplateDialog({CraftTemplateItem? existing}) async {
     if (_products.isEmpty || _stages.isEmpty || _processes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先配置产品、工段和小工序')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先配置产品、工段和小工序')));
       return;
     }
 
@@ -163,16 +218,18 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     if (isEdit) {
       final detail = await _getTemplateDetail(existing.id);
       steps = detail.steps
-          .map((item) => _TemplateStepDraft(stageId: item.stageId, processId: item.processId))
+          .map(
+            (item) => _TemplateStepDraft(
+              stageId: item.stageId,
+              processId: item.processId,
+            ),
+          )
           .toList();
     }
     if (steps.isEmpty) {
-      final stage = _stages.first;
-      final processRows = _processesByStage(stage.id);
-      if (processRows.isNotEmpty) {
-        steps = [
-          _TemplateStepDraft(stageId: stage.id, processId: processRows.first.id),
-        ];
+      final firstStep = _firstStepDraft();
+      if (firstStep != null) {
+        steps = [firstStep];
       }
     }
     if (!mounted) {
@@ -185,19 +242,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             void addStep() {
-              final stage = _stages.first;
-              final processRows = _processesByStage(stage.id);
-              if (processRows.isEmpty) {
+              final firstStep = _firstStepDraft();
+              if (firstStep == null) {
                 return;
               }
               setDialogState(() {
-                steps = [
-                  ...steps,
-                  _TemplateStepDraft(
-                    stageId: stage.id,
-                    processId: processRows.first.id,
-                  ),
-                ];
+                steps = [...steps, firstStep];
               });
             }
 
@@ -284,7 +334,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                           ),
                         Row(
                           children: [
-                            const Text('步骤', style: TextStyle(fontWeight: FontWeight.w600)),
+                            const Text(
+                              '步骤',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
                             const Spacer(),
                             OutlinedButton.icon(
                               onPressed: addStep,
@@ -297,7 +350,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         ...List.generate(steps.length, (index) {
                           final step = steps[index];
                           final processRows = _processesByStage(step.stageId);
-                          if (!processRows.any((item) => item.id == step.processId) && processRows.isNotEmpty) {
+                          if (!processRows.any(
+                                (item) => item.id == step.processId,
+                              ) &&
+                              processRows.isNotEmpty) {
                             step.processId = processRows.first.id;
                           }
                           return Card(
@@ -306,7 +362,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                               padding: const EdgeInsets.all(8),
                               child: Row(
                                 children: [
-                                  SizedBox(width: 48, child: Text('#${index + 1}')),
+                                  SizedBox(
+                                    width: 48,
+                                    child: Text('#${index + 1}'),
+                                  ),
                                   Expanded(
                                     child: DropdownButtonFormField<int>(
                                       initialValue: step.stageId,
@@ -316,13 +375,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                         isDense: true,
                                       ),
                                       items: _stages
-                                          .map((item) => DropdownMenuItem(value: item.id, child: Text(item.name)))
+                                          .map(
+                                            (item) => DropdownMenuItem(
+                                              value: item.id,
+                                              child: Text(item.name),
+                                            ),
+                                          )
                                           .toList(),
                                       onChanged: (value) {
                                         if (value == null) {
                                           return;
                                         }
-                                        final nextRows = _processesByStage(value);
+                                        final nextRows = _processesByStage(
+                                          value,
+                                        );
                                         setDialogState(() {
                                           step.stageId = value;
                                           if (nextRows.isNotEmpty) {
@@ -337,7 +403,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                     child: DropdownButtonFormField<int>(
                                       initialValue: processRows.isEmpty
                                           ? null
-                                          : (processRows.any((item) => item.id == step.processId)
+                                          : (processRows.any(
+                                                  (item) =>
+                                                      item.id == step.processId,
+                                                )
                                                 ? step.processId
                                                 : processRows.first.id),
                                       decoration: const InputDecoration(
@@ -346,7 +415,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                         isDense: true,
                                       ),
                                       items: processRows
-                                          .map((item) => DropdownMenuItem(value: item.id, child: Text(item.name)))
+                                          .map(
+                                            (item) => DropdownMenuItem(
+                                              value: item.id,
+                                              child: Text(item.name),
+                                            ),
+                                          )
                                           .toList(),
                                       onChanged: processRows.isEmpty
                                           ? null
@@ -366,7 +440,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                         ? null
                                         : () {
                                             setDialogState(() {
-                                              steps = [...steps]..removeAt(index);
+                                              steps = [...steps]
+                                                ..removeAt(index);
                                             });
                                           },
                                     icon: const Icon(Icons.delete_outline),
@@ -391,16 +466,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                     if (!formKey.currentState!.validate()) {
                       return;
                     }
-                    final payloadSteps = <CraftTemplateStepPayload>[];
-                    for (var i = 0; i < steps.length; i++) {
-                      payloadSteps.add(
-                        CraftTemplateStepPayload(
-                          stepOrder: i + 1,
-                          stageId: steps[i].stageId,
-                          processId: steps[i].processId,
-                        ),
-                      );
-                    }
+                    final payloadSteps = _buildPayloadSteps(steps);
                     try {
                       if (isEdit) {
                         await _craftService.updateTemplate(
@@ -453,6 +519,242 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
   }
 
+  Future<void> _showSystemMasterTemplateDialog() async {
+    if (_stages.isEmpty || _processes.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先配置工段和小工序')));
+      return;
+    }
+
+    final isEdit = _systemMasterTemplate != null;
+    List<_TemplateStepDraft> steps = isEdit
+        ? _systemMasterTemplate!.steps
+              .map(
+                (item) => _TemplateStepDraft(
+                  stageId: item.stageId,
+                  processId: item.processId,
+                ),
+              )
+              .toList()
+        : <_TemplateStepDraft>[];
+
+    if (steps.isEmpty) {
+      final firstStep = _firstStepDraft();
+      if (firstStep != null) {
+        steps = [firstStep];
+      }
+    }
+
+    if (steps.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前工段下暂无可用小工序，请先配置小工序')));
+      return;
+    }
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            void addStep() {
+              final firstStep = _firstStepDraft();
+              if (firstStep == null) {
+                return;
+              }
+              setDialogState(() {
+                steps = [...steps, firstStep];
+              });
+            }
+
+            return AlertDialog(
+              title: Text(isEdit ? '编辑系统母版' : '新建系统母版'),
+              content: SizedBox(
+                width: 860,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isEdit)
+                        Text(
+                          '当前版本：v${_systemMasterTemplate!.version}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      if (isEdit) const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Text(
+                            '步骤',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const Spacer(),
+                          OutlinedButton.icon(
+                            onPressed: addStep,
+                            icon: const Icon(Icons.add),
+                            label: const Text('新增步骤'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...List.generate(steps.length, (index) {
+                        final step = steps[index];
+                        final processRows = _processesByStage(step.stageId);
+                        if (!processRows.any(
+                              (item) => item.id == step.processId,
+                            ) &&
+                            processRows.isNotEmpty) {
+                          step.processId = processRows.first.id;
+                        }
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 48,
+                                  child: Text('#${index + 1}'),
+                                ),
+                                Expanded(
+                                  child: DropdownButtonFormField<int>(
+                                    initialValue: step.stageId,
+                                    decoration: const InputDecoration(
+                                      labelText: '工段',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    items: _stages
+                                        .map(
+                                          (item) => DropdownMenuItem(
+                                            value: item.id,
+                                            child: Text(item.name),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      final nextRows = _processesByStage(value);
+                                      setDialogState(() {
+                                        step.stageId = value;
+                                        if (nextRows.isNotEmpty) {
+                                          step.processId = nextRows.first.id;
+                                        }
+                                      });
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: DropdownButtonFormField<int>(
+                                    initialValue: processRows.isEmpty
+                                        ? null
+                                        : (processRows.any(
+                                                (item) =>
+                                                    item.id == step.processId,
+                                              )
+                                              ? step.processId
+                                              : processRows.first.id),
+                                    decoration: const InputDecoration(
+                                      labelText: '小工序',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    items: processRows
+                                        .map(
+                                          (item) => DropdownMenuItem(
+                                            value: item.id,
+                                            child: Text(item.name),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: processRows.isEmpty
+                                        ? null
+                                        : (value) {
+                                            if (value == null) {
+                                              return;
+                                            }
+                                            setDialogState(() {
+                                              step.processId = value;
+                                            });
+                                          },
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: '删除',
+                                  onPressed: steps.length <= 1
+                                      ? null
+                                      : () {
+                                          setDialogState(() {
+                                            steps = [...steps]..removeAt(index);
+                                          });
+                                        },
+                                  icon: const Icon(Icons.delete_outline),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final payloadSteps = _buildPayloadSteps(steps);
+                    if (payloadSteps.isEmpty) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(content: Text('请至少配置一个步骤')),
+                      );
+                      return;
+                    }
+                    try {
+                      if (isEdit) {
+                        await _craftService.updateSystemMasterTemplate(
+                          steps: payloadSteps,
+                        );
+                      } else {
+                        await _craftService.createSystemMasterTemplate(
+                          steps: payloadSteps,
+                        );
+                      }
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop(true);
+                      }
+                    } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
+                      if (dialogContext.mounted) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(content: Text(_errorMessage(error))),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      await _loadData();
+    }
+  }
+
   Future<void> _deleteTemplate(CraftTemplateItem item) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -484,12 +786,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_errorMessage(error))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     }
-  }
+  }
 
   Future<void> _handleTemplateAction(
     _TemplateAction action,
@@ -524,6 +826,19 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 ),
               ),
               const Spacer(),
+              if (_canManageSystemMasterTemplate)
+                FilledButton.icon(
+                  onPressed: _loading
+                      ? null
+                      : () => _showSystemMasterTemplateDialog(),
+                  icon: Icon(
+                    _systemMasterTemplate == null ? Icons.add_box : Icons.edit,
+                  ),
+                  label: Text(
+                    _systemMasterTemplate == null ? '新建系统母版' : '编辑系统母版',
+                  ),
+                ),
+              if (_canManageSystemMasterTemplate) const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: _loading ? null : () => _showTemplateDialog(),
                 icon: const Icon(Icons.add),
@@ -536,6 +851,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 icon: const Icon(Icons.refresh),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border.all(color: theme.dividerColor),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              _systemMasterTemplate == null
+                  ? '系统母版状态：未配置（新建产品将跳过自动绑定默认模板）'
+                  : '系统母版状态：已配置（版本 v${_systemMasterTemplate!.version}，步骤 ${_systemMasterTemplate!.steps.length}）',
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -599,18 +928,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Expanded(
-                              flex: 2,
-                              child: Text(item.productName),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(item.templateName),
-                            ),
-                            Expanded(
-                              flex: 1,
-                              child: Text('${item.version}'),
-                            ),
+                            Expanded(flex: 2, child: Text(item.productName)),
+                            Expanded(flex: 2, child: Text(item.templateName)),
+                            Expanded(flex: 1, child: Text('${item.version}')),
                             Expanded(
                               flex: 1,
                               child: Text(item.isDefault ? '是' : '否'),
@@ -667,4 +987,4 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       ),
     );
   }
-}
+}

@@ -4,9 +4,9 @@ import '../models/app_session.dart';
 import '../models/craft_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
-import '../widgets/adaptive_table_container.dart';
 
 enum _StageAction { edit, toggle, delete }
+
 enum _ProcessAction { edit, toggle, delete }
 
 class ProcessManagementPage extends StatefulWidget {
@@ -55,8 +55,14 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       _message = '';
     });
     try {
-      final stageResult = await _service.listStages(pageSize: 500, enabled: null);
-      final processResult = await _service.listProcesses(pageSize: 500, enabled: null);
+      final stageResult = await _service.listStages(
+        pageSize: 500,
+        enabled: null,
+      );
+      final processResult = await _service.listProcesses(
+        pageSize: 500,
+        enabled: null,
+      );
       if (!mounted) {
         return;
       }
@@ -69,11 +75,23 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             }
             return a.id.compareTo(b.id);
           });
+        final stageSortOrderById = <int, int>{
+          for (final item in _stages) item.id: item.sortOrder,
+        };
+        const missingStageSortOrder = 1 << 30;
         _processes = [...processResult.items]
           ..sort((a, b) {
-            final stageCompare = (a.stageName ?? '').compareTo(b.stageName ?? '');
-            if (stageCompare != 0) {
-              return stageCompare;
+            final stageOrderCompare =
+                (stageSortOrderById[a.stageId] ?? missingStageSortOrder)
+                    .compareTo(
+                      stageSortOrderById[b.stageId] ?? missingStageSortOrder,
+                    );
+            if (stageOrderCompare != 0) {
+              return stageOrderCompare;
+            }
+            final codeCompare = a.code.compareTo(b.code);
+            if (codeCompare != 0) {
+              return codeCompare;
             }
             return a.id.compareTo(b.id);
           });
@@ -241,63 +259,79 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     }
   }
 
+  CraftStageItem _stageById(int stageId) {
+    return _stages.firstWhere((item) => item.id == stageId);
+  }
+
+  String _extractSerialFromCode({
+    required String code,
+    required String stageCode,
+  }) {
+    final prefix = '$stageCode-';
+    if (!code.startsWith(prefix)) {
+      return '';
+    }
+    final serial = code.substring(prefix.length);
+    if (serial.length != 2 || int.tryParse(serial) == null || serial == '00') {
+      return '';
+    }
+    return serial;
+  }
+
   Future<void> _showProcessDialog({CraftProcessItem? existing}) async {
     if (_stages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先新增工段')), 
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先新增工段')));
       return;
     }
 
     final isEdit = existing != null;
-    final codeController = TextEditingController(text: existing?.code ?? '');
     final nameController = TextEditingController(text: existing?.name ?? '');
     var selectedStageId = existing?.stageId ?? _stages.first.id;
     bool isEnabled = existing?.isEnabled ?? true;
     final formKey = GlobalKey<FormState>();
+
+    String initialSerial = '';
+    bool legacyCodeInvalid = false;
+    if (existing != null && existing.stageId != null) {
+      CraftStageItem? stage;
+      for (final item in _stages) {
+        if (item.id == existing.stageId) {
+          stage = item;
+          break;
+        }
+      }
+      if (stage != null) {
+        initialSerial = _extractSerialFromCode(
+          code: existing.code,
+          stageCode: stage.code,
+        );
+        legacyCodeInvalid = initialSerial.isEmpty;
+      }
+    }
+    final serialController = TextEditingController(text: initialSerial);
 
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final stage = _stageById(selectedStageId);
+            final serialText = serialController.text.trim();
+            final fullCodePreview = serialText.isEmpty
+                ? '${stage.code}-__'
+                : '${stage.code}-$serialText';
             return AlertDialog(
-              title: Text(isEdit ? '编辑小工序' : '新增小工序'),
+              title: Text(isEdit ? '编辑工序' : '新增工序'),
               content: SizedBox(
                 width: 420,
                 child: Form(
                   key: formKey,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TextFormField(
-                        controller: codeController,
-                        decoration: const InputDecoration(
-                          labelText: '小工序编码',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入小工序编码';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: '小工序名称',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入小工序名称';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
                       DropdownButtonFormField<int>(
                         initialValue: selectedStageId,
                         decoration: const InputDecoration(
@@ -318,7 +352,64 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                           }
                           setDialogState(() {
                             selectedStageId = value;
+                            serialController.clear();
+                            legacyCodeInvalid = false;
                           });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: serialController,
+                        decoration: const InputDecoration(
+                          labelText: '工序编码序号（两位）',
+                          hintText: '例如 01',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) {
+                          setDialogState(() {});
+                        },
+                        validator: (value) {
+                          final serial = (value ?? '').trim();
+                          if (serial.isEmpty) {
+                            return '请输入两位序号';
+                          }
+                          if (serial.length != 2 ||
+                              int.tryParse(serial) == null) {
+                            return '序号必须是两位数字';
+                          }
+                          if (serial == '00') {
+                            return '序号必须是 01-99';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '完整编码预览：$fullCodePreview',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      if (legacyCodeInvalid) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          '历史编码不符合新规则，请按“工段编码-两位序号”重新填写。',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(color: Colors.orange),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: '小工序名称',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入小工序名称';
+                          }
+                          return null;
                         },
                       ),
                       if (isEdit) ...[
@@ -348,18 +439,20 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                     if (!formKey.currentState!.validate()) {
                       return;
                     }
+                    final serial = serialController.text.trim();
+                    final code = '${stage.code}-$serial';
                     try {
                       if (isEdit) {
                         await _service.updateProcess(
                           processId: existing.id,
-                          code: codeController.text.trim(),
+                          code: code,
                           name: nameController.text.trim(),
                           stageId: selectedStageId,
                           isEnabled: isEnabled,
                         );
                       } else {
                         await _service.createProcess(
-                          code: codeController.text.trim(),
+                          code: code,
                           name: nameController.text.trim(),
                           stageId: selectedStageId,
                         );
@@ -388,15 +481,18 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       },
     );
 
-    codeController.dispose();
     nameController.dispose();
+    serialController.dispose();
 
     if (saved == true) {
       await _loadData();
     }
   }
 
-  Future<void> _handleStageAction(_StageAction action, CraftStageItem item) async {
+  Future<void> _handleStageAction(
+    _StageAction action,
+    CraftStageItem item,
+  ) async {
     switch (action) {
       case _StageAction.edit:
         await _showStageDialog(existing: item);
@@ -417,9 +513,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             return;
           }
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(_errorMessage(error))),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
           }
         }
         return;
@@ -453,9 +549,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             return;
           }
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(_errorMessage(error))),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
           }
         }
         return;
@@ -486,9 +582,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             return;
           }
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(_errorMessage(error))),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
           }
         }
         return;
@@ -522,9 +618,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             return;
           }
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(_errorMessage(error))),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
           }
         }
         return;
@@ -558,7 +654,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
               FilledButton.icon(
                 onPressed: _loading ? null : () => _showProcessDialog(),
                 icon: const Icon(Icons.add),
-                label: const Text('新增小工序'),
+                label: const Text('新增工序'),
               ),
               const SizedBox(width: 8),
               IconButton(
@@ -606,10 +702,11 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                           itemBuilder: (context, index) {
                                             final item = _stages[index];
                                             return Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                vertical: 8,
-                                                horizontal: 12,
-                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 8,
+                                                    horizontal: 12,
+                                                  ),
                                               child: Row(
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.center,
@@ -624,58 +721,72 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                   ),
                                                   Expanded(
                                                     flex: 1,
-                                                    child:
-                                                        Text('${item.sortOrder}'),
+                                                    child: Text(
+                                                      '${item.sortOrder}',
+                                                    ),
                                                   ),
                                                   Expanded(
                                                     flex: 1,
                                                     child: Text(
-                                                        item.isEnabled ? '启用' : '停用'),
+                                                      item.isEnabled
+                                                          ? '启用'
+                                                          : '停用',
+                                                    ),
                                                   ),
                                                   Container(
                                                     alignment: Alignment.center,
                                                     padding:
                                                         const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 2,
-                                                    ),
+                                                          horizontal: 8,
+                                                          vertical: 2,
+                                                        ),
                                                     decoration: BoxDecoration(
                                                       color: theme
-                                                          .colorScheme.primary,
+                                                          .colorScheme
+                                                          .primary,
                                                       borderRadius:
                                                           BorderRadius.circular(
-                                                              20),
+                                                            20,
+                                                          ),
                                                     ),
-                                                    child:
-                                                        PopupMenuButton<_StageAction>(
-                                                      color: theme.colorScheme
+                                                    child: PopupMenuButton<_StageAction>(
+                                                      color: theme
+                                                          .colorScheme
                                                           .primaryContainer,
                                                       onSelected: (action) {
                                                         _handleStageAction(
-                                                            action, item);
+                                                          action,
+                                                          item,
+                                                        );
                                                       },
-                                                      itemBuilder:
-                                                          (context) => const [
-                                                        PopupMenuItem(
-                                                          value: _StageAction
-                                                              .edit,
-                                                          child: Text('编辑'),
-                                                        ),
-                                                        PopupMenuItem(
-                                                          value: _StageAction
-                                                              .toggle,
-                                                          child: Text('启用/停用'),
-                                                        ),
-                                                        PopupMenuItem(
-                                                          value: _StageAction
-                                                              .delete,
-                                                          child: Text('删除'),
-                                                        ),
-                                                      ],
+                                                      itemBuilder: (context) =>
+                                                          const [
+                                                            PopupMenuItem(
+                                                              value:
+                                                                  _StageAction
+                                                                      .edit,
+                                                              child: Text('编辑'),
+                                                            ),
+                                                            PopupMenuItem(
+                                                              value:
+                                                                  _StageAction
+                                                                      .toggle,
+                                                              child: Text(
+                                                                '启用/停用',
+                                                              ),
+                                                            ),
+                                                            PopupMenuItem(
+                                                              value:
+                                                                  _StageAction
+                                                                      .delete,
+                                                              child: Text('删除'),
+                                                            ),
+                                                          ],
                                                       child: Text(
                                                         '操作',
                                                         style: TextStyle(
-                                                          color: theme.colorScheme
+                                                          color: theme
+                                                              .colorScheme
                                                               .onPrimary,
                                                           fontSize: 12,
                                                         ),
@@ -702,7 +813,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '小工序列表',
+                                  '工序列表',
                                   style: theme.textTheme.titleMedium,
                                 ),
                                 const SizedBox(height: 8),
@@ -716,10 +827,11 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                           itemBuilder: (context, index) {
                                             final item = _processes[index];
                                             return Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                vertical: 8,
-                                                horizontal: 12,
-                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 8,
+                                                    horizontal: 12,
+                                                  ),
                                               child: Row(
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.center,
@@ -727,7 +839,8 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                   Expanded(
                                                     flex: 2,
                                                     child: Text(
-                                                        item.stageName ?? '-'),
+                                                      item.stageName ?? '-',
+                                                    ),
                                                   ),
                                                   Expanded(
                                                     flex: 1,
@@ -740,52 +853,65 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                   Expanded(
                                                     flex: 1,
                                                     child: Text(
-                                                        item.isEnabled ? '启用' : '停用'),
+                                                      item.isEnabled
+                                                          ? '启用'
+                                                          : '停用',
+                                                    ),
                                                   ),
                                                   Container(
                                                     alignment: Alignment.center,
                                                     padding:
                                                         const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 2,
-                                                    ),
+                                                          horizontal: 8,
+                                                          vertical: 2,
+                                                        ),
                                                     decoration: BoxDecoration(
                                                       color: theme
-                                                          .colorScheme.primary,
+                                                          .colorScheme
+                                                          .primary,
                                                       borderRadius:
                                                           BorderRadius.circular(
-                                                              20),
+                                                            20,
+                                                          ),
                                                     ),
-                                                    child:
-                                                        PopupMenuButton<_ProcessAction>(
-                                                      color: theme.colorScheme
+                                                    child: PopupMenuButton<_ProcessAction>(
+                                                      color: theme
+                                                          .colorScheme
                                                           .primaryContainer,
                                                       onSelected: (action) {
                                                         _handleProcessAction(
-                                                            action, item);
+                                                          action,
+                                                          item,
+                                                        );
                                                       },
-                                                      itemBuilder:
-                                                          (context) => const [
-                                                        PopupMenuItem(
-                                                          value: _ProcessAction
-                                                              .edit,
-                                                          child: Text('编辑'),
-                                                        ),
-                                                        PopupMenuItem(
-                                                          value: _ProcessAction
-                                                              .toggle,
-                                                          child: Text('启用/停用'),
-                                                        ),
-                                                        PopupMenuItem(
-                                                          value: _ProcessAction
-                                                              .delete,
-                                                          child: Text('删除'),
-                                                        ),
-                                                      ],
+                                                      itemBuilder: (context) =>
+                                                          const [
+                                                            PopupMenuItem(
+                                                              value:
+                                                                  _ProcessAction
+                                                                      .edit,
+                                                              child: Text('编辑'),
+                                                            ),
+                                                            PopupMenuItem(
+                                                              value:
+                                                                  _ProcessAction
+                                                                      .toggle,
+                                                              child: Text(
+                                                                '启用/停用',
+                                                              ),
+                                                            ),
+                                                            PopupMenuItem(
+                                                              value:
+                                                                  _ProcessAction
+                                                                      .delete,
+                                                              child: Text('删除'),
+                                                            ),
+                                                          ],
                                                       child: Text(
                                                         '操作',
                                                         style: TextStyle(
-                                                          color: theme.colorScheme
+                                                          color: theme
+                                                              .colorScheme
                                                               .onPrimary,
                                                           fontSize: 12,
                                                         ),
@@ -810,4 +936,4 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       ),
     );
   }
-}
+}

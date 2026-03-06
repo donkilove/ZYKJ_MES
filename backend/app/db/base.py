@@ -22,6 +22,8 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.product_process_template_step import ProductProcessTemplateStep
+from app.models.craft_system_master_template import CraftSystemMasterTemplate
+from app.models.craft_system_master_template_step import CraftSystemMasterTemplateStep
 
 __all__ = [
     "Base",
@@ -31,6 +33,8 @@ __all__ = [
     "ProcessStage",
     "ProductProcessTemplate",
     "ProductProcessTemplateStep",
+    "CraftSystemMasterTemplate",
+    "CraftSystemMasterTemplateStep",
     "RegistrationRequest",
     "PageVisibility",
     "Equipment",

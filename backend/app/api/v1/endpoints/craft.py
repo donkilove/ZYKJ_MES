@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import require_role_codes
 from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.db.session import get_db
+from app.models.craft_system_master_template import CraftSystemMasterTemplate
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.models.product_process_template import ProductProcessTemplate
@@ -28,6 +29,9 @@ from app.schemas.craft import (
     ProductProcessTemplateListResult,
     ProductProcessTemplateUpdate,
     ProductProcessTemplateUpdateResult,
+    SystemMasterTemplateItem,
+    SystemMasterTemplateStepItem,
+    SystemMasterTemplateUpsertRequest,
     TemplateStepItem,
     TemplateSyncOrderConflict,
     TemplateSyncResult,
@@ -35,17 +39,20 @@ from app.schemas.craft import (
 from app.services.craft_service import (
     TemplateSyncConflictError,
     create_process,
+    create_system_master_template,
     create_stage,
     create_template,
     delete_process,
     delete_stage,
     delete_template,
+    get_system_master_template,
     get_stage_by_id,
     get_template_by_id,
     list_craft_processes,
     list_stages,
     list_templates,
     update_process,
+    update_system_master_template,
     update_stage,
     update_template,
 )
@@ -108,6 +115,35 @@ def _to_template_detail(row: ProductProcessTemplate) -> ProductProcessTemplateDe
         template=_to_template_item(row),
         steps=[
             TemplateStepItem(
+                id=step.id,
+                step_order=step.step_order,
+                stage_id=step.stage_id,
+                stage_code=step.stage_code,
+                stage_name=step.stage_name,
+                process_id=step.process_id,
+                process_code=step.process_code,
+                process_name=step.process_name,
+                created_at=step.created_at,
+                updated_at=step.updated_at,
+            )
+            for step in steps
+        ],
+    )
+
+
+def _to_system_master_template_item(row: CraftSystemMasterTemplate) -> SystemMasterTemplateItem:
+    steps = sorted(row.steps, key=lambda item: (item.step_order, item.id))
+    return SystemMasterTemplateItem(
+        id=row.id,
+        version=row.version,
+        created_by_user_id=row.created_by_user_id,
+        created_by_username=row.created_by.username if row.created_by else None,
+        updated_by_user_id=row.updated_by_user_id,
+        updated_by_username=row.updated_by.username if row.updated_by else None,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        steps=[
+            SystemMasterTemplateStepItem(
                 id=step.id,
                 step_order=step.step_order,
                 stage_id=step.stage_id,
@@ -279,6 +315,53 @@ def delete_process_api(
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     return success_response({"deleted": True}, message="deleted")
+
+
+@router.get("/system-master-template", response_model=ApiResponse[SystemMasterTemplateItem | None])
+def get_system_master_template_api(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+) -> ApiResponse[SystemMasterTemplateItem | None]:
+    row = get_system_master_template(db)
+    if row is None:
+        return success_response(None)
+    return success_response(_to_system_master_template_item(row))
+
+
+@router.post("/system-master-template", response_model=ApiResponse[SystemMasterTemplateItem], status_code=status.HTTP_201_CREATED)
+def create_system_master_template_api(
+    payload: SystemMasterTemplateUpsertRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+) -> ApiResponse[SystemMasterTemplateItem]:
+    try:
+        row = create_system_master_template(
+            db,
+            steps=[item.model_dump() for item in payload.steps],
+            operator=current_user,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(_to_system_master_template_item(row), message="created")
+
+
+@router.put("/system-master-template", response_model=ApiResponse[SystemMasterTemplateItem])
+def update_system_master_template_api(
+    payload: SystemMasterTemplateUpsertRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+) -> ApiResponse[SystemMasterTemplateItem]:
+    try:
+        row = update_system_master_template(
+            db,
+            steps=[item.model_dump() for item in payload.steps],
+            operator=current_user,
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(_to_system_master_template_item(row), message="updated")
 
 
 @router.get("/templates", response_model=ApiResponse[ProductProcessTemplateListResult])

@@ -257,6 +257,65 @@ class CraftService {
     );
   }
 
+  Future<CraftSystemMasterTemplateItem?> getSystemMasterTemplate() async {
+    final uri = Uri.parse('$_basePath/system-master-template');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'];
+    if (data is Map<String, dynamic>) {
+      return CraftSystemMasterTemplateItem.fromJson(data);
+    }
+    return null;
+  }
+
+  Future<CraftSystemMasterTemplateItem> createSystemMasterTemplate({
+    required List<CraftTemplateStepPayload> steps,
+  }) async {
+    final uri = Uri.parse('$_basePath/system-master-template');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'steps': steps.map((item) => item.toJson()).toList()}),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftSystemMasterTemplateItem.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  Future<CraftSystemMasterTemplateItem> updateSystemMasterTemplate({
+    required List<CraftTemplateStepPayload> steps,
+  }) async {
+    final uri = Uri.parse('$_basePath/system-master-template');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'steps': steps.map((item) => item.toJson()).toList()}),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftSystemMasterTemplateItem.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
   Future<CraftTemplateDetail> getTemplateDetail({
     required int templateId,
   }) async {
@@ -347,7 +406,11 @@ class CraftService {
     if (response.body.isEmpty) {
       return {};
     }
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    try {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      return {'detail': response.body};
+    }
   }
 
   String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {

@@ -19,11 +19,13 @@ class CraftPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.visibleTabCodes,
+    required this.currentRoleCodes,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
+  final List<String> currentRoleCodes;
 
   @override
   State<CraftPage> createState() => _CraftPageState();
@@ -125,6 +127,7 @@ class _CraftPageState extends State<CraftPage>
         return ProcessConfigurationPage(
           session: widget.session,
           onLogout: widget.onLogout,
+          currentRoleCodes: widget.currentRoleCodes,
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));
@@ -157,4 +160,4 @@ class _CraftPageState extends State<CraftPage>
       ],
     );
   }
-}
+}

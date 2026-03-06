@@ -12,6 +12,8 @@ from app.core.production_constants import (
     PROCESS_STATUS_COMPLETED,
     PROCESS_STATUS_PENDING,
 )
+from app.models.craft_system_master_template import CraftSystemMasterTemplate
+from app.models.craft_system_master_template_step import CraftSystemMasterTemplateStep
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.models.product import Product
@@ -21,7 +23,21 @@ from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
 from app.models.user import User
+from app.services.process_code_rule import (
+    ensure_process_code_unique,
+    get_stage_for_process_write,
+    validate_process_code_matches_stage,
+)
 from app.services.production_order_service import ensure_sub_orders_visible_quantity
+
+
+SYSTEM_MASTER_TEMPLATE_SINGLETON_ID = 1
+
+
+@dataclass(slots=True)
+class SystemMasterTemplateResolveResult:
+    template: CraftSystemMasterTemplate | None
+    skip_reason: str | None
 
 
 @dataclass(slots=True)
@@ -192,15 +208,10 @@ def create_process(
     name: str,
     stage_id: int,
 ) -> Process:
-    normalized_code = _normalize_text(code, field_name="Process code")
+    stage = get_stage_for_process_write(db, stage_id=stage_id, require_enabled=True)
+    normalized_code = validate_process_code_matches_stage(code=code, stage=stage)
     normalized_name = _normalize_text(name, field_name="Process name")
-    if db.execute(select(Process).where(Process.code == normalized_code)).scalars().first():
-        raise ValueError("Process code already exists")
-    stage = _get_stage_by_id(db, stage_id)
-    if not stage:
-        raise ValueError("Stage not found")
-    if not stage.is_enabled:
-        raise ValueError("Stage is disabled")
+    ensure_process_code_unique(db, code=normalized_code)
 
     row = Process(
         code=normalized_code,
@@ -223,16 +234,12 @@ def update_process(
     is_enabled: bool,
     code: str | None = None,
 ) -> Process:
-    if code is not None:
-        normalized_code = _normalize_text(code, field_name="Process code")
-        if normalized_code != row.code:
-            existing = db.execute(select(Process).where(Process.code == normalized_code)).scalars().first()
-            if existing:
-                raise ValueError("Process code already exists")
-            row.code = normalized_code
-    stage = _get_stage_by_id(db, stage_id)
-    if not stage:
-        raise ValueError("Stage not found")
+    stage = get_stage_for_process_write(db, stage_id=stage_id)
+    candidate_code = code if code is not None else row.code
+    normalized_code = validate_process_code_matches_stage(code=candidate_code, stage=stage)
+    if normalized_code != row.code:
+        ensure_process_code_unique(db, code=normalized_code, exclude_process_id=row.id)
+    row.code = normalized_code
     row.name = _normalize_text(name, field_name="Process name")
     row.stage_id = stage.id
     row.is_enabled = is_enabled
@@ -395,6 +402,120 @@ def get_template_by_id(db: Session, template_id: int) -> ProductProcessTemplate 
         .scalars()
         .first()
     )
+
+
+def get_system_master_template(db: Session) -> CraftSystemMasterTemplate | None:
+    return (
+        db.execute(
+            select(CraftSystemMasterTemplate)
+            .where(CraftSystemMasterTemplate.id == SYSTEM_MASTER_TEMPLATE_SINGLETON_ID)
+            .options(
+                selectinload(CraftSystemMasterTemplate.created_by),
+                selectinload(CraftSystemMasterTemplate.updated_by),
+                selectinload(CraftSystemMasterTemplate.steps),
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
+def _replace_system_master_template_steps(
+    db: Session,
+    *,
+    template: CraftSystemMasterTemplate,
+    steps: list[tuple[int, ProcessStage, Process]],
+) -> None:
+    template.steps = []
+    db.flush()
+    for step_order, stage, process in steps:
+        template.steps.append(
+            CraftSystemMasterTemplateStep(
+                step_order=step_order,
+                stage_id=stage.id,
+                stage_code=stage.code,
+                stage_name=stage.name,
+                process_id=process.id,
+                process_code=process.code,
+                process_name=process.name,
+            )
+        )
+    db.flush()
+
+
+def create_system_master_template(
+    db: Session,
+    *,
+    steps: list[dict[str, int]],
+    operator: User,
+) -> CraftSystemMasterTemplate:
+    existing = get_system_master_template(db)
+    if existing is not None:
+        raise ValueError("System master template already exists")
+
+    step_payload = _build_template_steps_payload(steps)
+    step_processes = _load_template_step_process_map(db, steps=step_payload)
+
+    row = CraftSystemMasterTemplate(
+        id=SYSTEM_MASTER_TEMPLATE_SINGLETON_ID,
+        version=1,
+        created_by_user_id=operator.id,
+        updated_by_user_id=operator.id,
+    )
+    db.add(row)
+    db.flush()
+    _replace_system_master_template_steps(db, template=row, steps=step_processes)
+    db.commit()
+    return get_system_master_template(db) or row
+
+
+def update_system_master_template(
+    db: Session,
+    *,
+    steps: list[dict[str, int]],
+    operator: User,
+) -> CraftSystemMasterTemplate:
+    row = get_system_master_template(db)
+    if row is None:
+        raise LookupError("System master template not found")
+
+    step_payload = _build_template_steps_payload(steps)
+    step_processes = _load_template_step_process_map(db, steps=step_payload)
+
+    row.version += 1
+    row.updated_by_user_id = operator.id
+    _replace_system_master_template_steps(db, template=row, steps=step_processes)
+    db.commit()
+    return get_system_master_template(db) or row
+
+
+def resolve_system_master_template(db: Session) -> SystemMasterTemplateResolveResult:
+    template = get_system_master_template(db)
+    if template is None:
+        return SystemMasterTemplateResolveResult(
+            template=None,
+            skip_reason="No system master template configured",
+        )
+
+    steps = sorted(template.steps, key=lambda item: (item.step_order, item.id))
+    if not steps:
+        return SystemMasterTemplateResolveResult(
+            template=None,
+            skip_reason="Configured system master template has no steps",
+        )
+
+    try:
+        _load_template_step_process_map(
+            db,
+            steps=[(step.step_order, step.stage_id, step.process_id) for step in steps],
+        )
+    except ValueError as error:
+        return SystemMasterTemplateResolveResult(
+            template=None,
+            skip_reason=f"Configured system master template invalid: {error}",
+        )
+
+    return SystemMasterTemplateResolveResult(template=template, skip_reason=None)
 
 
 def create_template(
@@ -741,4 +862,3 @@ def resolve_user_stage_codes(db: Session, *, process_codes: list[str]) -> set[st
         .all()
     )
     return {row for row in rows if row}
-

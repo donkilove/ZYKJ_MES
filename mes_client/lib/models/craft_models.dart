@@ -200,6 +200,93 @@ class CraftTemplateListResult {
   final List<CraftTemplateItem> items;
 }
 
+class CraftSystemMasterTemplateStepItem {
+  CraftSystemMasterTemplateStepItem({
+    required this.id,
+    required this.stepOrder,
+    required this.stageId,
+    required this.stageCode,
+    required this.stageName,
+    required this.processId,
+    required this.processCode,
+    required this.processName,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final int id;
+  final int stepOrder;
+  final int stageId;
+  final String stageCode;
+  final String stageName;
+  final int processId;
+  final String processCode;
+  final String processName;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory CraftSystemMasterTemplateStepItem.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return CraftSystemMasterTemplateStepItem(
+      id: (json['id'] as int?) ?? 0,
+      stepOrder: (json['step_order'] as int?) ?? 0,
+      stageId: (json['stage_id'] as int?) ?? 0,
+      stageCode: (json['stage_code'] as String?) ?? '',
+      stageName: (json['stage_name'] as String?) ?? '',
+      processId: (json['process_id'] as int?) ?? 0,
+      processCode: (json['process_code'] as String?) ?? '',
+      processName: (json['process_name'] as String?) ?? '',
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+  }
+}
+
+class CraftSystemMasterTemplateItem {
+  CraftSystemMasterTemplateItem({
+    required this.id,
+    required this.version,
+    required this.createdByUserId,
+    required this.createdByUsername,
+    required this.updatedByUserId,
+    required this.updatedByUsername,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.steps,
+  });
+
+  final int id;
+  final int version;
+  final int? createdByUserId;
+  final String? createdByUsername;
+  final int? updatedByUserId;
+  final String? updatedByUsername;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final List<CraftSystemMasterTemplateStepItem> steps;
+
+  factory CraftSystemMasterTemplateItem.fromJson(Map<String, dynamic> json) {
+    return CraftSystemMasterTemplateItem(
+      id: (json['id'] as int?) ?? 0,
+      version: (json['version'] as int?) ?? 0,
+      createdByUserId: json['created_by_user_id'] as int?,
+      createdByUsername: json['created_by_username'] as String?,
+      updatedByUserId: json['updated_by_user_id'] as int?,
+      updatedByUsername: json['updated_by_username'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+      steps: (json['steps'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => CraftSystemMasterTemplateStepItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
 class CraftTemplateDetail {
   CraftTemplateDetail({required this.template, required this.steps});
 
@@ -213,9 +300,8 @@ class CraftTemplateDetail {
       ),
       steps: (json['steps'] as List<dynamic>? ?? const [])
           .map(
-            (entry) => CraftTemplateStepItem.fromJson(
-              entry as Map<String, dynamic>,
-            ),
+            (entry) =>
+                CraftTemplateStepItem.fromJson(entry as Map<String, dynamic>),
           )
           .toList(),
     );

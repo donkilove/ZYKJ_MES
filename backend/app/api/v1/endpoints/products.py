@@ -92,7 +92,7 @@ def get_products(
 def create_product_api(
     payload: ProductCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
 ) -> ApiResponse[ProductItem]:
     normalized_name = payload.name.strip()
     existing = get_product_by_name(db, normalized_name)
@@ -100,7 +100,7 @@ def create_product_api(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Product name already exists")
 
     try:
-        product = create_product(db, normalized_name)
+        product = create_product(db, normalized_name, operator=current_user)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 

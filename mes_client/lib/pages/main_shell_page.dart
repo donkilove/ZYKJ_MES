@@ -512,6 +512,8 @@ class _MainShellPageState extends State<MainShellPage>
           onLogout: widget.onLogout,
 
           visibleTabCodes: _visibleCraftTabCodes(),
+
+          currentRoleCodes: _currentUser!.roleCodes,
         );
 
       default:

@@ -137,6 +137,43 @@ class ProductProcessTemplateListResult(BaseModel):
     items: list[ProductProcessTemplateItem]
 
 
+class SystemMasterTemplateUpsertRequest(BaseModel):
+    steps: list[TemplateStepPayload] = Field(default_factory=list, min_length=1)
+
+    @field_validator("steps")
+    @classmethod
+    def validate_steps(cls, value: list[TemplateStepPayload]) -> list[TemplateStepPayload]:
+        step_orders = [item.step_order for item in value]
+        if len(step_orders) != len(set(step_orders)):
+            raise ValueError("step_order cannot be duplicated")
+        return value
+
+
+class SystemMasterTemplateStepItem(BaseModel):
+    id: int
+    step_order: int
+    stage_id: int
+    stage_code: str
+    stage_name: str
+    process_id: int
+    process_code: str
+    process_name: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SystemMasterTemplateItem(BaseModel):
+    id: int
+    version: int
+    created_by_user_id: int | None = None
+    created_by_username: str | None = None
+    updated_by_user_id: int | None = None
+    updated_by_username: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    steps: list[SystemMasterTemplateStepItem]
+
+
 class TemplateSyncOrderConflict(BaseModel):
     order_id: int
     order_code: str

@@ -4,6 +4,11 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.schemas.process import ProcessCreate, ProcessUpdate
+from app.services.process_code_rule import (
+    ensure_process_code_unique,
+    get_stage_for_process_write,
+    validate_process_code_matches_stage,
+)
 
 
 def list_processes(db: Session, page: int, page_size: int, keyword: str | None) -> tuple[int, list[Process]]:
@@ -58,7 +63,12 @@ def _default_stage_id(db: Session) -> int | None:
 
 def create_process(db: Session, payload: ProcessCreate) -> Process:
     stage_id = payload.stage_id if payload.stage_id is not None else _default_stage_id(db)
-    process = Process(code=payload.code, name=payload.name, stage_id=stage_id, is_enabled=True)
+    if stage_id is None:
+        raise ValueError("Stage not found")
+    stage = get_stage_for_process_write(db, stage_id=stage_id)
+    normalized_code = validate_process_code_matches_stage(code=payload.code, stage=stage)
+    ensure_process_code_unique(db, code=normalized_code)
+    process = Process(code=normalized_code, name=payload.name, stage_id=stage.id, is_enabled=True)
     db.add(process)
     db.commit()
     db.refresh(process)
@@ -66,9 +76,16 @@ def create_process(db: Session, payload: ProcessCreate) -> Process:
 
 
 def update_process(db: Session, process: Process, payload: ProcessUpdate) -> Process:
+    next_stage_id = payload.stage_id if payload.stage_id is not None else process.stage_id
+    if next_stage_id is None:
+        raise ValueError("Stage not found")
+    stage = get_stage_for_process_write(db, stage_id=next_stage_id)
+    normalized_code = validate_process_code_matches_stage(code=payload.code, stage=stage)
+    if normalized_code != process.code:
+        ensure_process_code_unique(db, code=normalized_code, exclude_process_id=process.id)
+    process.code = normalized_code
     process.name = payload.name
-    if payload.stage_id is not None:
-        process.stage_id = payload.stage_id
+    process.stage_id = stage.id
     if payload.is_enabled is not None:
         process.is_enabled = payload.is_enabled
     db.commit()

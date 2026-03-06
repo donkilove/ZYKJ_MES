@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import logging
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -17,7 +18,13 @@ from app.core.product_parameter_template import (
 from app.models.product import Product
 from app.models.product_parameter import ProductParameter
 from app.models.product_parameter_history import ProductParameterHistory
+from app.models.product_process_template import ProductProcessTemplate
+from app.models.product_process_template_step import ProductProcessTemplateStep
 from app.models.user import User
+from app.services.craft_service import resolve_system_master_template
+
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_product_name(name: str) -> str:
@@ -100,7 +107,93 @@ def list_products(
     return total, products, history_map
 
 
-def create_product(db: Session, name: str) -> Product:
+def _clone_default_craft_template_for_new_product(
+    db: Session,
+    *,
+    product: Product,
+    operator: User,
+) -> None:
+    existing_enabled_template_id = (
+        db.execute(
+            select(ProductProcessTemplate.id).where(
+                ProductProcessTemplate.product_id == product.id,
+                ProductProcessTemplate.is_enabled.is_(True),
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if existing_enabled_template_id is not None:
+        logger.warning(
+            "Skip auto bind default process template: product_id=%s already has enabled template_id=%s",
+            product.id,
+            existing_enabled_template_id,
+        )
+        return
+
+    source_result = resolve_system_master_template(db)
+    if source_result.template is None:
+        if source_result.skip_reason:
+            logger.info(
+                "Skip auto bind default process template: product_id=%s reason=%s",
+                product.id,
+                source_result.skip_reason,
+            )
+        return
+
+    source_template = source_result.template
+    source_steps = sorted(source_template.steps, key=lambda item: (item.step_order, item.id))
+    if not source_steps:
+        logger.warning(
+            "Skip auto bind default process template: product_id=%s system_master_template_id=%s has no steps",
+            product.id,
+            source_template.id,
+        )
+        return
+
+    row = ProductProcessTemplate(
+        product_id=product.id,
+        template_name="默认模板",
+        version=1,
+        is_default=True,
+        is_enabled=True,
+        created_by_user_id=operator.id,
+        updated_by_user_id=operator.id,
+    )
+    db.add(row)
+    db.flush()
+    for step in source_steps:
+        row.steps.append(
+            ProductProcessTemplateStep(
+                step_order=step.step_order,
+                stage_id=step.stage_id,
+                stage_code=step.stage_code,
+                stage_name=step.stage_name,
+                process_id=step.process_id,
+                process_code=step.process_code,
+                process_name=step.process_name,
+            )
+        )
+    db.flush()
+
+    enabled_rows = db.execute(
+        select(ProductProcessTemplate).where(
+            ProductProcessTemplate.product_id == product.id,
+            ProductProcessTemplate.is_enabled.is_(True),
+        )
+    ).scalars().all()
+    for item in enabled_rows:
+        item.is_default = item.id == row.id
+
+    logger.info(
+        "Auto bound default process template for product_id=%s from system_master_template_id=%s to template_id=%s",
+        product.id,
+        source_template.id,
+        row.id,
+    )
+
+
+def create_product(db: Session, name: str, *, operator: User) -> Product:
     normalized_name = _normalize_product_name(name)
     product = Product(name=normalized_name, parameter_template_initialized=True)
     db.add(product)
@@ -122,6 +215,12 @@ def create_product(db: Session, name: str) -> Product:
                 is_preset=True,
             )
         )
+
+    _clone_default_craft_template_for_new_product(
+        db,
+        product=product,
+        operator=operator,
+    )
 
     db.commit()
     db.refresh(product)

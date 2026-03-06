@@ -10,6 +10,7 @@ class ProcessCreate(BaseModel):
 
 
 class ProcessUpdate(BaseModel):
+    code: str = Field(min_length=2, max_length=64)
     name: str = Field(min_length=1, max_length=128)
     stage_id: int | None = Field(default=None, gt=0)
     is_enabled: bool | None = None
