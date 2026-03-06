@@ -808,6 +808,46 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
   }
 
+  Widget _buildHeaderLabel(
+    ThemeData theme,
+    String text, {
+    TextAlign textAlign = TextAlign.start,
+  }) {
+    return Text(
+      text,
+      textAlign: textAlign,
+      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+    );
+  }
+
+  Widget _buildTemplateHeaderRow(ThemeData theme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.65,
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(flex: 2, child: _buildHeaderLabel(theme, '产品')),
+          Expanded(flex: 2, child: _buildHeaderLabel(theme, '模板名称')),
+          Expanded(flex: 1, child: _buildHeaderLabel(theme, '版本')),
+          Expanded(flex: 1, child: _buildHeaderLabel(theme, '默认')),
+          Expanded(flex: 1, child: _buildHeaderLabel(theme, '状态')),
+          Expanded(flex: 2, child: _buildHeaderLabel(theme, '更新时间')),
+          SizedBox(
+            width: 64,
+            child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -913,75 +953,116 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : templates.isEmpty
-                ? const Center(child: Text('暂无模板数据'))
-                : ListView.separated(
-                    itemCount: templates.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final item = templates[index];
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 12,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(flex: 2, child: Text(item.productName)),
-                            Expanded(flex: 2, child: Text(item.templateName)),
-                            Expanded(flex: 1, child: Text('${item.version}')),
-                            Expanded(
-                              flex: 1,
-                              child: Text(item.isDefault ? '是' : '否'),
-                            ),
-                            Expanded(
-                              flex: 1,
-                              child: Text(item.isEnabled ? '启用' : '停用'),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(item.updatedAt.toLocal().toString()),
-                            ),
-                            Container(
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: PopupMenuButton<_TemplateAction>(
-                                color: theme.colorScheme.primaryContainer,
-                                onSelected: (action) {
-                                  _handleTemplateAction(action, item);
+                : Column(
+                    children: [
+                      _buildTemplateHeaderRow(theme),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: templates.isEmpty
+                            ? const Center(child: Text('暂无模板数据'))
+                            : ListView.separated(
+                                itemCount: templates.length,
+                                separatorBuilder: (context, index) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final item = templates[index];
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                      horizontal: 12,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(item.productName),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(item.templateName),
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: Text('${item.version}'),
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: Text(
+                                            item.isDefault ? '是' : '否',
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: Text(
+                                            item.isEnabled ? '启用' : '停用',
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            item.updatedAt.toLocal().toString(),
+                                          ),
+                                        ),
+                                        SizedBox(
+                                          width: 64,
+                                          child: Container(
+                                            alignment: Alignment.center,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: theme.colorScheme.primary,
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                            ),
+                                            child:
+                                                PopupMenuButton<
+                                                  _TemplateAction
+                                                >(
+                                                  color: theme
+                                                      .colorScheme
+                                                      .primaryContainer,
+                                                  onSelected: (action) {
+                                                    _handleTemplateAction(
+                                                      action,
+                                                      item,
+                                                    );
+                                                  },
+                                                  itemBuilder: (context) =>
+                                                      const [
+                                                        PopupMenuItem(
+                                                          value: _TemplateAction
+                                                              .edit,
+                                                          child: Text('编辑'),
+                                                        ),
+                                                        PopupMenuItem(
+                                                          value: _TemplateAction
+                                                              .delete,
+                                                          child: Text('删除'),
+                                                        ),
+                                                      ],
+                                                  child: Text(
+                                                    '操作',
+                                                    style: TextStyle(
+                                                      color: theme
+                                                          .colorScheme
+                                                          .onPrimary,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
                                 },
-                                itemBuilder: (context) => const [
-                                  PopupMenuItem(
-                                    value: _TemplateAction.edit,
-                                    child: Text('编辑'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: _TemplateAction.delete,
-                                    child: Text('删除'),
-                                  ),
-                                ],
-                                child: Text(
-                                  '操作',
-                                  style: TextStyle(
-                                    color: theme.colorScheme.onPrimary,
-                                    fontSize: 12,
-                                  ),
-                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                      ),
+                    ],
                   ),
           ),
         ],

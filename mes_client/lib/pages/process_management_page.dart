@@ -628,6 +628,70 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     }
   }
 
+  Widget _buildHeaderLabel(
+    ThemeData theme,
+    String text, {
+    TextAlign textAlign = TextAlign.start,
+  }) {
+    return Text(
+      text,
+      textAlign: textAlign,
+      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+    );
+  }
+
+  Widget _buildListHeaderRow({
+    required ThemeData theme,
+    required List<Widget> children,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.65,
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: children,
+      ),
+    );
+  }
+
+  Widget _buildStageHeaderRow(ThemeData theme) {
+    return _buildListHeaderRow(
+      theme: theme,
+      children: [
+        Expanded(flex: 1, child: _buildHeaderLabel(theme, '工段编码')),
+        Expanded(flex: 2, child: _buildHeaderLabel(theme, '工段名称')),
+        Expanded(flex: 1, child: _buildHeaderLabel(theme, '排序')),
+        Expanded(flex: 1, child: _buildHeaderLabel(theme, '状态')),
+        SizedBox(
+          width: 64,
+          child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProcessHeaderRow(ThemeData theme) {
+    return _buildListHeaderRow(
+      theme: theme,
+      children: [
+        Expanded(flex: 2, child: _buildHeaderLabel(theme, '所属工段')),
+        Expanded(flex: 1, child: _buildHeaderLabel(theme, '工序编码')),
+        Expanded(flex: 2, child: _buildHeaderLabel(theme, '工序名称')),
+        Expanded(flex: 1, child: _buildHeaderLabel(theme, '状态')),
+        SizedBox(
+          width: 64,
+          child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -679,258 +743,289 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : Row(
-                    children: [
-                      Expanded(
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '工段列表',
-                                  style: theme.textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 8),
-                                Expanded(
-                                  child: _stages.isEmpty
-                                      ? const Center(child: Text('暂无工段'))
-                                      : ListView.separated(
-                                          itemCount: _stages.length,
-                                          separatorBuilder: (context, index) =>
-                                              const Divider(height: 1),
-                                          itemBuilder: (context, index) {
-                                            final item = _stages[index];
-                                            return Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8,
-                                                    horizontal: 12,
-                                                  ),
-                                              child: Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.center,
-                                                children: [
-                                                  Expanded(
-                                                    flex: 1,
-                                                    child: Text(item.code),
-                                                  ),
-                                                  Expanded(
-                                                    flex: 2,
-                                                    child: Text(item.name),
-                                                  ),
-                                                  Expanded(
-                                                    flex: 1,
-                                                    child: Text(
-                                                      '${item.sortOrder}',
-                                                    ),
-                                                  ),
-                                                  Expanded(
-                                                    flex: 1,
-                                                    child: Text(
-                                                      item.isEnabled
-                                                          ? '启用'
-                                                          : '停用',
-                                                    ),
-                                                  ),
-                                                  Container(
-                                                    alignment: Alignment.center,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 2,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: theme
-                                                          .colorScheme
-                                                          .primary,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            20,
-                                                          ),
-                                                    ),
-                                                    child: PopupMenuButton<_StageAction>(
-                                                      color: theme
-                                                          .colorScheme
-                                                          .primaryContainer,
-                                                      onSelected: (action) {
-                                                        _handleStageAction(
-                                                          action,
-                                                          item,
-                                                        );
-                                                      },
-                                                      itemBuilder: (context) =>
-                                                          const [
-                                                            PopupMenuItem(
-                                                              value:
-                                                                  _StageAction
-                                                                      .edit,
-                                                              child: Text('编辑'),
-                                                            ),
-                                                            PopupMenuItem(
-                                                              value:
-                                                                  _StageAction
-                                                                      .toggle,
-                                                              child: Text(
-                                                                '启用/停用',
-                                                              ),
-                                                            ),
-                                                            PopupMenuItem(
-                                                              value:
-                                                                  _StageAction
-                                                                      .delete,
-                                                              child: Text('删除'),
-                                                            ),
-                                                          ],
-                                                      child: Text(
-                                                        '操作',
-                                                        style: TextStyle(
-                                                          color: theme
-                                                              .colorScheme
-                                                              .onPrimary,
-                                                          fontSize: 12,
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isNarrow = constraints.maxWidth < 960;
+                      return Flex(
+                        direction: isNarrow ? Axis.vertical : Axis.horizontal,
+                        children: [
+                          Expanded(
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '工段列表',
+                                      style: theme.textTheme.titleMedium,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _buildStageHeaderRow(theme),
+                                    const SizedBox(height: 8),
+                                    Expanded(
+                                      child: _stages.isEmpty
+                                          ? const Center(child: Text('暂无工段'))
+                                          : ListView.separated(
+                                              itemCount: _stages.length,
+                                              separatorBuilder:
+                                                  (context, index) =>
+                                                      const Divider(height: 1),
+                                              itemBuilder: (context, index) {
+                                                final item = _stages[index];
+                                                return Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 8,
+                                                        horizontal: 12,
+                                                      ),
+                                                  child: Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: Text(item.code),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 2,
+                                                        child: Text(item.name),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: Text(
+                                                          '${item.sortOrder}',
                                                         ),
                                                       ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '工序列表',
-                                  style: theme.textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 8),
-                                Expanded(
-                                  child: _processes.isEmpty
-                                      ? const Center(child: Text('暂无小工序'))
-                                      : ListView.separated(
-                                          itemCount: _processes.length,
-                                          separatorBuilder: (context, index) =>
-                                              const Divider(height: 1),
-                                          itemBuilder: (context, index) {
-                                            final item = _processes[index];
-                                            return Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8,
-                                                    horizontal: 12,
-                                                  ),
-                                              child: Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.center,
-                                                children: [
-                                                  Expanded(
-                                                    flex: 2,
-                                                    child: Text(
-                                                      item.stageName ?? '-',
-                                                    ),
-                                                  ),
-                                                  Expanded(
-                                                    flex: 1,
-                                                    child: Text(item.code),
-                                                  ),
-                                                  Expanded(
-                                                    flex: 2,
-                                                    child: Text(item.name),
-                                                  ),
-                                                  Expanded(
-                                                    flex: 1,
-                                                    child: Text(
-                                                      item.isEnabled
-                                                          ? '启用'
-                                                          : '停用',
-                                                    ),
-                                                  ),
-                                                  Container(
-                                                    alignment: Alignment.center,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 2,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: theme
-                                                          .colorScheme
-                                                          .primary,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            20,
-                                                          ),
-                                                    ),
-                                                    child: PopupMenuButton<_ProcessAction>(
-                                                      color: theme
-                                                          .colorScheme
-                                                          .primaryContainer,
-                                                      onSelected: (action) {
-                                                        _handleProcessAction(
-                                                          action,
-                                                          item,
-                                                        );
-                                                      },
-                                                      itemBuilder: (context) =>
-                                                          const [
-                                                            PopupMenuItem(
-                                                              value:
-                                                                  _ProcessAction
-                                                                      .edit,
-                                                              child: Text('编辑'),
-                                                            ),
-                                                            PopupMenuItem(
-                                                              value:
-                                                                  _ProcessAction
-                                                                      .toggle,
-                                                              child: Text(
-                                                                '启用/停用',
-                                                              ),
-                                                            ),
-                                                            PopupMenuItem(
-                                                              value:
-                                                                  _ProcessAction
-                                                                      .delete,
-                                                              child: Text('删除'),
-                                                            ),
-                                                          ],
-                                                      child: Text(
-                                                        '操作',
-                                                        style: TextStyle(
-                                                          color: theme
-                                                              .colorScheme
-                                                              .onPrimary,
-                                                          fontSize: 12,
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: Text(
+                                                          item.isEnabled
+                                                              ? '启用'
+                                                              : '停用',
                                                         ),
                                                       ),
-                                                    ),
+                                                      SizedBox(
+                                                        width: 64,
+                                                        child: Container(
+                                                          alignment:
+                                                              Alignment.center,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 2,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .primary,
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  20,
+                                                                ),
+                                                          ),
+                                                          child: PopupMenuButton<_StageAction>(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .primaryContainer,
+                                                            onSelected: (action) {
+                                                              _handleStageAction(
+                                                                action,
+                                                                item,
+                                                              );
+                                                            },
+                                                            itemBuilder: (context) => const [
+                                                              PopupMenuItem(
+                                                                value:
+                                                                    _StageAction
+                                                                        .edit,
+                                                                child: Text(
+                                                                  '编辑',
+                                                                ),
+                                                              ),
+                                                              PopupMenuItem(
+                                                                value:
+                                                                    _StageAction
+                                                                        .toggle,
+                                                                child: Text(
+                                                                  '启用/停用',
+                                                                ),
+                                                              ),
+                                                              PopupMenuItem(
+                                                                value:
+                                                                    _StageAction
+                                                                        .delete,
+                                                                child: Text(
+                                                                  '删除',
+                                                                ),
+                                                              ),
+                                                            ],
+                                                            child: Text(
+                                                              '操作',
+                                                              style: TextStyle(
+                                                                color: theme
+                                                                    .colorScheme
+                                                                    .onPrimary,
+                                                                fontSize: 12,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
-                                                ],
-                                              ),
-                                            );
-                                          },
-                                        ),
+                                                );
+                                              },
+                                            ),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    ],
+                          SizedBox(
+                            width: isNarrow ? 0 : 12,
+                            height: isNarrow ? 12 : 0,
+                          ),
+                          Expanded(
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '工序列表',
+                                      style: theme.textTheme.titleMedium,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _buildProcessHeaderRow(theme),
+                                    const SizedBox(height: 8),
+                                    Expanded(
+                                      child: _processes.isEmpty
+                                          ? const Center(child: Text('暂无小工序'))
+                                          : ListView.separated(
+                                              itemCount: _processes.length,
+                                              separatorBuilder:
+                                                  (context, index) =>
+                                                      const Divider(height: 1),
+                                              itemBuilder: (context, index) {
+                                                final item = _processes[index];
+                                                return Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 8,
+                                                        horizontal: 12,
+                                                      ),
+                                                  child: Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Expanded(
+                                                        flex: 2,
+                                                        child: Text(
+                                                          item.stageName ?? '-',
+                                                        ),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: Text(item.code),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 2,
+                                                        child: Text(item.name),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: Text(
+                                                          item.isEnabled
+                                                              ? '启用'
+                                                              : '停用',
+                                                        ),
+                                                      ),
+                                                      SizedBox(
+                                                        width: 64,
+                                                        child: Container(
+                                                          alignment:
+                                                              Alignment.center,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 2,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .primary,
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  20,
+                                                                ),
+                                                          ),
+                                                          child: PopupMenuButton<_ProcessAction>(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .primaryContainer,
+                                                            onSelected: (action) {
+                                                              _handleProcessAction(
+                                                                action,
+                                                                item,
+                                                              );
+                                                            },
+                                                            itemBuilder: (context) => const [
+                                                              PopupMenuItem(
+                                                                value:
+                                                                    _ProcessAction
+                                                                        .edit,
+                                                                child: Text(
+                                                                  '编辑',
+                                                                ),
+                                                              ),
+                                                              PopupMenuItem(
+                                                                value:
+                                                                    _ProcessAction
+                                                                        .toggle,
+                                                                child: Text(
+                                                                  '启用/停用',
+                                                                ),
+                                                              ),
+                                                              PopupMenuItem(
+                                                                value:
+                                                                    _ProcessAction
+                                                                        .delete,
+                                                                child: Text(
+                                                                  '删除',
+                                                                ),
+                                                              ),
+                                                            ],
+                                                            child: Text(
+                                                              '操作',
+                                                              style: TextStyle(
+                                                                color: theme
+                                                                    .colorScheme
+                                                                    .onPrimary,
+                                                                fontSize: 12,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
           ),
         ],
