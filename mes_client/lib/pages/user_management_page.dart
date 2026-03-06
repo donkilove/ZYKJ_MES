@@ -328,7 +328,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   Future<void> _showCreateUserDialog() async {
     final accountController = TextEditingController();
-    final passwordController = TextEditingController(text: 'User@123456');
+    final passwordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
     String? selectedRoleCode;
     int? selectedStageId;

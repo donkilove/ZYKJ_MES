@@ -181,7 +181,7 @@ def normalize_users_to_single_role(db: Session) -> int:
 
 def ensure_admin_account(
     db: Session,
-    password: str = "123456",
+    password: str,
     repair_role: bool = True,
 ) -> tuple[User, bool, bool]:
     roles, missing_role_codes = get_roles_by_codes(db, [ROLE_SYSTEM_ADMIN])
