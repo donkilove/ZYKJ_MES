@@ -63,6 +63,17 @@ def _normalize_optional_text(value: str | None) -> str:
     return value.strip()
 
 
+def _normalize_possible_mojibake(value: str) -> str:
+    """Attempt to repair text that was produced by UTF-8/GBK mojibake."""
+    try:
+        repaired = value.encode("gbk").decode("utf-8")
+    except UnicodeError:
+        return value
+    if any("\u4e00" <= char <= "\u9fff" for char in repaired):
+        return repaired
+    return value
+
+
 def _normalize_execution_process_code(db: Session, code: str) -> str:
     normalized = code.strip()
     if not normalized:
@@ -939,14 +950,8 @@ def complete_work_order(
     attachment_link: str | None,
 ) -> MaintenanceWorkOrder:
     normalized_summary = _normalize_name(result_summary, field_name="Result summary")
-    summary_alias_map = {
-        "完成": "完成",
-        "失败": "失败",
-        "瀹屾垚": "完成",
-        "澶辫触": "失败",
-    }
-    normalized_summary = summary_alias_map.get(normalized_summary)
-    if normalized_summary is None:
+    normalized_summary = _normalize_possible_mojibake(normalized_summary)
+    if normalized_summary not in {"完成", "失败"}:
         raise ValueError("Result summary must be 完成 or 失败")
 
     normalized_remark = _normalize_optional_text(result_remark)
