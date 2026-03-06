@@ -7,6 +7,7 @@ import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/locked_form_dialog.dart';
 
 enum _QueryOrderAction { detail, firstArticle, endProduction }
 
@@ -359,105 +360,105 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     final codeController = TextEditingController();
     final remarkController = TextEditingController();
     final formKey = GlobalKey<FormState>();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('提交首件'),
-          content: SizedBox(
-            width: 420,
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: codeController,
-                    decoration: const InputDecoration(
-                      labelText: '当日校验码',
-                      border: OutlineInputBorder(),
+    try {
+      final confirmed = await showLockedFormDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('提交首件'),
+            content: SizedBox(
+              width: 420,
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: codeController,
+                      decoration: const InputDecoration(
+                        labelText: '当日校验码',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return '请输入当日校验码';
+                        }
+                        return null;
+                      },
                     ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return '请输入当日校验码';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: remarkController,
-                    decoration: const InputDecoration(
-                      labelText: '备注',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: remarkController,
+                      decoration: const InputDecoration(
+                        labelText: '备注',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
                     ),
-                    maxLines: 2,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (!formKey.currentState!.validate()) {
-                  return;
-                }
-                Navigator.of(context).pop(true);
-              },
-              child: const Text('提交'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) {
-      codeController.dispose();
-      remarkController.dispose();
-      return;
-    }
-
-    setState(() {
-      _acting = true;
-    });
-    try {
-      await _service.submitFirstArticle(
-        orderId: item.orderId,
-        orderProcessId: item.currentProcessId,
-        verificationCode: codeController.text.trim(),
-        remark: remarkController.text.trim().isEmpty
-            ? null
-            : remarkController.text.trim(),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (!formKey.currentState!.validate()) {
+                    return;
+                  }
+                  Navigator.of(context).pop(true);
+                },
+                child: const Text('提交'),
+              ),
+            ],
+          );
+        },
       );
-      if (mounted) {
+
+      if (confirmed != true) {
+        return;
+      }
+
+      setState(() {
+        _acting = true;
+      });
+      try {
+        await _service.submitFirstArticle(
+          orderId: item.orderId,
+          orderProcessId: item.currentProcessId,
+          verificationCode: codeController.text.trim(),
+          remark: remarkController.text.trim().isEmpty
+              ? null
+              : remarkController.text.trim(),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('首件提交成功。')));
+        }
+        await _loadOrders();
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+          return;
+        }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('首件提交成功。')));
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      } finally {
+        if (mounted) {
+          setState(() {
+            _acting = false;
+          });
+        }
       }
-      await _loadOrders();
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
     } finally {
-      if (mounted) {
-        setState(() {
-          _acting = false;
-        });
-      }
       codeController.dispose();
       remarkController.dispose();
     }
@@ -471,113 +472,113 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     );
     final remarkController = TextEditingController();
     final formKey = GlobalKey<FormState>();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('报工'),
-          content: SizedBox(
-            width: 420,
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('最大可报工数量：${item.maxProducibleQuantity}'),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: quantityController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: '数量',
-                      border: OutlineInputBorder(),
+    try {
+      final confirmed = await showLockedFormDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('报工'),
+            content: SizedBox(
+              width: 420,
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('最大可报工数量：${item.maxProducibleQuantity}'),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: quantityController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: '数量',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        final quantity = int.tryParse(value?.trim() ?? '');
+                        if (quantity == null || quantity <= 0) {
+                          return 'Quantity must be greater than 0';
+                        }
+                        if (quantity > item.maxProducibleQuantity) {
+                          return 'Quantity exceeds max producible amount';
+                        }
+                        return null;
+                      },
                     ),
-                    validator: (value) {
-                      final quantity = int.tryParse(value?.trim() ?? '');
-                      if (quantity == null || quantity <= 0) {
-                        return 'Quantity must be greater than 0';
-                      }
-                      if (quantity > item.maxProducibleQuantity) {
-                        return 'Quantity exceeds max producible amount';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: remarkController,
-                    decoration: const InputDecoration(
-                      labelText: '备注',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: remarkController,
+                      decoration: const InputDecoration(
+                        labelText: '备注',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
                     ),
-                    maxLines: 2,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (!formKey.currentState!.validate()) {
-                  return;
-                }
-                Navigator.of(context).pop(true);
-              },
-              child: const Text('提交'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) {
-      quantityController.dispose();
-      remarkController.dispose();
-      return;
-    }
-
-    setState(() {
-      _acting = true;
-    });
-    try {
-      await _service.endProduction(
-        orderId: item.orderId,
-        orderProcessId: item.currentProcessId,
-        quantity: int.parse(quantityController.text.trim()),
-        remark: remarkController.text.trim().isEmpty
-            ? null
-            : remarkController.text.trim(),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (!formKey.currentState!.validate()) {
+                    return;
+                  }
+                  Navigator.of(context).pop(true);
+                },
+                child: const Text('提交'),
+              ),
+            ],
+          );
+        },
       );
-      if (mounted) {
+
+      if (confirmed != true) {
+        return;
+      }
+
+      setState(() {
+        _acting = true;
+      });
+      try {
+        await _service.endProduction(
+          orderId: item.orderId,
+          orderProcessId: item.currentProcessId,
+          quantity: int.parse(quantityController.text.trim()),
+          remark: remarkController.text.trim().isEmpty
+              ? null
+              : remarkController.text.trim(),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('报工成功。')));
+        }
+        await _loadOrders();
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+          return;
+        }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('报工成功。')));
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      } finally {
+        if (mounted) {
+          setState(() {
+            _acting = false;
+          });
+        }
       }
-      await _loadOrders();
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
     } finally {
-      if (mounted) {
-        setState(() {
-          _acting = false;
-        });
-      }
       quantityController.dispose();
       remarkController.dispose();
     }

@@ -5,6 +5,7 @@ import '../models/product_models.dart';
 import '../services/api_exception.dart';
 import '../services/product_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/locked_form_dialog.dart';
 
 class ProductManagementPage extends StatefulWidget {
   const ProductManagementPage({
@@ -112,7 +113,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     final nameController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
-    final created = await showDialog<bool>(
+    final created = await showLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -189,7 +190,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     final passwordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(

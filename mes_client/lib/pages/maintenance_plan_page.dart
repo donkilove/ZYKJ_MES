@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/craft_models.dart';
@@ -7,6 +7,7 @@ import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/equipment_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/locked_form_dialog.dart';
 
 class MaintenancePlanPage extends StatefulWidget {
   const MaintenancePlanPage({
@@ -148,10 +149,12 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
       return;
     }
     final pageContext = context;
-    if (_equipmentOptions.isEmpty || _itemOptions.isEmpty || _stageOptions.isEmpty) {
-      ScaffoldMessenger.of(pageContext).showSnackBar(
-        const SnackBar(content: Text('请先维护设备台账、保养项目和工艺工段')),
-      );
+    if (_equipmentOptions.isEmpty ||
+        _itemOptions.isEmpty ||
+        _stageOptions.isEmpty) {
+      ScaffoldMessenger.of(
+        pageContext,
+      ).showSnackBar(const SnackBar(content: Text('请先维护设备台账、保养项目和工艺工段')));
       return;
     }
 
@@ -159,17 +162,19 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     final formKey = GlobalKey<FormState>();
     var selectedEquipmentId = plan?.equipmentId ?? _equipmentOptions.first.id;
     var selectedItemId = plan?.itemId ?? _itemOptions.first.id;
-    var selectedExecutionProcessCode = plan?.executionProcessCode ?? _stageOptions.first.code;
-    if (!_stageOptions.any((stage) => stage.code == selectedExecutionProcessCode)) {
+    var selectedExecutionProcessCode =
+        plan?.executionProcessCode ?? _stageOptions.first.code;
+    if (!_stageOptions.any(
+      (stage) => stage.code == selectedExecutionProcessCode,
+    )) {
       selectedExecutionProcessCode = _stageOptions.first.code;
     }
     final startDate = plan?.startDate ?? DateTime.now();
     final nextDueDate = plan?.nextDueDate;
     final estimatedDurationMinutes = plan?.estimatedDurationMinutes;
 
-    final saved = await showDialog<bool>(
+    final saved = await showLockedFormDialog<bool>(
       context: pageContext,
-      barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (innerContext, setInnerState) {
@@ -317,7 +322,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                       }
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('保存保养计划失败: ${_errorMessage(error)}')),
+                          SnackBar(
+                            content: Text('保存保养计划失败: ${_errorMessage(error)}'),
+                          ),
                         );
                       }
                     }
@@ -401,7 +408,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('删除保养计划'),
-        content: Text('确认删除计划“${plan.equipmentName} / ${plan.itemName}”吗？此操作不可恢复。'),
+        content: Text(
+          '确认删除计划“${plan.equipmentName} / ${plan.itemName}”吗？此操作不可恢复。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -420,9 +429,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     try {
       await _equipmentService.deleteMaintenancePlan(planId: plan.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保养计划已删除')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('保养计划已删除')));
       }
       await _loadAll();
     } catch (error) {
@@ -458,7 +467,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               const Spacer(),
               IconButton(
                 tooltip: '刷新',
-                onPressed: _loading ? null : () => _loadAll(reloadOptions: true),
+                onPressed: _loading
+                    ? null
+                    : () => _loadAll(reloadOptions: true),
                 icon: const Icon(Icons.refresh),
               ),
             ],
@@ -576,7 +587,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                               DataCell(Text('${plan.cycleDays}')),
                               DataCell(Text(_formatDate(plan.startDate))),
                               DataCell(Text(_formatDate(plan.nextDueDate))),
-                              DataCell(Text(plan.defaultExecutorUsername ?? '-')),
+                              DataCell(
+                                Text(plan.defaultExecutorUsername ?? '-'),
+                              ),
                               DataCell(Text(plan.isEnabled ? '启用' : '停用')),
                               DataCell(
                                 Row(
@@ -584,7 +597,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                                   children: [
                                     TextButton(
                                       onPressed: widget.canWrite
-                                          ? () => _showPlanEditDialog(plan: plan)
+                                          ? () =>
+                                                _showPlanEditDialog(plan: plan)
                                           : null,
                                       child: const Text('编辑'),
                                     ),
@@ -604,7 +618,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                                     ),
                                     const SizedBox(width: 8),
                                     TextButton(
-                                      onPressed: (widget.canWrite && plan.isEnabled)
+                                      onPressed:
+                                          (widget.canWrite && plan.isEnabled)
                                           ? () => _generateWorkOrder(plan)
                                           : null,
                                       child: const Text('生成执行单'),

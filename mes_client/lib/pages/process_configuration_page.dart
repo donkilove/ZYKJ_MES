@@ -6,6 +6,7 @@ import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/production_service.dart';
+import '../widgets/locked_form_dialog.dart';
 
 class _TemplateStepDraft {
   _TemplateStepDraft({required this.stageId, required this.processId});
@@ -236,7 +237,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
 
-    final saved = await showDialog<bool>(
+    final saved = await showLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
@@ -553,7 +554,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
 
-    final saved = await showDialog<bool>(
+    final saved = await showLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(

@@ -5,6 +5,7 @@ import '../models/equipment_models.dart';
 import '../services/api_exception.dart';
 import '../services/equipment_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/locked_form_dialog.dart';
 
 class MaintenanceExecutionPage extends StatefulWidget {
   const MaintenanceExecutionPage({
@@ -19,7 +20,8 @@ class MaintenanceExecutionPage extends StatefulWidget {
   final bool canExecute;
 
   @override
-  State<MaintenanceExecutionPage> createState() => _MaintenanceExecutionPageState();
+  State<MaintenanceExecutionPage> createState() =>
+      _MaintenanceExecutionPageState();
 }
 
 class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
@@ -124,9 +126,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     try {
       await _equipmentService.startExecution(workOrderId: item.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已开始执行')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已开始执行')));
       }
       await _loadItems();
     } catch (error) {
@@ -137,9 +139,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         widget.onLogout();
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('开始执行失败：${_errorMessage(error)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('开始执行失败：${_errorMessage(error)}')));
     }
   }
 
@@ -152,9 +154,8 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     final formKey = GlobalKey<FormState>();
     String selectedSummary = '完成';
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showLockedFormDialog<bool>(
       context: pageContext,
-      barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogBuildContext, setDialogState) {
@@ -250,12 +251,14 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
       await _equipmentService.completeExecution(
         workOrderId: item.id,
         resultSummary: selectedSummary,
-        resultRemark: selectedSummary == '失败' ? remarkController.text.trim() : null,
+        resultRemark: selectedSummary == '失败'
+            ? remarkController.text.trim()
+            : null,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已完成执行')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已完成执行')));
       }
       await _loadItems();
     } catch (error) {
@@ -266,9 +269,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         widget.onLogout();
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('完成执行失败：${_errorMessage(error)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('完成执行失败：${_errorMessage(error)}')));
     } finally {
       remarkController.dispose();
     }
@@ -349,9 +352,12 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                           DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
-                          final canStart = widget.canExecute &&
-                              (item.status == 'pending' || item.status == 'overdue');
-                          final canComplete = widget.canExecute && item.status == 'in_progress';
+                          final canStart =
+                              widget.canExecute &&
+                              (item.status == 'pending' ||
+                                  item.status == 'overdue');
+                          final canComplete =
+                              widget.canExecute && item.status == 'in_progress';
                           return DataRow(
                             cells: [
                               DataCell(Text(item.equipmentName)),
@@ -364,12 +370,16 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     TextButton(
-                                      onPressed: canStart ? () => _startExecution(item) : null,
+                                      onPressed: canStart
+                                          ? () => _startExecution(item)
+                                          : null,
                                       child: const Text('开始执行'),
                                     ),
                                     const SizedBox(width: 8),
                                     TextButton(
-                                      onPressed: canComplete ? () => _completeExecution(item) : null,
+                                      onPressed: canComplete
+                                          ? () => _completeExecution(item)
+                                          : null,
                                       child: const Text('完成执行'),
                                     ),
                                   ],

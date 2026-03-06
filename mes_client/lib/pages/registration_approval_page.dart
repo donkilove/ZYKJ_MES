@@ -6,6 +6,7 @@ import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/user_service.dart';
+import '../widgets/locked_form_dialog.dart';
 
 class RegistrationApprovalPage extends StatefulWidget {
   const RegistrationApprovalPage({
@@ -236,7 +237,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     int? selectedStageId;
     Set<String> selectedProcessCodes = <String>{};
 
-    final approved = await showDialog<bool>(
+    final approved = await showLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -323,7 +324,8 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                     child: Text('暂无可分配工段'),
                                   )
                                 : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: _stages.map((stage) {
                                       return RadioListTile<int>(
                                         dense: true,
@@ -336,7 +338,10 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                           if (value != null) {
                                             setDialogState(() {
                                               selectedStageId = value;
-                                              selectedProcessCodes = _getProcessCodesByStage(value).toSet();
+                                              selectedProcessCodes =
+                                                  _getProcessCodesByStage(
+                                                    value,
+                                                  ).toSet();
                                             });
                                           }
                                         },
@@ -520,7 +525,8 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                 children: [
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           item.account,
@@ -533,7 +539,9 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                         Text(
                                           '提交时间：${_formatTime(item.createdAt)}',
                                           style: TextStyle(
-                                            color: theme.colorScheme.onSurfaceVariant,
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
                                             fontSize: 14,
                                           ),
                                         ),
@@ -548,19 +556,24 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                         borderRadius: BorderRadius.circular(20),
                                         child: Container(
                                           alignment: Alignment.center,
-                                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                          ),
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 8,
                                             vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
                                             color: theme.colorScheme.primary,
-                                            borderRadius: BorderRadius.circular(20),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
                                           ),
                                           child: Text(
                                             '通过',
                                             style: TextStyle(
-                                              color: theme.colorScheme.onPrimary,
+                                              color:
+                                                  theme.colorScheme.onPrimary,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -571,14 +584,18 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                         borderRadius: BorderRadius.circular(20),
                                         child: Container(
                                           alignment: Alignment.center,
-                                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                          ),
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 8,
                                             vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
                                             color: theme.colorScheme.error,
-                                            borderRadius: BorderRadius.circular(20),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
                                           ),
                                           child: Text(
                                             '驳回',

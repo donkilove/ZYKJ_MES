@@ -5,6 +5,7 @@ import '../models/equipment_models.dart';
 import '../services/api_exception.dart';
 import '../services/equipment_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/locked_form_dialog.dart';
 
 class MaintenanceItemPage extends StatefulWidget {
   const MaintenanceItemPage({
@@ -132,15 +133,16 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
       );
     }
 
-    final saved = await showDialog<bool>(
+    final saved = await showLockedFormDialog<bool>(
       context: pageContext,
-      barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (innerContext, setInnerState) {
             final ruleOptions = <_ExecutionRuleOption>[
               ..._executionRules,
-              if (_executionRules.every((rule) => rule.cycleDays != selectedRule.cycleDays))
+              if (_executionRules.every(
+                (rule) => rule.cycleDays != selectedRule.cycleDays,
+              ))
                 selectedRule,
             ];
             return AlertDialog(
@@ -230,7 +232,9 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                       }
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('保存保养项目失败: ${_errorMessage(error)}')),
+                          SnackBar(
+                            content: Text('保存保养项目失败: ${_errorMessage(error)}'),
+                          ),
                         );
                       }
                     }
@@ -283,9 +287,9 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
         enabled: nextEnabled,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保养项目已$action')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保养项目已$action')));
       }
       await _loadItems();
     } catch (error) {
@@ -329,9 +333,9 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     try {
       await _equipmentService.deleteMaintenanceItem(itemId: item.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保养项目已删除')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('保养项目已删除')));
       }
       await _loadItems();
     } catch (error) {
@@ -477,10 +481,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
 }
 
 class _ExecutionRuleOption {
-  const _ExecutionRuleOption({
-    required this.label,
-    required this.cycleDays,
-  });
+  const _ExecutionRuleOption({required this.label, required this.cycleDays});
 
   final String label;
   final int cycleDays;

@@ -1,10 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/equipment_models.dart';
 import '../services/api_exception.dart';
 import '../services/equipment_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/locked_form_dialog.dart';
 
 class EquipmentLedgerPage extends StatefulWidget {
   const EquipmentLedgerPage({
@@ -128,7 +129,8 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     final modelController = TextEditingController(text: item?.model ?? '');
     final formKey = GlobalKey<FormState>();
     var selectedLocation = (item?.location ?? '').trim();
-    if (selectedLocation.isNotEmpty && !_locationOptions.contains(selectedLocation)) {
+    if (selectedLocation.isNotEmpty &&
+        !_locationOptions.contains(selectedLocation)) {
       selectedLocation = '';
     }
     var selectedOwner = (item?.ownerName ?? '').trim();
@@ -137,9 +139,8 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
       selectedOwner = '';
     }
 
-    final saved = await showDialog<bool>(
+    final saved = await showLockedFormDialog<bool>(
       context: pageContext,
-      barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (innerContext, setInnerState) {
@@ -190,7 +191,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          initialValue: selectedLocation.isEmpty ? null : selectedLocation,
+                          initialValue: selectedLocation.isEmpty
+                              ? null
+                              : selectedLocation,
                           items: _locationOptions
                               .map(
                                 (entry) => DropdownMenuItem<String>(
@@ -217,7 +220,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          initialValue: selectedOwner.isEmpty ? null : selectedOwner,
+                          initialValue: selectedOwner.isEmpty
+                              ? null
+                              : selectedOwner,
                           items: _ownerOptions
                               .map(
                                 (entry) => DropdownMenuItem<String>(
@@ -286,7 +291,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                       }
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('保存设备失败: ${_errorMessage(error)}')),
+                          SnackBar(
+                            content: Text('保存设备失败: ${_errorMessage(error)}'),
+                          ),
                         );
                       }
                     }
@@ -341,9 +348,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
         enabled: nextEnabled,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('设备已$action')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('设备已$action')));
       }
       await _loadItems();
     } catch (error) {
@@ -387,9 +394,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     try {
       await _equipmentService.deleteEquipment(equipmentId: item.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('设备已删除')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('设备已删除')));
       }
       await _loadItems();
     } catch (error) {
@@ -499,9 +506,19 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                             cells: [
                               DataCell(Text(item.code)),
                               DataCell(Text(item.name)),
-                              DataCell(Text(item.model.isEmpty ? '-' : item.model)),
-                              DataCell(Text(item.location.isEmpty ? '-' : item.location)),
-                              DataCell(Text(item.ownerName.isEmpty ? '-' : item.ownerName)),
+                              DataCell(
+                                Text(item.model.isEmpty ? '-' : item.model),
+                              ),
+                              DataCell(
+                                Text(
+                                  item.location.isEmpty ? '-' : item.location,
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  item.ownerName.isEmpty ? '-' : item.ownerName,
+                                ),
+                              ),
                               DataCell(Text(item.isEnabled ? '启用' : '停用')),
                               DataCell(Text(_formatDateTime(item.createdAt))),
                               DataCell(Text(_formatDateTime(item.updatedAt))),

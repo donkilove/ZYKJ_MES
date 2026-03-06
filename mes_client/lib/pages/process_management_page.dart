@@ -4,6 +4,7 @@ import '../models/app_session.dart';
 import '../models/craft_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
+import '../widgets/locked_form_dialog.dart';
 
 enum _StageAction { edit, toggle, delete }
 
@@ -126,7 +127,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     bool isEnabled = existing?.isEnabled ?? true;
     final formKey = GlobalKey<FormState>();
 
-    final saved = await showDialog<bool>(
+    final saved = await showLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
@@ -312,7 +313,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     }
     final serialController = TextEditingController(text: initialSerial);
 
-    final saved = await showDialog<bool>(
+    final saved = await showLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(

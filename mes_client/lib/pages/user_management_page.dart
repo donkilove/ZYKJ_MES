@@ -8,6 +8,7 @@ import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/user_service.dart';
+import '../widgets/locked_form_dialog.dart';
 
 enum _UserAction { edit, delete }
 
@@ -334,7 +335,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
     int? selectedStageId;
     Set<String> selectedProcessCodes = <String>{};
 
-    final created = await showDialog<bool>(
+    final created = await showLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -434,7 +435,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                     child: Text('暂无可分配工段'),
                                   )
                                 : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: _stages.map((stage) {
                                       return RadioListTile<int>(
                                         dense: true,
@@ -447,7 +449,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                           if (value != null) {
                                             setDialogState(() {
                                               selectedStageId = value;
-                                              selectedProcessCodes = _getProcessCodesByStage(value).toSet();
+                                              selectedProcessCodes =
+                                                  _getProcessCodesByStage(
+                                                    value,
+                                                  ).toSet();
                                             });
                                           }
                                         },
@@ -543,7 +548,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
         ? user.processCodes.toSet()
         : <String>{};
 
-    final updated = await showDialog<bool>(
+    final updated = await showLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -652,7 +657,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                     child: Text('暂无可分配工段'),
                                   )
                                 : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: _stages.map((stage) {
                                       return RadioListTile<int>(
                                         dense: true,
@@ -665,7 +671,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                           if (value != null) {
                                             setDialogState(() {
                                               selectedStageId = value;
-                                              selectedProcessCodes = _getProcessCodesByStage(value).toSet();
+                                              selectedProcessCodes =
+                                                  _getProcessCodesByStage(
+                                                    value,
+                                                  ).toSet();
                                             });
                                           }
                                         },
@@ -905,7 +914,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                 children: [
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           user.username,
@@ -919,7 +929,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                           '角色：${user.roleNames.isEmpty ? '-' : user.roleNames.join('、')}'
                                           '\n工段：${user.stageNames.isEmpty ? '-' : user.stageNames.join('、')}',
                                           style: TextStyle(
-                                            color: theme.colorScheme.onSurfaceVariant,
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
                                             fontSize: 14,
                                           ),
                                         ),
@@ -928,7 +940,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                   ),
                                   Container(
                                     alignment: Alignment.center,
-                                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 8,
                                       vertical: 2,
@@ -955,7 +969,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                   ),
                                   Container(
                                     alignment: Alignment.center,
-                                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 8,
                                       vertical: 2,

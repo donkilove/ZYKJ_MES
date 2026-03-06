@@ -7,6 +7,7 @@ import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/locked_form_dialog.dart';
 
 enum _ManagementOrderAction { detail, edit, delete, complete }
 
@@ -464,7 +465,7 @@ class _ProductionOrderManagementPageState
       return;
     }
 
-    final saved = await showDialog<bool>(
+    final saved = await showLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
