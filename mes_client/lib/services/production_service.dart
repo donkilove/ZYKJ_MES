@@ -375,11 +375,88 @@ class ProductionService {
     if (detail is String && detail.isNotEmpty) {
       return detail;
     }
+    if (detail is List) {
+      final validationMessage = _extractValidationDetailMessage(detail);
+      if (validationMessage != null) {
+        return validationMessage;
+      }
+    }
     final message = body['message'];
     if (message is String && message.isNotEmpty) {
       return message;
     }
     return '请求失败（状态码 $statusCode）';
+  }
+
+  String? _extractValidationDetailMessage(List<dynamic> detail) {
+    if (detail.isEmpty) {
+      return null;
+    }
+
+    final messages = <String>[];
+    for (final item in detail.take(3)) {
+      if (item is! Map<String, dynamic>) {
+        continue;
+      }
+      final msg = (item['msg'] as String?)?.trim();
+      if (msg == null || msg.isEmpty) {
+        continue;
+      }
+
+      final locRaw = item['loc'];
+      String? fieldLabel;
+      if (locRaw is List) {
+        final locParts = locRaw
+            .map((entry) => entry.toString())
+            .where((entry) => entry.isNotEmpty && entry != 'body')
+            .toList();
+        if (locParts.isNotEmpty) {
+          fieldLabel = _fieldLabelForValidation(locParts.last);
+        }
+      }
+
+      messages.add(fieldLabel == null ? msg : '$fieldLabel：$msg');
+    }
+
+    if (messages.isEmpty) {
+      return null;
+    }
+    return messages.join('；');
+  }
+
+  String? _fieldLabelForValidation(String field) {
+    switch (field) {
+      case 'order_code':
+        return '订单号';
+      case 'product_id':
+        return '产品';
+      case 'quantity':
+        return '数量';
+      case 'start_date':
+        return '开始日期';
+      case 'due_date':
+        return '交期';
+      case 'remark':
+        return '备注';
+      case 'template_id':
+        return '工序模板';
+      case 'process_codes':
+        return '工序编码列表';
+      case 'process_steps':
+        return '工序路线';
+      case 'step_order':
+        return '工序顺序';
+      case 'stage_id':
+        return '工段';
+      case 'process_id':
+        return '小工序';
+      case 'new_template_name':
+        return '新模板名称';
+      case 'new_template_set_default':
+        return '设为默认模板';
+      default:
+        return null;
+    }
   }
 
   String? _formatDateOrNull(DateTime? value) {

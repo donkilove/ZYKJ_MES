@@ -67,15 +67,12 @@ void main() {
           expect(body['due_date'], '2026-03-22');
           return TestResponse.json(200, body: {'data': _orderJson()});
         },
-        'DELETE /production/orders/1': (_) => TestResponse.json(200, body: {'data': {}}),
+        'DELETE /production/orders/1': (_) =>
+            TestResponse.json(200, body: {'data': {}}),
         'POST /production/orders/1/complete': (_) => TestResponse.json(
           200,
           body: {
-            'data': {
-              'order_id': 1,
-              'status': 'completed',
-              'message': 'ok',
-            },
+            'data': {'order_id': 1, 'status': 'completed', 'message': 'ok'},
           },
         ),
         'GET /production/orders/1': (_) => TestResponse.json(
@@ -190,7 +187,11 @@ void main() {
           return TestResponse.json(
             200,
             body: {
-              'data': {'order_id': 1, 'status': 'ok', 'message': 'first article done'},
+              'data': {
+                'order_id': 1,
+                'status': 'ok',
+                'message': 'first article done',
+              },
             },
           );
         },
@@ -202,7 +203,11 @@ void main() {
           return TestResponse.json(
             200,
             body: {
-              'data': {'order_id': 1, 'status': 'ok', 'message': 'end production done'},
+              'data': {
+                'order_id': 1,
+                'status': 'ok',
+                'message': 'end production done',
+              },
             },
           );
         },
@@ -371,10 +376,8 @@ void main() {
 
     test('throws ApiException on backend errors', () async {
       final server = await TestHttpServer.start({
-        'GET /production/orders': (_) => TestResponse.json(
-          500,
-          body: {'detail': 'production list failed'},
-        ),
+        'GET /production/orders': (_) =>
+            TestResponse.json(500, body: {'detail': 'production list failed'}),
       });
       addTearDown(server.close);
 
@@ -388,6 +391,47 @@ void main() {
           isA<ApiException>()
               .having((e) => e.statusCode, 'statusCode', 500)
               .having((e) => e.message, 'message', 'production list failed'),
+        ),
+      );
+    });
+
+    test('parses 422 validation detail message', () async {
+      final server = await TestHttpServer.start({
+        'POST /production/orders': (_) => TestResponse.json(
+          422,
+          body: {
+            'detail': [
+              {
+                'type': 'string_too_short',
+                'loc': ['body', 'order_code'],
+                'msg': 'String should have at least 2 characters',
+                'input': 'A',
+              },
+            ],
+          },
+        ),
+      });
+      addTearDown(server.close);
+
+      final service = ProductionService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-production'),
+      );
+
+      await expectLater(
+        () => service.createOrder(
+          orderCode: 'A',
+          productId: 1,
+          quantity: 1,
+          processCodes: const ['01-01'],
+        ),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 422)
+              .having(
+                (e) => e.message,
+                'message',
+                contains('订单号：String should have at least 2 characters'),
+              ),
         ),
       );
     });

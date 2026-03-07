@@ -530,6 +530,7 @@ class _ProductionOrderManagementPageState
                         TextFormField(
                           controller: orderCodeController,
                           enabled: !isEdit,
+                          maxLength: 64,
                           decoration: const InputDecoration(
                             labelText: '订单号',
                             border: OutlineInputBorder(),
@@ -540,6 +541,13 @@ class _ProductionOrderManagementPageState
                             }
                             if (value == null || value.trim().isEmpty) {
                               return '订单号不能为空';
+                            }
+                            final normalized = value.trim();
+                            if (normalized.length < 2) {
+                              return '订单号至少 2 个字符';
+                            }
+                            if (normalized.length > 64) {
+                              return '订单号不能超过 64 个字符';
                             }
                             return null;
                           },
@@ -673,10 +681,20 @@ class _ProductionOrderManagementPageState
                         TextFormField(
                           controller: remarkController,
                           maxLines: 2,
+                          maxLength: 1024,
                           decoration: const InputDecoration(
                             labelText: '备注',
                             border: OutlineInputBorder(),
                           ),
+                          validator: (value) {
+                            if (value == null) {
+                              return null;
+                            }
+                            if (value.trim().length > 1024) {
+                              return '备注不能超过 1024 个字符';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -822,6 +840,7 @@ class _ProductionOrderManagementPageState
                           const SizedBox(height: 8),
                           TextFormField(
                             controller: newTemplateNameController,
+                            maxLength: 128,
                             decoration: const InputDecoration(
                               labelText: '新模板名称',
                               border: OutlineInputBorder(),
@@ -832,6 +851,9 @@ class _ProductionOrderManagementPageState
                               }
                               if (value == null || value.trim().isEmpty) {
                                 return '请输入新模板名称';
+                              }
+                              if (value.trim().length > 128) {
+                                return '新模板名称不能超过 128 个字符';
                               }
                               return null;
                             },
