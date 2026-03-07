@@ -44,6 +44,7 @@ from app.schemas.production import (
     EndProductionRequest,
     FirstArticleRequest,
     OrderCreate,
+    OrderPipelineModeUpdateRequest,
     OrderUpdate,
 )
 from app.schemas.user import UserCreate, UserUpdate
@@ -330,11 +331,19 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
         db,
         _=admin,
     )
+    stage_2 = craft.create_stage_api(ProcessStageCreate(code="75", name="工段75", sort_order=2), db, _=admin)
+    process_2 = craft.create_process_api(
+        CraftProcessCreate(code="75-01", name="工序75", stage_id=stage_2.data.id),
+        db,
+        _=admin,
+    )
     operator = factory.user(username="prod_operator_ep", role_codes=[ROLE_OPERATOR], processes=[])
     # operator uses process assignment by direct model relationship
     db_process = db.get(Process, process.data.id)
+    db_process_2 = db.get(Process, process_2.data.id)
     assert db_process is not None
-    operator.processes = [db_process]
+    assert db_process_2 is not None
+    operator.processes = [db_process, db_process_2]
     db.commit()
 
     product_resp = products.create_product_api(ProductCreate(name="生产接口产品"), db, current_user=admin)
@@ -356,7 +365,7 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
             order_code="EP-ORD-1",
             product_id=product_resp.data.id,
             quantity=5,
-            process_codes=[process.data.code],
+            process_codes=[process.data.code, process_2.data.code],
             template_id=None,
             process_steps=None,
             save_as_template=False,
@@ -376,8 +385,44 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
     assert detail.data.order.id == order_id
     process_id = detail.data.processes[0].id
 
+    pipeline_mode = production.get_order_pipeline_mode_api(order_id, db=db, current_user=admin)
+    assert pipeline_mode.data.enabled is False
+    assert pipeline_mode.data.available_process_codes == [process.data.code, process_2.data.code]
+
+    pipeline_mode_by_operator = production.get_order_pipeline_mode_api(order_id, db=db, current_user=operator)
+    assert pipeline_mode_by_operator.data.order_id == order_id
+
+    with pytest.raises(HTTPException) as no_permission_error:
+        production.update_order_pipeline_mode_api(
+            order_id,
+            OrderPipelineModeUpdateRequest(enabled=True, process_codes=[process.data.code, process_2.data.code]),
+            db=db,
+            current_user=operator,
+        )
+    assert no_permission_error.value.status_code == 403
+
+    with pytest.raises(HTTPException) as invalid_pipeline_error:
+        production.update_order_pipeline_mode_api(
+            order_id,
+            OrderPipelineModeUpdateRequest(enabled=True, process_codes=[process.data.code]),
+            db=db,
+            current_user=admin,
+        )
+    assert invalid_pipeline_error.value.status_code == 400
+
+    pipeline_updated = production.update_order_pipeline_mode_api(
+        order_id,
+        OrderPipelineModeUpdateRequest(enabled=True, process_codes=[process.data.code, process_2.data.code]),
+        db=db,
+        current_user=admin,
+    )
+    assert pipeline_updated.data.enabled is True
+
     my_orders = production.get_my_orders_api(keyword=None, page=1, page_size=20, db=db, current_user=operator)
     assert my_orders.data.total >= 1
+    assert isinstance(my_orders.data.items[0].pipeline_mode_enabled, bool)
+    assert isinstance(my_orders.data.items[0].pipeline_start_allowed, bool)
+    assert isinstance(my_orders.data.items[0].pipeline_end_allowed, bool)
 
     first = production.submit_first_article_api(
         order_id,

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import date
+from datetime import UTC, date, datetime
+from uuid import uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.production_constants import (
@@ -21,6 +22,7 @@ from app.core.production_constants import (
 from app.core.product_lifecycle import PRODUCT_LIFECYCLE_EFFECTIVE
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.process import Process
+from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
 from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.process_stage import ProcessStage
 from app.models.product import Product
@@ -47,6 +49,117 @@ def _normalize_process_codes(process_codes: Iterable[str]) -> list[str]:
     normalized = [item.strip() for item in process_codes if item and item.strip()]
     deduped = list(dict.fromkeys(normalized))
     return deduped
+
+
+def _parse_pipeline_process_codes_text(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return _normalize_process_codes(value.split(","))
+
+
+def _pipeline_process_codes_to_text(process_codes: Iterable[str]) -> str:
+    return ",".join(_normalize_process_codes(process_codes))
+
+
+def _sorted_order_processes(order: ProductionOrder) -> list[ProductionOrderProcess]:
+    return sorted(order.processes, key=lambda row: (row.process_order, row.id))
+
+
+def _route_process_codes_from_order(order: ProductionOrder) -> list[str]:
+    return [row.process_code for row in _sorted_order_processes(order)]
+
+
+def _ordered_selected_pipeline_codes(
+    *,
+    route_process_codes: list[str],
+    requested_codes: Iterable[str],
+) -> list[str]:
+    requested_set = set(_normalize_process_codes(requested_codes))
+    if not requested_set:
+        return []
+    return [code for code in route_process_codes if code in requested_set]
+
+
+def _pipeline_selected_code_set(order: ProductionOrder) -> set[str]:
+    if not order.pipeline_enabled:
+        return set()
+    return set(_parse_pipeline_process_codes_text(order.pipeline_process_codes))
+
+
+def _is_parallel_edge_enabled(
+    *,
+    order: ProductionOrder,
+    previous_process_code: str,
+    current_process_code: str,
+) -> bool:
+    selected_codes = _pipeline_selected_code_set(order)
+    if not selected_codes:
+        return False
+    return previous_process_code in selected_codes and current_process_code in selected_codes
+
+
+def is_pipeline_parallel_edge_for_processes(
+    *,
+    order: ProductionOrder,
+    previous_process_code: str,
+    current_process_code: str,
+) -> bool:
+    return _is_parallel_edge_enabled(
+        order=order,
+        previous_process_code=previous_process_code,
+        current_process_code=current_process_code,
+    )
+
+
+def _find_previous_process_row(
+    *,
+    order: ProductionOrder,
+    process_row: ProductionOrderProcess,
+) -> ProductionOrderProcess | None:
+    if process_row.process_order <= 1:
+        return None
+    return next(
+        (
+            row
+            for row in order.processes
+            if row.process_order == process_row.process_order - 1
+        ),
+        None,
+    )
+
+
+def is_pipeline_start_allowed_for_process(
+    *,
+    order: ProductionOrder,
+    process_row: ProductionOrderProcess,
+) -> bool:
+    previous_process = _find_previous_process_row(order=order, process_row=process_row)
+    if previous_process is None:
+        return True
+    if _is_parallel_edge_enabled(
+        order=order,
+        previous_process_code=previous_process.process_code,
+        current_process_code=process_row.process_code,
+    ):
+        return previous_process.completed_quantity > 0
+    return previous_process.status == PROCESS_STATUS_COMPLETED
+
+
+def is_pipeline_end_allowed_for_process(
+    *,
+    order: ProductionOrder,
+    process_row: ProductionOrderProcess,
+) -> bool:
+    previous_process = _find_previous_process_row(order=order, process_row=process_row)
+    if previous_process is None:
+        return True
+    if _is_parallel_edge_enabled(
+        order=order,
+        previous_process_code=previous_process.process_code,
+        current_process_code=process_row.process_code,
+    ):
+        return previous_process.completed_quantity > 0
+    return True
 
 
 def _resolve_processes_by_codes(db: Session, process_codes: list[str]) -> tuple[list[Process], list[str]]:
@@ -377,6 +490,256 @@ def get_order_by_code(db: Session, order_code: str) -> ProductionOrder | None:
     return db.execute(stmt).scalars().first()
 
 
+def can_user_access_order_pipeline_mode(
+    db: Session,
+    *,
+    order_id: int,
+    current_user: User,
+) -> bool:
+    role_codes = {role.code for role in current_user.roles}
+    if ROLE_SYSTEM_ADMIN in role_codes or ROLE_PRODUCTION_ADMIN in role_codes:
+        return True
+    if ROLE_OPERATOR not in role_codes:
+        return False
+    exists_stmt = (
+        select(exists().where(
+            ProductionSubOrder.operator_user_id == current_user.id,
+            ProductionSubOrder.order_process_id == ProductionOrderProcess.id,
+            ProductionOrderProcess.order_id == order_id,
+        ))
+    )
+    return bool(db.execute(exists_stmt).scalar())
+
+
+def _invalidate_pipeline_instances_for_order(
+    db: Session,
+    *,
+    order_id: int,
+    reason: str,
+) -> int:
+    now = datetime.now(UTC)
+    stmt = (
+        update(OrderSubOrderPipelineInstance)
+        .where(
+            OrderSubOrderPipelineInstance.order_id == order_id,
+            OrderSubOrderPipelineInstance.is_active.is_(True),
+        )
+        .values(
+            is_active=False,
+            invalid_reason=reason,
+            invalidated_at=now,
+            updated_at=now,
+        )
+    )
+    result = db.execute(stmt)
+    return int(result.rowcount or 0)
+
+
+def _create_pipeline_instances_for_order(
+    db: Session,
+    *,
+    order: ProductionOrder,
+    selected_codes: list[str],
+) -> int:
+    if not selected_codes:
+        return 0
+    sub_rows = (
+        db.execute(
+            select(ProductionSubOrder, ProductionOrderProcess)
+            .join(ProductionSubOrder.order_process)
+            .where(
+                ProductionOrderProcess.order_id == order.id,
+                ProductionOrderProcess.process_code.in_(selected_codes),
+            )
+            .order_by(
+                ProductionOrderProcess.process_order.asc(),
+                ProductionSubOrder.operator_user_id.asc(),
+                ProductionSubOrder.id.asc(),
+            )
+        )
+        .all()
+    )
+    created = 0
+    for pipeline_seq, (sub_order, process_row) in enumerate(sub_rows, start=1):
+        pipeline_no = f"P{order.id}-{sub_order.id}-{pipeline_seq}-{uuid4().hex[:8]}"
+        db.add(
+            OrderSubOrderPipelineInstance(
+                sub_order_id=sub_order.id,
+                order_id=order.id,
+                order_process_id=process_row.id,
+                process_code=process_row.process_code,
+                pipeline_seq=pipeline_seq,
+                pipeline_sub_order_no=pipeline_no,
+                is_active=True,
+                invalid_reason=None,
+                invalidated_at=None,
+            )
+        )
+        created += 1
+    if created:
+        db.flush()
+    return created
+
+
+def get_order_pipeline_mode(
+    db: Session,
+    *,
+    order_id: int,
+) -> dict[str, object]:
+    order = (
+        db.execute(
+            select(ProductionOrder)
+            .where(ProductionOrder.id == order_id)
+            .options(selectinload(ProductionOrder.processes))
+        )
+        .scalars()
+        .first()
+    )
+    if not order:
+        raise ValueError("Order not found")
+
+    route_codes = _route_process_codes_from_order(order)
+    selected_codes = _ordered_selected_pipeline_codes(
+        route_process_codes=route_codes,
+        requested_codes=_parse_pipeline_process_codes_text(order.pipeline_process_codes),
+    )
+    if not order.pipeline_enabled:
+        selected_codes = []
+    return {
+        "order_id": order.id,
+        "enabled": bool(order.pipeline_enabled),
+        "process_codes": selected_codes,
+        "available_process_codes": route_codes,
+    }
+
+
+def update_order_pipeline_mode(
+    db: Session,
+    *,
+    order_id: int,
+    enabled: bool,
+    process_codes: list[str],
+    operator: User,
+) -> dict[str, object]:
+    role_codes = {role.code for role in operator.roles}
+    if ROLE_SYSTEM_ADMIN not in role_codes and ROLE_PRODUCTION_ADMIN not in role_codes:
+        raise PermissionError("Only system admin or production admin can update pipeline mode")
+
+    order = (
+        db.execute(
+            select(ProductionOrder)
+            .where(ProductionOrder.id == order_id)
+            .options(selectinload(ProductionOrder.processes))
+            .with_for_update()
+        )
+        .scalars()
+        .first()
+    )
+    if not order:
+        raise ValueError("Order not found")
+    if order.status == ORDER_STATUS_COMPLETED:
+        raise ValueError("Completed order does not support pipeline mode update")
+
+    process_rows = _sorted_order_processes(order)
+    if len(process_rows) < 2 and enabled:
+        raise ValueError("Order has fewer than 2 processes and cannot enable pipeline mode")
+    route_codes = [row.process_code for row in process_rows]
+    selected_codes = _ordered_selected_pipeline_codes(
+        route_process_codes=route_codes,
+        requested_codes=process_codes,
+    )
+    if enabled and len(selected_codes) < 2:
+        raise ValueError("At least two valid process codes are required when enabling pipeline mode")
+    invalid_codes = [code for code in _normalize_process_codes(process_codes) if code not in route_codes]
+    if invalid_codes:
+        raise ValueError(f"Invalid process codes for order route: {', '.join(invalid_codes)}")
+
+    if enabled:
+        first_code = selected_codes[0]
+        first_row = next((row for row in process_rows if row.process_code == first_code), None)
+        if first_row is None:
+            raise ValueError("Selected first process does not exist in order route")
+        first_available = max(first_row.visible_quantity - first_row.completed_quantity, 0)
+        if first_available <= 0:
+            raise ValueError(
+                f"Cannot enable pipeline mode: first selected process {first_code} has no producible quantity"
+            )
+
+    previous_enabled = bool(order.pipeline_enabled)
+    previous_codes = _ordered_selected_pipeline_codes(
+        route_process_codes=route_codes,
+        requested_codes=_parse_pipeline_process_codes_text(order.pipeline_process_codes),
+    )
+
+    order.pipeline_enabled = bool(enabled)
+    order.pipeline_process_codes = _pipeline_process_codes_to_text(selected_codes if enabled else [])
+
+    reason = "pipeline_reconfigured" if enabled else "pipeline_disabled"
+    invalidated_count = _invalidate_pipeline_instances_for_order(
+        db,
+        order_id=order.id,
+        reason=reason,
+    )
+    created_count = 0
+    if enabled:
+        created_count = _create_pipeline_instances_for_order(
+            db,
+            order=order,
+            selected_codes=selected_codes,
+        )
+
+    add_order_event_log(
+        db,
+        order_id=order.id,
+        event_type="pipeline_mode_updated",
+        event_title="并行模式更新",
+        event_detail=(
+            f"{operator.username} 将并行模式设为 {'开启' if enabled else '关闭'}；"
+            f"工序: {', '.join(selected_codes) if selected_codes else '-'}"
+        ),
+        operator_user_id=operator.id,
+        payload={
+            "enabled": bool(enabled),
+            "process_codes": selected_codes if enabled else [],
+            "previous_enabled": previous_enabled,
+            "previous_process_codes": previous_codes,
+        },
+    )
+    if invalidated_count > 0:
+        add_order_event_log(
+            db,
+            order_id=order.id,
+            event_type="pipeline_instances_invalidated",
+            event_title="并行实例失效",
+            event_detail=f"已失效 {invalidated_count} 条并行实例，原因: {reason}",
+            operator_user_id=operator.id,
+            payload={
+                "invalidated_count": invalidated_count,
+                "reason": reason,
+            },
+        )
+    if created_count > 0:
+        add_order_event_log(
+            db,
+            order_id=order.id,
+            event_type="pipeline_instances_activated",
+            event_title="并行实例激活",
+            event_detail=f"已激活 {created_count} 条并行实例",
+            operator_user_id=operator.id,
+            payload={
+                "activated_count": created_count,
+            },
+        )
+
+    db.commit()
+    return {
+        "order_id": order.id,
+        "enabled": bool(order.pipeline_enabled),
+        "process_codes": selected_codes if enabled else [],
+        "available_process_codes": route_codes,
+    }
+
+
 def list_orders(
     db: Session,
     *,
@@ -649,6 +1012,8 @@ def create_order(
         quantity=quantity,
         status=ORDER_STATUS_PENDING,
         current_process_code=resolved_process_codes[0],
+        pipeline_enabled=False,
+        pipeline_process_codes="",
         start_date=start_date,
         due_date=due_date,
         remark=(remark or "").strip() or None,
@@ -750,6 +1115,8 @@ def update_order(
     order.remark = (remark or "").strip() or None
     order.status = ORDER_STATUS_PENDING
     order.current_process_code = resolved_process_codes[0]
+    order.pipeline_enabled = False
+    order.pipeline_process_codes = ""
     _set_order_product_snapshot(order=order, product=product)
     _set_order_template_snapshot(order=order, template=final_template)
 
@@ -857,22 +1224,37 @@ def _build_my_order_item(
 
     can_first_article = False
     can_end_production = False
+    pipeline_start_allowed = False
+    pipeline_end_allowed = False
+    pipeline_mode_enabled = bool(order.pipeline_enabled)
     if is_operator_context and sub_order is not None and sub_order.is_visible:
-        can_first_article = (
+        first_article_base = (
             process_row.status in {PROCESS_STATUS_PENDING, PROCESS_STATUS_PARTIAL}
             and sub_order.status == SUB_ORDER_STATUS_PENDING
             and max_producible > 0
         )
-        can_end_production = (
+        end_production_base = (
             process_row.status == PROCESS_STATUS_IN_PROGRESS
             and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
             and max_producible > 0
         )
+        pipeline_start_allowed = first_article_base and is_pipeline_start_allowed_for_process(
+            order=order,
+            process_row=process_row,
+        )
+        pipeline_end_allowed = end_production_base and is_pipeline_end_allowed_for_process(
+            order=order,
+            process_row=process_row,
+        )
+        can_first_article = pipeline_start_allowed
+        can_end_production = pipeline_end_allowed
 
     if can_first_article_override is not None:
         can_first_article = can_first_article_override
+        pipeline_start_allowed = can_first_article_override
     if can_end_production_override is not None:
         can_end_production = can_end_production_override
+        pipeline_end_allowed = can_end_production_override
 
     return {
         "order_id": order.id,
@@ -898,6 +1280,9 @@ def _build_my_order_item(
         "operator_username": sub_order.operator.username if sub_order and sub_order.operator else None,
         "work_view": work_view,
         "assist_authorization_id": assist_authorization_id,
+        "pipeline_mode_enabled": pipeline_mode_enabled,
+        "pipeline_start_allowed": pipeline_start_allowed,
+        "pipeline_end_allowed": pipeline_end_allowed,
         "max_producible_quantity": max_producible,
         "can_first_article": can_first_article,
         "can_end_production": can_end_production,
@@ -1024,12 +1409,14 @@ def list_my_orders(
                 and process_row.status in {PROCESS_STATUS_PENDING, PROCESS_STATUS_PARTIAL}
                 and sub_order.status == SUB_ORDER_STATUS_PENDING
                 and max_producible > 0
+                and is_pipeline_start_allowed_for_process(order=order, process_row=process_row)
             )
             can_end_production = (
                 assist_row.end_production_used_at is None
                 and process_row.status == PROCESS_STATUS_IN_PROGRESS
                 and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
                 and max_producible > 0
+                and is_pipeline_end_allowed_for_process(order=order, process_row=process_row)
             )
             items.append(
                 _build_my_order_item(

@@ -33,3 +33,9 @@ class ProductionSubOrder(Base, TimestampMixin):
     order_process = relationship("ProductionOrderProcess", back_populates="sub_orders")
     operator = relationship("User")
     production_records = relationship("ProductionRecord", back_populates="sub_order")
+    pipeline_instances = relationship(
+        "OrderSubOrderPipelineInstance",
+        back_populates="sub_order",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

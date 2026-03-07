@@ -40,6 +40,8 @@ from app.schemas.production import (
     OrderEventLogItem,
     OrderItem,
     OrderListResult,
+    OrderPipelineModeItem,
+    OrderPipelineModeUpdateRequest,
     OrderUpdate,
     ProductionOperatorStatItem,
     ProductionOperatorStatsResult,
@@ -53,12 +55,15 @@ from app.schemas.production import (
 from app.services.assist_authorization_service import create_assist_authorization, list_assist_authorizations, review_assist_authorization
 from app.services.production_execution_service import end_production, submit_first_article
 from app.services.production_order_service import (
+    can_user_access_order_pipeline_mode,
     complete_order_manually,
     create_order,
+    get_order_pipeline_mode,
     delete_order,
     get_order_by_id,
     list_my_orders,
     list_orders,
+    update_order_pipeline_mode,
     update_order,
 )
 from app.services.production_statistics_service import (
@@ -74,6 +79,8 @@ router = APIRouter()
 def _raise_service_error(error: Exception) -> None:
     message = str(error)
     message_lower = message.lower()
+    if isinstance(error, PermissionError):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=message)
     if isinstance(error, RuntimeError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
     if "not found" in message_lower:
@@ -92,6 +99,11 @@ def _to_order_item(order: ProductionOrder) -> OrderItem:
                 None,
             )
     created_by_username = order.created_by.username if order.created_by else None
+    pipeline_process_codes = [
+        item.strip()
+        for item in (order.pipeline_process_codes or "").split(",")
+        if item and item.strip()
+    ]
     return OrderItem(
         id=order.id,
         order_code=order.order_code,
@@ -108,6 +120,8 @@ def _to_order_item(order: ProductionOrder) -> OrderItem:
         process_template_id=order.process_template_id,
         process_template_name=order.process_template_name,
         process_template_version=order.process_template_version,
+        pipeline_enabled=bool(order.pipeline_enabled),
+        pipeline_process_codes=pipeline_process_codes if order.pipeline_enabled else [],
         created_by_user_id=order.created_by_user_id,
         created_by_username=created_by_username,
         created_at=order.created_at,
@@ -213,6 +227,15 @@ def _to_assist_user_option_item(user: User) -> AssistUserOptionItem:
     )
 
 
+def _to_order_pipeline_mode_item(payload: dict[str, object]) -> OrderPipelineModeItem:
+    return OrderPipelineModeItem(
+        order_id=int(payload.get("order_id") or 0),
+        enabled=bool(payload.get("enabled")),
+        process_codes=[str(code) for code in payload.get("process_codes") or []],
+        available_process_codes=[str(code) for code in payload.get("available_process_codes") or []],
+    )
+
+
 @router.get(
     "/orders",
     response_model=ApiResponse[OrderListResult],
@@ -311,6 +334,47 @@ def get_order_detail_api(
             events=[_to_event_item(item) for item in event_rows],
         )
     )
+
+
+@router.get(
+    "/orders/{order_id}/pipeline-mode",
+    response_model=ApiResponse[OrderPipelineModeItem],
+)
+def get_order_pipeline_mode_api(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+) -> ApiResponse[OrderPipelineModeItem]:
+    try:
+        if not can_user_access_order_pipeline_mode(db, order_id=order_id, current_user=current_user):
+            raise PermissionError("Current user has no access to this order pipeline mode")
+        payload = get_order_pipeline_mode(db, order_id=order_id)
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(_to_order_pipeline_mode_item(payload))
+
+
+@router.put(
+    "/orders/{order_id}/pipeline-mode",
+    response_model=ApiResponse[OrderPipelineModeItem],
+)
+def update_order_pipeline_mode_api(
+    order_id: int,
+    payload: OrderPipelineModeUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+) -> ApiResponse[OrderPipelineModeItem]:
+    try:
+        updated = update_order_pipeline_mode(
+            db,
+            order_id=order_id,
+            enabled=payload.enabled,
+            process_codes=payload.process_codes,
+            operator=current_user,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(_to_order_pipeline_mode_item(updated), message="updated")
 
 
 @router.put(

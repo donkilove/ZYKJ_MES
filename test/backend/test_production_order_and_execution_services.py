@@ -30,6 +30,23 @@ def _prepare_order_env(db, factory):
     return stage, process, operator, admin, product
 
 
+def _prepare_two_process_order_env(db, factory):
+    factory.ensure_default_roles()
+    stage_a = factory.stage(code="51", name="工段A", sort_order=1)
+    stage_b = factory.stage(code="52", name="工段B", sort_order=2)
+    process_a = factory.process(stage=stage_a, code="51-01", name="工序A")
+    process_b = factory.process(stage=stage_b, code="52-01", name="工序B")
+    operator = factory.user(
+        username="op_pipeline",
+        role_codes=[ROLE_OPERATOR],
+        processes=[process_a, process_b],
+    )
+    admin = factory.user(username="admin_pipeline", role_codes=[ROLE_PRODUCTION_ADMIN])
+    product = factory.product(name="并行测试产品")
+    db.commit()
+    return stage_a, stage_b, process_a, process_b, operator, admin, product
+
+
 def test_create_order_and_list_my_orders(db, factory) -> None:
     _, process, operator, admin, product = _prepare_order_env(db, factory)
 
@@ -386,3 +403,214 @@ def test_assist_authorization_and_view_modes(db, factory) -> None:
             effective_operator_user_id=operator.id,
             assist_authorization_id=auth_row.id,
         )
+
+
+def test_pipeline_mode_start_gate_and_release_rule(db, factory) -> None:
+    _, _, process_a, process_b, operator, admin, product = _prepare_two_process_order_env(db, factory)
+    order = production_order_service.create_order(
+        db,
+        order_code="ORD-PIPE-01",
+        product_id=product.id,
+        quantity=5,
+        start_date=None,
+        due_date=None,
+        remark="pipeline",
+        process_codes=[process_a.code, process_b.code],
+        template_id=None,
+        process_steps=None,
+        save_as_template=False,
+        new_template_name=None,
+        new_template_set_default=False,
+        operator=admin,
+    )
+    process_rows = db.execute(
+        select(ProductionOrderProcess)
+        .where(ProductionOrderProcess.order_id == order.id)
+        .order_by(ProductionOrderProcess.process_order.asc())
+    ).scalars().all()
+    assert len(process_rows) == 2
+    first_row = process_rows[0]
+    second_row = process_rows[1]
+
+    # Force visibility to verify strict start gate (serial mode should still block second process).
+    second_row.visible_quantity = 1
+    production_order_service.ensure_sub_orders_visible_quantity(
+        db,
+        process_row=second_row,
+        target_visible_quantity=1,
+    )
+    db.commit()
+
+    with pytest.raises(ValueError, match="pipeline start gate"):
+        production_execution_service.submit_first_article(
+            db,
+            order_id=order.id,
+            order_process_id=second_row.id,
+            verification_code=settings.production_default_verification_code,
+            remark=None,
+            operator=operator,
+        )
+
+    mode_payload = production_order_service.update_order_pipeline_mode(
+        db,
+        order_id=order.id,
+        enabled=True,
+        process_codes=[process_a.code, process_b.code],
+        operator=admin,
+    )
+    assert mode_payload["enabled"] is True
+    assert mode_payload["process_codes"] == [process_a.code, process_b.code]
+
+    production_execution_service.submit_first_article(
+        db,
+        order_id=order.id,
+        order_process_id=first_row.id,
+        verification_code=settings.production_default_verification_code,
+        remark=None,
+        operator=operator,
+    )
+    production_execution_service.end_production(
+        db,
+        order_id=order.id,
+        order_process_id=first_row.id,
+        quantity=1,
+        remark="upstream",
+        operator=operator,
+    )
+
+    # Parallel edge allows second process first article once upstream has output.
+    order, second_row, _ = production_execution_service.submit_first_article(
+        db,
+        order_id=order.id,
+        order_process_id=second_row.id,
+        verification_code=settings.production_default_verification_code,
+        remark="pipeline-start",
+        operator=operator,
+    )
+    assert order.status == ORDER_STATUS_IN_PROGRESS
+    assert second_row.status == PROCESS_STATUS_IN_PROGRESS
+
+    # Serial mode should not release downstream visibility on partial completion.
+    order_2 = production_order_service.create_order(
+        db,
+        order_code="ORD-PIPE-02",
+        product_id=product.id,
+        quantity=5,
+        start_date=None,
+        due_date=None,
+        remark="pipeline-release",
+        process_codes=[process_a.code, process_b.code],
+        template_id=None,
+        process_steps=None,
+        save_as_template=False,
+        new_template_name=None,
+        new_template_set_default=False,
+        operator=admin,
+    )
+    process_rows_2 = db.execute(
+        select(ProductionOrderProcess)
+        .where(ProductionOrderProcess.order_id == order_2.id)
+        .order_by(ProductionOrderProcess.process_order.asc())
+    ).scalars().all()
+    first_row_2 = process_rows_2[0]
+    second_row_2 = process_rows_2[1]
+
+    production_execution_service.submit_first_article(
+        db,
+        order_id=order_2.id,
+        order_process_id=first_row_2.id,
+        verification_code=settings.production_default_verification_code,
+        remark=None,
+        operator=operator,
+    )
+    production_execution_service.end_production(
+        db,
+        order_id=order_2.id,
+        order_process_id=first_row_2.id,
+        quantity=1,
+        remark="serial",
+        operator=operator,
+    )
+    second_row_2 = db.execute(
+        select(ProductionOrderProcess).where(ProductionOrderProcess.id == second_row_2.id)
+    ).scalars().first()
+    assert second_row_2 is not None
+    assert second_row_2.visible_quantity == 0
+
+    production_order_service.update_order_pipeline_mode(
+        db,
+        order_id=order_2.id,
+        enabled=True,
+        process_codes=[process_a.code, process_b.code],
+        operator=admin,
+    )
+    production_execution_service.submit_first_article(
+        db,
+        order_id=order_2.id,
+        order_process_id=first_row_2.id,
+        verification_code=settings.production_default_verification_code,
+        remark=None,
+        operator=operator,
+    )
+    production_execution_service.end_production(
+        db,
+        order_id=order_2.id,
+        order_process_id=first_row_2.id,
+        quantity=1,
+        remark="parallel",
+        operator=operator,
+    )
+    second_row_2 = db.execute(
+        select(ProductionOrderProcess).where(ProductionOrderProcess.id == second_row_2.id)
+    ).scalars().first()
+    assert second_row_2 is not None
+    assert second_row_2.visible_quantity == 2
+
+
+def test_update_pipeline_mode_validation_and_my_orders_flags(db, factory) -> None:
+    _, _, process_a, process_b, operator, admin, product = _prepare_two_process_order_env(db, factory)
+    order = production_order_service.create_order(
+        db,
+        order_code="ORD-PIPE-03",
+        product_id=product.id,
+        quantity=4,
+        start_date=None,
+        due_date=None,
+        remark=None,
+        process_codes=[process_a.code, process_b.code],
+        template_id=None,
+        process_steps=None,
+        save_as_template=False,
+        new_template_name=None,
+        new_template_set_default=False,
+        operator=admin,
+    )
+    with pytest.raises(ValueError, match="At least two valid process codes"):
+        production_order_service.update_order_pipeline_mode(
+            db,
+            order_id=order.id,
+            enabled=True,
+            process_codes=[process_a.code],
+            operator=admin,
+        )
+
+    production_order_service.update_order_pipeline_mode(
+        db,
+        order_id=order.id,
+        enabled=True,
+        process_codes=[process_a.code, process_b.code],
+        operator=admin,
+    )
+    total, items = production_order_service.list_my_orders(
+        db,
+        current_user=operator,
+        keyword=None,
+        page=1,
+        page_size=20,
+        view_mode="own",
+    )
+    assert total >= 1
+    first_item = items[0]
+    assert first_item["pipeline_mode_enabled"] is True
+    assert "pipeline_start_allowed" in first_item
+    assert "pipeline_end_allowed" in first_item

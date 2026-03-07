@@ -33,7 +33,10 @@ from app.services.assist_authorization_service import (
     mark_assist_authorization_used,
 )
 from app.services.production_event_log_service import add_order_event_log
-from app.services.production_order_service import ensure_sub_orders_visible_quantity
+from app.services.production_order_service import (
+    ensure_sub_orders_visible_quantity,
+    is_pipeline_parallel_edge_for_processes,
+)
 
 
 def _get_today_verification_code(
@@ -103,6 +106,68 @@ def _lock_sub_order(
     if not row.is_visible:
         raise ValueError("Sub-order is not visible for current user")
     return row
+
+
+def _lock_previous_process(
+    db: Session,
+    *,
+    order_id: int,
+    process_order: int,
+) -> ProductionOrderProcess | None:
+    if process_order <= 1:
+        return None
+    return db.execute(
+        select(ProductionOrderProcess)
+        .where(
+            ProductionOrderProcess.order_id == order_id,
+            ProductionOrderProcess.process_order == process_order - 1,
+        )
+        .with_for_update()
+    ).scalars().first()
+
+
+def _is_start_gate_allowed(
+    db: Session,
+    *,
+    order: ProductionOrder,
+    process_row: ProductionOrderProcess,
+) -> bool:
+    previous_process = _lock_previous_process(
+        db,
+        order_id=order.id,
+        process_order=process_row.process_order,
+    )
+    if previous_process is None:
+        return True
+    if is_pipeline_parallel_edge_for_processes(
+        order=order,
+        previous_process_code=previous_process.process_code,
+        current_process_code=process_row.process_code,
+    ):
+        return previous_process.completed_quantity > 0
+    return previous_process.status == PROCESS_STATUS_COMPLETED
+
+
+def _is_end_gate_allowed(
+    db: Session,
+    *,
+    order: ProductionOrder,
+    process_row: ProductionOrderProcess,
+) -> bool:
+    previous_process = _lock_previous_process(
+        db,
+        order_id=order.id,
+        process_order=process_row.process_order,
+    )
+    if previous_process is None:
+        return True
+    if is_pipeline_parallel_edge_for_processes(
+        order=order,
+        previous_process_code=previous_process.process_code,
+        current_process_code=process_row.process_code,
+    ):
+        return previous_process.completed_quantity > 0
+    return True
 
 
 def _refresh_order_status(db: Session, *, order: ProductionOrder) -> None:
@@ -177,6 +242,8 @@ def submit_first_article(
     sub_remaining = max(sub_order.assigned_quantity - sub_order.completed_quantity, 0)
     if min(process_remaining, sub_remaining) <= 0:
         raise ValueError("No producible quantity available for current user")
+    if not _is_start_gate_allowed(db, order=order, process_row=process_row):
+        raise ValueError("Current process is blocked by pipeline start gate")
 
     code_row = _get_today_verification_code(db, operator_user_id=operator.id)
     if verification_code.strip() != code_row.code:
@@ -295,6 +362,8 @@ def end_production(
         raise ValueError("No producible quantity available for current user")
     if quantity > max_producible:
         raise RuntimeError(f"Concurrent update detected. Max producible quantity is {max_producible}")
+    if not _is_end_gate_allowed(db, order=order, process_row=process_row):
+        raise ValueError("Current process is blocked by pipeline end gate")
 
     process_row.completed_quantity += quantity
     sub_order.completed_quantity += quantity
@@ -321,7 +390,17 @@ def end_production(
         .with_for_update()
     ).scalars().first()
     if next_process:
-        target_visible = min(process_row.completed_quantity, order.quantity)
+        parallel_edge = is_pipeline_parallel_edge_for_processes(
+            order=order,
+            previous_process_code=process_row.process_code,
+            current_process_code=next_process.process_code,
+        )
+        if parallel_edge:
+            target_visible = min(process_row.completed_quantity, order.quantity)
+        elif process_row.status == PROCESS_STATUS_COMPLETED:
+            target_visible = order.quantity
+        else:
+            target_visible = next_process.visible_quantity
         if target_visible > next_process.visible_quantity:
             next_process.visible_quantity = target_visible
         ensure_sub_orders_visible_quantity(

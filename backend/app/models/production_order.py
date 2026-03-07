@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -26,6 +26,18 @@ class ProductionOrder(Base, TimestampMixin):
     )
     process_template_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     process_template_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pipeline_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    pipeline_process_codes: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
     created_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("sys_user.id", ondelete="SET NULL"),
         nullable=True,
@@ -55,6 +67,12 @@ class ProductionOrder(Base, TimestampMixin):
     )
     event_logs = relationship(
         "OrderEventLog",
+        back_populates="order",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    pipeline_instances = relationship(
+        "OrderSubOrderPipelineInstance",
         back_populates="order",
         cascade="all, delete-orphan",
         passive_deletes=True,

@@ -149,6 +149,8 @@ class OrderItem(BaseModel):
     process_template_id: int | None = None
     process_template_name: str | None = None
     process_template_version: int | None = None
+    pipeline_enabled: bool = False
+    pipeline_process_codes: list[str] = Field(default_factory=list)
     created_by_user_id: int | None = None
     created_by_username: str | None = None
     created_at: datetime
@@ -172,6 +174,27 @@ class OrderActionResult(BaseModel):
     order_id: int
     status: str
     message: str
+
+
+class OrderPipelineModeItem(BaseModel):
+    order_id: int
+    enabled: bool
+    process_codes: list[str] = Field(default_factory=list)
+    available_process_codes: list[str] = Field(default_factory=list)
+
+
+class OrderPipelineModeUpdateRequest(BaseModel):
+    enabled: bool
+    process_codes: list[str] = Field(default_factory=list)
+
+    @field_validator("process_codes")
+    @classmethod
+    def validate_process_codes(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value if item and item.strip()]
+        deduplicated = list(dict.fromkeys(normalized))
+        if len(deduplicated) != len(normalized):
+            raise ValueError("Process codes cannot contain duplicates")
+        return deduplicated
 
 
 class MyOrderItem(BaseModel):
@@ -198,6 +221,9 @@ class MyOrderItem(BaseModel):
     operator_username: str | None = None
     work_view: str = "own"
     assist_authorization_id: int | None = None
+    pipeline_mode_enabled: bool = False
+    pipeline_start_allowed: bool = False
+    pipeline_end_allowed: bool = False
     max_producible_quantity: int
     can_first_article: bool
     can_end_production: bool
