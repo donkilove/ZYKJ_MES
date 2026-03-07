@@ -2,6 +2,11 @@ class ProductItem {
   ProductItem({
     required this.id,
     required this.name,
+    required this.lifecycleStatus,
+    required this.currentVersion,
+    required this.effectiveVersion,
+    required this.effectiveAt,
+    required this.inactiveReason,
     required this.lastParameterSummary,
     required this.createdAt,
     required this.updatedAt,
@@ -9,6 +14,11 @@ class ProductItem {
 
   final int id;
   final String name;
+  final String lifecycleStatus;
+  final int currentVersion;
+  final int effectiveVersion;
+  final DateTime? effectiveAt;
+  final String? inactiveReason;
   final String? lastParameterSummary;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -17,6 +27,13 @@ class ProductItem {
     return ProductItem(
       id: json['id'] as int,
       name: json['name'] as String,
+      lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
+      currentVersion: (json['current_version'] as int?) ?? 1,
+      effectiveVersion: (json['effective_version'] as int?) ?? 0,
+      effectiveAt: (json['effective_at'] as String?) == null
+          ? null
+          : DateTime.parse(json['effective_at'] as String),
+      inactiveReason: json['inactive_reason'] as String?,
       lastParameterSummary: json['last_parameter_summary'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -152,6 +169,206 @@ class ProductParameterUpdateResult {
   factory ProductParameterUpdateResult.fromJson(Map<String, dynamic> json) {
     return ProductParameterUpdateResult(
       updatedCount: (json['updated_count'] as int?) ?? 0,
+      changedKeys: (json['changed_keys'] as List<dynamic>? ?? const [])
+          .cast<String>(),
+    );
+  }
+}
+
+class ProductLifecycleUpdateRequest {
+  ProductLifecycleUpdateRequest({
+    required this.targetStatus,
+    this.confirmed = false,
+    this.note,
+    this.inactiveReason,
+  });
+
+  final String targetStatus;
+  final bool confirmed;
+  final String? note;
+  final String? inactiveReason;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'target_status': targetStatus,
+      'confirmed': confirmed,
+      'note': note,
+      'inactive_reason': inactiveReason,
+    };
+  }
+}
+
+class ProductImpactOrderItem {
+  ProductImpactOrderItem({
+    required this.orderId,
+    required this.orderCode,
+    required this.orderStatus,
+    required this.reason,
+  });
+
+  final int orderId;
+  final String orderCode;
+  final String orderStatus;
+  final String? reason;
+
+  factory ProductImpactOrderItem.fromJson(Map<String, dynamic> json) {
+    return ProductImpactOrderItem(
+      orderId: json['order_id'] as int,
+      orderCode: json['order_code'] as String,
+      orderStatus: json['order_status'] as String,
+      reason: json['reason'] as String?,
+    );
+  }
+}
+
+class ProductImpactAnalysisResult {
+  ProductImpactAnalysisResult({
+    required this.operation,
+    required this.targetStatus,
+    required this.targetVersion,
+    required this.totalOrders,
+    required this.pendingOrders,
+    required this.inProgressOrders,
+    required this.requiresConfirmation,
+    required this.items,
+  });
+
+  final String operation;
+  final String? targetStatus;
+  final int? targetVersion;
+  final int totalOrders;
+  final int pendingOrders;
+  final int inProgressOrders;
+  final bool requiresConfirmation;
+  final List<ProductImpactOrderItem> items;
+
+  factory ProductImpactAnalysisResult.fromJson(Map<String, dynamic> json) {
+    return ProductImpactAnalysisResult(
+      operation: (json['operation'] as String?) ?? '',
+      targetStatus: json['target_status'] as String?,
+      targetVersion: json['target_version'] as int?,
+      totalOrders: (json['total_orders'] as int?) ?? 0,
+      pendingOrders: (json['pending_orders'] as int?) ?? 0,
+      inProgressOrders: (json['in_progress_orders'] as int?) ?? 0,
+      requiresConfirmation: (json['requires_confirmation'] as bool?) ?? false,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) =>
+                ProductImpactOrderItem.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(),
+    );
+  }
+}
+
+class ProductVersionItem {
+  ProductVersionItem({
+    required this.version,
+    required this.lifecycleStatus,
+    required this.action,
+    required this.note,
+    required this.sourceVersion,
+    required this.createdByUserId,
+    required this.createdByUsername,
+    required this.createdAt,
+  });
+
+  final int version;
+  final String lifecycleStatus;
+  final String action;
+  final String? note;
+  final int? sourceVersion;
+  final int? createdByUserId;
+  final String? createdByUsername;
+  final DateTime createdAt;
+
+  factory ProductVersionItem.fromJson(Map<String, dynamic> json) {
+    return ProductVersionItem(
+      version: (json['version'] as int?) ?? 0,
+      lifecycleStatus: (json['lifecycle_status'] as String?) ?? '',
+      action: (json['action'] as String?) ?? '',
+      note: json['note'] as String?,
+      sourceVersion: json['source_version'] as int?,
+      createdByUserId: json['created_by_user_id'] as int?,
+      createdByUsername: json['created_by_username'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
+class ProductVersionListResult {
+  ProductVersionListResult({required this.total, required this.items});
+
+  final int total;
+  final List<ProductVersionItem> items;
+}
+
+class ProductVersionDiffItem {
+  ProductVersionDiffItem({
+    required this.key,
+    required this.diffType,
+    required this.fromValue,
+    required this.toValue,
+  });
+
+  final String key;
+  final String diffType;
+  final String? fromValue;
+  final String? toValue;
+
+  factory ProductVersionDiffItem.fromJson(Map<String, dynamic> json) {
+    return ProductVersionDiffItem(
+      key: (json['key'] as String?) ?? '',
+      diffType: (json['diff_type'] as String?) ?? '',
+      fromValue: json['from_value'] as String?,
+      toValue: json['to_value'] as String?,
+    );
+  }
+}
+
+class ProductVersionCompareResult {
+  ProductVersionCompareResult({
+    required this.fromVersion,
+    required this.toVersion,
+    required this.addedItems,
+    required this.removedItems,
+    required this.changedItems,
+    required this.items,
+  });
+
+  final int fromVersion;
+  final int toVersion;
+  final int addedItems;
+  final int removedItems;
+  final int changedItems;
+  final List<ProductVersionDiffItem> items;
+
+  factory ProductVersionCompareResult.fromJson(Map<String, dynamic> json) {
+    return ProductVersionCompareResult(
+      fromVersion: (json['from_version'] as int?) ?? 0,
+      toVersion: (json['to_version'] as int?) ?? 0,
+      addedItems: (json['added_items'] as int?) ?? 0,
+      removedItems: (json['removed_items'] as int?) ?? 0,
+      changedItems: (json['changed_items'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) =>
+                ProductVersionDiffItem.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(),
+    );
+  }
+}
+
+class ProductRollbackResult {
+  ProductRollbackResult({required this.product, required this.changedKeys});
+
+  final ProductItem product;
+  final List<String> changedKeys;
+
+  factory ProductRollbackResult.fromJson(Map<String, dynamic> json) {
+    return ProductRollbackResult(
+      product: ProductItem.fromJson(json['product'] as Map<String, dynamic>),
       changedKeys: (json['changed_keys'] as List<dynamic>? ?? const [])
           .cast<String>(),
     );
