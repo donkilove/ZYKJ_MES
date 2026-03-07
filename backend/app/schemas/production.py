@@ -194,6 +194,10 @@ class MyOrderItem(BaseModel):
     user_sub_order_id: int | None = None
     user_assigned_quantity: int | None = None
     user_completed_quantity: int | None = None
+    operator_user_id: int | None = None
+    operator_username: str | None = None
+    work_view: str = "own"
+    assist_authorization_id: int | None = None
     max_producible_quantity: int
     can_first_article: bool
     can_end_production: bool
@@ -209,12 +213,71 @@ class FirstArticleRequest(BaseModel):
     order_process_id: int = Field(gt=0)
     verification_code: str = Field(min_length=1, max_length=32)
     remark: str | None = Field(default=None, max_length=1024)
+    effective_operator_user_id: int | None = Field(default=None, gt=0)
+    assist_authorization_id: int | None = Field(default=None, gt=0)
 
 
 class EndProductionRequest(BaseModel):
     order_process_id: int = Field(gt=0)
     quantity: int = Field(gt=0)
     remark: str | None = Field(default=None, max_length=1024)
+    effective_operator_user_id: int | None = Field(default=None, gt=0)
+    assist_authorization_id: int | None = Field(default=None, gt=0)
+
+
+class AssistAuthorizationCreateRequest(BaseModel):
+    order_process_id: int = Field(gt=0)
+    target_operator_user_id: int = Field(gt=0)
+    helper_user_id: int = Field(gt=0)
+    reason: str | None = Field(default=None, max_length=1024)
+
+
+class AssistAuthorizationReviewRequest(BaseModel):
+    approve: bool
+    review_remark: str | None = Field(default=None, max_length=1024)
+
+
+class AssistAuthorizationItem(BaseModel):
+    id: int
+    order_id: int
+    order_code: str
+    order_process_id: int
+    process_code: str
+    process_name: str
+    target_operator_user_id: int
+    target_operator_username: str
+    requester_user_id: int
+    requester_username: str
+    helper_user_id: int
+    helper_username: str
+    status: str
+    reason: str | None = None
+    review_remark: str | None = None
+    reviewer_user_id: int | None = None
+    reviewer_username: str | None = None
+    reviewed_at: datetime | None = None
+    first_article_used_at: datetime | None = None
+    end_production_used_at: datetime | None = None
+    consumed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AssistAuthorizationListResult(BaseModel):
+    total: int
+    items: list[AssistAuthorizationItem]
+
+
+class AssistUserOptionItem(BaseModel):
+    id: int
+    username: str
+    full_name: str | None = None
+    role_codes: list[str]
+
+
+class AssistUserOptionListResult(BaseModel):
+    total: int
+    items: list[AssistUserOptionItem]
 
 
 class ProductionStatsOverview(BaseModel):

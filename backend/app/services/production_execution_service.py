@@ -26,6 +26,12 @@ from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
 from app.models.production_sub_order import ProductionSubOrder
 from app.models.user import User
+from app.services.assist_authorization_service import (
+    ASSIST_OP_END_PRODUCTION,
+    ASSIST_OP_FIRST_ARTICLE,
+    get_usable_assist_authorization_for_operation,
+    mark_assist_authorization_used,
+)
 from app.services.production_event_log_service import add_order_event_log
 from app.services.production_order_service import ensure_sub_orders_visible_quantity
 
@@ -131,6 +137,8 @@ def submit_first_article(
     verification_code: str,
     remark: str | None,
     operator: User,
+    effective_operator_user_id: int | None = None,
+    assist_authorization_id: int | None = None,
 ) -> tuple[ProductionOrder, ProductionOrderProcess, ProductionSubOrder]:
     order, process_row = _lock_order_and_process(
         db,
@@ -142,10 +150,25 @@ def submit_first_article(
     if process_row.status not in {PROCESS_STATUS_PENDING, PROCESS_STATUS_PARTIAL}:
         raise ValueError("Current process does not allow first-article operation")
 
+    effective_user_id = effective_operator_user_id or operator.id
+    assist_row = None
+    if effective_user_id != operator.id:
+        if not assist_authorization_id:
+            raise ValueError("Assist authorization is required for cross-user operation")
+        assist_row = get_usable_assist_authorization_for_operation(
+            db,
+            authorization_id=assist_authorization_id,
+            order_id=order_id,
+            order_process_id=order_process_id,
+            target_operator_user_id=effective_user_id,
+            helper_user_id=operator.id,
+            operation=ASSIST_OP_FIRST_ARTICLE,
+        )
+
     sub_order = _lock_sub_order(
         db,
         order_process_id=process_row.id,
-        operator_user_id=operator.id,
+        operator_user_id=effective_user_id,
     )
     if sub_order.status != SUB_ORDER_STATUS_PENDING:
         raise ValueError("Current sub-order does not allow first-article operation")
@@ -201,8 +224,16 @@ def submit_first_article(
             "order_process_id": process_row.id,
             "process_code": process_row.process_code,
             "operator_user_id": operator.id,
+            "effective_operator_user_id": effective_user_id,
+            "assist_authorization_id": assist_row.id if assist_row else None,
         },
     )
+    if assist_row is not None:
+        mark_assist_authorization_used(
+            db,
+            authorization_row=assist_row,
+            operation=ASSIST_OP_FIRST_ARTICLE,
+        )
     db.commit()
     db.refresh(order)
     db.refresh(process_row)
@@ -218,6 +249,8 @@ def end_production(
     quantity: int,
     remark: str | None,
     operator: User,
+    effective_operator_user_id: int | None = None,
+    assist_authorization_id: int | None = None,
 ) -> tuple[ProductionOrder, ProductionOrderProcess, ProductionSubOrder]:
     if quantity <= 0:
         raise ValueError("Quantity must be greater than 0")
@@ -232,10 +265,25 @@ def end_production(
     if process_row.status != PROCESS_STATUS_IN_PROGRESS:
         raise ValueError("Current process is not in progress")
 
+    effective_user_id = effective_operator_user_id or operator.id
+    assist_row = None
+    if effective_user_id != operator.id:
+        if not assist_authorization_id:
+            raise ValueError("Assist authorization is required for cross-user operation")
+        assist_row = get_usable_assist_authorization_for_operation(
+            db,
+            authorization_id=assist_authorization_id,
+            order_id=order_id,
+            order_process_id=order_process_id,
+            target_operator_user_id=effective_user_id,
+            helper_user_id=operator.id,
+            operation=ASSIST_OP_END_PRODUCTION,
+        )
+
     sub_order = _lock_sub_order(
         db,
         order_process_id=process_row.id,
-        operator_user_id=operator.id,
+        operator_user_id=effective_user_id,
     )
     if sub_order.status != SUB_ORDER_STATUS_IN_PROGRESS:
         raise ValueError("Current sub-order is not in progress")
@@ -308,8 +356,16 @@ def end_production(
             "process_code": process_row.process_code,
             "quantity": quantity,
             "operator_user_id": operator.id,
+            "effective_operator_user_id": effective_user_id,
+            "assist_authorization_id": assist_row.id if assist_row else None,
         },
     )
+    if assist_row is not None:
+        mark_assist_authorization_used(
+            db,
+            authorization_row=assist_row,
+            operation=ASSIST_OP_END_PRODUCTION,
+        )
 
     _refresh_order_status(db, order=order)
     db.commit()

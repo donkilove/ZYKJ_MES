@@ -21,6 +21,7 @@ from app.core.production_constants import (
 from app.core.product_lifecycle import PRODUCT_LIFECYCLE_EFFECTIVE
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.process import Process
+from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.process_stage import ProcessStage
 from app.models.product import Product
 from app.models.product_process_template import ProductProcessTemplate
@@ -31,6 +32,7 @@ from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_sub_order import ProductionSubOrder
 from app.models.order_event_log import OrderEventLog
 from app.models.user import User
+from app.services.assist_authorization_service import ASSIST_STATUS_APPROVED
 from app.services.production_event_log_service import add_order_event_log
 
 
@@ -842,6 +844,10 @@ def _build_my_order_item(
     process_row: ProductionOrderProcess,
     sub_order: ProductionSubOrder | None,
     is_operator_context: bool,
+    work_view: str = "own",
+    assist_authorization_id: int | None = None,
+    can_first_article_override: bool | None = None,
+    can_end_production_override: bool | None = None,
 ) -> dict[str, object]:
     process_remaining = max(process_row.visible_quantity - process_row.completed_quantity, 0)
     sub_remaining = process_remaining
@@ -863,6 +869,11 @@ def _build_my_order_item(
             and max_producible > 0
         )
 
+    if can_first_article_override is not None:
+        can_first_article = can_first_article_override
+    if can_end_production_override is not None:
+        can_end_production = can_end_production_override
+
     return {
         "order_id": order.id,
         "order_code": order.order_code,
@@ -883,6 +894,10 @@ def _build_my_order_item(
         "user_sub_order_id": sub_order.id if sub_order else None,
         "user_assigned_quantity": sub_order.assigned_quantity if sub_order else None,
         "user_completed_quantity": sub_order.completed_quantity if sub_order else None,
+        "operator_user_id": sub_order.operator_user_id if sub_order else None,
+        "operator_username": sub_order.operator.username if sub_order and sub_order.operator else None,
+        "work_view": work_view,
+        "assist_authorization_id": assist_authorization_id,
         "max_producible_quantity": max_producible,
         "can_first_article": can_first_article,
         "can_end_production": can_end_production,
@@ -897,12 +912,138 @@ def list_my_orders(
     keyword: str | None,
     page: int,
     page_size: int,
+    view_mode: str = "own",
+    proxy_operator_user_id: int | None = None,
 ) -> tuple[int, list[dict[str, object]]]:
+    if view_mode not in {"own", "proxy", "assist"}:
+        raise ValueError("Invalid work view mode")
+
     role_codes = {role.code for role in current_user.roles}
     is_admin_context = bool(role_codes.intersection(ADMIN_QUERY_ROLE_CODES))
+    is_production_admin = ROLE_PRODUCTION_ADMIN in role_codes
 
     items: list[dict[str, object]] = []
-    if is_admin_context:
+    if view_mode == "proxy":
+        if not is_production_admin:
+            raise PermissionError("Proxy view is only available for production admin")
+        if proxy_operator_user_id is None:
+            raise ValueError("proxy_operator_user_id is required for proxy view")
+        stmt = (
+            select(ProductionSubOrder)
+            .join(ProductionSubOrder.order_process)
+            .join(ProductionOrderProcess.order)
+            .where(
+                ProductionSubOrder.operator_user_id == proxy_operator_user_id,
+                ProductionSubOrder.is_visible.is_(True),
+                ProductionOrder.status != ORDER_STATUS_COMPLETED,
+                ProductionOrderProcess.status != PROCESS_STATUS_COMPLETED,
+            )
+            .options(
+                selectinload(ProductionSubOrder.operator),
+                selectinload(ProductionSubOrder.order_process)
+                .selectinload(ProductionOrderProcess.order)
+                .selectinload(ProductionOrder.product),
+            )
+            .order_by(ProductionOrder.updated_at.desc(), ProductionSubOrder.id.desc())
+        )
+        if keyword:
+            like_pattern = f"%{keyword.strip()}%"
+            stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
+                or_(
+                    ProductionOrder.order_code.ilike(like_pattern),
+                    Product.name.ilike(like_pattern),
+                )
+            )
+        sub_orders = db.execute(stmt).scalars().all()
+        for sub_order in sub_orders:
+            process_row = sub_order.order_process
+            order = process_row.order
+            if order is None:
+                continue
+            items.append(
+                _build_my_order_item(
+                    order=order,
+                    process_row=process_row,
+                    sub_order=sub_order,
+                    is_operator_context=True,
+                    work_view="proxy",
+                    can_first_article_override=False,
+                    can_end_production_override=False,
+                )
+            )
+    elif view_mode == "assist":
+        stmt = (
+            select(ProductionAssistAuthorization)
+            .where(
+                ProductionAssistAuthorization.helper_user_id == current_user.id,
+                ProductionAssistAuthorization.status == ASSIST_STATUS_APPROVED,
+                ProductionAssistAuthorization.end_production_used_at.is_(None),
+            )
+            .options(
+                selectinload(ProductionAssistAuthorization.order).selectinload(ProductionOrder.product),
+                selectinload(ProductionAssistAuthorization.order_process),
+            )
+            .order_by(
+                ProductionAssistAuthorization.updated_at.desc(),
+                ProductionAssistAuthorization.id.desc(),
+            )
+        )
+        assist_rows = db.execute(stmt).scalars().all()
+        for assist_row in assist_rows:
+            order = assist_row.order
+            process_row = assist_row.order_process
+            if order is None or process_row is None:
+                continue
+            if order.status == ORDER_STATUS_COMPLETED or process_row.status == PROCESS_STATUS_COMPLETED:
+                continue
+            sub_order = (
+                db.execute(
+                    select(ProductionSubOrder)
+                    .where(
+                        ProductionSubOrder.order_process_id == process_row.id,
+                        ProductionSubOrder.operator_user_id == assist_row.target_operator_user_id,
+                        ProductionSubOrder.is_visible.is_(True),
+                    )
+                    .options(selectinload(ProductionSubOrder.operator))
+                )
+                .scalars()
+                .first()
+            )
+            if sub_order is None:
+                continue
+            if keyword:
+                key = keyword.strip().lower()
+                if key and key not in order.order_code.lower() and key not in (order.product.name if order.product else "").lower():
+                    continue
+
+            process_remaining = max(process_row.visible_quantity - process_row.completed_quantity, 0)
+            sub_remaining = max(sub_order.assigned_quantity - sub_order.completed_quantity, 0)
+            max_producible = min(process_remaining, sub_remaining)
+            can_first_article = (
+                assist_row.first_article_used_at is None
+                and process_row.status in {PROCESS_STATUS_PENDING, PROCESS_STATUS_PARTIAL}
+                and sub_order.status == SUB_ORDER_STATUS_PENDING
+                and max_producible > 0
+            )
+            can_end_production = (
+                assist_row.end_production_used_at is None
+                and process_row.status == PROCESS_STATUS_IN_PROGRESS
+                and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
+                and max_producible > 0
+            )
+            items.append(
+                _build_my_order_item(
+                    order=order,
+                    process_row=process_row,
+                    sub_order=sub_order,
+                    is_operator_context=True,
+                    work_view="assist",
+                    assist_authorization_id=assist_row.id,
+                    can_first_article_override=can_first_article,
+                    can_end_production_override=can_end_production,
+                )
+            )
+    elif is_admin_context:
         stmt = (
             select(ProductionOrder)
             .where(ProductionOrder.status != ORDER_STATUS_COMPLETED)
@@ -932,6 +1073,7 @@ def list_my_orders(
                     process_row=current_process,
                     sub_order=None,
                     is_operator_context=False,
+                    work_view="own",
                 )
             )
     else:
@@ -976,6 +1118,7 @@ def list_my_orders(
                     process_row=process_row,
                     sub_order=sub_order,
                     is_operator_context=True,
+                    work_view="own",
                 )
             )
 

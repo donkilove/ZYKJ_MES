@@ -14,6 +14,7 @@ from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
 from app.models.production_sub_order import ProductionSubOrder
+from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.product_parameter import ProductParameter
 from app.models.product_parameter_history import ProductParameterHistory
 from app.models.process import Process
@@ -52,6 +53,7 @@ __all__ = [
     "ProductionOrder",
     "ProductionOrderProcess",
     "ProductionSubOrder",
+    "ProductionAssistAuthorization",
     "FirstArticleRecord",
     "DailyVerificationCode",
     "ProductionRecord",

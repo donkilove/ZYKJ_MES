@@ -38,7 +38,14 @@ from app.schemas.equipment import (
 )
 from app.schemas.process import ProcessCreate, ProcessUpdate
 from app.schemas.product import ProductCreate, ProductDeleteRequest, ProductParameterInputItem, ProductParameterUpdateRequest
-from app.schemas.production import EndProductionRequest, FirstArticleRequest, OrderCreate, OrderUpdate
+from app.schemas.production import (
+    AssistAuthorizationCreateRequest,
+    AssistAuthorizationReviewRequest,
+    EndProductionRequest,
+    FirstArticleRequest,
+    OrderCreate,
+    OrderUpdate,
+)
 from app.schemas.user import UserCreate, UserUpdate
 
 
@@ -387,6 +394,170 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
         current_user=operator,
     )
     assert end.data.status in {"in_progress", "completed"}
+
+    order_resp_2 = production.create_order_api(
+        OrderCreate(
+            order_code="EP-ORD-2",
+            product_id=product_resp.data.id,
+            quantity=2,
+            process_codes=[process.data.code],
+            template_id=None,
+            process_steps=None,
+            save_as_template=False,
+            new_template_name=None,
+            new_template_set_default=False,
+        ),
+        db,
+        current_user=admin,
+    )
+    order_id_2 = order_resp_2.data.id
+    detail_2 = production.get_order_detail_api(order_id_2, db=db, _=admin)
+    process_id_2 = detail_2.data.processes[0].id
+
+    with pytest.raises(HTTPException) as proxy_error:
+        production.get_my_orders_api(
+            keyword=None,
+            page=1,
+            page_size=20,
+            view_mode="proxy",
+            proxy_operator_user_id=None,
+            db=db,
+            current_user=admin,
+        )
+    assert proxy_error.value.status_code == 400
+
+    assist_created = production.create_assist_authorization_api(
+        order_id_2,
+        AssistAuthorizationCreateRequest(
+            order_process_id=process_id_2,
+            target_operator_user_id=operator.id,
+            helper_user_id=admin.id,
+            reason="代班测试",
+        ),
+        db=db,
+        current_user=operator,
+    )
+    assert assist_created.data.status == "pending"
+
+    with pytest.raises(HTTPException) as duplicate_error:
+        production.create_assist_authorization_api(
+            order_id_2,
+            AssistAuthorizationCreateRequest(
+                order_process_id=process_id_2,
+                target_operator_user_id=operator.id,
+                helper_user_id=admin.id,
+                reason="重复申请",
+            ),
+            db=db,
+            current_user=operator,
+        )
+    assert duplicate_error.value.status_code == 409
+
+    assist_list = production.get_assist_authorizations_api(
+        page=1,
+        page_size=20,
+        status_text="pending",
+        db=db,
+        current_user=admin,
+    )
+    assert assist_list.data.total >= 1
+
+    assist_user_options = production.get_assist_user_options_api(
+        page=1,
+        page_size=20,
+        keyword=None,
+        role_code=None,
+        db=db,
+        _=admin,
+    )
+    assert assist_user_options.data.total >= 2
+    assert any(item.id == operator.id for item in assist_user_options.data.items)
+
+    assist_operator_options = production.get_assist_user_options_api(
+        page=1,
+        page_size=20,
+        keyword=None,
+        role_code=ROLE_OPERATOR,
+        db=db,
+        _=admin,
+    )
+    assert assist_operator_options.data.total >= 1
+    assert all(ROLE_OPERATOR in item.role_codes for item in assist_operator_options.data.items)
+
+    with pytest.raises(HTTPException) as invalid_role_error:
+        production.get_assist_user_options_api(
+            page=1,
+            page_size=20,
+            keyword=None,
+            role_code="invalid_role",
+            db=db,
+            _=admin,
+        )
+    assert invalid_role_error.value.status_code == 400
+
+    reviewed = production.review_assist_authorization_api(
+        authorization_id=assist_created.data.id,
+        payload=AssistAuthorizationReviewRequest(approve=True, review_remark="ok"),
+        db=db,
+        current_user=admin,
+    )
+    assert reviewed.data.status == "approved"
+
+    assist_my_orders = production.get_my_orders_api(
+        keyword=None,
+        page=1,
+        page_size=20,
+        view_mode="assist",
+        proxy_operator_user_id=None,
+        db=db,
+        current_user=admin,
+    )
+    assert assist_my_orders.data.total >= 1
+    assist_item = assist_my_orders.data.items[0]
+    assert assist_item.assist_authorization_id == assist_created.data.id
+
+    assist_first = production.submit_first_article_api(
+        order_id_2,
+        FirstArticleRequest(
+            order_process_id=process_id_2,
+            verification_code=settings.production_default_verification_code,
+            remark="assist",
+            effective_operator_user_id=operator.id,
+            assist_authorization_id=assist_created.data.id,
+        ),
+        db,
+        current_user=admin,
+    )
+    assert assist_first.data.status in {"in_progress", "pending"}
+
+    assist_end = production.end_production_api(
+        order_id_2,
+        EndProductionRequest(
+            order_process_id=process_id_2,
+            quantity=2,
+            remark="assist-done",
+            effective_operator_user_id=operator.id,
+            assist_authorization_id=assist_created.data.id,
+        ),
+        db,
+        current_user=admin,
+    )
+    assert assist_end.data.status in {"in_progress", "completed"}
+
+    with pytest.raises(HTTPException) as consumed_error:
+        production.end_production_api(
+            order_id_2,
+            EndProductionRequest(
+                order_process_id=process_id_2,
+                quantity=1,
+                remark="retry",
+                effective_operator_user_id=operator.id,
+                assist_authorization_id=assist_created.data.id,
+            ),
+            db,
+            current_user=admin,
+        )
+    assert consumed_error.value.status_code in {400, 404}
 
     overview = production.get_overview_stats_api(db=db, _=qa_admin)
     assert overview.data.total_orders >= 1

@@ -16,7 +16,7 @@ from app.core.production_constants import (
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_sub_order import ProductionSubOrder
-from app.services import production_execution_service, production_order_service
+from app.services import assist_authorization_service, production_execution_service, production_order_service
 
 
 def _prepare_order_env(db, factory):
@@ -266,4 +266,123 @@ def test_execution_service_validation_errors(db, factory) -> None:
             quantity=0,
             remark=None,
             operator=operator,
+        )
+
+
+def test_assist_authorization_and_view_modes(db, factory) -> None:
+    _, process, operator, admin, product = _prepare_order_env(db, factory)
+
+    order = production_order_service.create_order(
+        db,
+        order_code="ORD-2001",
+        product_id=product.id,
+        quantity=3,
+        start_date=None,
+        due_date=None,
+        remark="assist",
+        process_codes=[process.code],
+        template_id=None,
+        process_steps=None,
+        save_as_template=False,
+        new_template_name=None,
+        new_template_set_default=False,
+        operator=admin,
+    )
+    process_row = db.execute(
+        select(ProductionOrderProcess).where(ProductionOrderProcess.order_id == order.id)
+    ).scalars().first()
+    assert process_row is not None
+
+    total_proxy, proxy_items = production_order_service.list_my_orders(
+        db,
+        current_user=admin,
+        keyword=None,
+        page=1,
+        page_size=10,
+        view_mode="proxy",
+        proxy_operator_user_id=operator.id,
+    )
+    assert total_proxy == 1
+    assert proxy_items[0]["can_first_article"] is False
+    assert proxy_items[0]["can_end_production"] is False
+
+    auth_row = assist_authorization_service.create_assist_authorization(
+        db,
+        order_id=order.id,
+        order_process_id=process_row.id,
+        target_operator_user_id=operator.id,
+        helper_user_id=admin.id,
+        reason="代班服务测试",
+        requester=operator,
+    )
+    reviewed_row = assist_authorization_service.review_assist_authorization(
+        db,
+        authorization_id=auth_row.id,
+        approve=True,
+        reviewer=admin,
+        review_remark="ok",
+    )
+    assert reviewed_row.status == "approved"
+
+    total_assist, assist_items = production_order_service.list_my_orders(
+        db,
+        current_user=admin,
+        keyword=None,
+        page=1,
+        page_size=10,
+        view_mode="assist",
+    )
+    assert total_assist == 1
+    assert assist_items[0]["assist_authorization_id"] == auth_row.id
+    assert assist_items[0]["work_view"] == "assist"
+    assert assist_items[0]["can_first_article"] is True
+
+    order, process_row, _ = production_execution_service.submit_first_article(
+        db,
+        order_id=order.id,
+        order_process_id=process_row.id,
+        verification_code=settings.production_default_verification_code,
+        remark="assist-first",
+        operator=admin,
+        effective_operator_user_id=operator.id,
+        assist_authorization_id=auth_row.id,
+    )
+    assert order.status == ORDER_STATUS_IN_PROGRESS
+    assert process_row.status == PROCESS_STATUS_IN_PROGRESS
+
+    with pytest.raises(ValueError, match="does not allow first-article operation"):
+        production_execution_service.submit_first_article(
+            db,
+            order_id=order.id,
+            order_process_id=process_row.id,
+            verification_code=settings.production_default_verification_code,
+            remark=None,
+            operator=admin,
+            effective_operator_user_id=operator.id,
+            assist_authorization_id=auth_row.id,
+        )
+
+    order, process_row, _ = production_execution_service.end_production(
+        db,
+        order_id=order.id,
+        order_process_id=process_row.id,
+        quantity=3,
+        remark="assist-end",
+        operator=admin,
+        effective_operator_user_id=operator.id,
+        assist_authorization_id=auth_row.id,
+    )
+    assert process_row.completed_quantity == 3
+    assert order.status == ORDER_STATUS_COMPLETED
+
+    with pytest.raises(ValueError, match="Order already completed"):
+        production_execution_service.end_production(
+            db,
+            order_id=order.id,
+            order_process_id=process_row.id,
+            quantity=1,
+            remark="retry",
+            operator=admin,
+            effective_operator_user_id=operator.id,
+            assist_authorization_id=auth_row.id,
         )

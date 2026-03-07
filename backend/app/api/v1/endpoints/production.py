@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, require_role_codes
@@ -19,9 +20,16 @@ from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
 from app.models.production_sub_order import ProductionSubOrder
+from app.models.role import Role
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.production import (
+    AssistAuthorizationCreateRequest,
+    AssistAuthorizationItem,
+    AssistAuthorizationListResult,
+    AssistAuthorizationReviewRequest,
+    AssistUserOptionItem,
+    AssistUserOptionListResult,
     EndProductionRequest,
     FirstArticleRequest,
     MyOrderItem,
@@ -42,6 +50,7 @@ from app.schemas.production import (
     ProductionStatsOverview,
     ProductionSubOrderItem,
 )
+from app.services.assist_authorization_service import create_assist_authorization, list_assist_authorizations, review_assist_authorization
 from app.services.production_execution_service import end_production, submit_first_article
 from app.services.production_order_service import (
     complete_order_manually,
@@ -164,6 +173,43 @@ def _to_event_item(row: OrderEventLog) -> OrderEventLogItem:
         operator_username=row.operator.username if row.operator else None,
         payload_json=row.payload_json,
         created_at=row.created_at,
+    )
+
+
+def _to_assist_authorization_item(row) -> AssistAuthorizationItem:
+    return AssistAuthorizationItem(
+        id=row.id,
+        order_id=row.order_id,
+        order_code=row.order.order_code if row.order else "",
+        order_process_id=row.order_process_id,
+        process_code=row.order_process.process_code if row.order_process else "",
+        process_name=row.order_process.process_name if row.order_process else "",
+        target_operator_user_id=row.target_operator_user_id,
+        target_operator_username=row.target_operator.username if row.target_operator else "",
+        requester_user_id=row.requester_user_id,
+        requester_username=row.requester.username if row.requester else "",
+        helper_user_id=row.helper_user_id,
+        helper_username=row.helper.username if row.helper else "",
+        status=row.status,
+        reason=row.reason,
+        review_remark=row.review_remark,
+        reviewer_user_id=row.reviewer_user_id,
+        reviewer_username=row.reviewer.username if row.reviewer else None,
+        reviewed_at=row.reviewed_at,
+        first_article_used_at=row.first_article_used_at,
+        end_production_used_at=row.end_production_used_at,
+        consumed_at=row.consumed_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _to_assist_user_option_item(user: User) -> AssistUserOptionItem:
+    return AssistUserOptionItem(
+        id=user.id,
+        username=user.username,
+        full_name=user.full_name,
+        role_codes=sorted(role.code for role in user.roles),
     )
 
 
@@ -353,18 +399,27 @@ def get_my_orders_api(
     keyword: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=30, ge=1, le=200),
+    view_mode: str = "own",
+    proxy_operator_user_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(
         require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_OPERATOR])
     ),
 ) -> ApiResponse[MyOrderListResult]:
-    total, items = list_my_orders(
-        db,
-        current_user=current_user,
-        keyword=keyword,
-        page=page,
-        page_size=page_size,
-    )
+    if proxy_operator_user_id is not None and proxy_operator_user_id <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="proxy_operator_user_id must be > 0")
+    try:
+        total, items = list_my_orders(
+            db,
+            current_user=current_user,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+            view_mode=view_mode,
+            proxy_operator_user_id=proxy_operator_user_id,
+        )
+    except Exception as error:
+        _raise_service_error(error)
     return success_response(
         MyOrderListResult(
             total=total,
@@ -381,7 +436,7 @@ def submit_first_article_api(
     order_id: int,
     payload: FirstArticleRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_OPERATOR])),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
 ) -> ApiResponse[OrderActionResult]:
     try:
         row, _, _ = submit_first_article(
@@ -391,6 +446,8 @@ def submit_first_article_api(
             verification_code=payload.verification_code,
             remark=payload.remark,
             operator=current_user,
+            effective_operator_user_id=payload.effective_operator_user_id,
+            assist_authorization_id=payload.assist_authorization_id,
         )
     except Exception as error:
         _raise_service_error(error)
@@ -412,7 +469,7 @@ def end_production_api(
     order_id: int,
     payload: EndProductionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_OPERATOR])),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
 ) -> ApiResponse[OrderActionResult]:
     try:
         row, _, _ = end_production(
@@ -422,6 +479,8 @@ def end_production_api(
             quantity=payload.quantity,
             remark=payload.remark,
             operator=current_user,
+            effective_operator_user_id=payload.effective_operator_user_id,
+            assist_authorization_id=payload.assist_authorization_id,
         )
     except Exception as error:
         _raise_service_error(error)
@@ -470,4 +529,141 @@ def get_operator_stats_api(
     rows = get_operator_stats(db)
     return success_response(
         ProductionOperatorStatsResult(items=[ProductionOperatorStatItem(**row) for row in rows])
+    )
+
+
+@router.get(
+    "/assist-authorizations",
+    response_model=ApiResponse[AssistAuthorizationListResult],
+)
+def get_assist_authorizations_api(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
+    status_text: str | None = Query(default=None, alias="status"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+) -> ApiResponse[AssistAuthorizationListResult]:
+    try:
+        total, rows = list_assist_authorizations(
+            db,
+            current_user=current_user,
+            page=page,
+            page_size=page_size,
+            status=status_text,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(
+        AssistAuthorizationListResult(
+            total=total,
+            items=[_to_assist_authorization_item(row) for row in rows],
+        )
+    )
+
+
+@router.post(
+    "/orders/{order_id}/assist-authorizations",
+    response_model=ApiResponse[AssistAuthorizationItem],
+    status_code=status.HTTP_201_CREATED,
+)
+def create_assist_authorization_api(
+    order_id: int,
+    payload: AssistAuthorizationCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+) -> ApiResponse[AssistAuthorizationItem]:
+    try:
+        row = create_assist_authorization(
+            db,
+            order_id=order_id,
+            order_process_id=payload.order_process_id,
+            target_operator_user_id=payload.target_operator_user_id,
+            helper_user_id=payload.helper_user_id,
+            reason=payload.reason,
+            requester=current_user,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(
+        _to_assist_authorization_item(row),
+        message="created",
+    )
+
+
+@router.post(
+    "/assist-authorizations/{authorization_id}/review",
+    response_model=ApiResponse[AssistAuthorizationItem],
+)
+def review_assist_authorization_api(
+    authorization_id: int,
+    payload: AssistAuthorizationReviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes([ROLE_PRODUCTION_ADMIN])),
+) -> ApiResponse[AssistAuthorizationItem]:
+    try:
+        row = review_assist_authorization(
+            db,
+            authorization_id=authorization_id,
+            approve=payload.approve,
+            reviewer=current_user,
+            review_remark=payload.review_remark,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(
+        _to_assist_authorization_item(row),
+        message="reviewed",
+    )
+
+
+@router.get(
+    "/assist-user-options",
+    response_model=ApiResponse[AssistUserOptionListResult],
+)
+def get_assist_user_options_api(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    keyword: str | None = Query(default=None),
+    role_code: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+) -> ApiResponse[AssistUserOptionListResult]:
+    allowed_role_codes = {
+        ROLE_SYSTEM_ADMIN,
+        ROLE_PRODUCTION_ADMIN,
+        ROLE_OPERATOR,
+    }
+    if role_code and role_code not in allowed_role_codes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role_code: {role_code}")
+
+    stmt = (
+        select(User)
+        .join(User.roles)
+        .where(
+            User.is_active.is_(True),
+            Role.code.in_(allowed_role_codes),
+        )
+        .order_by(User.id.asc())
+        .distinct()
+    )
+    if role_code:
+        stmt = stmt.where(Role.code == role_code)
+    if keyword and keyword.strip():
+        like_pattern = f"%{keyword.strip()}%"
+        stmt = stmt.where(
+            or_(
+                User.username.ilike(like_pattern),
+                User.full_name.ilike(like_pattern),
+            )
+        )
+
+    rows = db.execute(stmt).scalars().unique().all()
+    total = len(rows)
+    offset = (page - 1) * page_size
+    paged_rows = rows[offset : offset + page_size]
+    return success_response(
+        AssistUserOptionListResult(
+            total=total,
+            items=[_to_assist_user_option_item(user) for user in paged_rows],
+        )
     )

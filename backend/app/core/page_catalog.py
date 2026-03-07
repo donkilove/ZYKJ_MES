@@ -29,6 +29,7 @@ PAGE_MAINTENANCE_RECORD = "maintenance_record"
 PAGE_PRODUCTION = "production"
 PAGE_PRODUCTION_ORDER_MANAGEMENT = "production_order_management"
 PAGE_PRODUCTION_ORDER_QUERY = "production_order_query"
+PAGE_PRODUCTION_ASSIST_APPROVAL = "production_assist_approval"
 PAGE_PRODUCTION_DATA_QUERY = "production_data_query"
 PAGE_QUALITY = "quality"
 PAGE_FIRST_ARTICLE_MANAGEMENT = "first_article_management"
@@ -185,12 +186,20 @@ PAGE_CATALOG = [
         "sort_order": 52,
     },
     {
+        "code": PAGE_PRODUCTION_ASSIST_APPROVAL,
+        "name": "浠ｇ彮瀹℃壒",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCTION,
+        "always_visible": False,
+        "sort_order": 53,
+    },
+    {
         "code": PAGE_PRODUCTION_DATA_QUERY,
         "name": "生产数据",
         "page_type": PAGE_TYPE_TAB,
         "parent_code": PAGE_PRODUCTION,
         "always_visible": False,
-        "sort_order": 53,
+        "sort_order": 54,
     },
     {
         "code": PAGE_QUALITY,
@@ -304,6 +313,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCTION,
         PAGE_PRODUCTION_ORDER_MANAGEMENT,
         PAGE_PRODUCTION_ORDER_QUERY,
+        PAGE_PRODUCTION_ASSIST_APPROVAL,
         PAGE_PRODUCTION_DATA_QUERY,
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
