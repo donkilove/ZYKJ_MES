@@ -8,6 +8,9 @@ import '../models/product_models.dart';
 import '../services/api_exception.dart';
 import '../services/product_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/unified_list_table_header_style.dart';
+
+enum _ProductParameterManagementListAction { history, edit }
 
 class ProductParameterManagementPage extends StatefulWidget {
   const ProductParameterManagementPage({
@@ -128,6 +131,34 @@ class _ProductParameterManagementPageState
     final min = local.minute.toString().padLeft(2, '0');
     final sec = local.second.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd $hh:$min:$sec';
+  }
+
+  List<PopupMenuEntry<_ProductParameterManagementListAction>>
+  _buildListActionMenuItems() {
+    return const [
+      PopupMenuItem(
+        value: _ProductParameterManagementListAction.history,
+        child: Text('查看历史'),
+      ),
+      PopupMenuItem(
+        value: _ProductParameterManagementListAction.edit,
+        child: Text('编辑参数'),
+      ),
+    ];
+  }
+
+  Future<void> _handleListAction(
+    _ProductParameterManagementListAction action,
+    ProductItem product,
+  ) async {
+    switch (action) {
+      case _ProductParameterManagementListAction.history:
+        await _showHistoryDialog(product);
+        return;
+      case _ProductParameterManagementListAction.edit:
+        await _enterEditor(product);
+        return;
+    }
   }
 
   ProductItem? _findProductById(int productId) {
@@ -337,6 +368,47 @@ class _ProductParameterManagementPageState
     return confirmed ?? false;
   }
 
+  Future<bool> _confirmImpactForEffectiveUpdate(
+    ProductImpactAnalysisResult impact,
+  ) async {
+    if (!impact.requiresConfirmation) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('变更影响确认'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '存在 ${impact.totalOrders} 条未完工订单（待开工 ${impact.pendingOrders}，生产中 ${impact.inProgressOrders}）。',
+                ),
+                const SizedBox(height: 8),
+                const Text('确认后将按强制模式继续保存。'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('确认继续'),
+            ),
+          ],
+        );
+      },
+    );
+    return confirmed ?? false;
+  }
+
   Future<bool> _exitEditor({bool force = false}) async {
     if (_editingProduct == null) {
       return true;
@@ -510,11 +582,37 @@ class _ProductParameterManagementPageState
     });
 
     try {
-      final result = await _productService.updateProductParameters(
-        productId: product.id,
-        remark: remark,
-        items: items,
-      );
+      ProductParameterUpdateResult result;
+      try {
+        result = await _productService.updateProductParameters(
+          productId: product.id,
+          remark: remark,
+          items: items,
+        );
+      } on ApiException catch (error) {
+        if (!error.message.contains('Impact confirmation required')) {
+          rethrow;
+        }
+        final impact = await _productService.getProductImpactAnalysis(
+          productId: product.id,
+          operation: 'update_parameters',
+        );
+        final confirmed = await _confirmImpactForEffectiveUpdate(impact);
+        if (!confirmed) {
+          if (mounted) {
+            setState(() {
+              _editorSubmitting = false;
+            });
+          }
+          return;
+        }
+        result = await _productService.updateProductParameters(
+          productId: product.id,
+          remark: remark,
+          items: items,
+          confirmed: true,
+        );
+      }
       if (!mounted) {
         return;
       }
@@ -980,37 +1078,45 @@ class _ProductParameterManagementPageState
               ? const Center(child: Text('暂无产品'))
               : Card(
                   child: AdaptiveTableContainer(
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(label: Text('产品名称')),
-                        DataColumn(label: Text('创建时间')),
-                        DataColumn(label: Text('最后修改时间')),
-                        DataColumn(label: Text('最后修改参数')),
-                        DataColumn(label: Text('历史修改参数备注')),
-                        DataColumn(label: Text('编辑产品参数')),
-                      ],
-                      rows: _products.map((product) {
-                        return DataRow(
-                          cells: [
-                            DataCell(Text(product.name)),
-                            DataCell(Text(_formatTime(product.createdAt))),
-                            DataCell(Text(_formatTime(product.updatedAt))),
-                            DataCell(Text(product.lastParameterSummary ?? '-')),
-                            DataCell(
-                              TextButton(
-                                onPressed: () => _showHistoryDialog(product),
-                                child: const Text('查看历史'),
+                    child: UnifiedListTableHeaderStyle.wrap(
+                      theme: theme,
+                      child: DataTable(
+                        columns: [
+                          UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                          UnifiedListTableHeaderStyle.column(context, '创建时间'),
+                          UnifiedListTableHeaderStyle.column(context, '最后修改时间'),
+                          UnifiedListTableHeaderStyle.column(context, '最后修改参数'),
+                          UnifiedListTableHeaderStyle.column(
+                            context,
+                            '操作',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                        rows: _products.map((product) {
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(product.name)),
+                              DataCell(Text(_formatTime(product.createdAt))),
+                              DataCell(Text(_formatTime(product.updatedAt))),
+                              DataCell(
+                                Text(product.lastParameterSummary ?? '-'),
                               ),
-                            ),
-                            DataCell(
-                              TextButton(
-                                onPressed: () => _enterEditor(product),
-                                child: const Text('编辑参数'),
+                              DataCell(
+                                UnifiedListTableHeaderStyle.actionMenuButton<
+                                  _ProductParameterManagementListAction
+                                >(
+                                  theme: theme,
+                                  onSelected: (action) {
+                                    _handleListAction(action, product);
+                                  },
+                                  itemBuilder: (context) =>
+                                      _buildListActionMenuItems(),
+                                ),
                               ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
+                            ],
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ),

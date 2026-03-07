@@ -9,6 +9,9 @@ import '../models/product_models.dart';
 import '../services/api_exception.dart';
 import '../services/product_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/unified_list_table_header_style.dart';
+
+enum _ProductParameterQueryListAction { view }
 
 class ProductParameterQueryPage extends StatefulWidget {
   const ProductParameterQueryPage({
@@ -90,6 +93,27 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     final min = local.minute.toString().padLeft(2, '0');
     final sec = local.second.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd $hh:$min:$sec';
+  }
+
+  List<PopupMenuEntry<_ProductParameterQueryListAction>>
+  _buildListActionMenuItems() {
+    return const [
+      PopupMenuItem(
+        value: _ProductParameterQueryListAction.view,
+        child: Text('查看参数'),
+      ),
+    ];
+  }
+
+  Future<void> _handleListAction(
+    _ProductParameterQueryListAction action,
+    ProductItem product,
+  ) async {
+    switch (action) {
+      case _ProductParameterQueryListAction.view:
+        await _showParametersDialog(product);
+        return;
+    }
   }
 
   ProductItem? _findProductById(int productId) {
@@ -341,29 +365,44 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                 ? const Center(child: Text('暂无产品'))
                 : Card(
                     child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('产品名称')),
-                          DataColumn(label: Text('创建时间')),
-                          DataColumn(label: Text('最后修改时间')),
-                          DataColumn(label: Text('查看产品参数')),
-                        ],
-                        rows: _products.map((product) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(product.name)),
-                              DataCell(Text(_formatTime(product.createdAt))),
-                              DataCell(Text(_formatTime(product.updatedAt))),
-                              DataCell(
-                                TextButton(
-                                  onPressed: () =>
-                                      _showParametersDialog(product),
-                                  child: const Text('查看参数'),
+                      child: UnifiedListTableHeaderStyle.wrap(
+                        theme: theme,
+                        child: DataTable(
+                          columns: [
+                            UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                            UnifiedListTableHeaderStyle.column(context, '创建时间'),
+                            UnifiedListTableHeaderStyle.column(
+                              context,
+                              '最后修改时间',
+                            ),
+                            UnifiedListTableHeaderStyle.column(
+                              context,
+                              '操作',
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                          rows: _products.map((product) {
+                            return DataRow(
+                              cells: [
+                                DataCell(Text(product.name)),
+                                DataCell(Text(_formatTime(product.createdAt))),
+                                DataCell(Text(_formatTime(product.updatedAt))),
+                                DataCell(
+                                  UnifiedListTableHeaderStyle.actionMenuButton<
+                                    _ProductParameterQueryListAction
+                                  >(
+                                    theme: theme,
+                                    onSelected: (action) {
+                                      _handleListAction(action, product);
+                                    },
+                                    itemBuilder: (context) =>
+                                        _buildListActionMenuItems(),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+                              ],
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ),
                   ),
