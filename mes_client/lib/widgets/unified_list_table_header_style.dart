@@ -8,6 +8,7 @@ class UnifiedListTableHeaderStyle {
   static const double _headerVerticalPadding = 8;
   static const double _headingRowHeight = 44;
   static const double _actionButtonWidth = 64;
+  static const double _actionButtonHeight = 28;
   static const double _actionButtonHorizontalPadding = 8;
   static const double _actionButtonVerticalPadding = 2;
   static const double _actionButtonFontSize = 12;
@@ -66,9 +67,11 @@ class UnifiedListTableHeaderStyle {
     required ValueChanged<T> onSelected,
     String label = '操作',
     double width = _actionButtonWidth,
+    double height = _actionButtonHeight,
   }) {
     return SizedBox(
       width: width,
+      height: height,
       child: Container(
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(
@@ -81,13 +84,17 @@ class UnifiedListTableHeaderStyle {
         ),
         child: PopupMenuButton<T>(
           color: theme.colorScheme.primaryContainer,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 0, minHeight: 0),
           onSelected: onSelected,
           itemBuilder: itemBuilder,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: theme.colorScheme.onPrimary,
-              fontSize: _actionButtonFontSize,
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: theme.colorScheme.onPrimary,
+                fontSize: _actionButtonFontSize,
+              ),
             ),
           ),
         ),

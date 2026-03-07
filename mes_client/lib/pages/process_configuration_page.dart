@@ -10,6 +10,7 @@ import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/production_service.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 class _TemplateStepDraft {
   _TemplateStepDraft({required this.stageId, required this.processId});
@@ -2012,69 +2013,46 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                         ),
                                         SizedBox(
                                           width: 64,
-                                          child: Container(
-                                            alignment: Alignment.center,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: theme.colorScheme.primary,
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                            child:
-                                                PopupMenuButton<
-                                                  _TemplateAction
-                                                >(
-                                                  color: theme
-                                                      .colorScheme
-                                                      .primaryContainer,
-                                                  onSelected: (action) {
-                                                    _handleTemplateAction(
-                                                      action,
-                                                      item,
-                                                    );
-                                                  },
-                                                  itemBuilder: (context) =>
-                                                      const [
-                                                        PopupMenuItem(
-                                                          value: _TemplateAction
-                                                              .edit,
-                                                          child: Text('编辑'),
-                                                        ),
-                                                        PopupMenuItem(
-                                                          value: _TemplateAction
-                                                              .publish,
-                                                          child: Text('发布'),
-                                                        ),
-                                                        PopupMenuItem(
-                                                          value: _TemplateAction
-                                                              .impact,
-                                                          child: Text('影响分析'),
-                                                        ),
-                                                        PopupMenuItem(
-                                                          value: _TemplateAction
-                                                              .versions,
-                                                          child: Text('版本管理'),
-                                                        ),
-                                                        PopupMenuItem(
-                                                          value: _TemplateAction
-                                                              .delete,
-                                                          child: Text('删除'),
-                                                        ),
-                                                      ],
-                                                  child: Text(
-                                                    '操作',
-                                                    style: TextStyle(
-                                                      color: theme
-                                                          .colorScheme
-                                                          .onPrimary,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ),
-                                          ),
+                                          child:
+                                              UnifiedListTableHeaderStyle.actionMenuButton<
+                                                _TemplateAction
+                                              >(
+                                                theme: theme,
+                                                onSelected: (action) {
+                                                  _handleTemplateAction(
+                                                    action,
+                                                    item,
+                                                  );
+                                                },
+                                                itemBuilder: (context) =>
+                                                    const [
+                                                      PopupMenuItem(
+                                                        value: _TemplateAction
+                                                            .edit,
+                                                        child: Text('编辑'),
+                                                      ),
+                                                      PopupMenuItem(
+                                                        value: _TemplateAction
+                                                            .publish,
+                                                        child: Text('发布'),
+                                                      ),
+                                                      PopupMenuItem(
+                                                        value: _TemplateAction
+                                                            .impact,
+                                                        child: Text('影响分析'),
+                                                      ),
+                                                      PopupMenuItem(
+                                                        value: _TemplateAction
+                                                            .versions,
+                                                        child: Text('版本管理'),
+                                                      ),
+                                                      PopupMenuItem(
+                                                        value: _TemplateAction
+                                                            .delete,
+                                                        child: Text('删除'),
+                                                      ),
+                                                    ],
+                                              ),
                                         ),
                                       ],
                                     ),

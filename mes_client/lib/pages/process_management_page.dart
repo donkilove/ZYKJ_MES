@@ -5,6 +5,7 @@ import '../models/craft_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 enum _StageAction { edit, toggle, delete }
 
@@ -808,69 +809,43 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                       ),
                                                       SizedBox(
                                                         width: 64,
-                                                        child: Container(
-                                                          alignment:
-                                                              Alignment.center,
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 2,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color: theme
-                                                                .colorScheme
-                                                                .primary,
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  20,
+                                                        child: UnifiedListTableHeaderStyle.actionMenuButton<_StageAction>(
+                                                          theme: theme,
+                                                          onSelected: (action) {
+                                                            _handleStageAction(
+                                                              action,
+                                                              item,
+                                                            );
+                                                          },
+                                                          itemBuilder:
+                                                              (
+                                                                context,
+                                                              ) => const [
+                                                                PopupMenuItem(
+                                                                  value:
+                                                                      _StageAction
+                                                                          .edit,
+                                                                  child: Text(
+                                                                    '编辑',
+                                                                  ),
                                                                 ),
-                                                          ),
-                                                          child: PopupMenuButton<_StageAction>(
-                                                            color: theme
-                                                                .colorScheme
-                                                                .primaryContainer,
-                                                            onSelected: (action) {
-                                                              _handleStageAction(
-                                                                action,
-                                                                item,
-                                                              );
-                                                            },
-                                                            itemBuilder: (context) => const [
-                                                              PopupMenuItem(
-                                                                value:
-                                                                    _StageAction
-                                                                        .edit,
-                                                                child: Text(
-                                                                  '编辑',
+                                                                PopupMenuItem(
+                                                                  value:
+                                                                      _StageAction
+                                                                          .toggle,
+                                                                  child: Text(
+                                                                    '启用/停用',
+                                                                  ),
                                                                 ),
-                                                              ),
-                                                              PopupMenuItem(
-                                                                value:
-                                                                    _StageAction
-                                                                        .toggle,
-                                                                child: Text(
-                                                                  '启用/停用',
+                                                                PopupMenuItem(
+                                                                  value:
+                                                                      _StageAction
+                                                                          .delete,
+                                                                  child: Text(
+                                                                    '删除',
+                                                                  ),
                                                                 ),
-                                                              ),
-                                                              PopupMenuItem(
-                                                                value:
-                                                                    _StageAction
-                                                                        .delete,
-                                                                child: Text(
-                                                                  '删除',
-                                                                ),
-                                                              ),
-                                                            ],
-                                                            child: Text(
-                                                              '操作',
-                                                              style: TextStyle(
-                                                                color: theme
-                                                                    .colorScheme
-                                                                    .onPrimary,
-                                                                fontSize: 12,
-                                                              ),
-                                                            ),
-                                                          ),
+                                                              ],
                                                         ),
                                                       ),
                                                     ],
@@ -947,69 +922,36 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                       ),
                                                       SizedBox(
                                                         width: 64,
-                                                        child: Container(
-                                                          alignment:
-                                                              Alignment.center,
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 2,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color: theme
-                                                                .colorScheme
-                                                                .primary,
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  20,
-                                                                ),
-                                                          ),
-                                                          child: PopupMenuButton<_ProcessAction>(
-                                                            color: theme
-                                                                .colorScheme
-                                                                .primaryContainer,
-                                                            onSelected: (action) {
-                                                              _handleProcessAction(
-                                                                action,
-                                                                item,
-                                                              );
-                                                            },
-                                                            itemBuilder: (context) => const [
-                                                              PopupMenuItem(
-                                                                value:
-                                                                    _ProcessAction
-                                                                        .edit,
-                                                                child: Text(
-                                                                  '编辑',
-                                                                ),
-                                                              ),
-                                                              PopupMenuItem(
-                                                                value:
-                                                                    _ProcessAction
-                                                                        .toggle,
-                                                                child: Text(
-                                                                  '启用/停用',
-                                                                ),
-                                                              ),
-                                                              PopupMenuItem(
-                                                                value:
-                                                                    _ProcessAction
-                                                                        .delete,
-                                                                child: Text(
-                                                                  '删除',
-                                                                ),
-                                                              ),
-                                                            ],
-                                                            child: Text(
-                                                              '操作',
-                                                              style: TextStyle(
-                                                                color: theme
-                                                                    .colorScheme
-                                                                    .onPrimary,
-                                                                fontSize: 12,
+                                                        child: UnifiedListTableHeaderStyle.actionMenuButton<_ProcessAction>(
+                                                          theme: theme,
+                                                          onSelected: (action) {
+                                                            _handleProcessAction(
+                                                              action,
+                                                              item,
+                                                            );
+                                                          },
+                                                          itemBuilder: (context) => const [
+                                                            PopupMenuItem(
+                                                              value:
+                                                                  _ProcessAction
+                                                                      .edit,
+                                                              child: Text('编辑'),
+                                                            ),
+                                                            PopupMenuItem(
+                                                              value:
+                                                                  _ProcessAction
+                                                                      .toggle,
+                                                              child: Text(
+                                                                '启用/停用',
                                                               ),
                                                             ),
-                                                          ),
+                                                            PopupMenuItem(
+                                                              value:
+                                                                  _ProcessAction
+                                                                      .delete,
+                                                              child: Text('删除'),
+                                                            ),
+                                                          ],
                                                         ),
                                                       ),
                                                     ],
