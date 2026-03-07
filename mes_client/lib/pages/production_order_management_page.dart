@@ -9,7 +9,14 @@ import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
 
-enum _ManagementOrderAction { detail, edit, delete, complete }
+enum _ManagementOrderAction {
+  detail,
+  edit,
+  delete,
+  complete,
+  configurePipeline,
+  disablePipeline,
+}
 
 class _OrderProcessStepDraft {
   _OrderProcessStepDraft({required this.stageId, required this.processId});
@@ -197,7 +204,7 @@ class _ProductionOrderManagementPageState
   List<PopupMenuEntry<_ManagementOrderAction>> _buildOrderActionMenuItems(
     ProductionOrderItem item,
   ) {
-    return [
+    final items = <PopupMenuEntry<_ManagementOrderAction>>[
       const PopupMenuItem<_ManagementOrderAction>(
         value: _ManagementOrderAction.detail,
         child: Text('详情'),
@@ -218,6 +225,17 @@ class _ProductionOrderManagementPageState
         child: const Text('完工'),
       ),
     ];
+    if (widget.canWrite) {
+      items.add(
+        PopupMenuItem<_ManagementOrderAction>(
+          value: item.pipelineEnabled
+              ? _ManagementOrderAction.disablePipeline
+              : _ManagementOrderAction.configurePipeline,
+          child: Text(item.pipelineEnabled ? '关闭并行模式' : '并行模式设置'),
+        ),
+      );
+    }
+    return items;
   }
 
   void _onOrderActionSelected(
@@ -236,6 +254,12 @@ class _ProductionOrderManagementPageState
         break;
       case _ManagementOrderAction.complete:
         _completeOrder(item);
+        break;
+      case _ManagementOrderAction.configurePipeline:
+        _showPipelineModeDialog(item);
+        break;
+      case _ManagementOrderAction.disablePipeline:
+        _disablePipelineMode(item);
         break;
     }
   }
@@ -1076,6 +1100,190 @@ class _ProductionOrderManagementPageState
           context,
         ).showSnackBar(const SnackBar(content: Text('订单已标记为完工。')));
       }
+      await _loadOrders();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+    }
+  }
+
+  Future<void> _showPipelineModeDialog(ProductionOrderItem order) async {
+    if (!widget.canWrite) {
+      return;
+    }
+    try {
+      final detail = await _service.getOrderDetail(orderId: order.id);
+      final mode = await _service.getOrderPipelineMode(orderId: order.id);
+      final sortedProcesses = detail.processes.toList()
+        ..sort((a, b) => a.processOrder.compareTo(b.processOrder));
+      if (sortedProcesses.length < 2) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('工序不足两道，无法开启并行模式')));
+        return;
+      }
+      final availableCodes = mode.availableProcessCodes.toSet();
+      final initialSelected = mode.processCodes.toSet();
+      if (!mounted) {
+        return;
+      }
+      final selectedCodes = await showLockedFormDialog<List<String>>(
+        context: context,
+        builder: (dialogContext) {
+          final selected = <String>{...initialSelected};
+          return StatefulBuilder(
+            builder: (dialogContext, setDialogState) {
+              return AlertDialog(
+                title: Text('并行模式设置 - ${order.orderCode}'),
+                content: SizedBox(
+                  width: 520,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('请选择参与并行的工序（至少 2 道）：'),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 260,
+                        child: ListView(
+                          children: sortedProcesses.map((row) {
+                            final code = row.processCode;
+                            final enabled = availableCodes.contains(code);
+                            return CheckboxListTile(
+                              dense: true,
+                              value: selected.contains(code),
+                              onChanged: enabled
+                                  ? (checked) {
+                                      setDialogState(() {
+                                        if (checked == true) {
+                                          selected.add(code);
+                                        } else {
+                                          selected.remove(code);
+                                        }
+                                      });
+                                    }
+                                  : null,
+                              title: Text('${row.processName} ($code)'),
+                              subtitle: Text('顺序 ${row.processOrder}'),
+                              controlAffinity: ListTileControlAffinity.leading,
+                              contentPadding: EdgeInsets.zero,
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '已选择 ${selected.length} 道工序',
+                        style: Theme.of(dialogContext).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(null),
+                    child: const Text('取消'),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      if (selected.length < 2) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          const SnackBar(content: Text('至少选择两道工序')),
+                        );
+                        return;
+                      }
+                      final ordered = sortedProcesses
+                          .map((row) => row.processCode)
+                          .where(selected.contains)
+                          .toList();
+                      Navigator.of(dialogContext).pop(ordered);
+                    },
+                    child: const Text('保存'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+      if (selectedCodes == null) {
+        return;
+      }
+      await _service.updateOrderPipelineMode(
+        orderId: order.id,
+        enabled: true,
+        processCodes: selectedCodes,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('并行模式设置成功')));
+      await _loadOrders();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+    }
+  }
+
+  Future<void> _disablePipelineMode(ProductionOrderItem order) async {
+    if (!widget.canWrite) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('关闭并行模式'),
+          content: Text('确认关闭订单 ${order.orderCode} 的并行模式吗？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('确认关闭'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      await _service.updateOrderPipelineMode(
+        orderId: order.id,
+        enabled: false,
+        processCodes: const [],
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('并行模式已关闭')));
       await _loadOrders();
     } catch (error) {
       if (!mounted) {

@@ -183,6 +183,47 @@ class ProductionService {
     return ProductionOrderDetail.fromJson(data);
   }
 
+  Future<OrderPipelineModeItem> getOrderPipelineMode({
+    required int orderId,
+  }) async {
+    final uri = Uri.parse('$_basePath/orders/$orderId/pipeline-mode');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return OrderPipelineModeItem.fromJson(data);
+  }
+
+  Future<OrderPipelineModeItem> updateOrderPipelineMode({
+    required int orderId,
+    required bool enabled,
+    required List<String> processCodes,
+  }) async {
+    final uri = Uri.parse('$_basePath/orders/$orderId/pipeline-mode');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'enabled': enabled,
+        'process_codes': processCodes,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return OrderPipelineModeItem.fromJson(data);
+  }
+
   Future<MyOrderListResult> listMyOrders({
     required int page,
     required int pageSize,
@@ -612,6 +653,12 @@ class ProductionService {
         return 'Effective Operator';
       case 'assist_authorization_id':
         return 'Assist Authorization';
+      case 'enabled':
+        return 'Enabled';
+      case 'pipeline_enabled':
+        return 'Pipeline Enabled';
+      case 'pipeline_process_codes':
+        return 'Pipeline Processes';
       case 'review_remark':
         return 'Review Remark';
       default:

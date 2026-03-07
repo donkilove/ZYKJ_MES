@@ -81,6 +81,8 @@ class ProductionOrderItem {
     required this.processTemplateId,
     required this.processTemplateName,
     required this.processTemplateVersion,
+    required this.pipelineEnabled,
+    required this.pipelineProcessCodes,
     required this.createdByUserId,
     required this.createdByUsername,
     required this.createdAt,
@@ -101,6 +103,8 @@ class ProductionOrderItem {
   final int? processTemplateId;
   final String? processTemplateName;
   final int? processTemplateVersion;
+  final bool pipelineEnabled;
+  final List<String> pipelineProcessCodes;
   final int? createdByUserId;
   final String? createdByUsername;
   final DateTime createdAt;
@@ -122,6 +126,11 @@ class ProductionOrderItem {
       processTemplateId: json['process_template_id'] as int?,
       processTemplateName: json['process_template_name'] as String?,
       processTemplateVersion: json['process_template_version'] as int?,
+      pipelineEnabled: (json['pipeline_enabled'] as bool?) ?? false,
+      pipelineProcessCodes:
+          (json['pipeline_process_codes'] as List<dynamic>? ?? const [])
+              .map((entry) => entry.toString())
+              .toList(),
       createdByUserId: json['created_by_user_id'] as int?,
       createdByUsername: json['created_by_username'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
@@ -378,6 +387,9 @@ class MyOrderItem {
     required this.operatorUsername,
     required this.workView,
     required this.assistAuthorizationId,
+    required this.pipelineModeEnabled,
+    required this.pipelineStartAllowed,
+    required this.pipelineEndAllowed,
     required this.maxProducibleQuantity,
     required this.canFirstArticle,
     required this.canEndProduction,
@@ -407,6 +419,9 @@ class MyOrderItem {
   final String? operatorUsername;
   final String workView;
   final int? assistAuthorizationId;
+  final bool pipelineModeEnabled;
+  final bool pipelineStartAllowed;
+  final bool pipelineEndAllowed;
   final int maxProducibleQuantity;
   final bool canFirstArticle;
   final bool canEndProduction;
@@ -438,6 +453,11 @@ class MyOrderItem {
       operatorUsername: json['operator_username'] as String?,
       workView: (json['work_view'] as String?) ?? 'own',
       assistAuthorizationId: json['assist_authorization_id'] as int?,
+      pipelineModeEnabled:
+          (json['pipeline_mode_enabled'] as bool?) ?? false,
+      pipelineStartAllowed:
+          (json['pipeline_start_allowed'] as bool?) ?? false,
+      pipelineEndAllowed: (json['pipeline_end_allowed'] as bool?) ?? false,
       maxProducibleQuantity: (json['max_producible_quantity'] as int?) ?? 0,
       canFirstArticle: (json['can_first_article'] as bool?) ?? false,
       canEndProduction: (json['can_end_production'] as bool?) ?? false,
@@ -451,6 +471,34 @@ class MyOrderListResult {
 
   final int total;
   final List<MyOrderItem> items;
+}
+
+class OrderPipelineModeItem {
+  OrderPipelineModeItem({
+    required this.orderId,
+    required this.enabled,
+    required this.processCodes,
+    required this.availableProcessCodes,
+  });
+
+  final int orderId;
+  final bool enabled;
+  final List<String> processCodes;
+  final List<String> availableProcessCodes;
+
+  factory OrderPipelineModeItem.fromJson(Map<String, dynamic> json) {
+    return OrderPipelineModeItem(
+      orderId: (json['order_id'] as int?) ?? 0,
+      enabled: (json['enabled'] as bool?) ?? false,
+      processCodes: (json['process_codes'] as List<dynamic>? ?? const [])
+          .map((entry) => entry.toString())
+          .toList(),
+      availableProcessCodes:
+          (json['available_process_codes'] as List<dynamic>? ?? const [])
+              .map((entry) => entry.toString())
+              .toList(),
+    );
+  }
 }
 
 class AssistAuthorizationItem {

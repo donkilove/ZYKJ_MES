@@ -31,6 +31,8 @@ void main() {
       'process_template_id': 5,
       'process_template_name': '默认模板',
       'process_template_version': 2,
+      'pipeline_enabled': true,
+      'pipeline_process_codes': ['01-01', '02-01'],
       'created_by_user_id': 1,
       'created_by_username': 'admin',
       'created_at': '2026-03-01T00:00:00Z',
@@ -108,6 +110,8 @@ void main() {
 
     expect(order.startDate, isNull);
     expect(order.dueDate, isNull);
+    expect(order.pipelineEnabled, isTrue);
+    expect(order.pipelineProcessCodes, ['01-01', '02-01']);
     expect(detail.processes.single.processCode, '01-01');
     expect(detail.subOrders.single.isVisible, isTrue);
     expect(detail.records.single.productionQuantity, 5);
@@ -136,6 +140,9 @@ void main() {
       'user_sub_order_id': 10,
       'user_assigned_quantity': 50,
       'user_completed_quantity': 20,
+      'pipeline_mode_enabled': true,
+      'pipeline_start_allowed': true,
+      'pipeline_end_allowed': false,
       'max_producible_quantity': 30,
       'can_first_article': true,
       'can_end_production': false,
@@ -145,6 +152,12 @@ void main() {
       'order_id': 9,
       'status': 'ok',
       'message': 'done',
+    });
+    final pipelineMode = OrderPipelineModeItem.fromJson({
+      'order_id': 9,
+      'enabled': true,
+      'process_codes': ['01-01', '02-01'],
+      'available_process_codes': ['01-01', '02-01', '03-01'],
     });
     final overview = ProductionStatsOverview.fromJson({
       'total_orders': 10,
@@ -193,6 +206,10 @@ void main() {
     );
 
     expect(myOrder.canFirstArticle, isTrue);
+    expect(myOrder.pipelineModeEnabled, isTrue);
+    expect(myOrder.pipelineStartAllowed, isTrue);
+    expect(myOrder.pipelineEndAllowed, isFalse);
+    expect(pipelineMode.availableProcessCodes.length, 3);
     expect(action.message, 'done');
     expect(overview.finishedQuantity, 800);
     expect(processStat.totalVisibleQuantity, 100);

@@ -209,6 +209,33 @@ void main() {
             },
           },
         ),
+        'GET /production/orders/1/pipeline-mode': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'order_id': 1,
+              'enabled': false,
+              'process_codes': [],
+              'available_process_codes': ['01-01', '02-01'],
+            },
+          },
+        ),
+        'PUT /production/orders/1/pipeline-mode': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['enabled'], true);
+          expect(body['process_codes'], ['01-01', '02-01']);
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'order_id': 1,
+                'enabled': true,
+                'process_codes': ['01-01', '02-01'],
+                'available_process_codes': ['01-01', '02-01'],
+              },
+            },
+          );
+        },
         'GET /production/my-orders': (request) {
           final viewMode = request.uri.queryParameters['view_mode'];
           if (viewMode == 'proxy') {
@@ -479,6 +506,12 @@ void main() {
       await service.deleteOrder(orderId: 1);
       final complete = await service.completeOrder(orderId: 1);
       final detail = await service.getOrderDetail(orderId: 1);
+      final pipelineMode = await service.getOrderPipelineMode(orderId: 1);
+      final pipelineUpdated = await service.updateOrderPipelineMode(
+        orderId: 1,
+        enabled: true,
+        processCodes: const ['01-01', '02-01'],
+      );
       final myOrders = await service.listMyOrders(
         page: 1,
         pageSize: 999,
@@ -538,6 +571,8 @@ void main() {
       expect(updatedOrder.quantity, 100);
       expect(complete.status, 'completed');
       expect(detail.processes.single.processCode, '01-01');
+      expect(pipelineMode.enabled, isFalse);
+      expect(pipelineUpdated.enabled, isTrue);
       expect(myOrders.items.single.canEndProduction, isTrue);
       expect(proxyOrders.items.single.workView, 'proxy');
       expect(firstArticle.message, 'first article done');
@@ -551,7 +586,7 @@ void main() {
       expect(assistList.total, 1);
       expect(assistCreated.id, 100);
       expect(assistReviewed.status, 'approved');
-      expect(server.requests.length, 19);
+      expect(server.requests.length, 21);
     });
 
     test('throws ApiException on backend errors', () async {
