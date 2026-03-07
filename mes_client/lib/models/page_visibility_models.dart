@@ -416,6 +416,20 @@ const fallbackPageCatalog = <PageCatalogItem>[
   ),
 
   PageCatalogItem(
+    code: 'production_assist_approval',
+
+    name: '代班审批',
+
+    pageType: 'tab',
+
+    parentCode: 'production',
+
+    alwaysVisible: false,
+
+    sortOrder: 53,
+  ),
+
+  PageCatalogItem(
     code: 'production_data_query',
 
     name: '生产数据',
@@ -426,7 +440,7 @@ const fallbackPageCatalog = <PageCatalogItem>[
 
     alwaysVisible: false,
 
-    sortOrder: 53,
+    sortOrder: 54,
   ),
 
   PageCatalogItem(

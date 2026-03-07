@@ -50,6 +50,21 @@ String productionSubOrderStatusLabel(String status) {
   }
 }
 
+String assistAuthorizationStatusLabel(String status) {
+  switch (status) {
+    case 'pending':
+      return '待审批';
+    case 'approved':
+      return '已通过';
+    case 'rejected':
+      return '已拒绝';
+    case 'consumed':
+      return '已消耗';
+    default:
+      return status;
+  }
+}
+
 class ProductionOrderItem {
   ProductionOrderItem({
     required this.id,
@@ -359,6 +374,10 @@ class MyOrderItem {
     required this.userSubOrderId,
     required this.userAssignedQuantity,
     required this.userCompletedQuantity,
+    required this.operatorUserId,
+    required this.operatorUsername,
+    required this.workView,
+    required this.assistAuthorizationId,
     required this.maxProducibleQuantity,
     required this.canFirstArticle,
     required this.canEndProduction,
@@ -384,6 +403,10 @@ class MyOrderItem {
   final int? userSubOrderId;
   final int? userAssignedQuantity;
   final int? userCompletedQuantity;
+  final int? operatorUserId;
+  final String? operatorUsername;
+  final String workView;
+  final int? assistAuthorizationId;
   final int maxProducibleQuantity;
   final bool canFirstArticle;
   final bool canEndProduction;
@@ -411,6 +434,10 @@ class MyOrderItem {
       userSubOrderId: json['user_sub_order_id'] as int?,
       userAssignedQuantity: json['user_assigned_quantity'] as int?,
       userCompletedQuantity: json['user_completed_quantity'] as int?,
+      operatorUserId: json['operator_user_id'] as int?,
+      operatorUsername: json['operator_username'] as String?,
+      workView: (json['work_view'] as String?) ?? 'own',
+      assistAuthorizationId: json['assist_authorization_id'] as int?,
       maxProducibleQuantity: (json['max_producible_quantity'] as int?) ?? 0,
       canFirstArticle: (json['can_first_article'] as bool?) ?? false,
       canEndProduction: (json['can_end_production'] as bool?) ?? false,
@@ -424,6 +451,134 @@ class MyOrderListResult {
 
   final int total;
   final List<MyOrderItem> items;
+}
+
+class AssistAuthorizationItem {
+  AssistAuthorizationItem({
+    required this.id,
+    required this.orderId,
+    required this.orderCode,
+    required this.orderProcessId,
+    required this.processCode,
+    required this.processName,
+    required this.targetOperatorUserId,
+    required this.targetOperatorUsername,
+    required this.requesterUserId,
+    required this.requesterUsername,
+    required this.helperUserId,
+    required this.helperUsername,
+    required this.status,
+    required this.reason,
+    required this.reviewRemark,
+    required this.reviewerUserId,
+    required this.reviewerUsername,
+    required this.reviewedAt,
+    required this.firstArticleUsedAt,
+    required this.endProductionUsedAt,
+    required this.consumedAt,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final int id;
+  final int orderId;
+  final String orderCode;
+  final int orderProcessId;
+  final String processCode;
+  final String processName;
+  final int targetOperatorUserId;
+  final String targetOperatorUsername;
+  final int requesterUserId;
+  final String requesterUsername;
+  final int helperUserId;
+  final String helperUsername;
+  final String status;
+  final String? reason;
+  final String? reviewRemark;
+  final int? reviewerUserId;
+  final String? reviewerUsername;
+  final DateTime? reviewedAt;
+  final DateTime? firstArticleUsedAt;
+  final DateTime? endProductionUsedAt;
+  final DateTime? consumedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory AssistAuthorizationItem.fromJson(Map<String, dynamic> json) {
+    return AssistAuthorizationItem(
+      id: json['id'] as int,
+      orderId: (json['order_id'] as int?) ?? 0,
+      orderCode: (json['order_code'] as String?) ?? '',
+      orderProcessId: (json['order_process_id'] as int?) ?? 0,
+      processCode: (json['process_code'] as String?) ?? '',
+      processName: (json['process_name'] as String?) ?? '',
+      targetOperatorUserId: (json['target_operator_user_id'] as int?) ?? 0,
+      targetOperatorUsername:
+          (json['target_operator_username'] as String?) ?? '',
+      requesterUserId: (json['requester_user_id'] as int?) ?? 0,
+      requesterUsername: (json['requester_username'] as String?) ?? '',
+      helperUserId: (json['helper_user_id'] as int?) ?? 0,
+      helperUsername: (json['helper_username'] as String?) ?? '',
+      status: (json['status'] as String?) ?? 'pending',
+      reason: json['reason'] as String?,
+      reviewRemark: json['review_remark'] as String?,
+      reviewerUserId: json['reviewer_user_id'] as int?,
+      reviewerUsername: json['reviewer_username'] as String?,
+      reviewedAt: _parseDateOrNull(json['reviewed_at']),
+      firstArticleUsedAt: _parseDateOrNull(json['first_article_used_at']),
+      endProductionUsedAt: _parseDateOrNull(json['end_production_used_at']),
+      consumedAt: _parseDateOrNull(json['consumed_at']),
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+  }
+}
+
+class AssistAuthorizationListResult {
+  AssistAuthorizationListResult({required this.total, required this.items});
+
+  final int total;
+  final List<AssistAuthorizationItem> items;
+}
+
+class AssistUserOptionItem {
+  AssistUserOptionItem({
+    required this.id,
+    required this.username,
+    required this.fullName,
+    required this.roleCodes,
+  });
+
+  final int id;
+  final String username;
+  final String? fullName;
+  final List<String> roleCodes;
+
+  String get displayName {
+    final normalized = (fullName ?? '').trim();
+    if (normalized.isEmpty) {
+      return username;
+    }
+    return '$username ($normalized)';
+  }
+
+  factory AssistUserOptionItem.fromJson(Map<String, dynamic> json) {
+    return AssistUserOptionItem(
+      id: json['id'] as int,
+      username: (json['username'] as String?) ?? '',
+      fullName: json['full_name'] as String?,
+      roleCodes: (json['role_codes'] as List<dynamic>? ?? const [])
+          .map((entry) => entry.toString())
+          .toList(),
+    );
+  }
+}
+
+class AssistUserOptionListResult {
+  AssistUserOptionListResult({required this.total, required this.items});
+
+  final int total;
+  final List<AssistUserOptionItem> items;
 }
 
 class ProductionActionResult {

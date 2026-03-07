@@ -187,6 +187,8 @@ class ProductionService {
     required int page,
     required int pageSize,
     String? keyword,
+    String? viewMode,
+    int? proxyOperatorUserId,
   }) async {
     final normalizedPageSize = pageSize.clamp(1, 200).toInt();
     final query = <String, String>{
@@ -195,6 +197,12 @@ class ProductionService {
     };
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
+    }
+    if (viewMode != null && viewMode.trim().isNotEmpty) {
+      query['view_mode'] = viewMode.trim();
+    }
+    if (proxyOperatorUserId != null && proxyOperatorUserId > 0) {
+      query['proxy_operator_user_id'] = '$proxyOperatorUserId';
     }
     final uri = Uri.parse(
       '$_basePath/my-orders',
@@ -219,6 +227,8 @@ class ProductionService {
     required int orderProcessId,
     required String verificationCode,
     String? remark,
+    int? effectiveOperatorUserId,
+    int? assistAuthorizationId,
   }) async {
     final uri = Uri.parse('$_basePath/orders/$orderId/first-article');
     final response = await http.post(
@@ -228,6 +238,8 @@ class ProductionService {
         'order_process_id': orderProcessId,
         'verification_code': verificationCode,
         'remark': remark,
+        'effective_operator_user_id': effectiveOperatorUserId,
+        'assist_authorization_id': assistAuthorizationId,
       }),
     );
     final body = _decodeBody(response);
@@ -246,6 +258,8 @@ class ProductionService {
     required int orderProcessId,
     required int quantity,
     String? remark,
+    int? effectiveOperatorUserId,
+    int? assistAuthorizationId,
   }) async {
     final uri = Uri.parse('$_basePath/orders/$orderId/end-production');
     final response = await http.post(
@@ -255,6 +269,8 @@ class ProductionService {
         'order_process_id': orderProcessId,
         'quantity': quantity,
         'remark': remark,
+        'effective_operator_user_id': effectiveOperatorUserId,
+        'assist_authorization_id': assistAuthorizationId,
       }),
     );
     final body = _decodeBody(response);
@@ -363,6 +379,138 @@ class ProductionService {
         .toList();
   }
 
+  Future<AssistAuthorizationListResult> listAssistAuthorizations({
+    required int page,
+    required int pageSize,
+    String? status,
+  }) async {
+    final query = <String, String>{
+      'page': '$page',
+      'page_size': '${pageSize.clamp(1, 200)}',
+    };
+    if (status != null && status.trim().isNotEmpty) {
+      query['status'] = status.trim();
+    }
+    final uri = Uri.parse(
+      '$_basePath/assist-authorizations',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) =>
+              AssistAuthorizationItem.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+    return AssistAuthorizationListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<AssistAuthorizationItem> createAssistAuthorization({
+    required int orderId,
+    required int orderProcessId,
+    required int targetOperatorUserId,
+    required int helperUserId,
+    String? reason,
+  }) async {
+    final uri = Uri.parse('$_basePath/orders/$orderId/assist-authorizations');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'order_process_id': orderProcessId,
+        'target_operator_user_id': targetOperatorUserId,
+        'helper_user_id': helperUserId,
+        'reason': reason,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return AssistAuthorizationItem.fromJson(data);
+  }
+
+  Future<AssistAuthorizationItem> reviewAssistAuthorization({
+    required int authorizationId,
+    required bool approve,
+    String? reviewRemark,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/assist-authorizations/$authorizationId/review',
+    );
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'approve': approve,
+        'review_remark': reviewRemark,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return AssistAuthorizationItem.fromJson(data);
+  }
+
+  Future<AssistUserOptionListResult> listAssistUserOptions({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? roleCode,
+  }) async {
+    final query = <String, String>{
+      'page': '$page',
+      'page_size': '${pageSize.clamp(1, 200)}',
+    };
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (roleCode != null && roleCode.trim().isNotEmpty) {
+      query['role_code'] = roleCode.trim();
+    }
+    final uri = Uri.parse(
+      '$_basePath/assist-user-options',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) =>
+              AssistUserOptionItem.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+    return AssistUserOptionListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
   Map<String, dynamic> _decodeBody(http.Response response) {
     if (response.body.isEmpty) {
       return {};
@@ -385,7 +533,7 @@ class ProductionService {
     if (message is String && message.isNotEmpty) {
       return message;
     }
-    return '请求失败（状态码 $statusCode）';
+    return 'Request failed (status $statusCode)';
   }
 
   String? _extractValidationDetailMessage(List<dynamic> detail) {
@@ -415,45 +563,57 @@ class ProductionService {
         }
       }
 
-      messages.add(fieldLabel == null ? msg : '$fieldLabel：$msg');
+      messages.add(fieldLabel == null ? msg : '$fieldLabel: $msg');
     }
 
     if (messages.isEmpty) {
       return null;
     }
-    return messages.join('；');
+    return messages.join('; ');
   }
 
   String? _fieldLabelForValidation(String field) {
     switch (field) {
       case 'order_code':
-        return '订单号';
+        return 'Order Code';
       case 'product_id':
-        return '产品';
+        return 'Product';
       case 'quantity':
-        return '数量';
+        return 'Quantity';
       case 'start_date':
-        return '开始日期';
+        return 'Start Date';
       case 'due_date':
-        return '交期';
+        return 'Due Date';
       case 'remark':
-        return '备注';
+        return 'Remark';
       case 'template_id':
-        return '工序模板';
+        return 'Template';
       case 'process_codes':
-        return '工序编码列表';
+        return 'Process Codes';
       case 'process_steps':
-        return '工序路线';
+        return 'Process Steps';
       case 'step_order':
-        return '工序顺序';
+        return 'Step Order';
       case 'stage_id':
-        return '工段';
+        return 'Stage';
       case 'process_id':
-        return '小工序';
+        return 'Process';
       case 'new_template_name':
-        return '新模板名称';
+        return 'Template Name';
       case 'new_template_set_default':
-        return '设为默认模板';
+        return 'Set Default';
+      case 'order_process_id':
+        return 'Order Process';
+      case 'target_operator_user_id':
+        return 'Target Operator';
+      case 'helper_user_id':
+        return 'Helper';
+      case 'effective_operator_user_id':
+        return 'Effective Operator';
+      case 'assist_authorization_id':
+        return 'Assist Authorization';
+      case 'review_remark':
+        return 'Review Remark';
       default:
         return null;
     }

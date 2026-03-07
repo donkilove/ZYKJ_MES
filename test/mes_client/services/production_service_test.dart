@@ -13,16 +13,16 @@ Map<String, dynamic> _orderJson() {
     'id': 1,
     'order_code': 'PO-1',
     'product_id': 10,
-    'product_name': '产品A',
+    'product_name': 'Product-A',
     'quantity': 100,
     'status': 'pending',
     'current_process_code': '01-01',
-    'current_process_name': '切割',
+    'current_process_name': 'Cut',
     'start_date': '2026-03-01',
     'due_date': '2026-03-20',
-    'remark': '备注',
+    'remark': 'note',
     'process_template_id': 3,
-    'process_template_name': '默认模板',
+    'process_template_name': 'default',
     'process_template_version': 1,
     'created_by_user_id': 1,
     'created_by_username': 'admin',
@@ -31,9 +31,78 @@ Map<String, dynamic> _orderJson() {
   };
 }
 
+Map<String, dynamic> _myOrderJson({
+  required String workView,
+  required bool canFirstArticle,
+  required bool canEndProduction,
+  int? assistAuthorizationId,
+}) {
+  return {
+    'order_id': 1,
+    'order_code': 'PO-1',
+    'product_id': 10,
+    'product_name': 'Product-A',
+    'quantity': 100,
+    'order_status': 'pending',
+    'current_process_id': 11,
+    'current_stage_id': 1,
+    'current_stage_code': '01',
+    'current_stage_name': 'Cut-Stage',
+    'current_process_code': '01-01',
+    'current_process_name': 'Cut',
+    'current_process_order': 1,
+    'process_status': 'pending',
+    'visible_quantity': 80,
+    'process_completed_quantity': 20,
+    'user_sub_order_id': 12,
+    'user_assigned_quantity': 20,
+    'user_completed_quantity': 10,
+    'operator_user_id': 8,
+    'operator_username': 'worker',
+    'work_view': workView,
+    'assist_authorization_id': assistAuthorizationId,
+    'max_producible_quantity': 10,
+    'can_first_article': canFirstArticle,
+    'can_end_production': canEndProduction,
+    'updated_at': '2026-03-01T00:00:00Z',
+  };
+}
+
+Map<String, dynamic> _assistAuthorizationJson({
+  required int id,
+  required String status,
+  String? reviewRemark,
+}) {
+  return {
+    'id': id,
+    'order_id': 1,
+    'order_code': 'PO-1',
+    'order_process_id': 11,
+    'process_code': '01-01',
+    'process_name': 'Cut',
+    'target_operator_user_id': 8,
+    'target_operator_username': 'worker',
+    'requester_user_id': 2,
+    'requester_username': 'manager',
+    'helper_user_id': 9,
+    'helper_username': 'assistant',
+    'status': status,
+    'reason': 'assist',
+    'review_remark': reviewRemark,
+    'reviewer_user_id': status == 'approved' ? 1 : null,
+    'reviewer_username': status == 'approved' ? 'admin' : null,
+    'reviewed_at': status == 'approved' ? '2026-03-01T00:00:00Z' : null,
+    'first_article_used_at': null,
+    'end_production_used_at': null,
+    'consumed_at': null,
+    'created_at': '2026-03-01T00:00:00Z',
+    'updated_at': '2026-03-01T00:00:00Z',
+  };
+}
+
 void main() {
   group('ProductionService', () {
-    test('covers production order CRUD, actions, stats and options', () async {
+    test('covers production api including assist authorization flows', () async {
       final server = await TestHttpServer.start({
         'GET /production/orders': (request) {
           expect(request.uri.queryParameters['page'], '1');
@@ -85,9 +154,9 @@ void main() {
                   'id': 11,
                   'stage_id': 1,
                   'stage_code': '01',
-                  'stage_name': '切割段',
+                  'stage_name': 'Cut-Stage',
                   'process_code': '01-01',
-                  'process_name': '切割',
+                  'process_name': 'Cut',
                   'process_order': 1,
                   'status': 'pending',
                   'visible_quantity': 80,
@@ -101,7 +170,7 @@ void main() {
                   'id': 12,
                   'order_process_id': 11,
                   'process_code': '01-01',
-                  'process_name': '切割',
+                  'process_name': 'Cut',
                   'operator_user_id': 8,
                   'operator_username': 'worker',
                   'assigned_quantity': 20,
@@ -117,7 +186,7 @@ void main() {
                   'id': 13,
                   'order_process_id': 11,
                   'process_code': '01-01',
-                  'process_name': '切割',
+                  'process_name': 'Cut',
                   'operator_user_id': 8,
                   'operator_username': 'worker',
                   'production_quantity': 5,
@@ -129,7 +198,7 @@ void main() {
                 {
                   'id': 14,
                   'event_type': 'created',
-                  'event_title': '创建订单',
+                  'event_title': 'created',
                   'event_detail': null,
                   'operator_user_id': 1,
                   'operator_username': 'admin',
@@ -141,6 +210,27 @@ void main() {
           },
         ),
         'GET /production/my-orders': (request) {
+          final viewMode = request.uri.queryParameters['view_mode'];
+          if (viewMode == 'proxy') {
+            expect(request.uri.queryParameters['page'], '2');
+            expect(request.uri.queryParameters['page_size'], '20');
+            expect(request.uri.queryParameters['proxy_operator_user_id'], '8');
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'total': 1,
+                  'items': [
+                    _myOrderJson(
+                      workView: 'proxy',
+                      canFirstArticle: false,
+                      canEndProduction: false,
+                    ),
+                  ],
+                },
+              },
+            );
+          }
           expect(request.uri.queryParameters['page_size'], '200');
           expect(request.uri.queryParameters['keyword'], 'mine');
           return TestResponse.json(
@@ -149,31 +239,11 @@ void main() {
               'data': {
                 'total': 1,
                 'items': [
-                  {
-                    'order_id': 1,
-                    'order_code': 'PO-1',
-                    'product_id': 10,
-                    'product_name': '产品A',
-                    'quantity': 100,
-                    'order_status': 'pending',
-                    'current_process_id': 11,
-                    'current_stage_id': 1,
-                    'current_stage_code': '01',
-                    'current_stage_name': '切割段',
-                    'current_process_code': '01-01',
-                    'current_process_name': '切割',
-                    'current_process_order': 1,
-                    'process_status': 'pending',
-                    'visible_quantity': 80,
-                    'process_completed_quantity': 20,
-                    'user_sub_order_id': 12,
-                    'user_assigned_quantity': 20,
-                    'user_completed_quantity': 10,
-                    'max_producible_quantity': 10,
-                    'can_first_article': true,
-                    'can_end_production': true,
-                    'updated_at': '2026-03-01T00:00:00Z',
-                  },
+                  _myOrderJson(
+                    workView: 'own',
+                    canFirstArticle: true,
+                    canEndProduction: true,
+                  ),
                 ],
               },
             },
@@ -183,7 +253,9 @@ void main() {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['order_process_id'], 11);
           expect(body['verification_code'], 'code-1');
-          expect(body['remark'], '首检');
+          expect(body['remark'], 'first');
+          expect(body['effective_operator_user_id'], 8);
+          expect(body['assist_authorization_id'], 99);
           return TestResponse.json(
             200,
             body: {
@@ -199,7 +271,9 @@ void main() {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['order_process_id'], 11);
           expect(body['quantity'], 5);
-          expect(body['remark'], '完工');
+          expect(body['remark'], 'done');
+          expect(body['effective_operator_user_id'], 8);
+          expect(body['assist_authorization_id'], 99);
           return TestResponse.json(
             200,
             body: {
@@ -231,7 +305,7 @@ void main() {
               'items': [
                 {
                   'process_code': '01-01',
-                  'process_name': '切割',
+                  'process_name': 'Cut',
                   'total_orders': 10,
                   'pending_orders': 2,
                   'in_progress_orders': 3,
@@ -253,7 +327,7 @@ void main() {
                   'operator_user_id': 8,
                   'operator_username': 'worker',
                   'process_code': '01-01',
-                  'process_name': '切割',
+                  'process_name': 'Cut',
                   'production_records': 20,
                   'production_quantity': 300,
                   'last_production_at': '2026-03-01T00:00:00Z',
@@ -267,7 +341,7 @@ void main() {
           body: {
             'data': {
               'items': [
-                {'id': 10, 'name': '产品A'},
+                {'id': 10, 'name': 'Product-A'},
               ],
             },
           },
@@ -280,15 +354,85 @@ void main() {
                 {
                   'id': 2,
                   'code': '01-01',
-                  'name': '切割',
+                  'name': 'Cut',
                   'stage_id': 1,
                   'stage_code': '01',
-                  'stage_name': '切割段',
+                  'stage_name': 'Cut-Stage',
                 },
               ],
             },
           },
         ),
+        'GET /production/assist-user-options': (request) {
+          expect(request.uri.queryParameters['page'], '1');
+          expect(request.uri.queryParameters['page_size'], '200');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'total': 2,
+                'items': [
+                  {
+                    'id': 8,
+                    'username': 'worker',
+                    'full_name': 'Worker-A',
+                    'role_codes': ['operator'],
+                  },
+                  {
+                    'id': 2,
+                    'username': 'manager',
+                    'full_name': 'Manager',
+                    'role_codes': ['production_admin'],
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'GET /production/assist-authorizations': (request) {
+          expect(request.uri.queryParameters['page'], '1');
+          expect(request.uri.queryParameters['page_size'], '20');
+          expect(request.uri.queryParameters['status'], 'pending');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'total': 1,
+                'items': [
+                  _assistAuthorizationJson(id: 99, status: 'pending'),
+                ],
+              },
+            },
+          );
+        },
+        'POST /production/orders/1/assist-authorizations': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['order_process_id'], 11);
+          expect(body['target_operator_user_id'], 8);
+          expect(body['helper_user_id'], 9);
+          expect(body['reason'], 'need assist');
+          return TestResponse.json(
+            201,
+            body: {
+              'data': _assistAuthorizationJson(id: 100, status: 'pending'),
+            },
+          );
+        },
+        'POST /production/assist-authorizations/99/review': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['approve'], true);
+          expect(body['review_remark'], 'ok');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': _assistAuthorizationJson(
+                id: 99,
+                status: 'approved',
+                reviewRemark: 'ok',
+              ),
+            },
+          );
+        },
       });
       addTearDown(server.close);
 
@@ -313,11 +457,11 @@ void main() {
         templateId: 3,
         processSteps: steps,
         saveAsTemplate: true,
-        newTemplateName: '新模板',
+        newTemplateName: 'new-template',
         newTemplateSetDefault: true,
         startDate: DateTime(2026, 3, 1),
         dueDate: DateTime(2026, 3, 20),
-        remark: '备注',
+        remark: 'note',
       );
       final updatedOrder = await service.updateOrder(
         orderId: 1,
@@ -330,7 +474,7 @@ void main() {
         newTemplateName: null,
         startDate: DateTime(2026, 3, 2),
         dueDate: DateTime(2026, 3, 22),
-        remark: '更新',
+        remark: 'updated',
       );
       await service.deleteOrder(orderId: 1);
       final complete = await service.completeOrder(orderId: 1);
@@ -340,23 +484,54 @@ void main() {
         pageSize: 999,
         keyword: '  mine ',
       );
+      final proxyOrders = await service.listMyOrders(
+        page: 2,
+        pageSize: 20,
+        viewMode: 'proxy',
+        proxyOperatorUserId: 8,
+      );
       final firstArticle = await service.submitFirstArticle(
         orderId: 1,
         orderProcessId: 11,
         verificationCode: 'code-1',
-        remark: '首检',
+        remark: 'first',
+        effectiveOperatorUserId: 8,
+        assistAuthorizationId: 99,
       );
       final endProduction = await service.endProduction(
         orderId: 1,
         orderProcessId: 11,
         quantity: 5,
-        remark: '完工',
+        remark: 'done',
+        effectiveOperatorUserId: 8,
+        assistAuthorizationId: 99,
       );
       final overview = await service.getOverviewStats();
       final processStats = await service.getProcessStats();
       final operatorStats = await service.getOperatorStats();
       final productOptions = await service.listProductOptions();
       final processOptions = await service.listProcessOptions();
+      final assistUsers = await service.listAssistUserOptions(
+        page: 1,
+        pageSize: 200,
+      );
+      final assistList = await service.listAssistAuthorizations(
+        page: 1,
+        pageSize: 20,
+        status: 'pending',
+      );
+      final assistCreated = await service.createAssistAuthorization(
+        orderId: 1,
+        orderProcessId: 11,
+        targetOperatorUserId: 8,
+        helperUserId: 9,
+        reason: 'need assist',
+      );
+      final assistReviewed = await service.reviewAssistAuthorization(
+        authorizationId: 99,
+        approve: true,
+        reviewRemark: 'ok',
+      );
 
       expect(orders.items.single.orderCode, 'PO-1');
       expect(createdOrder.quantity, 100);
@@ -364,14 +539,19 @@ void main() {
       expect(complete.status, 'completed');
       expect(detail.processes.single.processCode, '01-01');
       expect(myOrders.items.single.canEndProduction, isTrue);
+      expect(proxyOrders.items.single.workView, 'proxy');
       expect(firstArticle.message, 'first article done');
       expect(endProduction.message, 'end production done');
       expect(overview.totalOrders, 10);
-      expect(processStats.single.processName, '切割');
+      expect(processStats.single.processName, 'Cut');
       expect(operatorStats.single.operatorUsername, 'worker');
       expect(productOptions.single.id, 10);
       expect(processOptions.single.code, '01-01');
-      expect(server.requests.length, 14);
+      expect(assistUsers.items.length, 2);
+      expect(assistList.total, 1);
+      expect(assistCreated.id, 100);
+      expect(assistReviewed.status, 'approved');
+      expect(server.requests.length, 19);
     });
 
     test('throws ApiException on backend errors', () async {
@@ -430,7 +610,7 @@ void main() {
               .having(
                 (e) => e.message,
                 'message',
-                contains('订单号：String should have at least 2 characters'),
+                contains('Order Code: String should have at least 2 characters'),
               ),
         ),
       );

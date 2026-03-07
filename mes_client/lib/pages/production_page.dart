@@ -2,17 +2,20 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import 'production_assist_approval_page.dart';
 import 'production_data_page.dart';
 import 'production_order_management_page.dart';
 import 'production_order_query_page.dart';
 
 const String productionOrderManagementTabCode = 'production_order_management';
 const String productionOrderQueryTabCode = 'production_order_query';
+const String productionAssistApprovalTabCode = 'production_assist_approval';
 const String productionDataQueryTabCode = 'production_data_query';
 
 const List<String> _defaultTabOrder = [
   productionOrderManagementTabCode,
   productionOrderQueryTabCode,
+  productionAssistApprovalTabCode,
   productionDataQueryTabCode,
 ];
 
@@ -73,6 +76,9 @@ class _ProductionPageState extends State<ProductionPage>
       widget.currentRoleCodes.contains('system_admin') ||
       widget.currentRoleCodes.contains('production_admin');
 
+  bool get _isProductionAdmin =>
+      widget.currentRoleCodes.contains('production_admin');
+
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
     final visibleSet = tabCodes.toSet();
     final ordered = <String>[];
@@ -123,6 +129,8 @@ class _ProductionPageState extends State<ProductionPage>
         return '订单管理';
       case productionOrderQueryTabCode:
         return '订单查询';
+      case productionAssistApprovalTabCode:
+        return '代班审批';
       case productionDataQueryTabCode:
         return '生产数据';
       default:
@@ -143,6 +151,13 @@ class _ProductionPageState extends State<ProductionPage>
           session: widget.session,
           onLogout: widget.onLogout,
           canOperate: _canOperate,
+          isProductionAdmin: _isProductionAdmin,
+        );
+      case productionAssistApprovalTabCode:
+        return ProductionAssistApprovalPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          canReview: _isProductionAdmin,
         );
       case productionDataQueryTabCode:
         return ProductionDataPage(
@@ -157,7 +172,7 @@ class _ProductionPageState extends State<ProductionPage>
   @override
   Widget build(BuildContext context) {
     if (_orderedVisibleTabCodes.isEmpty || _tabController == null) {
-      return const Center(child: Text('当前账号无可见生产页面。'));
+      return const Center(child: Text('当前账号无可见生产页面'));
     }
 
     return Column(
