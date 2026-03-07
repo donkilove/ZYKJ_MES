@@ -8,6 +8,7 @@ from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.order_event_log import OrderEventLog
 from app.models.page_visibility import PageVisibility
 from app.models.product import Product
+from app.models.product_revision import ProductRevision
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
@@ -45,6 +46,7 @@ __all__ = [
     "MaintenanceRecord",
     "MaintenanceWorkOrder",
     "Product",
+    "ProductRevision",
     "ProductionOrder",
     "ProductionOrderProcess",
     "ProductionSubOrder",

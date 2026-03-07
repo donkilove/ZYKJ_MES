@@ -88,6 +88,7 @@ def _to_order_item(order: ProductionOrder) -> OrderItem:
         order_code=order.order_code,
         product_id=order.product_id,
         product_name=order.product.name if order.product else "",
+        product_version=order.product_version,
         quantity=order.quantity,
         status=order.status,
         current_process_code=order.current_process_code,

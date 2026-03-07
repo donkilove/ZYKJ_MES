@@ -51,6 +51,7 @@ def test_create_order_and_list_my_orders(db, factory) -> None:
     )
     assert order.status == ORDER_STATUS_PENDING
     assert order.current_process_code == process.code
+    assert order.product_version == 1
 
     process_rows = db.execute(
         select(ProductionOrderProcess).where(ProductionOrderProcess.order_id == order.id)
@@ -190,6 +191,7 @@ def test_update_delete_and_manual_complete_order(db, factory) -> None:
     )
     assert updated.quantity == 6
     assert updated.remark == "new"
+    assert updated.product_version == 1
 
     production_order_service.delete_order(db, order=updated)
     assert production_order_service.get_order_by_code(db, "ORD-1003") is None

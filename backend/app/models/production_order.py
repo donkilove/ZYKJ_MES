@@ -12,6 +12,7 @@ class ProductionOrder(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     order_code: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     product_id: Mapped[int] = mapped_column(ForeignKey("mes_product.id", ondelete="RESTRICT"), nullable=False)
+    product_version: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
     current_process_code: Mapped[str | None] = mapped_column(String(64), nullable=True)

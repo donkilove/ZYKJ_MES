@@ -172,6 +172,24 @@ def test_products_and_craft_endpoints(db, factory) -> None:
 
     product_resp = products.create_product_api(ProductCreate(name="接口产品A"), db, current_user=admin)
     product_id = product_resp.data.id
+    assert product_resp.data.lifecycle_status == "draft"
+
+    lifecycle_resp = products.update_product_lifecycle(
+        product_id,
+        products.ProductLifecycleUpdateRequest(target_status="pending_review"),
+        db=db,
+        current_user=admin,
+    )
+    assert lifecycle_resp.data.lifecycle_status == "pending_review"
+
+    lifecycle_effective_resp = products.update_product_lifecycle(
+        product_id,
+        products.ProductLifecycleUpdateRequest(target_status="effective"),
+        db=db,
+        current_user=admin,
+    )
+    assert lifecycle_effective_resp.data.lifecycle_status == "effective"
+    assert lifecycle_effective_resp.data.effective_version >= 1
 
     kanban_empty = craft.get_craft_kanban_process_metrics_api(
         product_id=product_id,
@@ -204,6 +222,36 @@ def test_products_and_craft_endpoints(db, factory) -> None:
 
     history = products.get_parameter_history(product_id, page=1, page_size=20, db=db, _=admin)
     assert history.data.total >= 1
+
+    versions_resp = products.get_product_versions(product_id, db=db, _=admin)
+    assert versions_resp.data.total >= 2
+
+    compare_resp = products.compare_product_version_api(
+        product_id,
+        from_version=1,
+        to_version=2,
+        db=db,
+        _=admin,
+    )
+    assert compare_resp.data.changed_items >= 1
+
+    impact_resp = products.get_product_impact_analysis(
+        product_id,
+        operation="rollback",
+        target_status=None,
+        target_version=1,
+        db=db,
+        _=admin,
+    )
+    assert impact_resp.data.operation == "rollback"
+
+    rollback_resp = products.rollback_product_api(
+        product_id,
+        products.ProductRollbackRequest(target_version=1, confirmed=False, note="回滚"),
+        db=db,
+        current_user=admin,
+    )
+    assert rollback_resp.data.product.current_version >= 3
 
     # craft stage/process/template flow
     stage_resp = craft.create_stage_api(ProcessStageCreate(code="73", name="工段73", sort_order=1), db, _=admin)
@@ -283,6 +331,18 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
     db.commit()
 
     product_resp = products.create_product_api(ProductCreate(name="生产接口产品"), db, current_user=admin)
+    products.update_product_lifecycle(
+        product_resp.data.id,
+        products.ProductLifecycleUpdateRequest(target_status="pending_review"),
+        db=db,
+        current_user=admin,
+    )
+    products.update_product_lifecycle(
+        product_resp.data.id,
+        products.ProductLifecycleUpdateRequest(target_status="effective"),
+        db=db,
+        current_user=admin,
+    )
 
     order_resp = production.create_order_api(
         OrderCreate(
@@ -300,6 +360,7 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
         current_user=admin,
     )
     order_id = order_resp.data.id
+    assert order_resp.data.product_version is not None
 
     order_list = production.get_orders(page=1, page_size=20, keyword=None, status_text=None, db=db, _=admin)
     assert order_list.data.total >= 1

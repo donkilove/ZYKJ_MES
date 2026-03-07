@@ -138,6 +138,7 @@ class OrderItem(BaseModel):
     order_code: str
     product_id: int
     product_name: str
+    product_version: int | None = None
     quantity: int
     status: str
     current_process_code: str | None = None

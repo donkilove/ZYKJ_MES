@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role_codes
@@ -15,8 +16,12 @@ from app.models.product_parameter_history import ProductParameterHistory
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.product import (
+    ProductImpactAnalysisQuery,
+    ProductImpactAnalysisResult,
+    ProductImpactOrderItem,
     ProductCreate,
     ProductDeleteRequest,
+    ProductLifecycleUpdateRequest,
     ProductItem,
     ProductListResult,
     ProductParameterHistoryItem,
@@ -25,16 +30,28 @@ from app.schemas.product import (
     ProductParameterListResult,
     ProductParameterUpdateRequest,
     ProductParameterUpdateResult,
+    ProductRollbackRequest,
+    ProductRollbackResult,
+    ProductVersionCompareResult,
+    ProductVersionDiffItem,
+    ProductVersionItem,
+    ProductVersionListResult,
 )
 from app.services.product_service import (
+    analyze_product_impact,
+    change_product_lifecycle,
+    compare_product_versions,
     create_product,
     delete_product,
     ensure_product_parameter_template_initialized,
     get_product_by_id,
     get_product_by_name,
+    get_product_version,
     list_parameter_history,
     list_product_parameters,
+    list_product_versions,
     list_products,
+    rollback_product_to_version,
     summarize_changed_keys,
     update_product_parameters,
 )
@@ -65,6 +82,11 @@ def to_product_item(
     return ProductItem(
         id=product.id,
         name=product.name,
+        lifecycle_status=product.lifecycle_status,
+        current_version=product.current_version,
+        effective_version=product.effective_version,
+        effective_at=product.effective_at,
+        inactive_reason=product.inactive_reason,
         last_parameter_summary=last_parameter_summary,
         created_at=product.created_at,
         updated_at=product.updated_at,
@@ -101,7 +123,7 @@ def create_product_api(
 
     try:
         product = create_product(db, normalized_name, operator=current_user)
-    except ValueError as error:
+    except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
     return success_response(to_product_item(product, None), message="created")
@@ -177,8 +199,9 @@ def update_parameters(
             items=[(item.name, item.category, item.type, item.value) for item in payload.items],
             remark=payload.remark,
             operator=current_user,
+            confirmed=payload.confirmed,
         )
-    except ValueError as error:
+    except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
     return success_response(
@@ -187,6 +210,188 @@ def update_parameters(
             changed_keys=changed_keys,
         ),
         message="updated",
+    )
+
+
+@router.get("/{product_id}/impact-analysis", response_model=ApiResponse[ProductImpactAnalysisResult])
+def get_product_impact_analysis(
+    product_id: int,
+    operation: str = Query(default="lifecycle"),
+    target_status: str | None = Query(default=None),
+    target_version: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
+) -> ApiResponse[ProductImpactAnalysisResult]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    try:
+        query = ProductImpactAnalysisQuery(
+            operation=operation,
+            target_status=target_status,
+            target_version=target_version,
+        )
+        result = analyze_product_impact(
+            db,
+            product=product,
+            operation=query.operation,
+            target_status=query.target_status,
+            target_version=query.target_version,
+        )
+    except (ValueError, ValidationError) as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+
+    return success_response(
+        ProductImpactAnalysisResult(
+            operation=result.operation,
+            target_status=result.target_status,
+            target_version=result.target_version,
+            total_orders=result.total_orders,
+            pending_orders=result.pending_orders,
+            in_progress_orders=result.in_progress_orders,
+            requires_confirmation=result.requires_confirmation,
+            items=[
+                ProductImpactOrderItem(
+                    order_id=item.order_id,
+                    order_code=item.order_code,
+                    order_status=item.order_status,
+                    reason=item.reason,
+                )
+                for item in result.items
+            ],
+        )
+    )
+
+
+@router.post("/{product_id}/lifecycle", response_model=ApiResponse[ProductItem])
+def update_product_lifecycle(
+    product_id: int,
+    payload: ProductLifecycleUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
+) -> ApiResponse[ProductItem]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    try:
+        updated = change_product_lifecycle(
+            db,
+            product=product,
+            target_status=payload.target_status,
+            confirmed=payload.confirmed,
+            note=payload.note,
+            inactive_reason=payload.inactive_reason,
+            operator=current_user,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(to_product_item(updated, None), message="updated")
+
+
+@router.get("/{product_id}/versions", response_model=ApiResponse[ProductVersionListResult])
+def get_product_versions(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes(PRODUCT_READ_ROLE_CODES)),
+) -> ApiResponse[ProductVersionListResult]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    rows = list_product_versions(db, product_id=product.id)
+    return success_response(
+        ProductVersionListResult(
+            total=len(rows),
+            items=[
+                ProductVersionItem(
+                    version=row.version,
+                    lifecycle_status=row.lifecycle_status,
+                    action=row.action,
+                    note=row.note,
+                    source_version=row.source_revision.version if row.source_revision else None,
+                    created_by_user_id=row.created_by_user_id,
+                    created_by_username=row.created_by.username if row.created_by else None,
+                    created_at=row.created_at,
+                )
+                for row in rows
+            ],
+        )
+    )
+
+
+@router.get("/{product_id}/versions/compare", response_model=ApiResponse[ProductVersionCompareResult])
+def compare_product_version_api(
+    product_id: int,
+    from_version: int = Query(ge=1),
+    to_version: int = Query(ge=1),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes(PRODUCT_READ_ROLE_CODES)),
+) -> ApiResponse[ProductVersionCompareResult]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    try:
+        result = compare_product_versions(
+            db,
+            product=product,
+            from_version=from_version,
+            to_version=to_version,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(
+        ProductVersionCompareResult(
+            from_version=result.from_version,
+            to_version=result.to_version,
+            added_items=result.added_items,
+            removed_items=result.removed_items,
+            changed_items=result.changed_items,
+            items=[
+                ProductVersionDiffItem(
+                    key=item.key,
+                    diff_type=item.diff_type,
+                    from_value=item.from_value,
+                    to_value=item.to_value,
+                )
+                for item in result.items
+            ],
+        )
+    )
+
+
+@router.post("/{product_id}/rollback", response_model=ApiResponse[ProductRollbackResult])
+def rollback_product_api(
+    product_id: int,
+    payload: ProductRollbackRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
+) -> ApiResponse[ProductRollbackResult]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    if not get_product_version(db, product_id=product.id, version=payload.target_version):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target version not found")
+
+    try:
+        changed_keys = rollback_product_to_version(
+            db,
+            product=product,
+            target_version=payload.target_version,
+            confirmed=payload.confirmed,
+            note=payload.note,
+            operator=current_user,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+
+    refreshed = get_product_by_id(db, product.id) or product
+    return success_response(
+        ProductRollbackResult(
+            product=to_product_item(refreshed, None),
+            changed_keys=changed_keys,
+        ),
+        message="rolled_back",
     )
 
 

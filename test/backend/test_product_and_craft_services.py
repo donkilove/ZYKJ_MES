@@ -391,3 +391,180 @@ def test_product_update_parameters_rejects_invalid_input(db, factory) -> None:
         assert False, "expected ValueError"
     except ValueError as exc:
         assert "cannot be deleted" in str(exc)
+
+
+def test_product_lifecycle_and_version_compare_and_rollback(db, factory) -> None:
+    operator = factory.user(username="product_lifecycle_admin", role_codes=[ROLE_SYSTEM_ADMIN])
+    product = product_service.create_product(db, "产品生命周期A", operator=operator)
+    assert product.lifecycle_status == "draft"
+    assert product.current_version == 1
+    assert product.effective_version == 0
+
+    product = product_service.change_product_lifecycle(
+        db,
+        product=product,
+        target_status="pending_review",
+        confirmed=False,
+        note="提交审核",
+        inactive_reason=None,
+        operator=operator,
+    )
+    product = product_service.change_product_lifecycle(
+        db,
+        product=product,
+        target_status="effective",
+        confirmed=False,
+        note="发布生效",
+        inactive_reason=None,
+        operator=operator,
+    )
+    assert product.lifecycle_status == "effective"
+    assert product.effective_version == 1
+
+    changed_keys = product_service.update_product_parameters(
+        db,
+        product=product,
+        items=[
+            (PRODUCT_NAME_PARAMETER_KEY, "基础参数", "Text", "产品生命周期A-改1"),
+            ("参数X", "分类X", "Text", "v1"),
+        ],
+        remark="版本二",
+        operator=operator,
+    )
+    assert "参数X" in changed_keys
+    assert product.current_version == 2
+    assert product.effective_version == 2
+
+    product_service.update_product_parameters(
+        db,
+        product=product,
+        items=[
+            (PRODUCT_NAME_PARAMETER_KEY, "基础参数", "Text", "产品生命周期A-改2"),
+            ("参数X", "分类X", "Text", "v2"),
+        ],
+        remark="版本三",
+        operator=operator,
+    )
+    assert product.current_version == 3
+
+    versions = product_service.list_product_versions(db, product_id=product.id)
+    assert [item.version for item in versions[:3]] == [3, 2, 1]
+
+    compare_result = product_service.compare_product_versions(
+        db,
+        product=product,
+        from_version=1,
+        to_version=3,
+    )
+    assert compare_result.changed_items >= 1
+
+    rollback_changed_keys = product_service.rollback_product_to_version(
+        db,
+        product=product,
+        target_version=1,
+        confirmed=False,
+        note="回滚到v1",
+        operator=operator,
+    )
+    assert PRODUCT_NAME_PARAMETER_KEY in rollback_changed_keys
+    assert product.current_version == 4
+    assert product.effective_version == 4
+
+
+def test_product_impact_confirmation_required_for_inactive_and_update(db, factory) -> None:
+    operator = factory.user(username="product_impact_admin", role_codes=[ROLE_SYSTEM_ADMIN])
+    product = product_service.create_product(db, "产品影响A", operator=operator)
+    product = product_service.change_product_lifecycle(
+        db,
+        product=product,
+        target_status="pending_review",
+        confirmed=False,
+        note=None,
+        inactive_reason=None,
+        operator=operator,
+    )
+    product = product_service.change_product_lifecycle(
+        db,
+        product=product,
+        target_status="effective",
+        confirmed=False,
+        note=None,
+        inactive_reason=None,
+        operator=operator,
+    )
+    factory.order(product=product, order_code="IMPACT-ORD-1", status="pending")
+    db.commit()
+
+    impact = product_service.analyze_product_impact(
+        db,
+        product=product,
+        operation="lifecycle",
+        target_status="inactive",
+    )
+    assert impact.requires_confirmation is True
+    assert impact.total_orders == 1
+
+    try:
+        product_service.change_product_lifecycle(
+            db,
+            product=product,
+            target_status="inactive",
+            confirmed=False,
+            note=None,
+            inactive_reason="停产",
+            operator=operator,
+        )
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "Impact confirmation required" in str(exc)
+
+    product = product_service.change_product_lifecycle(
+        db,
+        product=product,
+        target_status="inactive",
+        confirmed=True,
+        note=None,
+        inactive_reason="停产",
+        operator=operator,
+    )
+    assert product.lifecycle_status == "inactive"
+
+    product = product_service.change_product_lifecycle(
+        db,
+        product=product,
+        target_status="effective",
+        confirmed=False,
+        note=None,
+        inactive_reason=None,
+        operator=operator,
+    )
+    assert product.lifecycle_status == "effective"
+
+    try:
+        product_service.update_product_parameters(
+            db,
+            product=product,
+            items=[
+                (PRODUCT_NAME_PARAMETER_KEY, "基础参数", "Text", "产品影响A-改"),
+                ("参数Y", "分类Y", "Text", "v1"),
+            ],
+            remark="生效状态改参",
+            operator=operator,
+            confirmed=False,
+        )
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "Impact confirmation required" in str(exc)
+
+    changed_keys = product_service.update_product_parameters(
+        db,
+        product=product,
+        items=[
+            (PRODUCT_NAME_PARAMETER_KEY, "基础参数", "Text", "产品影响A-改"),
+            ("参数Y", "分类Y", "Text", "v1"),
+        ],
+        remark="生效状态改参",
+        operator=operator,
+        confirmed=True,
+    )
+    assert "参数Y" in changed_keys

@@ -18,6 +18,7 @@ from app.core.production_constants import (
     SUB_ORDER_STATUS_IN_PROGRESS,
     SUB_ORDER_STATUS_PENDING,
 )
+from app.core.product_lifecycle import PRODUCT_LIFECYCLE_EFFECTIVE
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
@@ -478,6 +479,17 @@ def _set_order_template_snapshot(
     order.process_template_version = template.version
 
 
+def _set_order_product_snapshot(
+    *,
+    order: ProductionOrder,
+    product: Product,
+) -> None:
+    if product.effective_version > 0:
+        order.product_version = product.effective_version
+        return
+    order.product_version = max(product.current_version, 1)
+
+
 def _normalize_template_name(value: str | None) -> str:
     normalized = (value or "").strip()
     if not normalized:
@@ -605,6 +617,8 @@ def create_order(
     product = db.execute(select(Product).where(Product.id == product_id)).scalars().first()
     if not product:
         raise ValueError("Product not found")
+    if product.lifecycle_status != PRODUCT_LIFECYCLE_EFFECTIVE:
+        raise ValueError("Product is not effective")
 
     route_steps, selected_template = _resolve_route_steps(
         db,
@@ -638,6 +652,7 @@ def create_order(
         remark=(remark or "").strip() or None,
         created_by_user_id=operator.id,
     )
+    _set_order_product_snapshot(order=order, product=product)
     _set_order_template_snapshot(order=order, template=final_template)
     db.add(order)
     db.flush()
@@ -697,6 +712,8 @@ def update_order(
     product = db.execute(select(Product).where(Product.id == product_id)).scalars().first()
     if not product:
         raise ValueError("Product not found")
+    if product.lifecycle_status != PRODUCT_LIFECYCLE_EFFECTIVE:
+        raise ValueError("Product is not effective")
 
     route_steps, selected_template = _resolve_route_steps(
         db,
@@ -731,6 +748,7 @@ def update_order(
     order.remark = (remark or "").strip() or None
     order.status = ORDER_STATUS_PENDING
     order.current_process_code = resolved_process_codes[0]
+    _set_order_product_snapshot(order=order, product=product)
     _set_order_template_snapshot(order=order, template=final_template)
 
     process_rows = _build_order_process_rows(

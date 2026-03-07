@@ -1,11 +1,20 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
+import json
 import logging
 
 from sqlalchemy import delete, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
+from app.core.product_lifecycle import (
+    PRODUCT_LIFECYCLE_DRAFT,
+    PRODUCT_LIFECYCLE_EFFECTIVE,
+    PRODUCT_LIFECYCLE_INACTIVE,
+    PRODUCT_LIFECYCLE_OPTIONS,
+    PRODUCT_LIFECYCLE_TRANSITIONS,
+)
 from app.core.product_parameter_template import (
     ALLOWED_PARAMETER_TYPES,
     PARAMETER_TYPE_TEXT,
@@ -15,11 +24,14 @@ from app.core.product_parameter_template import (
     PRODUCT_PARAMETER_TEMPLATE,
     PRODUCT_PARAMETER_TEMPLATE_NAME_SET,
 )
+from app.core.production_constants import ORDER_STATUS_IN_PROGRESS, ORDER_STATUS_PENDING
 from app.models.product import Product
 from app.models.product_parameter import ProductParameter
 from app.models.product_parameter_history import ProductParameterHistory
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.product_process_template_step import ProductProcessTemplateStep
+from app.models.product_revision import ProductRevision
+from app.models.production_order import ProductionOrder
 from app.models.user import User
 from app.services.craft_service import resolve_system_master_template
 
@@ -27,10 +39,55 @@ from app.services.craft_service import resolve_system_master_template
 logger = logging.getLogger(__name__)
 
 
+@dataclass(slots=True)
+class ProductImpactOrder:
+    order_id: int
+    order_code: str
+    order_status: str
+    reason: str | None = None
+
+
+@dataclass(slots=True)
+class ProductImpactResult:
+    operation: str
+    target_status: str | None
+    target_version: int | None
+    total_orders: int
+    pending_orders: int
+    in_progress_orders: int
+    requires_confirmation: bool
+    items: list[ProductImpactOrder]
+
+
+@dataclass(slots=True)
+class ProductVersionCompareRow:
+    key: str
+    diff_type: str
+    from_value: str | None = None
+    to_value: str | None = None
+
+
+@dataclass(slots=True)
+class ProductVersionCompareResult:
+    from_version: int
+    to_version: int
+    added_items: int
+    removed_items: int
+    changed_items: int
+    items: list[ProductVersionCompareRow]
+
+
 def _normalize_product_name(name: str) -> str:
     normalized = name.strip()
     if not normalized:
         raise ValueError("Product name is required")
+    return normalized
+
+
+def _normalize_lifecycle_status(value: str | None) -> str:
+    normalized = (value or PRODUCT_LIFECYCLE_DRAFT).strip().lower()
+    if normalized not in PRODUCT_LIFECYCLE_OPTIONS:
+        raise ValueError("Invalid lifecycle status")
     return normalized
 
 
@@ -64,6 +121,128 @@ def _normalize_parameter_items(items: list[tuple[str, str, str, str]]) -> list[d
             }
         )
     return normalized_items
+
+
+def _parameter_compare_value(item: dict[str, object]) -> str:
+    return (
+        f"分类={item['category']};"
+        f"类型={item['type']};"
+        f"值={item['value']};"
+        f"排序={item['sort_order']};"
+        f"预置={'是' if bool(item['is_preset']) else '否'}"
+    )
+
+
+def _snapshot_signature(payload: dict[str, object]) -> str:
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _build_snapshot_payload(
+    *,
+    product_name: str,
+    parameters: list[ProductParameter],
+) -> dict[str, object]:
+    return {
+        "name": product_name,
+        "parameters": [
+            {
+                "name": row.param_key,
+                "category": row.param_category,
+                "type": row.param_type,
+                "value": row.param_value,
+                "sort_order": row.sort_order,
+                "is_preset": row.is_preset,
+            }
+            for row in parameters
+        ],
+    }
+
+
+def _normalize_snapshot_payload(payload: dict[str, object]) -> dict[str, object]:
+    product_name = _normalize_product_name(str(payload.get("name") or ""))
+    raw_parameters = payload.get("parameters")
+    if not isinstance(raw_parameters, list):
+        raise ValueError("Invalid revision snapshot")
+
+    tuples: list[tuple[str, str, str, str]] = []
+    for raw_item in raw_parameters:
+        if not isinstance(raw_item, dict):
+            raise ValueError("Invalid revision snapshot")
+        tuples.append(
+            (
+                str(raw_item.get("name") or ""),
+                str(raw_item.get("category") or ""),
+                str(raw_item.get("type") or ""),
+                str(raw_item.get("value") or ""),
+            )
+        )
+
+    normalized_parameters = _normalize_parameter_items(tuples)
+    by_name = {str(item["name"]): item for item in normalized_parameters}
+    name_parameter = by_name.get(PRODUCT_NAME_PARAMETER_KEY)
+    if name_parameter is None:
+        raise ValueError("Invalid revision snapshot: product name parameter missing")
+    name_parameter["category"] = PRODUCT_NAME_PARAMETER_CATEGORY
+    name_parameter["type"] = PRODUCT_NAME_PARAMETER_TYPE
+    name_parameter["value"] = product_name
+
+    return {
+        "name": product_name,
+        "parameters": normalized_parameters,
+    }
+
+
+def _parse_revision_snapshot(row: ProductRevision) -> dict[str, object]:
+    try:
+        raw_payload = json.loads(row.snapshot_json)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Invalid revision snapshot") from error
+    if not isinstance(raw_payload, dict):
+        raise ValueError("Invalid revision snapshot")
+    return _normalize_snapshot_payload(raw_payload)
+
+
+def _calculate_changed_keys(
+    *,
+    current_parameters: list[ProductParameter],
+    next_items: list[dict[str, object]],
+) -> list[str]:
+    current_by_name = {item.param_key: item for item in current_parameters}
+    current_order = [item.param_key for item in current_parameters]
+    next_order = [str(item["name"]) for item in next_items]
+    next_by_name = {str(item["name"]): item for item in next_items}
+
+    current_name_set = set(current_by_name.keys())
+    next_name_set = set(next_by_name.keys())
+    changed_name_set: set[str] = set()
+
+    changed_name_set.update(current_name_set - next_name_set)
+    changed_name_set.update(next_name_set - current_name_set)
+
+    for name in current_name_set & next_name_set:
+        existing = current_by_name[name]
+        next_item = next_by_name[name]
+        if (
+            existing.param_category != next_item["category"]
+            or existing.param_type != next_item["type"]
+            or existing.param_value != next_item["value"]
+            or existing.sort_order != next_item["sort_order"]
+            or existing.is_preset != next_item["is_preset"]
+        ):
+            changed_name_set.add(name)
+
+    max_count = max(len(current_order), len(next_order))
+    for index in range(max_count):
+        current_name = current_order[index] if index < len(current_order) else None
+        next_name = next_order[index] if index < len(next_order) else None
+        if current_name == next_name:
+            continue
+        if current_name is not None:
+            changed_name_set.add(current_name)
+        if next_name is not None:
+            changed_name_set.add(next_name)
+
+    return sorted(changed_name_set)
 
 
 def summarize_changed_keys(changed_keys: list[str], *, max_count: int = 3) -> str | None:
@@ -118,7 +297,7 @@ def _clone_default_craft_template_for_new_product(
             select(ProductProcessTemplate.id).where(
                 ProductProcessTemplate.product_id == product.id,
                 ProductProcessTemplate.is_enabled.is_(True),
-            ProductProcessTemplate.lifecycle_status == "published",
+                ProductProcessTemplate.lifecycle_status == "published",
             )
         )
         .scalars()
@@ -197,9 +376,43 @@ def _clone_default_craft_template_for_new_product(
     )
 
 
+def _create_product_revision_snapshot(
+    db: Session,
+    *,
+    product: Product,
+    action: str,
+    note: str | None,
+    operator: User,
+    source_revision_id: int | None = None,
+) -> ProductRevision:
+    parameters = list_product_parameters(db, product.id)
+    payload = _build_snapshot_payload(product_name=product.name, parameters=parameters)
+    row = ProductRevision(
+        product_id=product.id,
+        version=product.current_version,
+        lifecycle_status=product.lifecycle_status,
+        action=action,
+        note=(note or "").strip() or None,
+        source_revision_id=source_revision_id,
+        snapshot_json=_snapshot_signature(payload),
+        created_by_user_id=operator.id,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
 def create_product(db: Session, name: str, *, operator: User) -> Product:
     normalized_name = _normalize_product_name(name)
-    product = Product(name=normalized_name, parameter_template_initialized=True)
+    product = Product(
+        name=normalized_name,
+        parameter_template_initialized=True,
+        lifecycle_status=PRODUCT_LIFECYCLE_DRAFT,
+        current_version=1,
+        effective_version=0,
+        effective_at=None,
+        inactive_reason=None,
+    )
     db.add(product)
     db.flush()
 
@@ -219,6 +432,15 @@ def create_product(db: Session, name: str, *, operator: User) -> Product:
                 is_preset=True,
             )
         )
+    db.flush()
+
+    _create_product_revision_snapshot(
+        db,
+        product=product,
+        action="create",
+        note="Product created",
+        operator=operator,
+    )
 
     _clone_default_craft_template_for_new_product(
         db,
@@ -343,6 +565,83 @@ def list_product_parameters(db: Session, product_id: int) -> list[ProductParamet
     return db.execute(stmt).scalars().all()
 
 
+def _list_open_orders_for_product(db: Session, *, product_id: int) -> list[ProductionOrder]:
+    return (
+        db.execute(
+            select(ProductionOrder)
+            .where(
+                ProductionOrder.product_id == product_id,
+                ProductionOrder.status.in_([ORDER_STATUS_PENDING, ORDER_STATUS_IN_PROGRESS]),
+            )
+            .order_by(ProductionOrder.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def analyze_product_impact(
+    db: Session,
+    *,
+    product: Product,
+    operation: str,
+    target_status: str | None = None,
+    target_version: int | None = None,
+) -> ProductImpactResult:
+    normalized_operation = (operation or "").strip().lower()
+    if normalized_operation not in {"update_parameters", "lifecycle", "rollback"}:
+        raise ValueError("Invalid operation")
+
+    normalized_target_status = None
+    if target_status is not None:
+        normalized_target_status = _normalize_lifecycle_status(target_status)
+
+    open_orders = _list_open_orders_for_product(db, product_id=product.id)
+    pending_orders = sum(1 for row in open_orders if row.status == ORDER_STATUS_PENDING)
+    in_progress_orders = sum(1 for row in open_orders if row.status == ORDER_STATUS_IN_PROGRESS)
+
+    requires_confirmation = False
+    reason_text: str | None = None
+    if normalized_operation == "update_parameters":
+        requires_confirmation = (
+            product.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE and len(open_orders) > 0
+        )
+        if requires_confirmation:
+            reason_text = "Effective product has unfinished orders"
+    elif normalized_operation == "lifecycle":
+        if normalized_target_status is None:
+            raise ValueError("target_status is required for lifecycle impact analysis")
+        requires_confirmation = (
+            normalized_target_status == PRODUCT_LIFECYCLE_INACTIVE and len(open_orders) > 0
+        )
+        if requires_confirmation:
+            reason_text = "Inactive transition affects unfinished orders"
+    elif normalized_operation == "rollback":
+        requires_confirmation = len(open_orders) > 0
+        if requires_confirmation:
+            reason_text = "Rollback affects unfinished orders"
+
+    items = [
+        ProductImpactOrder(
+            order_id=row.id,
+            order_code=row.order_code,
+            order_status=row.status,
+            reason=reason_text,
+        )
+        for row in open_orders
+    ]
+    return ProductImpactResult(
+        operation=normalized_operation,
+        target_status=normalized_target_status,
+        target_version=target_version,
+        total_orders=len(open_orders),
+        pending_orders=pending_orders,
+        in_progress_orders=in_progress_orders,
+        requires_confirmation=requires_confirmation,
+        items=items,
+    )
+
+
 def update_product_parameters(
     db: Session,
     *,
@@ -350,10 +649,19 @@ def update_product_parameters(
     items: list[tuple[str, str, str, str]],
     remark: str,
     operator: User,
+    confirmed: bool = False,
 ) -> list[str]:
     normalized_remark = remark.strip()
     if not normalized_remark:
         raise ValueError("Remark is required")
+
+    impact = analyze_product_impact(
+        db,
+        product=product,
+        operation="update_parameters",
+    )
+    if impact.requires_confirmation and not confirmed:
+        raise ValueError("Impact confirmation required before updating effective product")
 
     normalized_items = _normalize_parameter_items(items)
     normalized_by_name = {
@@ -373,39 +681,10 @@ def update_product_parameters(
         raise ValueError("Product name already exists")
 
     current_parameters = list_product_parameters(db, product.id)
-    current_by_name = {item.param_key: item for item in current_parameters}
-    current_order = [item.param_key for item in current_parameters]
-    next_order = [str(item["name"]) for item in normalized_items]
-
-    current_name_set = set(current_by_name.keys())
-    next_name_set = set(next_order)
-    changed_name_set: set[str] = set()
-
-    changed_name_set.update(current_name_set - next_name_set)
-    changed_name_set.update(next_name_set - current_name_set)
-
-    for name in current_name_set & next_name_set:
-        existing = current_by_name[name]
-        next_item = normalized_by_name[name]
-        if (
-            existing.param_category != next_item["category"]
-            or existing.param_type != next_item["type"]
-            or existing.param_value != next_item["value"]
-        ):
-            changed_name_set.add(name)
-
-    max_count = max(len(current_order), len(next_order))
-    for index in range(max_count):
-        current_name = current_order[index] if index < len(current_order) else None
-        next_name = next_order[index] if index < len(next_order) else None
-        if current_name == next_name:
-            continue
-        if current_name is not None:
-            changed_name_set.add(current_name)
-        if next_name is not None:
-            changed_name_set.add(next_name)
-
-    changed_keys = sorted(changed_name_set)
+    changed_keys = _calculate_changed_keys(
+        current_parameters=current_parameters,
+        next_items=normalized_items,
+    )
     if not changed_keys:
         raise ValueError("No parameter changes detected")
 
@@ -435,6 +714,274 @@ def update_product_parameters(
     )
     product.name = candidate_product_name
     product.updated_at = datetime.now(UTC)
+    product.current_version = max(product.current_version, 0) + 1
+    if product.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE:
+        product.effective_version = product.current_version
+        product.effective_at = datetime.now(UTC)
+    db.flush()
+    _create_product_revision_snapshot(
+        db,
+        product=product,
+        action="update_parameters",
+        note=normalized_remark,
+        operator=operator,
+    )
+
+    db.commit()
+    return changed_keys
+
+
+def change_product_lifecycle(
+    db: Session,
+    *,
+    product: Product,
+    target_status: str,
+    confirmed: bool,
+    note: str | None,
+    inactive_reason: str | None,
+    operator: User,
+) -> Product:
+    del note  # reserved for future audit expansion.
+    del operator  # lifecycle transition currently does not create a separate revision row.
+
+    normalized_target_status = _normalize_lifecycle_status(target_status)
+    current_status = _normalize_lifecycle_status(product.lifecycle_status)
+
+    if normalized_target_status == current_status:
+        raise ValueError("Product is already in target status")
+
+    allowed_targets = PRODUCT_LIFECYCLE_TRANSITIONS.get(current_status, set())
+    if normalized_target_status not in allowed_targets:
+        raise ValueError(
+            f"Lifecycle transition not allowed: {current_status} -> {normalized_target_status}"
+        )
+
+    impact = analyze_product_impact(
+        db,
+        product=product,
+        operation="lifecycle",
+        target_status=normalized_target_status,
+    )
+    if impact.requires_confirmation and not confirmed:
+        raise ValueError("Impact confirmation required before changing lifecycle")
+
+    normalized_reason = (inactive_reason or "").strip() or None
+    if normalized_target_status == PRODUCT_LIFECYCLE_INACTIVE and not normalized_reason:
+        raise ValueError("inactive_reason is required when target_status is inactive")
+
+    product.lifecycle_status = normalized_target_status
+    if normalized_target_status == PRODUCT_LIFECYCLE_EFFECTIVE:
+        product.effective_version = max(product.current_version, 1)
+        product.effective_at = datetime.now(UTC)
+        product.inactive_reason = None
+    elif normalized_target_status == PRODUCT_LIFECYCLE_INACTIVE:
+        product.inactive_reason = normalized_reason
+    else:
+        product.inactive_reason = None
+
+    product.updated_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+def list_product_versions(db: Session, *, product_id: int) -> list[ProductRevision]:
+    return (
+        db.execute(
+            select(ProductRevision)
+            .where(ProductRevision.product_id == product_id)
+            .options(
+                selectinload(ProductRevision.created_by),
+                selectinload(ProductRevision.source_revision),
+            )
+            .order_by(ProductRevision.version.desc(), ProductRevision.id.desc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def get_product_version(db: Session, *, product_id: int, version: int) -> ProductRevision | None:
+    return (
+        db.execute(
+            select(ProductRevision)
+            .where(
+                ProductRevision.product_id == product_id,
+                ProductRevision.version == version,
+            )
+            .options(
+                selectinload(ProductRevision.created_by),
+                selectinload(ProductRevision.source_revision),
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
+def compare_product_versions(
+    db: Session,
+    *,
+    product: Product,
+    from_version: int,
+    to_version: int,
+) -> ProductVersionCompareResult:
+    from_row = get_product_version(db, product_id=product.id, version=from_version)
+    to_row = get_product_version(db, product_id=product.id, version=to_version)
+    if from_row is None or to_row is None:
+        raise ValueError("Product version not found")
+
+    from_snapshot = _parse_revision_snapshot(from_row)
+    to_snapshot = _parse_revision_snapshot(to_row)
+
+    from_map: dict[str, str] = {
+        "产品名称": str(from_snapshot["name"]),
+    }
+    to_map: dict[str, str] = {
+        "产品名称": str(to_snapshot["name"]),
+    }
+
+    for item in from_snapshot["parameters"]:
+        item_dict = dict(item)
+        from_map[f"参数:{item_dict['name']}"] = _parameter_compare_value(item_dict)
+    for item in to_snapshot["parameters"]:
+        item_dict = dict(item)
+        to_map[f"参数:{item_dict['name']}"] = _parameter_compare_value(item_dict)
+
+    all_keys = sorted(set(from_map.keys()) | set(to_map.keys()))
+    rows: list[ProductVersionCompareRow] = []
+    added = 0
+    removed = 0
+    changed = 0
+
+    for key in all_keys:
+        from_value = from_map.get(key)
+        to_value = to_map.get(key)
+        if from_value is None:
+            added += 1
+            rows.append(
+                ProductVersionCompareRow(
+                    key=key,
+                    diff_type="added",
+                    from_value=None,
+                    to_value=to_value,
+                )
+            )
+            continue
+        if to_value is None:
+            removed += 1
+            rows.append(
+                ProductVersionCompareRow(
+                    key=key,
+                    diff_type="removed",
+                    from_value=from_value,
+                    to_value=None,
+                )
+            )
+            continue
+        if from_value != to_value:
+            changed += 1
+            rows.append(
+                ProductVersionCompareRow(
+                    key=key,
+                    diff_type="changed",
+                    from_value=from_value,
+                    to_value=to_value,
+                )
+            )
+
+    return ProductVersionCompareResult(
+        from_version=from_version,
+        to_version=to_version,
+        added_items=added,
+        removed_items=removed,
+        changed_items=changed,
+        items=rows,
+    )
+
+
+def rollback_product_to_version(
+    db: Session,
+    *,
+    product: Product,
+    target_version: int,
+    confirmed: bool,
+    note: str | None,
+    operator: User,
+) -> list[str]:
+    target_revision = get_product_version(db, product_id=product.id, version=target_version)
+    if target_revision is None:
+        raise ValueError("Target version not found")
+
+    impact = analyze_product_impact(
+        db,
+        product=product,
+        operation="rollback",
+        target_version=target_version,
+    )
+    if impact.requires_confirmation and not confirmed:
+        raise ValueError("Impact confirmation required before rollback")
+
+    target_snapshot = _parse_revision_snapshot(target_revision)
+    current_parameters = list_product_parameters(db, product.id)
+    current_snapshot = _build_snapshot_payload(
+        product_name=product.name,
+        parameters=current_parameters,
+    )
+    if _snapshot_signature(current_snapshot) == _snapshot_signature(target_snapshot):
+        raise ValueError("Selected version is identical to current state")
+
+    candidate_name = _normalize_product_name(str(target_snapshot["name"]))
+    existing_product = get_product_by_name(db, candidate_name)
+    if existing_product and existing_product.id != product.id:
+        raise ValueError("Product name already exists")
+
+    next_items = [dict(item) for item in target_snapshot["parameters"]]
+    changed_keys = _calculate_changed_keys(
+        current_parameters=current_parameters,
+        next_items=next_items,
+    )
+
+    db.execute(delete(ProductParameter).where(ProductParameter.product_id == product.id))
+    for item in next_items:
+        db.add(
+            ProductParameter(
+                product_id=product.id,
+                param_key=str(item["name"]),
+                param_category=str(item["category"]),
+                param_type=str(item["type"]),
+                param_value=str(item["value"]),
+                sort_order=int(item["sort_order"]),
+                is_preset=bool(item["is_preset"]),
+            )
+        )
+
+    product.name = candidate_name
+    product.updated_at = datetime.now(UTC)
+    product.current_version = max(product.current_version, 0) + 1
+    if product.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE:
+        product.effective_version = product.current_version
+        product.effective_at = datetime.now(UTC)
+
+    rollback_note = (note or "").strip() or f"Rollback to v{target_version}"
+    db.add(
+        ProductParameterHistory(
+            product_id=product.id,
+            operator_user_id=operator.id,
+            operator_username=operator.username,
+            remark=rollback_note,
+            changed_keys=changed_keys,
+        )
+    )
+    db.flush()
+    _create_product_revision_snapshot(
+        db,
+        product=product,
+        action="rollback",
+        note=rollback_note,
+        operator=operator,
+        source_revision_id=target_revision.id,
+    )
 
     db.commit()
     return changed_keys
@@ -483,9 +1030,3 @@ def get_latest_history_map_by_product_ids(
         if row.product_id not in latest_map:
             latest_map[row.product_id] = row
     return latest_map
-
-
-
-
-
-

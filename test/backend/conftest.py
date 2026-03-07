@@ -155,7 +155,15 @@ class DataFactory:
         return row
 
     def product(self, *, name: str | None = None) -> Product:
-        row = Product(name=name or self._next("product_"), parameter_template_initialized=False)
+        row = Product(
+            name=name or self._next("product_"),
+            parameter_template_initialized=False,
+            lifecycle_status="effective",
+            current_version=1,
+            effective_version=1,
+            effective_at=None,
+            inactive_reason=None,
+        )
         self.db.add(row)
         self.db.flush()
         return row
@@ -210,6 +218,7 @@ class DataFactory:
         row = ProductionOrder(
             order_code=order_code or self._next("ORD-"),
             product_id=product.id,
+            product_version=product.effective_version if product.effective_version > 0 else product.current_version,
             quantity=quantity,
             status=status,
             current_process_code=current_process_code,
