@@ -13,7 +13,7 @@ from app.core.production_constants import (
     PROCESS_STATUS_IN_PROGRESS,
     PROCESS_STATUS_PARTIAL,
 )
-from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
+from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_sub_order import ProductionSubOrder
 from app.services import assist_authorization_service, production_execution_service, production_order_service
@@ -332,14 +332,16 @@ def test_assist_authorization_and_view_modes(db, factory) -> None:
         reason="代班服务测试",
         requester=operator,
     )
-    reviewed_row = assist_authorization_service.review_assist_authorization(
-        db,
-        authorization_id=auth_row.id,
-        approve=True,
-        reviewer=admin,
-        review_remark="ok",
-    )
-    assert reviewed_row.status == "approved"
+    assert auth_row.status == "approved"
+
+    with pytest.raises(RuntimeError, match="发起即生效"):
+        assist_authorization_service.review_assist_authorization(
+            db,
+            authorization_id=auth_row.id,
+            approve=True,
+            reviewer=admin,
+            review_remark="ok",
+        )
 
     total_assist, assist_items = production_order_service.list_my_orders(
         db,
@@ -614,3 +616,125 @@ def test_update_pipeline_mode_validation_and_my_orders_flags(db, factory) -> Non
     assert first_item["pipeline_mode_enabled"] is True
     assert "pipeline_start_allowed" in first_item
     assert "pipeline_end_allowed" in first_item
+
+
+def test_order_detail_access_and_my_order_context(db, factory) -> None:
+    _, process, operator, admin, product = _prepare_order_env(db, factory)
+    quality_admin = factory.user(username="quality_reader", role_codes=[ROLE_QUALITY_ADMIN])
+    unrelated_operator = factory.user(
+        username="unrelated_operator",
+        role_codes=[ROLE_OPERATOR],
+        processes=[],
+    )
+    db.commit()
+
+    order = production_order_service.create_order(
+        db,
+        order_code="ORD-CTX-01",
+        product_id=product.id,
+        quantity=6,
+        start_date=None,
+        due_date=None,
+        remark="ctx",
+        process_codes=[process.code],
+        template_id=None,
+        process_steps=None,
+        save_as_template=False,
+        new_template_name=None,
+        new_template_set_default=False,
+        operator=admin,
+    )
+    process_row = db.execute(
+        select(ProductionOrderProcess).where(ProductionOrderProcess.order_id == order.id)
+    ).scalars().first()
+    assert process_row is not None
+
+    assert production_order_service.can_user_access_order_detail(
+        db,
+        order_id=order.id,
+        current_user=admin,
+    )
+    assert production_order_service.can_user_access_order_detail(
+        db,
+        order_id=order.id,
+        current_user=quality_admin,
+    )
+    assert production_order_service.can_user_access_order_detail(
+        db,
+        order_id=order.id,
+        current_user=operator,
+    )
+    assert not production_order_service.can_user_access_order_detail(
+        db,
+        order_id=order.id,
+        current_user=unrelated_operator,
+    )
+
+    context_own = production_order_service.get_my_order_context(
+        db,
+        order_id=order.id,
+        current_user=operator,
+        view_mode="own",
+    )
+    assert context_own is not None
+    assert context_own["work_view"] == "own"
+
+    context_unrelated = production_order_service.get_my_order_context(
+        db,
+        order_id=order.id,
+        current_user=unrelated_operator,
+        view_mode="own",
+    )
+    assert context_unrelated is None
+
+    auth_row = assist_authorization_service.create_assist_authorization(
+        db,
+        order_id=order.id,
+        order_process_id=process_row.id,
+        target_operator_user_id=operator.id,
+        helper_user_id=admin.id,
+        reason="代班上下文",
+        requester=operator,
+    )
+    context_assist = production_order_service.get_my_order_context(
+        db,
+        order_id=order.id,
+        current_user=admin,
+        view_mode="assist",
+    )
+    assert context_assist is not None
+    assert context_assist["assist_authorization_id"] == auth_row.id
+
+    _, _, _ = production_execution_service.submit_first_article(
+        db,
+        order_id=order.id,
+        order_process_id=process_row.id,
+        verification_code=settings.production_default_verification_code,
+        remark="ctx-first",
+        operator=admin,
+        effective_operator_user_id=operator.id,
+        assist_authorization_id=auth_row.id,
+    )
+    _, _, _ = production_execution_service.end_production(
+        db,
+        order_id=order.id,
+        order_process_id=process_row.id,
+        quantity=6,
+        remark="ctx-end",
+        operator=admin,
+        effective_operator_user_id=operator.id,
+        assist_authorization_id=auth_row.id,
+    )
+
+    context_assist_after = production_order_service.get_my_order_context(
+        db,
+        order_id=order.id,
+        current_user=admin,
+        view_mode="assist",
+    )
+    assert context_assist_after is None
+    assert production_order_service.can_user_access_order_detail(
+        db,
+        order_id=order.id,
+        current_user=admin,
+    )

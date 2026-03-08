@@ -36,6 +36,7 @@ from app.schemas.production import (
     AssistUserOptionListResult,
     EndProductionRequest,
     FirstArticleRequest,
+    MyOrderContextResult,
     MyOrderItem,
     MyOrderListResult,
     OrderActionResult,
@@ -75,9 +76,11 @@ from app.schemas.production import (
 from app.services.assist_authorization_service import create_assist_authorization, list_assist_authorizations, review_assist_authorization
 from app.services.production_execution_service import end_production, submit_first_article
 from app.services.production_order_service import (
+    can_user_access_order_detail,
     can_user_access_order_pipeline_mode,
     complete_order_manually,
     create_order,
+    get_my_order_context,
     get_order_pipeline_mode,
     delete_order,
     get_order_by_id,
@@ -399,11 +402,13 @@ def create_order_api(
 def get_order_detail_api(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[OrderDetail]:
     row = get_order_by_id(db, order_id, with_relations=True)
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+    if not can_user_access_order_detail(db, order_id=order_id, current_user=current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current user has no access to this order")
 
     process_rows = sorted(row.processes, key=lambda item: (item.process_order, item.id))
     sub_order_rows: list[ProductionSubOrder] = []
@@ -586,6 +591,36 @@ def get_my_orders_api(
             items=[MyOrderItem(**item) for item in items],
         )
     )
+
+
+@router.get(
+    "/my-orders/{order_id}/context",
+    response_model=ApiResponse[MyOrderContextResult],
+)
+def get_my_order_context_api(
+    order_id: int,
+    view_mode: str = "own",
+    proxy_operator_user_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_OPERATOR])
+    ),
+) -> ApiResponse[MyOrderContextResult]:
+    if proxy_operator_user_id is not None and proxy_operator_user_id <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="proxy_operator_user_id must be > 0")
+    try:
+        item = get_my_order_context(
+            db,
+            order_id=order_id,
+            current_user=current_user,
+            view_mode=view_mode,
+            proxy_operator_user_id=proxy_operator_user_id,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    if item is None:
+        return success_response(MyOrderContextResult(found=False, item=None))
+    return success_response(MyOrderContextResult(found=True, item=MyOrderItem(**item)))
 
 
 @router.post(
@@ -1079,7 +1114,7 @@ def review_assist_authorization_api(
     authorization_id: int,
     payload: AssistAuthorizationReviewRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_PRODUCTION_ADMIN])),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
 ) -> ApiResponse[AssistAuthorizationItem]:
     try:
         row = review_assist_authorization(

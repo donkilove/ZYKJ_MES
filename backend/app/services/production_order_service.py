@@ -34,7 +34,7 @@ from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_sub_order import ProductionSubOrder
 from app.models.order_event_log import OrderEventLog
 from app.models.user import User
-from app.services.assist_authorization_service import ASSIST_STATUS_APPROVED
+from app.services.assist_authorization_service import ASSIST_STATUS_APPROVED, ASSIST_STATUS_CONSUMED
 from app.services.production_event_log_service import add_order_event_log
 
 
@@ -509,6 +509,38 @@ def can_user_access_order_pipeline_mode(
         ))
     )
     return bool(db.execute(exists_stmt).scalar())
+
+
+def can_user_access_order_detail(
+    db: Session,
+    *,
+    order_id: int,
+    current_user: User,
+) -> bool:
+    role_codes = {role.code for role in current_user.roles}
+    if role_codes.intersection(ADMIN_QUERY_ROLE_CODES):
+        return True
+    if ROLE_OPERATOR not in role_codes:
+        return False
+
+    assigned_stmt = select(
+        exists().where(
+            ProductionSubOrder.operator_user_id == current_user.id,
+            ProductionSubOrder.order_process_id == ProductionOrderProcess.id,
+            ProductionOrderProcess.order_id == order_id,
+        )
+    )
+    if bool(db.execute(assigned_stmt).scalar()):
+        return True
+
+    assist_stmt = select(
+        exists().where(
+            ProductionAssistAuthorization.order_id == order_id,
+            ProductionAssistAuthorization.helper_user_id == current_user.id,
+            ProductionAssistAuthorization.status.in_([ASSIST_STATUS_APPROVED, ASSIST_STATUS_CONSUMED]),
+        )
+    )
+    return bool(db.execute(assist_stmt).scalar())
 
 
 def _invalidate_pipeline_instances_for_order(
@@ -1290,16 +1322,15 @@ def _build_my_order_item(
     }
 
 
-def list_my_orders(
+def _collect_my_order_items(
     db: Session,
     *,
     current_user: User,
     keyword: str | None,
-    page: int,
-    page_size: int,
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
-) -> tuple[int, list[dict[str, object]]]:
+    exact_order_id: int | None = None,
+) -> list[dict[str, object]]:
     if view_mode not in {"own", "proxy", "assist"}:
         raise ValueError("Invalid work view mode")
 
@@ -1331,6 +1362,8 @@ def list_my_orders(
             )
             .order_by(ProductionOrder.updated_at.desc(), ProductionSubOrder.id.desc())
         )
+        if exact_order_id is not None:
+            stmt = stmt.where(ProductionOrder.id == exact_order_id)
         if keyword:
             like_pattern = f"%{keyword.strip()}%"
             stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
@@ -1373,6 +1406,8 @@ def list_my_orders(
                 ProductionAssistAuthorization.id.desc(),
             )
         )
+        if exact_order_id is not None:
+            stmt = stmt.where(ProductionAssistAuthorization.order_id == exact_order_id)
         assist_rows = db.execute(stmt).scalars().all()
         for assist_row in assist_rows:
             order = assist_row.order
@@ -1437,6 +1472,8 @@ def list_my_orders(
             .options(selectinload(ProductionOrder.product), selectinload(ProductionOrder.processes))
             .order_by(ProductionOrder.updated_at.desc(), ProductionOrder.id.desc())
         )
+        if exact_order_id is not None:
+            stmt = stmt.where(ProductionOrder.id == exact_order_id)
         if keyword:
             like_pattern = f"%{keyword.strip()}%"
             stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
@@ -1485,6 +1522,8 @@ def list_my_orders(
             )
             .order_by(ProductionOrder.updated_at.desc(), ProductionSubOrder.id.desc())
         )
+        if exact_order_id is not None:
+            stmt = stmt.where(ProductionOrder.id == exact_order_id)
         if keyword:
             like_pattern = f"%{keyword.strip()}%"
             stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
@@ -1509,6 +1548,48 @@ def list_my_orders(
                 )
             )
 
+    return items
+
+
+def list_my_orders(
+    db: Session,
+    *,
+    current_user: User,
+    keyword: str | None,
+    page: int,
+    page_size: int,
+    view_mode: str = "own",
+    proxy_operator_user_id: int | None = None,
+) -> tuple[int, list[dict[str, object]]]:
+    items = _collect_my_order_items(
+        db,
+        current_user=current_user,
+        keyword=keyword,
+        view_mode=view_mode,
+        proxy_operator_user_id=proxy_operator_user_id,
+        exact_order_id=None,
+    )
     total = len(items)
     offset = (page - 1) * page_size
     return total, items[offset : offset + page_size]
+
+
+def get_my_order_context(
+    db: Session,
+    *,
+    order_id: int,
+    current_user: User,
+    view_mode: str = "own",
+    proxy_operator_user_id: int | None = None,
+) -> dict[str, object] | None:
+    items = _collect_my_order_items(
+        db,
+        current_user=current_user,
+        keyword=None,
+        view_mode=view_mode,
+        proxy_operator_user_id=proxy_operator_user_id,
+        exact_order_id=order_id,
+    )
+    if not items:
+        return None
+    return items[0]

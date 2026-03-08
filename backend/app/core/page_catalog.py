@@ -189,7 +189,7 @@ PAGE_CATALOG = [
     },
     {
         "code": PAGE_PRODUCTION_ASSIST_APPROVAL,
-        "name": "代班审批",
+        "name": "代班记录",
         "page_type": PAGE_TYPE_TAB,
         "parent_code": PAGE_PRODUCTION,
         "always_visible": False,

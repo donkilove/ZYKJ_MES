@@ -235,6 +235,11 @@ class MyOrderListResult(BaseModel):
     items: list[MyOrderItem]
 
 
+class MyOrderContextResult(BaseModel):
+    found: bool
+    item: MyOrderItem | None = None
+
+
 class FirstArticleRequest(BaseModel):
     order_process_id: int = Field(gt=0)
     verification_code: str = Field(min_length=1, max_length=32)

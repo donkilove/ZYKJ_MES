@@ -345,6 +345,7 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
         _=admin,
     )
     operator = factory.user(username="prod_operator_ep", role_codes=[ROLE_OPERATOR], processes=[])
+    unrelated_operator = factory.user(username="prod_operator_unrelated", role_codes=[ROLE_OPERATOR], processes=[])
     # operator uses process assignment by direct model relationship
     db_process = db.get(Process, process.data.id)
     db_process_2 = db.get(Process, process_2.data.id)
@@ -388,9 +389,12 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
     order_list = production.get_orders(page=1, page_size=20, keyword=None, status_text=None, db=db, _=admin)
     assert order_list.data.total >= 1
 
-    detail = production.get_order_detail_api(order_id, db=db, _=admin)
+    detail = production.get_order_detail_api(order_id, db=db, current_user=admin)
     assert detail.data.order.id == order_id
     process_id = detail.data.processes[0].id
+    with pytest.raises(HTTPException) as detail_permission_error:
+        production.get_order_detail_api(order_id, db=db, current_user=unrelated_operator)
+    assert detail_permission_error.value.status_code == 403
 
     pipeline_mode = production.get_order_pipeline_mode_api(order_id, db=db, current_user=admin)
     assert pipeline_mode.data.enabled is False
@@ -463,7 +467,7 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
         current_user=admin,
     )
     order_id_2 = order_resp_2.data.id
-    detail_2 = production.get_order_detail_api(order_id_2, db=db, _=admin)
+    detail_2 = production.get_order_detail_api(order_id_2, db=db, current_user=admin)
     process_id_2 = detail_2.data.processes[0].id
 
     with pytest.raises(HTTPException) as proxy_error:
@@ -489,7 +493,7 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
         db=db,
         current_user=operator,
     )
-    assert assist_created.data.status == "pending"
+    assert assist_created.data.status == "approved"
 
     with pytest.raises(HTTPException) as duplicate_error:
         production.create_assist_authorization_api(
@@ -508,7 +512,7 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
     assist_list = production.get_assist_authorizations_api(
         page=1,
         page_size=20,
-        status_text="pending",
+        status_text="approved",
         db=db,
         current_user=admin,
     )
@@ -547,13 +551,14 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
         )
     assert invalid_role_error.value.status_code == 400
 
-    reviewed = production.review_assist_authorization_api(
-        authorization_id=assist_created.data.id,
-        payload=AssistAuthorizationReviewRequest(approve=True, review_remark="ok"),
-        db=db,
-        current_user=admin,
-    )
-    assert reviewed.data.status == "approved"
+    with pytest.raises(HTTPException) as review_disabled_error:
+        production.review_assist_authorization_api(
+            authorization_id=assist_created.data.id,
+            payload=AssistAuthorizationReviewRequest(approve=True, review_remark="ok"),
+            db=db,
+            current_user=admin,
+        )
+    assert review_disabled_error.value.status_code == 409
 
     assist_my_orders = production.get_my_orders_api(
         keyword=None,
@@ -567,6 +572,17 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
     assert assist_my_orders.data.total >= 1
     assist_item = assist_my_orders.data.items[0]
     assert assist_item.assist_authorization_id == assist_created.data.id
+
+    assist_context = production.get_my_order_context_api(
+        order_id_2,
+        view_mode="assist",
+        proxy_operator_user_id=None,
+        db=db,
+        current_user=admin,
+    )
+    assert assist_context.data.found is True
+    assert assist_context.data.item is not None
+    assert assist_context.data.item.assist_authorization_id == assist_created.data.id
 
     assist_first = production.submit_first_article_api(
         order_id_2,
@@ -595,6 +611,16 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
         current_user=admin,
     )
     assert assist_end.data.status in {"in_progress", "completed"}
+
+    consumed_context = production.get_my_order_context_api(
+        order_id_2,
+        view_mode="assist",
+        proxy_operator_user_id=None,
+        db=db,
+        current_user=admin,
+    )
+    assert consumed_context.data.found is False
+    assert consumed_context.data.item is None
 
     with pytest.raises(HTTPException) as consumed_error:
         production.end_production_api(
@@ -627,7 +653,7 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
         current_user=admin,
     )
     order_id_3 = order_resp_3.data.id
-    detail_3 = production.get_order_detail_api(order_id_3, db=db, _=admin)
+    detail_3 = production.get_order_detail_api(order_id_3, db=db, current_user=admin)
     process_id_3 = detail_3.data.processes[0].id
 
     production.submit_first_article_api(
