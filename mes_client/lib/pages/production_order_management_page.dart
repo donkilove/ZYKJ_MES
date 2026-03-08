@@ -8,15 +8,7 @@ import '../services/craft_service.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
-
-enum _ManagementOrderAction {
-  detail,
-  edit,
-  delete,
-  complete,
-  configurePipeline,
-  disablePipeline,
-}
+import 'production_order_detail_page.dart';
 
 class _OrderProcessStepDraft {
   _OrderProcessStepDraft({required this.stageId, required this.processId});
@@ -189,104 +181,6 @@ class _ProductionOrderManagementPageState
     return '${local.year}-$mm-$dd';
   }
 
-  bool _canEditOrder(ProductionOrderItem item) {
-    return widget.canWrite && item.status == 'pending';
-  }
-
-  bool _canDeleteOrder(ProductionOrderItem item) {
-    return widget.canWrite && item.status == 'pending';
-  }
-
-  bool _canCompleteOrderAction(ProductionOrderItem item) {
-    return widget.canWrite && item.status != 'completed';
-  }
-
-  List<PopupMenuEntry<_ManagementOrderAction>> _buildOrderActionMenuItems(
-    ProductionOrderItem item,
-  ) {
-    final items = <PopupMenuEntry<_ManagementOrderAction>>[
-      const PopupMenuItem<_ManagementOrderAction>(
-        value: _ManagementOrderAction.detail,
-        child: Text('详情'),
-      ),
-      PopupMenuItem<_ManagementOrderAction>(
-        value: _ManagementOrderAction.edit,
-        enabled: _canEditOrder(item),
-        child: const Text('编辑'),
-      ),
-      PopupMenuItem<_ManagementOrderAction>(
-        value: _ManagementOrderAction.delete,
-        enabled: _canDeleteOrder(item),
-        child: const Text('删除'),
-      ),
-      PopupMenuItem<_ManagementOrderAction>(
-        value: _ManagementOrderAction.complete,
-        enabled: _canCompleteOrderAction(item),
-        child: const Text('完工'),
-      ),
-    ];
-    if (widget.canWrite) {
-      items.add(
-        PopupMenuItem<_ManagementOrderAction>(
-          value: item.pipelineEnabled
-              ? _ManagementOrderAction.disablePipeline
-              : _ManagementOrderAction.configurePipeline,
-          child: Text(item.pipelineEnabled ? '关闭并行模式' : '并行模式设置'),
-        ),
-      );
-    }
-    return items;
-  }
-
-  void _onOrderActionSelected(
-    _ManagementOrderAction action,
-    ProductionOrderItem item,
-  ) {
-    switch (action) {
-      case _ManagementOrderAction.detail:
-        _showOrderDetail(item);
-        break;
-      case _ManagementOrderAction.edit:
-        _showOrderDialog(existing: item);
-        break;
-      case _ManagementOrderAction.delete:
-        _deleteOrder(item);
-        break;
-      case _ManagementOrderAction.complete:
-        _completeOrder(item);
-        break;
-      case _ManagementOrderAction.configurePipeline:
-        _showPipelineModeDialog(item);
-        break;
-      case _ManagementOrderAction.disablePipeline:
-        _disablePipelineMode(item);
-        break;
-    }
-  }
-
-  Widget _buildOrderActionMenu(ProductionOrderItem item) {
-    return PopupMenuButton<_ManagementOrderAction>(
-      tooltip: '操作',
-      onSelected: (action) => _onOrderActionSelected(action, item),
-      itemBuilder: (_) => _buildOrderActionMenuItems(item),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('操作'),
-            SizedBox(width: 4),
-            Icon(Icons.arrow_drop_down, size: 18),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _loadReferenceData() async {
     try {
       final products = await _service.listProductOptions();
@@ -376,21 +270,24 @@ class _ProductionOrderManagementPageState
     }
   }
 
-  Future<void> _showOrderDialog({ProductionOrderItem? existing}) async {
+  Future<bool> _showOrderDialog({
+    ProductionOrderItem? existing,
+    bool reloadAfterSave = true,
+  }) async {
     if (!widget.canWrite) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('无权限管理订单。')));
-      return;
+      return false;
     }
     if (_products.isEmpty || _processes.isEmpty) {
       await _loadReferenceData();
       if (_products.isEmpty || _processes.isEmpty) {
-        return;
+        return false;
       }
     }
     if (!mounted) {
-      return;
+      return false;
     }
 
     final stageOptions = _stageOptions();
@@ -398,7 +295,7 @@ class _ProductionOrderManagementPageState
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('请先配置工段与小工序。')));
-      return;
+      return false;
     }
 
     final isEdit = existing != null;
@@ -446,14 +343,14 @@ class _ProductionOrderManagementPageState
       } catch (error) {
         if (_isUnauthorized(error)) {
           widget.onLogout();
-          return;
+          return false;
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('加载订单详情失败：${_errorMessage(error)}')),
           );
         }
-        return;
+        return false;
       }
     } else {
       final templates = _templatesByProduct(selectedProductId);
@@ -486,7 +383,7 @@ class _ProductionOrderManagementPageState
     }
 
     if (!mounted) {
-      return;
+      return false;
     }
 
     final saved = await showLockedFormDialog<bool>(
@@ -1016,14 +913,21 @@ class _ProductionOrderManagementPageState
     newTemplateNameController.dispose();
 
     if (saved == true) {
-      await _loadReferenceData();
-      await _loadOrders();
+      if (reloadAfterSave) {
+        await _loadReferenceData();
+        await _loadOrders();
+      }
+      return true;
     }
+    return false;
   }
 
-  Future<void> _deleteOrder(ProductionOrderItem order) async {
+  Future<bool> _deleteOrder(
+    ProductionOrderItem order, {
+    bool reloadAfterAction = true,
+  }) async {
     if (!widget.canWrite) {
-      return;
+      return false;
     }
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1043,7 +947,7 @@ class _ProductionOrderManagementPageState
       ),
     );
     if (confirmed != true) {
-      return;
+      return false;
     }
 
     try {
@@ -1053,24 +957,31 @@ class _ProductionOrderManagementPageState
           context,
         ).showSnackBar(const SnackBar(content: Text('订单已删除。')));
       }
-      await _loadOrders();
+      if (reloadAfterAction) {
+        await _loadOrders();
+      }
+      return true;
     } catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
       if (_isUnauthorized(error)) {
         widget.onLogout();
-        return;
+        return false;
       }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      return false;
     }
   }
 
-  Future<void> _completeOrder(ProductionOrderItem order) async {
+  Future<bool> _completeOrder(
+    ProductionOrderItem order, {
+    bool reloadAfterAction = true,
+  }) async {
     if (!widget.canWrite) {
-      return;
+      return false;
     }
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1090,7 +1001,7 @@ class _ProductionOrderManagementPageState
       ),
     );
     if (confirmed != true) {
-      return;
+      return false;
     }
 
     try {
@@ -1100,24 +1011,57 @@ class _ProductionOrderManagementPageState
           context,
         ).showSnackBar(const SnackBar(content: Text('订单已标记为完工。')));
       }
-      await _loadOrders();
+      if (reloadAfterAction) {
+        await _loadOrders();
+      }
+      return true;
     } catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
       if (_isUnauthorized(error)) {
         widget.onLogout();
-        return;
+        return false;
       }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      return false;
     }
   }
 
-  Future<void> _showPipelineModeDialog(ProductionOrderItem order) async {
+  Future<void> _openOrderDetailPage(ProductionOrderItem order) async {
+    final needsRefresh = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => ProductionOrderDetailPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          orderId: order.id,
+          canWrite: widget.canWrite,
+          onEditOrder: (targetOrder) =>
+              _showOrderDialog(existing: targetOrder, reloadAfterSave: false),
+          onDeleteOrder: (targetOrder) =>
+              _deleteOrder(targetOrder, reloadAfterAction: false),
+          onCompleteOrder: (targetOrder) =>
+              _completeOrder(targetOrder, reloadAfterAction: false),
+          onConfigurePipelineOrder: (targetOrder) =>
+              _showPipelineModeDialog(targetOrder, reloadAfterAction: false),
+          onDisablePipelineOrder: (targetOrder) =>
+              _disablePipelineMode(targetOrder, reloadAfterAction: false),
+        ),
+      ),
+    );
+    if (needsRefresh == true && mounted) {
+      await _loadOrders();
+    }
+  }
+
+  Future<bool> _showPipelineModeDialog(
+    ProductionOrderItem order, {
+    bool reloadAfterAction = true,
+  }) async {
     if (!widget.canWrite) {
-      return;
+      return false;
     }
     try {
       final detail = await _service.getOrderDetail(orderId: order.id);
@@ -1126,17 +1070,17 @@ class _ProductionOrderManagementPageState
         ..sort((a, b) => a.processOrder.compareTo(b.processOrder));
       if (sortedProcesses.length < 2) {
         if (!mounted) {
-          return;
+          return false;
         }
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('工序不足两道，无法开启并行模式')));
-        return;
+        return false;
       }
       final availableCodes = mode.availableProcessCodes.toSet();
       final initialSelected = mode.processCodes.toSet();
       if (!mounted) {
-        return;
+        return false;
       }
       final selectedCodes = await showLockedFormDialog<List<String>>(
         context: context,
@@ -1218,7 +1162,7 @@ class _ProductionOrderManagementPageState
         },
       );
       if (selectedCodes == null) {
-        return;
+        return false;
       }
       await _service.updateOrderPipelineMode(
         orderId: order.id,
@@ -1226,29 +1170,36 @@ class _ProductionOrderManagementPageState
         processCodes: selectedCodes,
       );
       if (!mounted) {
-        return;
+        return false;
       }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('并行模式设置成功')));
-      await _loadOrders();
+      if (reloadAfterAction) {
+        await _loadOrders();
+      }
+      return true;
     } catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
       if (_isUnauthorized(error)) {
         widget.onLogout();
-        return;
+        return false;
       }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      return false;
     }
   }
 
-  Future<void> _disablePipelineMode(ProductionOrderItem order) async {
+  Future<bool> _disablePipelineMode(
+    ProductionOrderItem order, {
+    bool reloadAfterAction = true,
+  }) async {
     if (!widget.canWrite) {
-      return;
+      return false;
     }
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1270,7 +1221,7 @@ class _ProductionOrderManagementPageState
       },
     );
     if (confirmed != true) {
-      return;
+      return false;
     }
     try {
       await _service.updateOrderPipelineMode(
@@ -1279,235 +1230,28 @@ class _ProductionOrderManagementPageState
         processCodes: const [],
       );
       if (!mounted) {
-        return;
+        return false;
       }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('并行模式已关闭')));
-      await _loadOrders();
+      if (reloadAfterAction) {
+        await _loadOrders();
+      }
+      return true;
     } catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
       if (_isUnauthorized(error)) {
         widget.onLogout();
-        return;
+        return false;
       }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      return false;
     }
-  }
-
-  Future<void> _showOrderDetail(ProductionOrderItem order) async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        return Dialog(
-          child: SizedBox(
-            width: 1100,
-            height: 700,
-            child: FutureBuilder<ProductionOrderDetail>(
-              future: _service.getOrderDetail(orderId: order.id),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('加载订单详情失败'),
-                        const SizedBox(height: 8),
-                        Text(snapshot.error.toString()),
-                        const Spacer(),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: FilledButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('关闭'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                final detail = snapshot.data!;
-                final sortedProcesses = detail.processes.toList()
-                  ..sort((a, b) => a.processOrder.compareTo(b.processOrder));
-                return Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            '订单详情：${detail.order.orderCode}',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const Spacer(),
-                          FilledButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('关闭'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 16,
-                        runSpacing: 8,
-                        children: [
-                          Text('产品：${detail.order.productName}'),
-                          Text('数量：${detail.order.quantity}'),
-                          Text(
-                            '状态：${productionOrderStatusLabel(detail.order.status)}',
-                          ),
-                          Text(
-                            '当前工序：${detail.order.currentProcessName ?? '-'}',
-                          ),
-                          Text('开始日期：${_formatDate(detail.order.startDate)}'),
-                          Text('交期：${_formatDate(detail.order.dueDate)}'),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: DefaultTabController(
-                          length: 3,
-                          child: Column(
-                            children: [
-                              const TabBar(
-                                tabs: [
-                                  Tab(text: '工序'),
-                                  Tab(text: '记录'),
-                                  Tab(text: '事件'),
-                                ],
-                              ),
-                              Expanded(
-                                child: TabBarView(
-                                  children: [
-                                    Card(
-                                      child: AdaptiveTableContainer(
-                                        child: DataTable(
-                                          columns: const [
-                                            DataColumn(label: Text('顺序')),
-                                            DataColumn(label: Text('工序编码')),
-                                            DataColumn(label: Text('工序名称')),
-                                            DataColumn(label: Text('状态')),
-                                            DataColumn(label: Text('可见数量')),
-                                            DataColumn(label: Text('完成数量')),
-                                          ],
-                                          rows: sortedProcesses.map((item) {
-                                            return DataRow(
-                                              cells: [
-                                                DataCell(
-                                                  Text('${item.processOrder}'),
-                                                ),
-                                                DataCell(
-                                                  Text(item.processCode),
-                                                ),
-                                                DataCell(
-                                                  Text(item.processName),
-                                                ),
-                                                DataCell(
-                                                  Text(
-                                                    productionProcessStatusLabel(
-                                                      item.status,
-                                                    ),
-                                                  ),
-                                                ),
-                                                DataCell(
-                                                  Text(
-                                                    '${item.visibleQuantity}',
-                                                  ),
-                                                ),
-                                                DataCell(
-                                                  Text(
-                                                    '${item.completedQuantity}',
-                                                  ),
-                                                ),
-                                              ],
-                                            );
-                                          }).toList(),
-                                        ),
-                                      ),
-                                    ),
-                                    Card(
-                                      child: AdaptiveTableContainer(
-                                        child: DataTable(
-                                          columns: const [
-                                            DataColumn(label: Text('时间')),
-                                            DataColumn(label: Text('工序')),
-                                            DataColumn(label: Text('操作员')),
-                                            DataColumn(label: Text('类型')),
-                                            DataColumn(label: Text('数量')),
-                                          ],
-                                          rows: detail.records.map((item) {
-                                            return DataRow(
-                                              cells: [
-                                                DataCell(
-                                                  Text(
-                                                    _formatDateTime(
-                                                      item.createdAt,
-                                                    ),
-                                                  ),
-                                                ),
-                                                DataCell(
-                                                  Text(item.processName),
-                                                ),
-                                                DataCell(
-                                                  Text(item.operatorUsername),
-                                                ),
-                                                DataCell(Text(item.recordType)),
-                                                DataCell(
-                                                  Text(
-                                                    '${item.productionQuantity}',
-                                                  ),
-                                                ),
-                                              ],
-                                            );
-                                          }).toList(),
-                                        ),
-                                      ),
-                                    ),
-                                    Card(
-                                      child: ListView.separated(
-                                        itemCount: detail.events.length,
-                                        separatorBuilder: (_, _) =>
-                                            const Divider(height: 1),
-                                        itemBuilder: (context, index) {
-                                          final item = detail.events[index];
-                                          return ListTile(
-                                            title: Text(item.eventTitle),
-                                            subtitle: Text(
-                                              '${_formatDateTime(item.createdAt)}  ${item.eventDetail ?? ''}',
-                                            ),
-                                            trailing: Text(
-                                              item.operatorUsername ?? '-',
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
   }
 
   @override
@@ -1626,7 +1370,7 @@ class _ProductionOrderManagementPageState
                           DataColumn(label: Text('开始日期')),
                           DataColumn(label: Text('交期')),
                           DataColumn(label: Text('更新时间')),
-                          DataColumn(label: Text('操作')),
+                          DataColumn(label: Text('详情')),
                         ],
                         rows: _items.map((item) {
                           return DataRow(
@@ -1641,7 +1385,12 @@ class _ProductionOrderManagementPageState
                               DataCell(Text(_formatDate(item.startDate))),
                               DataCell(Text(_formatDate(item.dueDate))),
                               DataCell(Text(_formatDateTime(item.updatedAt))),
-                              DataCell(_buildOrderActionMenu(item)),
+                              DataCell(
+                                OutlinedButton(
+                                  onPressed: () => _openOrderDetailPage(item),
+                                  child: const Text('详情'),
+                                ),
+                              ),
                             ],
                           );
                         }).toList(),
