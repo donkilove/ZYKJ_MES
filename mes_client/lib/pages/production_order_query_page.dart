@@ -212,10 +212,14 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
   }
 
-  Future<MyOrderContextResult> _fetchOrderContextInCurrentView(int orderId) async {
+  Future<MyOrderContextResult> _fetchOrderContextInCurrentView(
+    int orderId,
+    int orderProcessId,
+  ) async {
     try {
       return await _service.getMyOrderContext(
         orderId: orderId,
+        orderProcessId: orderProcessId,
         viewMode: _viewMode,
         proxyOperatorUserId: _proxyOperatorUserId,
       );

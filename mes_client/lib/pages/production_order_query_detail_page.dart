@@ -31,7 +31,8 @@ class ProductionOrderQueryDetailPage extends StatefulWidget {
   final Future<bool> Function(MyOrderItem item) onEndProduction;
   final Future<bool> Function(MyOrderItem item) onCreateManualRepair;
   final Future<bool> Function(MyOrderItem item) onApplyAssist;
-  final Future<MyOrderContextResult> Function(int orderId) onRefreshOrderContext;
+  final Future<MyOrderContextResult> Function(int orderId, int orderProcessId)
+  onRefreshOrderContext;
   final ProductionService? service;
 
   @override
@@ -49,12 +50,14 @@ class _ProductionOrderQueryDetailPageState
   String _message = '';
   ProductionOrderDetail? _detail;
   MyOrderItem? _orderContext;
+  late int _contextProcessId;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? ProductionService(widget.session);
     _orderContext = widget.initialOrderContext;
+    _contextProcessId = widget.initialOrderContext.currentProcessId;
     _loadDetail();
   }
 
@@ -137,12 +140,18 @@ class _ProductionOrderQueryDetailPageState
   }
 
   Future<void> _refreshOrderContext() async {
-    final result = await widget.onRefreshOrderContext(widget.orderId);
+    final result = await widget.onRefreshOrderContext(
+      widget.orderId,
+      _contextProcessId,
+    );
     if (!mounted) {
       return;
     }
     setState(() {
       _orderContext = result.found ? result.item : null;
+      if (result.item != null) {
+        _contextProcessId = result.item!.currentProcessId;
+      }
     });
   }
 

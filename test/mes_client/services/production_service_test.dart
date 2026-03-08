@@ -337,6 +337,7 @@ void main() {
             );
           },
           'GET /production/my-orders/1/context': (request) {
+            expect(request.uri.queryParameters['order_process_id'], '11');
             expect(request.uri.queryParameters['view_mode'], 'assist');
             expect(request.uri.queryParameters['proxy_operator_user_id'], '8');
             return TestResponse.json(
@@ -821,6 +822,7 @@ void main() {
         );
         final myOrderContext = await service.getMyOrderContext(
           orderId: 1,
+          orderProcessId: 11,
           viewMode: 'assist',
           proxyOperatorUserId: 8,
         );

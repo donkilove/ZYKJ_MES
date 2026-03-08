@@ -85,6 +85,10 @@ class _ProductionPageState extends State<ProductionPage>
   bool get _isProductionAdmin =>
       widget.currentRoleCodes.contains('production_admin');
 
+  bool get _canViewAssistRecords =>
+      widget.currentRoleCodes.contains('system_admin') ||
+      widget.currentRoleCodes.contains('production_admin');
+
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
     final visibleSet = tabCodes.toSet();
     final ordered = <String>[];
@@ -167,7 +171,7 @@ class _ProductionPageState extends State<ProductionPage>
         return ProductionAssistApprovalPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canReview: _isProductionAdmin,
+          canReview: _canViewAssistRecords,
         );
       case productionDataQueryTabCode:
         return ProductionDataPage(

@@ -164,7 +164,7 @@ void main() {
             applyAssistCalled = true;
             return true;
           },
-          onRefreshOrderContext: (_) async => MyOrderContextResult(
+          onRefreshOrderContext: (_, __) async => MyOrderContextResult(
             found: true,
             item: _buildMyOrderItem(),
           ),
@@ -226,7 +226,7 @@ void main() {
           onEndProduction: (_) async => false,
           onCreateManualRepair: (_) async => false,
           onApplyAssist: (_) async => false,
-          onRefreshOrderContext: (_) async =>
+          onRefreshOrderContext: (_, __) async =>
               MyOrderContextResult(found: false, item: null),
         ),
       ),

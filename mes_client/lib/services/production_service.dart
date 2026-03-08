@@ -262,10 +262,14 @@ class ProductionService {
 
   Future<MyOrderContextResult> getMyOrderContext({
     required int orderId,
+    int? orderProcessId,
     String? viewMode,
     int? proxyOperatorUserId,
   }) async {
     final query = <String, String>{};
+    if (orderProcessId != null && orderProcessId > 0) {
+      query['order_process_id'] = '$orderProcessId';
+    }
     if (viewMode != null && viewMode.trim().isNotEmpty) {
       query['view_mode'] = viewMode.trim();
     }
