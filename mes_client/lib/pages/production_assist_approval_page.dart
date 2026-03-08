@@ -5,7 +5,6 @@ import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
-import '../widgets/locked_form_dialog.dart';
 
 class ProductionAssistApprovalPage extends StatefulWidget {
   const ProductionAssistApprovalPage({
@@ -29,9 +28,8 @@ class _ProductionAssistApprovalPageState
   late final ProductionService _service;
 
   bool _loading = false;
-  bool _acting = false;
   String _message = '';
-  String _statusFilter = 'pending';
+  String _statusFilter = 'approved';
   int _total = 0;
   List<AssistAuthorizationItem> _items = const [];
 
@@ -101,106 +99,6 @@ class _ProductionAssistApprovalPageState
     }
   }
 
-  Future<void> _reviewItem(AssistAuthorizationItem item, bool approve) async {
-    if (!widget.canReview || item.status != 'pending') {
-      return;
-    }
-    final remarkController = TextEditingController();
-    try {
-      final confirmed = await showLockedFormDialog<bool>(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            title: Text(approve ? '通过代班申请' : '拒绝代班申请'),
-            content: SizedBox(
-              width: 420,
-              child: TextField(
-                controller: remarkController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: '审批备注（可选）',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('确认'),
-              ),
-            ],
-          );
-        },
-      );
-      if (confirmed != true) {
-        return;
-      }
-
-      setState(() {
-        _acting = true;
-      });
-      try {
-        await _service.reviewAssistAuthorization(
-          authorizationId: item.id,
-          approve: approve,
-          reviewRemark: remarkController.text.trim().isEmpty
-              ? null
-              : remarkController.text.trim(),
-        );
-        if (!mounted) {
-          return;
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(approve ? '审批通过' : '已拒绝申请')),
-        );
-        await _loadRows();
-      } catch (error) {
-        if (!mounted) {
-          return;
-        }
-        if (_isUnauthorized(error)) {
-          widget.onLogout();
-          return;
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      } finally {
-        if (mounted) {
-          setState(() {
-            _acting = false;
-          });
-        }
-      }
-    } finally {
-      remarkController.dispose();
-    }
-  }
-
-  Widget _buildActionCell(AssistAuthorizationItem item) {
-    if (!widget.canReview || item.status != 'pending') {
-      return const Text('-');
-    }
-    final disabled = _acting || _loading;
-    return Wrap(
-      spacing: 8,
-      children: [
-        OutlinedButton(
-          onPressed: disabled ? null : () => _reviewItem(item, false),
-          child: const Text('拒绝'),
-        ),
-        FilledButton(
-          onPressed: disabled ? null : () => _reviewItem(item, true),
-          child: const Text('通过'),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -212,7 +110,7 @@ class _ProductionAssistApprovalPageState
           Row(
             children: [
               Text(
-                '代班审批',
+                '代班记录',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -229,7 +127,7 @@ class _ProductionAssistApprovalPageState
                   ),
                   items: const [
                     DropdownMenuItem(value: 'pending', child: Text('待审批')),
-                    DropdownMenuItem(value: 'approved', child: Text('已通过')),
+                    DropdownMenuItem(value: 'approved', child: Text('已生效')),
                     DropdownMenuItem(value: 'rejected', child: Text('已拒绝')),
                     DropdownMenuItem(value: 'consumed', child: Text('已消耗')),
                   ],
@@ -271,7 +169,7 @@ class _ProductionAssistApprovalPageState
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(
-                '当前账号无审批权限',
+                '当前账号无查看权限',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.error,
                 ),
@@ -281,7 +179,7 @@ class _ProductionAssistApprovalPageState
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _items.isEmpty
-                ? const Center(child: Text('暂无代班申请'))
+                ? const Center(child: Text('暂无代班记录'))
                 : Card(
                     child: AdaptiveTableContainer(
                       child: DataTable(
@@ -293,7 +191,6 @@ class _ProductionAssistApprovalPageState
                           DataColumn(label: Text('代班人')),
                           DataColumn(label: Text('状态')),
                           DataColumn(label: Text('申请时间')),
-                          DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
                           return DataRow(
@@ -307,7 +204,6 @@ class _ProductionAssistApprovalPageState
                                 Text(assistAuthorizationStatusLabel(item.status)),
                               ),
                               DataCell(Text(_formatDateTime(item.createdAt))),
-                              DataCell(_buildActionCell(item)),
                             ],
                           );
                         }).toList(),

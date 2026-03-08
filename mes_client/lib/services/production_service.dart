@@ -260,6 +260,33 @@ class ProductionService {
     return MyOrderListResult(total: (data['total'] as int?) ?? 0, items: items);
   }
 
+  Future<MyOrderContextResult> getMyOrderContext({
+    required int orderId,
+    String? viewMode,
+    int? proxyOperatorUserId,
+  }) async {
+    final query = <String, String>{};
+    if (viewMode != null && viewMode.trim().isNotEmpty) {
+      query['view_mode'] = viewMode.trim();
+    }
+    if (proxyOperatorUserId != null && proxyOperatorUserId > 0) {
+      query['proxy_operator_user_id'] = '$proxyOperatorUserId';
+    }
+    final uri = Uri.parse(
+      '$_basePath/my-orders/$orderId/context',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return MyOrderContextResult.fromJson(data);
+  }
+
   Future<ProductionActionResult> submitFirstArticle({
     required int orderId,
     required int orderProcessId,

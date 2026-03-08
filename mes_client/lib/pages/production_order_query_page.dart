@@ -8,14 +8,7 @@ import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
-
-enum _QueryOrderAction {
-  detail,
-  firstArticle,
-  endProduction,
-  manualRepair,
-  applyAssist,
-}
+import 'production_order_query_detail_page.dart';
 
 class _DefectRowDraft {
   _DefectRowDraft({String? phenomenon, int? quantity})
@@ -80,7 +73,6 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   Timer? _pollTimer;
 
   bool _loading = false;
-  bool _acting = false;
   String _message = '';
   String _viewMode = 'own';
   int? _proxyOperatorUserId;
@@ -138,6 +130,20 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           _proxyOperatorUserId = null;
         }
       });
+    } catch (_) {}
+  }
+
+  Future<void> _ensureTargetOperatorsLoadedForAssistDialog() async {
+    if (_proxyOperators.isNotEmpty) {
+      return;
+    }
+    try {
+      final result = await _service.listAssistUserOptions(
+        page: 1,
+        pageSize: 200,
+        roleCode: 'operator',
+      );
+      _proxyOperators = result.items;
     } catch (_) {}
   }
 
@@ -206,37 +212,58 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
   }
 
-  Future<void> _showOrderDetail(MyOrderItem item) async {
+  Future<MyOrderContextResult> _fetchOrderContextInCurrentView(int orderId) async {
     try {
-      final detail = await _service.getOrderDetail(orderId: item.orderId);
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('订单详情：${detail.order.orderCode}'),
-          content: SizedBox(
-            width: 620,
-            child: Text(
-              '产品：${detail.order.productName}\n工序数：${detail.processes.length}\n事件数：${detail.events.length}',
-            ),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
+      return await _service.getMyOrderContext(
+        orderId: orderId,
+        viewMode: _viewMode,
+        proxyOperatorUserId: _proxyOperatorUserId,
       );
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return MyOrderContextResult(found: false, item: null);
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return MyOrderContextResult(found: false, item: null);
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      return MyOrderContextResult(found: false, item: null);
     }
   }
 
-  Future<void> _showFirstArticleDialog(MyOrderItem item) async {
+  Future<void> _openOrderDetailPage(MyOrderItem item) async {
+    final needsRefresh = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => ProductionOrderQueryDetailPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          orderId: item.orderId,
+          canOperate: widget.canOperate,
+          initialOrderContext: item,
+          onSubmitFirstArticle: (target) =>
+              _showFirstArticleDialog(target, reloadAfterAction: false),
+          onEndProduction: (target) =>
+              _showEndProductionDialog(target, reloadAfterAction: false),
+          onCreateManualRepair: (target) =>
+              _showManualRepairDialog(target, reloadAfterAction: false),
+          onApplyAssist: (target) =>
+              _showApplyAssistDialog(target, reloadAfterAction: false),
+          onRefreshOrderContext: _fetchOrderContextInCurrentView,
+        ),
+      ),
+    );
+    if (needsRefresh == true && mounted) {
+      await _loadOrders();
+    }
+  }
+
+  Future<bool> _showFirstArticleDialog(
+    MyOrderItem item, {
+    bool reloadAfterAction = true,
+  }) async {
     final codeController = TextEditingController();
     try {
       final ok = await showLockedFormDialog<bool>(
@@ -262,7 +289,9 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           ],
         ),
       );
-      if (ok != true || codeController.text.trim().isEmpty) return;
+      if (ok != true || codeController.text.trim().isEmpty) {
+        return false;
+      }
       await _service.submitFirstArticle(
         orderId: item.orderId,
         orderProcessId: item.currentProcessId,
@@ -270,17 +299,37 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         effectiveOperatorUserId: item.operatorUserId,
         assistAuthorizationId: item.assistAuthorizationId,
       );
-      if (!mounted) return;
+      if (!mounted) {
+        return false;
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('首件提交成功')));
-      await _loadOrders();
+      if (reloadAfterAction) {
+        await _loadOrders();
+      }
+      return true;
+    } catch (error) {
+      if (!mounted) {
+        return false;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return false;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      return false;
     } finally {
       codeController.dispose();
     }
   }
 
-  Future<void> _showEndProductionDialog(MyOrderItem item) async {
+  Future<bool> _showEndProductionDialog(
+    MyOrderItem item, {
+    bool reloadAfterAction = true,
+  }) async {
     final qtyController = TextEditingController(
       text: '${item.maxProducibleQuantity.clamp(1, 999999)}',
     );
@@ -420,7 +469,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         ),
       );
       if (payload == null) {
-        return;
+        return false;
       }
       await _service.endProduction(
         orderId: item.orderId,
@@ -431,12 +480,27 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         defectItems: payload.defectItems,
       );
       if (!mounted) {
-        return;
+        return false;
       }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('报工成功')));
-      await _loadOrders();
+      if (reloadAfterAction) {
+        await _loadOrders();
+      }
+      return true;
+    } catch (error) {
+      if (!mounted) {
+        return false;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return false;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      return false;
     } finally {
       qtyController.dispose();
       for (final row in defectRows) {
@@ -445,7 +509,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
   }
 
-  Future<void> _showManualRepairDialog(MyOrderItem item) async {
+  Future<bool> _showManualRepairDialog(
+    MyOrderItem item, {
+    bool reloadAfterAction = true,
+  }) async {
     final productionQtyController = TextEditingController(
       text: '${item.maxProducibleQuantity.clamp(1, 999999)}',
     );
@@ -589,7 +656,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         ),
       );
       if (payload == null) {
-        return;
+        return false;
       }
       await _service.createManualRepairOrder(
         orderId: item.orderId,
@@ -598,12 +665,27 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         defectItems: payload.defectItems,
       );
       if (!mounted) {
-        return;
+        return false;
       }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('维修单创建成功')));
-      await _loadOrders();
+      if (reloadAfterAction) {
+        await _loadOrders();
+      }
+      return true;
+    } catch (error) {
+      if (!mounted) {
+        return false;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return false;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      return false;
     } finally {
       productionQtyController.dispose();
       for (final row in defectRows) {
@@ -612,11 +694,30 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
   }
 
-  Future<void> _showApplyAssistDialog(MyOrderItem item) async {
+  Future<bool> _showApplyAssistDialog(
+    MyOrderItem item, {
+    bool reloadAfterAction = true,
+  }) async {
     await _ensureAssistUsersLoaded();
-    if (widget.isProductionAdmin && _proxyOperators.isEmpty) {
-      await _loadProxyOperators();
+    await _ensureTargetOperatorsLoadedForAssistDialog();
+    if (!mounted) {
+      return false;
     }
+    final targetOperators = _proxyOperators.isNotEmpty
+        ? _proxyOperators
+        : [
+            if (item.operatorUserId != null)
+              AssistUserOptionItem(
+                id: item.operatorUserId!,
+                username:
+                    (item.operatorUsername == null ||
+                        item.operatorUsername!.trim().isEmpty)
+                    ? 'operator_${item.operatorUserId}'
+                    : item.operatorUsername!,
+                fullName: null,
+                roleCodes: const ['operator'],
+              ),
+          ];
     int? targetId = item.operatorUserId;
     int? helperId;
     final reasonController = TextEditingController();
@@ -625,7 +726,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         context: context,
         builder: (context) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: const Text('申请代班'),
+            title: const Text('发起代班'),
             content: SizedBox(
               width: 440,
               child: Column(
@@ -637,7 +738,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                       labelText: '目标操作员',
                       border: OutlineInputBorder(),
                     ),
-                    items: _proxyOperators
+                    items: targetOperators
                         .map(
                           (it) => DropdownMenuItem<int>(
                             value: it.id,
@@ -671,7 +772,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                     controller: reasonController,
                     maxLines: 2,
                     decoration: const InputDecoration(
-                      labelText: '申请原因（可选）',
+                      labelText: '代班原因（可选）',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -685,13 +786,15 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('提交申请'),
+                child: const Text('发起代班'),
               ),
             ],
           ),
         ),
       );
-      if (ok != true || targetId == null || helperId == null) return;
+      if (ok != true || targetId == null || helperId == null) {
+        return false;
+      }
       await _service.createAssistAuthorization(
         orderId: item.orderId,
         orderProcessId: item.currentProcessId,
@@ -701,11 +804,28 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
             ? null
             : reasonController.text.trim(),
       );
-      if (!mounted) return;
+      if (!mounted) {
+        return false;
+      }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('代班申请已提交')));
-      await _loadOrders();
+      ).showSnackBar(const SnackBar(content: Text('代班已发起并生效')));
+      if (reloadAfterAction) {
+        await _loadOrders();
+      }
+      return true;
+    } catch (error) {
+      if (!mounted) {
+        return false;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return false;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      return false;
     } finally {
       reasonController.dispose();
     }
@@ -848,7 +968,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                           DataColumn(label: Text('可见数量')),
                           DataColumn(label: Text('完成数量')),
                           DataColumn(label: Text('更新时间')),
-                          DataColumn(label: Text('操作')),
+                          DataColumn(label: Text('详情')),
                         ],
                         rows: _items.map((item) {
                           return DataRow(
@@ -874,71 +994,9 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                               ),
                               DataCell(Text(_formatDateTime(item.updatedAt))),
                               DataCell(
-                                PopupMenuButton<_QueryOrderAction>(
-                                  onSelected: (action) {
-                                    switch (action) {
-                                      case _QueryOrderAction.detail:
-                                        _showOrderDetail(item);
-                                        break;
-                                      case _QueryOrderAction.firstArticle:
-                                        _showFirstArticleDialog(item);
-                                        break;
-                                      case _QueryOrderAction.endProduction:
-                                        _showEndProductionDialog(item);
-                                        break;
-                                      case _QueryOrderAction.manualRepair:
-                                        _showManualRepairDialog(item);
-                                        break;
-                                      case _QueryOrderAction.applyAssist:
-                                        _showApplyAssistDialog(item);
-                                        break;
-                                    }
-                                  },
-                                  itemBuilder: (_) => [
-                                    const PopupMenuItem(
-                                      value: _QueryOrderAction.detail,
-                                      child: Text('详情'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: _QueryOrderAction.firstArticle,
-                                      enabled:
-                                          widget.canOperate &&
-                                          item.canFirstArticle &&
-                                          !_acting,
-                                      child: const Text('首件'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: _QueryOrderAction.endProduction,
-                                      enabled:
-                                          widget.canOperate &&
-                                          item.canEndProduction &&
-                                          !_acting,
-                                      child: const Text('报工'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: _QueryOrderAction.manualRepair,
-                                      enabled: widget.canOperate && !_acting,
-                                      child: const Text('手工送修建单'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: _QueryOrderAction.applyAssist,
-                                      enabled: widget.canOperate && !_acting,
-                                      child: const Text('申请代班'),
-                                    ),
-                                  ],
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text('操作'),
-                                        Icon(Icons.arrow_drop_down),
-                                      ],
-                                    ),
-                                  ),
+                                OutlinedButton(
+                                  onPressed: () => _openOrderDetailPage(item),
+                                  child: const Text('详情'),
                                 ),
                               ),
                             ],

@@ -418,7 +418,7 @@ const fallbackPageCatalog = <PageCatalogItem>[
   PageCatalogItem(
     code: 'production_assist_approval',
 
-    name: '代班审批',
+    name: '代班记录',
 
     pageType: 'tab',
 

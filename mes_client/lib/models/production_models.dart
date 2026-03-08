@@ -55,7 +55,7 @@ String assistAuthorizationStatusLabel(String status) {
     case 'pending':
       return '待审批';
     case 'approved':
-      return '已通过';
+      return '已生效';
     case 'rejected':
       return '已拒绝';
     case 'consumed':
@@ -491,6 +491,22 @@ class MyOrderListResult {
 
   final int total;
   final List<MyOrderItem> items;
+}
+
+class MyOrderContextResult {
+  MyOrderContextResult({required this.found, required this.item});
+
+  final bool found;
+  final MyOrderItem? item;
+
+  factory MyOrderContextResult.fromJson(Map<String, dynamic> json) {
+    return MyOrderContextResult(
+      found: (json['found'] as bool?) ?? false,
+      item: json['item'] is Map<String, dynamic>
+          ? MyOrderItem.fromJson(json['item'] as Map<String, dynamic>)
+          : null,
+    );
+  }
 }
 
 class OrderPipelineModeItem {

@@ -136,7 +136,7 @@ class _ProductionPageState extends State<ProductionPage>
       case productionOrderQueryTabCode:
         return '订单查询';
       case productionAssistApprovalTabCode:
-        return '代班审批';
+        return '代班记录';
       case productionDataQueryTabCode:
         return '生产数据';
       case productionScrapStatisticsTabCode:

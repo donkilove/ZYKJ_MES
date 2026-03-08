@@ -336,6 +336,24 @@ void main() {
               },
             );
           },
+          'GET /production/my-orders/1/context': (request) {
+            expect(request.uri.queryParameters['view_mode'], 'assist');
+            expect(request.uri.queryParameters['proxy_operator_user_id'], '8');
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'found': true,
+                  'item': _myOrderJson(
+                    workView: 'assist',
+                    canFirstArticle: true,
+                    canEndProduction: true,
+                    assistAuthorizationId: 99,
+                  ),
+                },
+              },
+            );
+          },
           'POST /production/orders/1/first-article': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['order_process_id'], 11);
@@ -599,14 +617,14 @@ void main() {
           'GET /production/assist-authorizations': (request) {
             expect(request.uri.queryParameters['page'], '1');
             expect(request.uri.queryParameters['page_size'], '20');
-            expect(request.uri.queryParameters['status'], 'pending');
+            expect(request.uri.queryParameters['status'], 'approved');
             return TestResponse.json(
               200,
               body: {
                 'data': {
                   'total': 1,
                   'items': [
-                    _assistAuthorizationJson(id: 99, status: 'pending'),
+                    _assistAuthorizationJson(id: 99, status: 'approved'),
                   ],
                 },
               },
@@ -621,7 +639,7 @@ void main() {
             return TestResponse.json(
               201,
               body: {
-                'data': _assistAuthorizationJson(id: 100, status: 'pending'),
+                'data': _assistAuthorizationJson(id: 100, status: 'approved'),
               },
             );
           },
@@ -629,16 +647,7 @@ void main() {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['approve'], true);
             expect(body['review_remark'], 'ok');
-            return TestResponse.json(
-              200,
-              body: {
-                'data': _assistAuthorizationJson(
-                  id: 99,
-                  status: 'approved',
-                  reviewRemark: 'ok',
-                ),
-              },
-            );
+            return TestResponse.json(409, body: {'detail': '代班流程已改为发起即生效，无需审批'});
           },
           'GET /production/scrap-statistics': (request) {
             expect(request.uri.queryParameters['page'], '1');
@@ -810,6 +819,11 @@ void main() {
           viewMode: 'proxy',
           proxyOperatorUserId: 8,
         );
+        final myOrderContext = await service.getMyOrderContext(
+          orderId: 1,
+          viewMode: 'assist',
+          proxyOperatorUserId: 8,
+        );
         final firstArticle = await service.submitFirstArticle(
           orderId: 1,
           orderProcessId: 11,
@@ -857,7 +871,7 @@ void main() {
         final assistList = await service.listAssistAuthorizations(
           page: 1,
           pageSize: 20,
-          status: 'pending',
+          status: 'approved',
         );
         final assistCreated = await service.createAssistAuthorization(
           orderId: 1,
@@ -866,10 +880,21 @@ void main() {
           helperUserId: 9,
           reason: 'need assist',
         );
-        final assistReviewed = await service.reviewAssistAuthorization(
-          authorizationId: 99,
-          approve: true,
-          reviewRemark: 'ok',
+        await expectLater(
+          () => service.reviewAssistAuthorization(
+            authorizationId: 99,
+            approve: true,
+            reviewRemark: 'ok',
+          ),
+          throwsA(
+            isA<ApiException>()
+                .having((e) => e.statusCode, 'statusCode', 409)
+                .having(
+                  (e) => e.message,
+                  'message',
+                  contains('发起即生效'),
+                ),
+          ),
         );
         final scrapStats = await service.getScrapStatistics(
           page: 1,
@@ -921,6 +946,8 @@ void main() {
         expect(pipelineUpdated.enabled, isTrue);
         expect(myOrders.items.single.canEndProduction, isTrue);
         expect(proxyOrders.items.single.workView, 'proxy');
+        expect(myOrderContext.found, isTrue);
+        expect(myOrderContext.item?.workView, 'assist');
         expect(firstArticle.message, 'first article done');
         expect(endProduction.message, 'end production done');
         expect(overview.totalOrders, 10);
@@ -935,7 +962,7 @@ void main() {
         expect(assistUsers.items.length, 2);
         expect(assistList.total, 1);
         expect(assistCreated.id, 100);
-        expect(assistReviewed.status, 'approved');
+        expect(assistCreated.status, 'approved');
         expect(scrapStats.items.single.scrapReason, '刀具磨损');
         expect(scrapExport.fileName, 'scrap.csv');
         expect(repairOrders.items.single.repairOrderCode, 'RW-1');
@@ -943,7 +970,7 @@ void main() {
         expect(repairSummary.items.single.phenomenon, '毛刺');
         expect(completedRepair.status, 'completed');
         expect(repairExport.fileName, 'repair.csv');
-        expect(server.requests.length, 32);
+        expect(server.requests.length, 33);
       },
     );
 
