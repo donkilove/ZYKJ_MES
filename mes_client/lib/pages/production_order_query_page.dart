@@ -9,7 +9,49 @@ import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
 
-enum _QueryOrderAction { detail, firstArticle, endProduction, applyAssist }
+enum _QueryOrderAction {
+  detail,
+  firstArticle,
+  endProduction,
+  manualRepair,
+  applyAssist,
+}
+
+class _DefectRowDraft {
+  _DefectRowDraft({String? phenomenon, int? quantity})
+    : phenomenonController = TextEditingController(text: phenomenon ?? ''),
+      quantityController = TextEditingController(
+        text: quantity == null ? '' : '$quantity',
+      );
+
+  final TextEditingController phenomenonController;
+  final TextEditingController quantityController;
+
+  void dispose() {
+    phenomenonController.dispose();
+    quantityController.dispose();
+  }
+}
+
+class _ProductionSubmitPayload {
+  const _ProductionSubmitPayload({
+    required this.quantity,
+    required this.defectItems,
+  });
+
+  final int quantity;
+  final List<ProductionDefectItemInput> defectItems;
+}
+
+class _ManualRepairSubmitPayload {
+  const _ManualRepairSubmitPayload({
+    required this.productionQuantity,
+    required this.defectItems,
+  });
+
+  final int productionQuantity;
+  final List<ProductionDefectItemInput> defectItems;
+}
 
 class ProductionOrderQueryPage extends StatefulWidget {
   const ProductionOrderQueryPage({
@@ -26,7 +68,8 @@ class ProductionOrderQueryPage extends StatefulWidget {
   final bool isProductionAdmin;
 
   @override
-  State<ProductionOrderQueryPage> createState() => _ProductionOrderQueryPageState();
+  State<ProductionOrderQueryPage> createState() =>
+      _ProductionOrderQueryPageState();
 }
 
 class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
@@ -64,9 +107,11 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     super.dispose();
   }
 
-  bool _isUnauthorized(Object error) => error is ApiException && error.statusCode == 401;
+  bool _isUnauthorized(Object error) =>
+      error is ApiException && error.statusCode == 401;
 
-  String _errorMessage(Object error) => error is ApiException ? error.message : error.toString();
+  String _errorMessage(Object error) =>
+      error is ApiException ? error.message : error.toString();
 
   String _formatDateTime(DateTime value) {
     final local = value.toLocal();
@@ -80,11 +125,16 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
 
   Future<void> _loadProxyOperators() async {
     try {
-      final result = await _service.listAssistUserOptions(page: 1, pageSize: 200, roleCode: 'operator');
+      final result = await _service.listAssistUserOptions(
+        page: 1,
+        pageSize: 200,
+        roleCode: 'operator',
+      );
       if (!mounted) return;
       setState(() {
         _proxyOperators = result.items;
-        if (_proxyOperatorUserId != null && !_proxyOperators.any((item) => item.id == _proxyOperatorUserId)) {
+        if (_proxyOperatorUserId != null &&
+            !_proxyOperators.any((item) => item.id == _proxyOperatorUserId)) {
           _proxyOperatorUserId = null;
         }
       });
@@ -99,7 +149,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_pollInterval, (_) => _loadOrders(silent: true));
+    _pollTimer = Timer.periodic(
+      _pollInterval,
+      (_) => _loadOrders(silent: true),
+    );
   }
 
   Future<void> _loadOrders({bool silent = false}) async {
@@ -163,16 +216,23 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           title: Text('订单详情：${detail.order.orderCode}'),
           content: SizedBox(
             width: 620,
-            child: Text('产品：${detail.order.productName}\n工序数：${detail.processes.length}\n事件数：${detail.events.length}'),
+            child: Text(
+              '产品：${detail.order.productName}\n工序数：${detail.processes.length}\n事件数：${detail.events.length}',
+            ),
           ),
           actions: [
-            FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('关闭')),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
           ],
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
     }
   }
 
@@ -185,11 +245,20 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           title: const Text('提交首件'),
           content: TextField(
             controller: codeController,
-            decoration: const InputDecoration(labelText: '当日校验码', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+              labelText: '当日校验码',
+              border: OutlineInputBorder(),
+            ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('取消')),
-            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('提交')),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('提交'),
+            ),
           ],
         ),
       );
@@ -202,7 +271,9 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         assistAuthorizationId: item.assistAuthorizationId,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('首件提交成功')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('首件提交成功')));
       await _loadOrders();
     } finally {
       codeController.dispose();
@@ -210,38 +281,334 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   }
 
   Future<void> _showEndProductionDialog(MyOrderItem item) async {
-    final qtyController = TextEditingController(text: '${item.maxProducibleQuantity.clamp(1, 999999)}');
+    final qtyController = TextEditingController(
+      text: '${item.maxProducibleQuantity.clamp(1, 999999)}',
+    );
+    final defectRows = <_DefectRowDraft>[];
     try {
-      final ok = await showLockedFormDialog<bool>(
+      final payload = await showLockedFormDialog<_ProductionSubmitPayload?>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('报工'),
-          content: TextField(
-            controller: qtyController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: '数量', border: OutlineInputBorder()),
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('报工'),
+            content: SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: qtyController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: '有效流转数量',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('不良现象（可选）'),
+                        const Spacer(),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            setDialogState(() {
+                              defectRows.add(_DefectRowDraft());
+                            });
+                          },
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('新增'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ...List.generate(defectRows.length, (index) {
+                      final row = defectRows[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: TextField(
+                                controller: row.phenomenonController,
+                                decoration: const InputDecoration(
+                                  labelText: '现象',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: row.quantityController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: '数量',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                setDialogState(() {
+                                  final removed = defectRows.removeAt(index);
+                                  removed.dispose();
+                                });
+                              },
+                              icon: const Icon(Icons.delete_outline),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final qty = int.tryParse(qtyController.text.trim());
+                  if (qty == null || qty <= 0) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('请输入有效报工数量')));
+                    return;
+                  }
+                  final defects = <ProductionDefectItemInput>[];
+                  for (final row in defectRows) {
+                    final phenomenon = row.phenomenonController.text.trim();
+                    final qtyText = row.quantityController.text.trim();
+                    if (phenomenon.isEmpty && qtyText.isEmpty) {
+                      continue;
+                    }
+                    final defectQty = int.tryParse(qtyText);
+                    if (phenomenon.isEmpty ||
+                        defectQty == null ||
+                        defectQty <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('不良明细需同时填写现象与正整数数量')),
+                      );
+                      return;
+                    }
+                    defects.add(
+                      ProductionDefectItemInput(
+                        phenomenon: phenomenon,
+                        quantity: defectQty,
+                      ),
+                    );
+                  }
+                  Navigator.of(context).pop(
+                    _ProductionSubmitPayload(
+                      quantity: qty,
+                      defectItems: defects,
+                    ),
+                  );
+                },
+                child: const Text('提交'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('取消')),
-            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('提交')),
-          ],
         ),
       );
-      if (ok != true) return;
-      final qty = int.tryParse(qtyController.text.trim());
-      if (qty == null || qty <= 0) return;
+      if (payload == null) {
+        return;
+      }
       await _service.endProduction(
         orderId: item.orderId,
         orderProcessId: item.currentProcessId,
-        quantity: qty,
+        quantity: payload.quantity,
         effectiveOperatorUserId: item.operatorUserId,
         assistAuthorizationId: item.assistAuthorizationId,
+        defectItems: payload.defectItems,
       );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('报工成功')));
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('报工成功')));
       await _loadOrders();
     } finally {
       qtyController.dispose();
+      for (final row in defectRows) {
+        row.dispose();
+      }
+    }
+  }
+
+  Future<void> _showManualRepairDialog(MyOrderItem item) async {
+    final productionQtyController = TextEditingController(
+      text: '${item.maxProducibleQuantity.clamp(1, 999999)}',
+    );
+    final defectRows = <_DefectRowDraft>[_DefectRowDraft()];
+    try {
+      final payload = await showLockedFormDialog<_ManualRepairSubmitPayload?>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('手工送修建单'),
+            content: SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: productionQtyController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: '本次生产数量',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('不良现象明细'),
+                        const Spacer(),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            setDialogState(() {
+                              defectRows.add(_DefectRowDraft());
+                            });
+                          },
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('新增'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ...List.generate(defectRows.length, (index) {
+                      final row = defectRows[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: TextField(
+                                controller: row.phenomenonController,
+                                decoration: const InputDecoration(
+                                  labelText: '现象',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: row.quantityController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: '数量',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: defectRows.length <= 1
+                                  ? null
+                                  : () {
+                                      setDialogState(() {
+                                        final removed = defectRows.removeAt(
+                                          index,
+                                        );
+                                        removed.dispose();
+                                      });
+                                    },
+                              icon: const Icon(Icons.delete_outline),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final productionQty = int.tryParse(
+                    productionQtyController.text.trim(),
+                  );
+                  if (productionQty == null || productionQty <= 0) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('请输入本次生产数量')));
+                    return;
+                  }
+                  final defects = <ProductionDefectItemInput>[];
+                  for (final row in defectRows) {
+                    final phenomenon = row.phenomenonController.text.trim();
+                    final defectQty = int.tryParse(
+                      row.quantityController.text.trim(),
+                    );
+                    if (phenomenon.isEmpty ||
+                        defectQty == null ||
+                        defectQty <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('请完整填写不良现象明细')),
+                      );
+                      return;
+                    }
+                    defects.add(
+                      ProductionDefectItemInput(
+                        phenomenon: phenomenon,
+                        quantity: defectQty,
+                      ),
+                    );
+                  }
+                  Navigator.of(context).pop(
+                    _ManualRepairSubmitPayload(
+                      productionQuantity: productionQty,
+                      defectItems: defects,
+                    ),
+                  );
+                },
+                child: const Text('提交建单'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (payload == null) {
+        return;
+      }
+      await _service.createManualRepairOrder(
+        orderId: item.orderId,
+        orderProcessId: item.currentProcessId,
+        productionQuantity: payload.productionQuantity,
+        defectItems: payload.defectItems,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('维修单创建成功')));
+      await _loadOrders();
+    } finally {
+      productionQtyController.dispose();
+      for (final row in defectRows) {
+        row.dispose();
+      }
     }
   }
 
@@ -266,29 +633,60 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 children: [
                   DropdownButtonFormField<int>(
                     value: targetId,
-                    decoration: const InputDecoration(labelText: '目标操作员', border: OutlineInputBorder()),
-                    items: _proxyOperators.map((it) => DropdownMenuItem<int>(value: it.id, child: Text(it.displayName))).toList(),
-                    onChanged: (value) => setDialogState(() => targetId = value),
+                    decoration: const InputDecoration(
+                      labelText: '目标操作员',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _proxyOperators
+                        .map(
+                          (it) => DropdownMenuItem<int>(
+                            value: it.id,
+                            child: Text(it.displayName),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => targetId = value),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
                     value: helperId,
-                    decoration: const InputDecoration(labelText: '代班人', border: OutlineInputBorder()),
-                    items: _assistUsers.map((it) => DropdownMenuItem<int>(value: it.id, child: Text(it.displayName))).toList(),
-                    onChanged: (value) => setDialogState(() => helperId = value),
+                    decoration: const InputDecoration(
+                      labelText: '代班人',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _assistUsers
+                        .map(
+                          (it) => DropdownMenuItem<int>(
+                            value: it.id,
+                            child: Text(it.displayName),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => helperId = value),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: reasonController,
                     maxLines: 2,
-                    decoration: const InputDecoration(labelText: '申请原因（可选）', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: '申请原因（可选）',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ],
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('取消')),
-              FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('提交申请')),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('提交申请'),
+              ),
             ],
           ),
         ),
@@ -299,10 +697,14 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         orderProcessId: item.currentProcessId,
         targetOperatorUserId: targetId!,
         helperUserId: helperId!,
-        reason: reasonController.text.trim().isEmpty ? null : reasonController.text.trim(),
+        reason: reasonController.text.trim().isEmpty
+            ? null
+            : reasonController.text.trim(),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('代班申请已提交')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('代班申请已提交')));
       await _loadOrders();
     } finally {
       reasonController.dispose();
@@ -319,10 +721,21 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         children: [
           Row(
             children: [
-              Text('生产订单查询', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
+              Text(
+                '生产订单查询',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const Spacer(),
-              Text('每 ${_pollInterval.inSeconds} 秒自动刷新', style: theme.textTheme.bodySmall),
-              IconButton(onPressed: _loading ? null : _loadOrders, icon: const Icon(Icons.refresh)),
+              Text(
+                '每 ${_pollInterval.inSeconds} 秒自动刷新',
+                style: theme.textTheme.bodySmall,
+              ),
+              IconButton(
+                onPressed: _loading ? null : _loadOrders,
+                icon: const Icon(Icons.refresh),
+              ),
             ],
           ),
           Row(
@@ -330,12 +743,19 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
               Expanded(
                 child: TextField(
                   controller: _keywordController,
-                  decoration: const InputDecoration(labelText: '搜索订单号/产品', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: '搜索订单号/产品',
+                    border: OutlineInputBorder(),
+                  ),
                   onSubmitted: (_) => _loadOrders(),
                 ),
               ),
               const SizedBox(width: 12),
-              FilledButton.icon(onPressed: _loading ? null : _loadOrders, icon: const Icon(Icons.search), label: const Text('查询')),
+              FilledButton.icon(
+                onPressed: _loading ? null : _loadOrders,
+                icon: const Icon(Icons.search),
+                label: const Text('查询'),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -345,11 +765,22 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 width: 220,
                 child: DropdownButtonFormField<String>(
                   value: _viewMode,
-                  decoration: const InputDecoration(labelText: '工单视角', border: OutlineInputBorder(), isDense: true),
+                  decoration: const InputDecoration(
+                    labelText: '工单视角',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
                   items: [
                     const DropdownMenuItem(value: 'own', child: Text('我的工单')),
-                    const DropdownMenuItem(value: 'assist', child: Text('我的代班工单')),
-                    if (widget.isProductionAdmin) const DropdownMenuItem(value: 'proxy', child: Text('代理操作员视角')),
+                    const DropdownMenuItem(
+                      value: 'assist',
+                      child: Text('我的代班工单'),
+                    ),
+                    if (widget.isProductionAdmin)
+                      const DropdownMenuItem(
+                        value: 'proxy',
+                        child: Text('代理操作员视角'),
+                      ),
                   ],
                   onChanged: (value) {
                     if (value == null || value == _viewMode) return;
@@ -367,8 +798,19 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                   width: 260,
                   child: DropdownButtonFormField<int>(
                     value: _proxyOperatorUserId,
-                    decoration: const InputDecoration(labelText: '选择操作员', border: OutlineInputBorder(), isDense: true),
-                    items: _proxyOperators.map((entry) => DropdownMenuItem<int>(value: entry.id, child: Text(entry.displayName))).toList(),
+                    decoration: const InputDecoration(
+                      labelText: '选择操作员',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: _proxyOperators
+                        .map(
+                          (entry) => DropdownMenuItem<int>(
+                            value: entry.id,
+                            child: Text(entry.displayName),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (value) {
                       setState(() => _proxyOperatorUserId = value);
                       _loadOrders();
@@ -383,7 +825,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           if (_message.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(_message, style: TextStyle(color: theme.colorScheme.error)),
+              child: Text(
+                _message,
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
             ),
           const SizedBox(height: 8),
           Expanded(
@@ -406,49 +851,98 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                           DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
-                          return DataRow(cells: [
-                            DataCell(Text(item.orderCode)),
-                            DataCell(Text(item.productName)),
-                            DataCell(Text(productionOrderStatusLabel(item.orderStatus))),
-                            DataCell(Text(item.currentProcessName)),
-                            DataCell(Text(productionProcessStatusLabel(item.processStatus))),
-                            DataCell(Text('${item.visibleQuantity}')),
-                            DataCell(Text('${item.processCompletedQuantity}')),
-                            DataCell(Text(_formatDateTime(item.updatedAt))),
-                            DataCell(
-                              PopupMenuButton<_QueryOrderAction>(
-                                onSelected: (action) {
-                                  switch (action) {
-                                    case _QueryOrderAction.detail:
-                                      _showOrderDetail(item);
-                                      break;
-                                    case _QueryOrderAction.firstArticle:
-                                      _showFirstArticleDialog(item);
-                                      break;
-                                    case _QueryOrderAction.endProduction:
-                                      _showEndProductionDialog(item);
-                                      break;
-                                    case _QueryOrderAction.applyAssist:
-                                      _showApplyAssistDialog(item);
-                                      break;
-                                  }
-                                },
-                                itemBuilder: (_) => [
-                                  const PopupMenuItem(value: _QueryOrderAction.detail, child: Text('详情')),
-                                  PopupMenuItem(value: _QueryOrderAction.firstArticle, enabled: widget.canOperate && item.canFirstArticle && !_acting, child: const Text('首件')),
-                                  PopupMenuItem(value: _QueryOrderAction.endProduction, enabled: widget.canOperate && item.canEndProduction && !_acting, child: const Text('报工')),
-                                  PopupMenuItem(value: _QueryOrderAction.applyAssist, enabled: widget.canOperate && !_acting, child: const Text('申请代班')),
-                                ],
-                                child: const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [Text('操作'), Icon(Icons.arrow_drop_down)],
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(item.orderCode)),
+                              DataCell(Text(item.productName)),
+                              DataCell(
+                                Text(
+                                  productionOrderStatusLabel(item.orderStatus),
+                                ),
+                              ),
+                              DataCell(Text(item.currentProcessName)),
+                              DataCell(
+                                Text(
+                                  productionProcessStatusLabel(
+                                    item.processStatus,
                                   ),
                                 ),
                               ),
-                            ),
-                          ]);
+                              DataCell(Text('${item.visibleQuantity}')),
+                              DataCell(
+                                Text('${item.processCompletedQuantity}'),
+                              ),
+                              DataCell(Text(_formatDateTime(item.updatedAt))),
+                              DataCell(
+                                PopupMenuButton<_QueryOrderAction>(
+                                  onSelected: (action) {
+                                    switch (action) {
+                                      case _QueryOrderAction.detail:
+                                        _showOrderDetail(item);
+                                        break;
+                                      case _QueryOrderAction.firstArticle:
+                                        _showFirstArticleDialog(item);
+                                        break;
+                                      case _QueryOrderAction.endProduction:
+                                        _showEndProductionDialog(item);
+                                        break;
+                                      case _QueryOrderAction.manualRepair:
+                                        _showManualRepairDialog(item);
+                                        break;
+                                      case _QueryOrderAction.applyAssist:
+                                        _showApplyAssistDialog(item);
+                                        break;
+                                    }
+                                  },
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(
+                                      value: _QueryOrderAction.detail,
+                                      child: Text('详情'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: _QueryOrderAction.firstArticle,
+                                      enabled:
+                                          widget.canOperate &&
+                                          item.canFirstArticle &&
+                                          !_acting,
+                                      child: const Text('首件'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: _QueryOrderAction.endProduction,
+                                      enabled:
+                                          widget.canOperate &&
+                                          item.canEndProduction &&
+                                          !_acting,
+                                      child: const Text('报工'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: _QueryOrderAction.manualRepair,
+                                      enabled: widget.canOperate && !_acting,
+                                      child: const Text('手工送修建单'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: _QueryOrderAction.applyAssist,
+                                      enabled: widget.canOperate && !_acting,
+                                      child: const Text('申请代班'),
+                                    ),
+                                  ],
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text('操作'),
+                                        Icon(Icons.arrow_drop_down),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
                         }).toList(),
                       ),
                     ),

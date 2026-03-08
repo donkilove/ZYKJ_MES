@@ -6,17 +6,23 @@ import 'production_assist_approval_page.dart';
 import 'production_data_page.dart';
 import 'production_order_management_page.dart';
 import 'production_order_query_page.dart';
+import 'production_repair_orders_page.dart';
+import 'production_scrap_statistics_page.dart';
 
 const String productionOrderManagementTabCode = 'production_order_management';
 const String productionOrderQueryTabCode = 'production_order_query';
 const String productionAssistApprovalTabCode = 'production_assist_approval';
 const String productionDataQueryTabCode = 'production_data_query';
+const String productionScrapStatisticsTabCode = 'production_scrap_statistics';
+const String productionRepairOrdersTabCode = 'production_repair_orders';
 
 const List<String> _defaultTabOrder = [
   productionOrderManagementTabCode,
   productionOrderQueryTabCode,
   productionAssistApprovalTabCode,
   productionDataQueryTabCode,
+  productionScrapStatisticsTabCode,
+  productionRepairOrdersTabCode,
 ];
 
 class ProductionPage extends StatefulWidget {
@@ -133,6 +139,10 @@ class _ProductionPageState extends State<ProductionPage>
         return '代班审批';
       case productionDataQueryTabCode:
         return '生产数据';
+      case productionScrapStatisticsTabCode:
+        return '报废统计';
+      case productionRepairOrdersTabCode:
+        return '维修订单';
       default:
         return code;
     }
@@ -163,6 +173,17 @@ class _ProductionPageState extends State<ProductionPage>
         return ProductionDataPage(
           session: widget.session,
           onLogout: widget.onLogout,
+        );
+      case productionScrapStatisticsTabCode:
+        return ProductionScrapStatisticsPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+        );
+      case productionRepairOrdersTabCode:
+        return ProductionRepairOrdersPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          canComplete: _canManageOrders,
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));

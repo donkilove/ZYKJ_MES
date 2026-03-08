@@ -13,6 +13,10 @@ void main() {
 
     expect(productionSubOrderStatusLabel('done'), isNot('done'));
     expect(productionSubOrderStatusLabel('y'), 'y');
+    expect(repairOrderStatusLabel('in_repair'), isNot('in_repair'));
+    expect(repairOrderStatusLabel('completed'), isNot('completed'));
+    expect(scrapProgressLabel('pending_apply'), isNot('pending_apply'));
+    expect(scrapProgressLabel('applied'), isNot('applied'));
   });
 
   test('order and detail models parse nested payload', () {
@@ -217,106 +221,190 @@ void main() {
     expect(productOption.id, 2);
     expect(processOption.stageCode, '01');
     expect(step.toJson(), {'step_order': 1, 'stage_id': 1, 'process_id': 3});
-    expect(MyOrderListResult(total: 1, items: [myOrder]).items.single.orderId, 9);
+    expect(
+      MyOrderListResult(total: 1, items: [myOrder]).items.single.orderId,
+      9,
+    );
   });
 
-  test('production data query models parse today/unfinished/manual payloads', () {
-    final today = ProductionTodayRealtimeResult.fromJson({
-      'stat_mode': 'main_order',
-      'summary': {
-        'total_products': 1,
-        'total_quantity': 20,
-      },
-      'table_rows': [
-        {
-          'product_id': 1,
-          'product_name': '产品A',
-          'quantity': 20,
-          'latest_time': '2026-03-02T08:00:00Z',
-          'latest_time_text': '2026-03-02 16:00:00',
-        },
-      ],
-      'chart_data': [
-        {'label': '产品A', 'value': 20},
-      ],
-      'query_signature': '{"view":"today_realtime"}',
-    });
-
-    final unfinished = ProductionUnfinishedProgressResult.fromJson({
-      'summary': {
-        'total_orders': 2,
-        'avg_progress_percent': 34.5,
-      },
-      'table_rows': [
-        {
-          'order_id': 11,
-          'order_code': 'PO-11',
-          'product_id': 1,
-          'product_name': '产品A',
-          'order_status': 'in_progress',
-          'process_count': 3,
-          'produced_total': 120,
-          'target_total': 300,
-          'progress_percent': 40.0,
-        },
-      ],
-      'query_signature': '{"view":"unfinished_progress"}',
-    });
-
-    final manual = ProductionManualQueryResult.fromJson({
-      'stat_mode': 'sub_order',
-      'summary': {
-        'rows': 1,
-        'filtered_total': 15,
-        'time_range_total': 20,
-        'ratio_percent': 75,
-      },
-      'table_rows': [
-        {
-          'order_id': 12,
-          'order_code': 'PO-12',
-          'product_id': 2,
-          'product_name': '产品B',
-          'stage_id': 1,
-          'stage_code': '01',
-          'stage_name': '切割段',
-          'process_id': 3,
-          'process_code': '01-01',
-          'process_name': '切割',
-          'operator_user_id': 9,
-          'operator_username': 'worker',
-          'quantity': 15,
-          'production_time': '2026-03-02T10:00:00Z',
-          'production_time_text': '2026-03-02 18:00:00',
-          'order_status': 'in_progress',
-        },
-      ],
-      'chart_data': {
-        'single_day': true,
-        'model_output': [
-          {'product_name': '产品B', 'quantity': 15},
+  test(
+    'production data query models parse today/unfinished/manual payloads',
+    () {
+      final today = ProductionTodayRealtimeResult.fromJson({
+        'stat_mode': 'main_order',
+        'summary': {'total_products': 1, 'total_quantity': 20},
+        'table_rows': [
+          {
+            'product_id': 1,
+            'product_name': '产品A',
+            'quantity': 20,
+            'latest_time': '2026-03-02T08:00:00Z',
+            'latest_time_text': '2026-03-02 16:00:00',
+          },
         ],
-        'trend_output': [
-          {'bucket': '10:00', 'quantity': 15},
+        'chart_data': [
+          {'label': '产品A', 'value': 20},
         ],
-        'pie_output': [
-          {'name': '筛选结果', 'quantity': 15},
-          {'name': '其余产量', 'quantity': 5},
-        ],
-      },
-      'query_signature': '{"view":"manual"}',
-    });
+        'query_signature': '{"view":"today_realtime"}',
+      });
 
-    final export = ProductionManualExportResult.fromJson({
-      'file_name': 'production_manual_20260302_100000.csv',
+      final unfinished = ProductionUnfinishedProgressResult.fromJson({
+        'summary': {'total_orders': 2, 'avg_progress_percent': 34.5},
+        'table_rows': [
+          {
+            'order_id': 11,
+            'order_code': 'PO-11',
+            'product_id': 1,
+            'product_name': '产品A',
+            'order_status': 'in_progress',
+            'process_count': 3,
+            'produced_total': 120,
+            'target_total': 300,
+            'progress_percent': 40.0,
+          },
+        ],
+        'query_signature': '{"view":"unfinished_progress"}',
+      });
+
+      final manual = ProductionManualQueryResult.fromJson({
+        'stat_mode': 'sub_order',
+        'summary': {
+          'rows': 1,
+          'filtered_total': 15,
+          'time_range_total': 20,
+          'ratio_percent': 75,
+        },
+        'table_rows': [
+          {
+            'order_id': 12,
+            'order_code': 'PO-12',
+            'product_id': 2,
+            'product_name': '产品B',
+            'stage_id': 1,
+            'stage_code': '01',
+            'stage_name': '切割段',
+            'process_id': 3,
+            'process_code': '01-01',
+            'process_name': '切割',
+            'operator_user_id': 9,
+            'operator_username': 'worker',
+            'quantity': 15,
+            'production_time': '2026-03-02T10:00:00Z',
+            'production_time_text': '2026-03-02 18:00:00',
+            'order_status': 'in_progress',
+          },
+        ],
+        'chart_data': {
+          'single_day': true,
+          'model_output': [
+            {'product_name': '产品B', 'quantity': 15},
+          ],
+          'trend_output': [
+            {'bucket': '10:00', 'quantity': 15},
+          ],
+          'pie_output': [
+            {'name': '筛选结果', 'quantity': 15},
+            {'name': '其余产量', 'quantity': 5},
+          ],
+        },
+        'query_signature': '{"view":"manual"}',
+      });
+
+      final export = ProductionManualExportResult.fromJson({
+        'file_name': 'production_manual_20260302_100000.csv',
+        'mime_type': 'text/csv',
+        'content_base64': 'YWJj',
+      });
+
+      expect(today.summary.totalQuantity, 20);
+      expect(today.tableRows.single.latestTimeText, contains('2026-03-02'));
+      expect(unfinished.tableRows.single.targetTotal, 300);
+      expect(manual.chartData.pieOutput.length, 2);
+      expect(export.fileName, contains('.csv'));
+    },
+  );
+
+  test('d-batch repair and scrap models parse payloads', () {
+    const defectInput = ProductionDefectItemInput(
+      phenomenon: '毛刺',
+      quantity: 1,
+    );
+    const causeInput = RepairCauseItemInput(
+      phenomenon: '毛刺',
+      reason: '刀具磨损',
+      quantity: 1,
+      isScrap: true,
+    );
+    const allocationInput = RepairReturnAllocationInput(
+      targetOrderProcessId: 11,
+      quantity: 2,
+    );
+    final repair = RepairOrderItem.fromJson({
+      'id': 1,
+      'repair_order_code': 'RW-1',
+      'source_order_id': 2,
+      'source_order_code': 'PO-2',
+      'product_id': 3,
+      'product_name': '产品A',
+      'source_order_process_id': 4,
+      'source_process_code': '01-01',
+      'source_process_name': '切割',
+      'sender_user_id': 5,
+      'sender_username': 'worker',
+      'production_quantity': 10,
+      'repair_quantity': 2,
+      'repaired_quantity': 1,
+      'scrap_quantity': 1,
+      'scrap_replenished': true,
+      'repair_time': '2026-03-01T00:00:00Z',
+      'status': 'completed',
+      'completed_at': '2026-03-01T01:00:00Z',
+      'repair_operator_user_id': 1,
+      'repair_operator_username': 'admin',
+      'created_at': '2026-03-01T00:00:00Z',
+      'updated_at': '2026-03-01T00:00:00Z',
+    });
+    final summary = RepairOrderPhenomenaSummaryResult.fromJson({
+      'repair_order_id': 1,
+      'items': [
+        {'phenomenon': '毛刺', 'quantity': 1},
+      ],
+    });
+    final scrap = ScrapStatisticsItem.fromJson({
+      'id': 1,
+      'order_id': 2,
+      'order_code': 'PO-2',
+      'product_id': 3,
+      'product_name': '产品A',
+      'process_id': 4,
+      'process_code': '01-01',
+      'process_name': '切割',
+      'scrap_reason': '刀具磨损',
+      'scrap_quantity': 1,
+      'last_scrap_time': '2026-03-01T01:00:00Z',
+      'progress': 'pending_apply',
+      'applied_at': null,
+      'created_at': '2026-03-01T00:00:00Z',
+      'updated_at': '2026-03-01T00:00:00Z',
+    });
+    final export = ProductionExportResult.fromJson({
+      'file_name': 'repair.csv',
       'mime_type': 'text/csv',
       'content_base64': 'YWJj',
+      'exported_count': 12,
     });
 
-    expect(today.summary.totalQuantity, 20);
-    expect(today.tableRows.single.latestTimeText, contains('2026-03-02'));
-    expect(unfinished.tableRows.single.targetTotal, 300);
-    expect(manual.chartData.pieOutput.length, 2);
-    expect(export.fileName, contains('.csv'));
+    expect(defectInput.toJson()['quantity'], 1);
+    expect(causeInput.toJson()['is_scrap'], isTrue);
+    expect(allocationInput.toJson()['target_order_process_id'], 11);
+    expect(repair.status, 'completed');
+    expect(summary.items.single.phenomenon, '毛刺');
+    expect(scrap.scrapReason, '刀具磨损');
+    expect(export.exportedCount, 12);
+    expect(RepairOrderListResult(total: 1, items: [repair]).items.single.id, 1);
+    expect(
+      ScrapStatisticsListResult(total: 1, items: [scrap]).items.single.id,
+      1,
+    );
   });
 }

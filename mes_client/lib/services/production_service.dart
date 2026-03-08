@@ -208,10 +208,7 @@ class ProductionService {
     final response = await http.put(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({
-        'enabled': enabled,
-        'process_codes': processCodes,
-      }),
+      body: jsonEncode({'enabled': enabled, 'process_codes': processCodes}),
     );
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -301,6 +298,7 @@ class ProductionService {
     String? remark,
     int? effectiveOperatorUserId,
     int? assistAuthorizationId,
+    List<ProductionDefectItemInput>? defectItems,
   }) async {
     final uri = Uri.parse('$_basePath/orders/$orderId/end-production');
     final response = await http.post(
@@ -312,6 +310,9 @@ class ProductionService {
         'remark': remark,
         'effective_operator_user_id': effectiveOperatorUserId,
         'assist_authorization_id': assistAuthorizationId,
+        'defect_items': (defectItems ?? const <ProductionDefectItemInput>[])
+            .map((item) => item.toJson())
+            .toList(),
       }),
     );
     final body = _decodeBody(response);
@@ -465,7 +466,9 @@ class ProductionService {
     _appendIntListQuery(query, 'process_ids', processIds);
     _appendIntListQuery(query, 'operator_user_ids', operatorUserIds);
 
-    final uri = Uri.parse('$_basePath/data/manual').replace(queryParameters: query);
+    final uri = Uri.parse(
+      '$_basePath/data/manual',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -512,6 +515,229 @@ class ProductionService {
     }
     final data = body['data'] as Map<String, dynamic>;
     return ProductionManualExportResult.fromJson(data);
+  }
+
+  Future<ScrapStatisticsListResult> getScrapStatistics({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String progress = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final query = <String, String>{
+      'page': '$page',
+      'page_size': '${pageSize.clamp(1, 500)}',
+      'progress': progress,
+    };
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    final startDateText = _formatDateOrNull(startDate);
+    if (startDateText != null) {
+      query['start_date'] = startDateText;
+    }
+    final endDateText = _formatDateOrNull(endDate);
+    if (endDateText != null) {
+      query['end_date'] = endDateText;
+    }
+    final uri = Uri.parse(
+      '$_basePath/scrap-statistics',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) =>
+              ScrapStatisticsItem.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+    return ScrapStatisticsListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<ProductionExportResult> exportScrapStatistics({
+    String? keyword,
+    String progress = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final uri = Uri.parse('$_basePath/scrap-statistics/export');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'keyword': keyword,
+        'progress': progress,
+        'start_date': _formatDateOrNull(startDate),
+        'end_date': _formatDateOrNull(endDate),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return ProductionExportResult.fromJson(data);
+  }
+
+  Future<RepairOrderListResult> getRepairOrders({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String status = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final query = <String, String>{
+      'page': '$page',
+      'page_size': '${pageSize.clamp(1, 500)}',
+      'status': status,
+    };
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    final startDateText = _formatDateOrNull(startDate);
+    if (startDateText != null) {
+      query['start_date'] = startDateText;
+    }
+    final endDateText = _formatDateOrNull(endDate);
+    if (endDateText != null) {
+      query['end_date'] = endDateText;
+    }
+    final uri = Uri.parse(
+      '$_basePath/repair-orders',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map((entry) => RepairOrderItem.fromJson(entry as Map<String, dynamic>))
+        .toList();
+    return RepairOrderListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<RepairOrderItem> createManualRepairOrder({
+    required int orderId,
+    required int orderProcessId,
+    required int productionQuantity,
+    required List<ProductionDefectItemInput> defectItems,
+  }) async {
+    final uri = Uri.parse('$_basePath/orders/$orderId/repair-orders');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'order_process_id': orderProcessId,
+        'production_quantity': productionQuantity,
+        'defect_items': defectItems.map((item) => item.toJson()).toList(),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return RepairOrderItem.fromJson(data);
+  }
+
+  Future<RepairOrderPhenomenaSummaryResult> getRepairOrderPhenomenaSummary({
+    required int repairOrderId,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/repair-orders/$repairOrderId/phenomena-summary',
+    );
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return RepairOrderPhenomenaSummaryResult.fromJson(data);
+  }
+
+  Future<RepairOrderItem> completeRepairOrder({
+    required int repairOrderId,
+    required List<RepairCauseItemInput> causeItems,
+    required bool scrapReplenished,
+    required List<RepairReturnAllocationInput> returnAllocations,
+  }) async {
+    final uri = Uri.parse('$_basePath/repair-orders/$repairOrderId/complete');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'cause_items': causeItems.map((item) => item.toJson()).toList(),
+        'scrap_replenished': scrapReplenished,
+        'return_allocations': returnAllocations
+            .map((item) => item.toJson())
+            .toList(),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return RepairOrderItem.fromJson(data);
+  }
+
+  Future<ProductionExportResult> exportRepairOrders({
+    String? keyword,
+    String status = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final uri = Uri.parse('$_basePath/repair-orders/export');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'keyword': keyword,
+        'status': status,
+        'start_date': _formatDateOrNull(startDate),
+        'end_date': _formatDateOrNull(endDate),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return ProductionExportResult.fromJson(data);
   }
 
   Future<List<ProductionProductOption>> listProductOptions() async {
@@ -632,10 +858,7 @@ class ProductionService {
     final response = await http.post(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({
-        'approve': approve,
-        'review_remark': reviewRemark,
-      }),
+      body: jsonEncode({'approve': approve, 'review_remark': reviewRemark}),
     );
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -789,6 +1012,22 @@ class ProductionService {
         return 'Effective Operator';
       case 'assist_authorization_id':
         return 'Assist Authorization';
+      case 'defect_items':
+        return 'Defect Items';
+      case 'phenomenon':
+        return 'Phenomenon';
+      case 'reason':
+        return 'Reason';
+      case 'scrap_replenished':
+        return 'Scrap Replenished';
+      case 'cause_items':
+        return 'Cause Items';
+      case 'return_allocations':
+        return 'Return Allocations';
+      case 'target_order_process_id':
+        return 'Target Process';
+      case 'progress':
+        return 'Progress';
       case 'enabled':
         return 'Enabled';
       case 'pipeline_enabled':

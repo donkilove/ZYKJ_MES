@@ -65,6 +65,28 @@ String assistAuthorizationStatusLabel(String status) {
   }
 }
 
+String repairOrderStatusLabel(String status) {
+  switch (status) {
+    case 'in_repair':
+      return '维修中';
+    case 'completed':
+      return '维修完成';
+    default:
+      return status;
+  }
+}
+
+String scrapProgressLabel(String status) {
+  switch (status) {
+    case 'pending_apply':
+      return '待申请';
+    case 'applied':
+      return '已申请';
+    default:
+      return status;
+  }
+}
+
 class ProductionOrderItem {
   ProductionOrderItem({
     required this.id,
@@ -453,10 +475,8 @@ class MyOrderItem {
       operatorUsername: json['operator_username'] as String?,
       workView: (json['work_view'] as String?) ?? 'own',
       assistAuthorizationId: json['assist_authorization_id'] as int?,
-      pipelineModeEnabled:
-          (json['pipeline_mode_enabled'] as bool?) ?? false,
-      pipelineStartAllowed:
-          (json['pipeline_start_allowed'] as bool?) ?? false,
+      pipelineModeEnabled: (json['pipeline_mode_enabled'] as bool?) ?? false,
+      pipelineStartAllowed: (json['pipeline_start_allowed'] as bool?) ?? false,
       pipelineEndAllowed: (json['pipeline_end_allowed'] as bool?) ?? false,
       maxProducibleQuantity: (json['max_producible_quantity'] as int?) ?? 0,
       canFirstArticle: (json['can_first_article'] as bool?) ?? false,
@@ -627,6 +647,60 @@ class AssistUserOptionListResult {
 
   final int total;
   final List<AssistUserOptionItem> items;
+}
+
+class ProductionDefectItemInput {
+  const ProductionDefectItemInput({
+    required this.phenomenon,
+    required this.quantity,
+  });
+
+  final String phenomenon;
+  final int quantity;
+
+  Map<String, dynamic> toJson() {
+    return {'phenomenon': phenomenon, 'quantity': quantity};
+  }
+}
+
+class RepairCauseItemInput {
+  const RepairCauseItemInput({
+    required this.phenomenon,
+    required this.reason,
+    required this.quantity,
+    required this.isScrap,
+  });
+
+  final String phenomenon;
+  final String reason;
+  final int quantity;
+  final bool isScrap;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'phenomenon': phenomenon,
+      'reason': reason,
+      'quantity': quantity,
+      'is_scrap': isScrap,
+    };
+  }
+}
+
+class RepairReturnAllocationInput {
+  const RepairReturnAllocationInput({
+    required this.targetOrderProcessId,
+    required this.quantity,
+  });
+
+  final int targetOrderProcessId;
+  final int quantity;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'target_order_process_id': targetOrderProcessId,
+      'quantity': quantity,
+    };
+  }
 }
 
 class ProductionActionResult {
@@ -828,8 +902,9 @@ class ProductionTodayRealtimeResult {
       ),
       tableRows: (json['table_rows'] as List<dynamic>? ?? const [])
           .map(
-            (entry) =>
-                ProductionTodayRealtimeRow.fromJson(entry as Map<String, dynamic>),
+            (entry) => ProductionTodayRealtimeRow.fromJson(
+              entry as Map<String, dynamic>,
+            ),
           )
           .toList(),
       chartData: (json['chart_data'] as List<dynamic>? ?? const [])
@@ -922,8 +997,9 @@ class ProductionUnfinishedProgressResult {
       ),
       tableRows: (json['table_rows'] as List<dynamic>? ?? const [])
           .map(
-            (entry) =>
-                ProductionUnfinishedProgressRow.fromJson(entry as Map<String, dynamic>),
+            (entry) => ProductionUnfinishedProgressRow.fromJson(
+              entry as Map<String, dynamic>,
+            ),
           )
           .toList(),
       querySignature: (json['query_signature'] as String?) ?? '',
@@ -1008,7 +1084,10 @@ class ProductionManualModelChartItem {
 }
 
 class ProductionManualTrendChartItem {
-  ProductionManualTrendChartItem({required this.bucket, required this.quantity});
+  ProductionManualTrendChartItem({
+    required this.bucket,
+    required this.quantity,
+  });
 
   final String bucket;
   final int quantity;
@@ -1067,8 +1146,9 @@ class ProductionManualChartData {
           .toList(),
       pieOutput: (json['pie_output'] as List<dynamic>? ?? const [])
           .map(
-            (entry) =>
-                ProductionManualPieChartItem.fromJson(entry as Map<String, dynamic>),
+            (entry) => ProductionManualPieChartItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
           )
           .toList(),
     );
@@ -1120,7 +1200,10 @@ class ProductionManualQueryResult {
         json['summary'] as Map<String, dynamic>? ?? const {},
       ),
       tableRows: (json['table_rows'] as List<dynamic>? ?? const [])
-          .map((entry) => ProductionManualRow.fromJson(entry as Map<String, dynamic>))
+          .map(
+            (entry) =>
+                ProductionManualRow.fromJson(entry as Map<String, dynamic>),
+          )
           .toList(),
       chartData: ProductionManualChartData.fromJson(
         json['chart_data'] as Map<String, dynamic>? ?? const {},
@@ -1146,6 +1229,221 @@ class ProductionManualExportResult {
       fileName: (json['file_name'] as String?) ?? '',
       mimeType: (json['mime_type'] as String?) ?? 'text/csv',
       contentBase64: (json['content_base64'] as String?) ?? '',
+    );
+  }
+}
+
+class RepairOrderItem {
+  RepairOrderItem({
+    required this.id,
+    required this.repairOrderCode,
+    required this.sourceOrderId,
+    required this.sourceOrderCode,
+    required this.productId,
+    required this.productName,
+    required this.sourceOrderProcessId,
+    required this.sourceProcessCode,
+    required this.sourceProcessName,
+    required this.senderUserId,
+    required this.senderUsername,
+    required this.productionQuantity,
+    required this.repairQuantity,
+    required this.repairedQuantity,
+    required this.scrapQuantity,
+    required this.scrapReplenished,
+    required this.repairTime,
+    required this.status,
+    required this.completedAt,
+    required this.repairOperatorUserId,
+    required this.repairOperatorUsername,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final int id;
+  final String repairOrderCode;
+  final int? sourceOrderId;
+  final String? sourceOrderCode;
+  final int? productId;
+  final String? productName;
+  final int? sourceOrderProcessId;
+  final String sourceProcessCode;
+  final String sourceProcessName;
+  final int? senderUserId;
+  final String? senderUsername;
+  final int productionQuantity;
+  final int repairQuantity;
+  final int repairedQuantity;
+  final int scrapQuantity;
+  final bool scrapReplenished;
+  final DateTime repairTime;
+  final String status;
+  final DateTime? completedAt;
+  final int? repairOperatorUserId;
+  final String? repairOperatorUsername;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory RepairOrderItem.fromJson(Map<String, dynamic> json) {
+    return RepairOrderItem(
+      id: (json['id'] as int?) ?? 0,
+      repairOrderCode: (json['repair_order_code'] as String?) ?? '',
+      sourceOrderId: json['source_order_id'] as int?,
+      sourceOrderCode: json['source_order_code'] as String?,
+      productId: json['product_id'] as int?,
+      productName: json['product_name'] as String?,
+      sourceOrderProcessId: json['source_order_process_id'] as int?,
+      sourceProcessCode: (json['source_process_code'] as String?) ?? '',
+      sourceProcessName: (json['source_process_name'] as String?) ?? '',
+      senderUserId: json['sender_user_id'] as int?,
+      senderUsername: json['sender_username'] as String?,
+      productionQuantity: (json['production_quantity'] as int?) ?? 0,
+      repairQuantity: (json['repair_quantity'] as int?) ?? 0,
+      repairedQuantity: (json['repaired_quantity'] as int?) ?? 0,
+      scrapQuantity: (json['scrap_quantity'] as int?) ?? 0,
+      scrapReplenished: (json['scrap_replenished'] as bool?) ?? false,
+      repairTime: DateTime.parse(json['repair_time'] as String),
+      status: (json['status'] as String?) ?? 'in_repair',
+      completedAt: _parseDateOrNull(json['completed_at']),
+      repairOperatorUserId: json['repair_operator_user_id'] as int?,
+      repairOperatorUsername: json['repair_operator_username'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+  }
+}
+
+class RepairOrderListResult {
+  RepairOrderListResult({required this.total, required this.items});
+
+  final int total;
+  final List<RepairOrderItem> items;
+}
+
+class RepairOrderPhenomenonSummaryItem {
+  RepairOrderPhenomenonSummaryItem({
+    required this.phenomenon,
+    required this.quantity,
+  });
+
+  final String phenomenon;
+  final int quantity;
+
+  factory RepairOrderPhenomenonSummaryItem.fromJson(Map<String, dynamic> json) {
+    return RepairOrderPhenomenonSummaryItem(
+      phenomenon: (json['phenomenon'] as String?) ?? '',
+      quantity: (json['quantity'] as int?) ?? 0,
+    );
+  }
+}
+
+class RepairOrderPhenomenaSummaryResult {
+  RepairOrderPhenomenaSummaryResult({
+    required this.repairOrderId,
+    required this.items,
+  });
+
+  final int repairOrderId;
+  final List<RepairOrderPhenomenonSummaryItem> items;
+
+  factory RepairOrderPhenomenaSummaryResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return RepairOrderPhenomenaSummaryResult(
+      repairOrderId: (json['repair_order_id'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => RepairOrderPhenomenonSummaryItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class ScrapStatisticsItem {
+  ScrapStatisticsItem({
+    required this.id,
+    required this.orderId,
+    required this.orderCode,
+    required this.productId,
+    required this.productName,
+    required this.processId,
+    required this.processCode,
+    required this.processName,
+    required this.scrapReason,
+    required this.scrapQuantity,
+    required this.lastScrapTime,
+    required this.progress,
+    required this.appliedAt,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final int id;
+  final int? orderId;
+  final String? orderCode;
+  final int? productId;
+  final String? productName;
+  final int? processId;
+  final String? processCode;
+  final String? processName;
+  final String scrapReason;
+  final int scrapQuantity;
+  final DateTime? lastScrapTime;
+  final String progress;
+  final DateTime? appliedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory ScrapStatisticsItem.fromJson(Map<String, dynamic> json) {
+    return ScrapStatisticsItem(
+      id: (json['id'] as int?) ?? 0,
+      orderId: json['order_id'] as int?,
+      orderCode: json['order_code'] as String?,
+      productId: json['product_id'] as int?,
+      productName: json['product_name'] as String?,
+      processId: json['process_id'] as int?,
+      processCode: json['process_code'] as String?,
+      processName: json['process_name'] as String?,
+      scrapReason: (json['scrap_reason'] as String?) ?? '',
+      scrapQuantity: (json['scrap_quantity'] as int?) ?? 0,
+      lastScrapTime: _parseDateOrNull(json['last_scrap_time']),
+      progress: (json['progress'] as String?) ?? 'pending_apply',
+      appliedAt: _parseDateOrNull(json['applied_at']),
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+  }
+}
+
+class ScrapStatisticsListResult {
+  ScrapStatisticsListResult({required this.total, required this.items});
+
+  final int total;
+  final List<ScrapStatisticsItem> items;
+}
+
+class ProductionExportResult {
+  ProductionExportResult({
+    required this.fileName,
+    required this.mimeType,
+    required this.contentBase64,
+    required this.exportedCount,
+  });
+
+  final String fileName;
+  final String mimeType;
+  final String contentBase64;
+  final int exportedCount;
+
+  factory ProductionExportResult.fromJson(Map<String, dynamic> json) {
+    return ProductionExportResult(
+      fileName: (json['file_name'] as String?) ?? '',
+      mimeType: (json['mime_type'] as String?) ?? 'text/csv',
+      contentBase64: (json['content_base64'] as String?) ?? '',
+      exportedCount: (json['exported_count'] as int?) ?? 0,
     );
   }
 }
