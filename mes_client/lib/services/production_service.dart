@@ -378,6 +378,142 @@ class ProductionService {
         .toList();
   }
 
+  Future<ProductionTodayRealtimeResult> getTodayRealtimeData({
+    String statMode = 'main_order',
+    List<int>? productIds,
+    List<int>? stageIds,
+    List<int>? processIds,
+    List<int>? operatorUserIds,
+    String orderStatus = 'all',
+  }) async {
+    final query = <String, String>{
+      'stat_mode': statMode,
+      'order_status': orderStatus,
+    };
+    _appendIntListQuery(query, 'product_ids', productIds);
+    _appendIntListQuery(query, 'stage_ids', stageIds);
+    _appendIntListQuery(query, 'process_ids', processIds);
+    _appendIntListQuery(query, 'operator_user_ids', operatorUserIds);
+
+    final uri = Uri.parse(
+      '$_basePath/data/today-realtime',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return ProductionTodayRealtimeResult.fromJson(data);
+  }
+
+  Future<ProductionUnfinishedProgressResult> getUnfinishedProgressData({
+    List<int>? productIds,
+    List<int>? stageIds,
+    List<int>? processIds,
+    List<int>? operatorUserIds,
+    String orderStatus = 'all',
+  }) async {
+    final query = <String, String>{'order_status': orderStatus};
+    _appendIntListQuery(query, 'product_ids', productIds);
+    _appendIntListQuery(query, 'stage_ids', stageIds);
+    _appendIntListQuery(query, 'process_ids', processIds);
+    _appendIntListQuery(query, 'operator_user_ids', operatorUserIds);
+
+    final uri = Uri.parse(
+      '$_basePath/data/unfinished-progress',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return ProductionUnfinishedProgressResult.fromJson(data);
+  }
+
+  Future<ProductionManualQueryResult> getManualProductionData({
+    String statMode = 'main_order',
+    DateTime? startDate,
+    DateTime? endDate,
+    List<int>? productIds,
+    List<int>? stageIds,
+    List<int>? processIds,
+    List<int>? operatorUserIds,
+    String orderStatus = 'all',
+  }) async {
+    final query = <String, String>{
+      'stat_mode': statMode,
+      'order_status': orderStatus,
+    };
+    final startDateText = _formatDateOrNull(startDate);
+    if (startDateText != null) {
+      query['start_date'] = startDateText;
+    }
+    final endDateText = _formatDateOrNull(endDate);
+    if (endDateText != null) {
+      query['end_date'] = endDateText;
+    }
+    _appendIntListQuery(query, 'product_ids', productIds);
+    _appendIntListQuery(query, 'stage_ids', stageIds);
+    _appendIntListQuery(query, 'process_ids', processIds);
+    _appendIntListQuery(query, 'operator_user_ids', operatorUserIds);
+
+    final uri = Uri.parse('$_basePath/data/manual').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return ProductionManualQueryResult.fromJson(data);
+  }
+
+  Future<ProductionManualExportResult> exportManualProductionData({
+    String statMode = 'main_order',
+    DateTime? startDate,
+    DateTime? endDate,
+    List<int>? productIds,
+    List<int>? stageIds,
+    List<int>? processIds,
+    List<int>? operatorUserIds,
+    String orderStatus = 'all',
+  }) async {
+    final uri = Uri.parse('$_basePath/data/manual/export');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'stat_mode': statMode,
+        'start_date': _formatDateOrNull(startDate),
+        'end_date': _formatDateOrNull(endDate),
+        'product_ids': productIds ?? const <int>[],
+        'stage_ids': stageIds ?? const <int>[],
+        'process_ids': processIds ?? const <int>[],
+        'operator_user_ids': operatorUserIds ?? const <int>[],
+        'order_status': orderStatus,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return ProductionManualExportResult.fromJson(data);
+  }
+
   Future<List<ProductionProductOption>> listProductOptions() async {
     final uri = Uri.parse(
       '${session.baseUrl}/products',
@@ -661,9 +797,41 @@ class ProductionService {
         return 'Pipeline Processes';
       case 'review_remark':
         return 'Review Remark';
+      case 'stat_mode':
+        return 'Stat Mode';
+      case 'end_date':
+        return 'End Date';
+      case 'product_ids':
+        return 'Products';
+      case 'stage_ids':
+        return 'Stages';
+      case 'process_ids':
+        return 'Processes';
+      case 'operator_user_ids':
+        return 'Operators';
+      case 'order_status':
+        return 'Order Status';
       default:
         return null;
     }
+  }
+
+  void _appendIntListQuery(
+    Map<String, String> query,
+    String key,
+    List<int>? values,
+  ) {
+    if (values == null || values.isEmpty) {
+      return;
+    }
+    final tokens = values
+        .where((value) => value > 0)
+        .map((value) => value.toString())
+        .toList();
+    if (tokens.isEmpty) {
+      return;
+    }
+    query[key] = tokens.join(',');
   }
 
   String? _formatDateOrNull(DateTime? value) {

@@ -363,6 +363,131 @@ void main() {
             },
           },
         ),
+        'GET /production/data/today-realtime': (request) {
+          expect(request.uri.queryParameters['stat_mode'], 'sub_order');
+          expect(request.uri.queryParameters['product_ids'], '10');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'stat_mode': 'sub_order',
+                'summary': {
+                  'total_products': 1,
+                  'total_quantity': 300,
+                },
+                'table_rows': [
+                  {
+                    'product_id': 10,
+                    'product_name': 'Product-A',
+                    'quantity': 300,
+                    'latest_time': '2026-03-01T00:00:00Z',
+                    'latest_time_text': '2026-03-01 08:00:00',
+                  },
+                ],
+                'chart_data': [
+                  {'label': 'Product-A', 'value': 300},
+                ],
+                'query_signature': '{"view":"today_realtime"}',
+              },
+            },
+          );
+        },
+        'GET /production/data/unfinished-progress': (request) {
+          expect(request.uri.queryParameters['order_status'], 'in_progress');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'summary': {
+                  'total_orders': 1,
+                  'avg_progress_percent': 40.0,
+                },
+                'table_rows': [
+                  {
+                    'order_id': 1,
+                    'order_code': 'PO-1',
+                    'product_id': 10,
+                    'product_name': 'Product-A',
+                    'order_status': 'in_progress',
+                    'process_count': 2,
+                    'produced_total': 80,
+                    'target_total': 200,
+                    'progress_percent': 40.0,
+                  },
+                ],
+                'query_signature': '{"view":"unfinished_progress"}',
+              },
+            },
+          );
+        },
+        'GET /production/data/manual': (request) {
+          expect(request.uri.queryParameters['stat_mode'], 'main_order');
+          expect(request.uri.queryParameters['start_date'], '2026-03-01');
+          expect(request.uri.queryParameters['end_date'], '2026-03-02');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'stat_mode': 'main_order',
+                'summary': {
+                  'rows': 1,
+                  'filtered_total': 20,
+                  'time_range_total': 30,
+                  'ratio_percent': 66.67,
+                },
+                'table_rows': [
+                  {
+                    'order_id': 1,
+                    'order_code': 'PO-1',
+                    'product_id': 10,
+                    'product_name': 'Product-A',
+                    'stage_id': 1,
+                    'stage_code': '01',
+                    'stage_name': 'Cut-Stage',
+                    'process_id': 2,
+                    'process_code': '01-01',
+                    'process_name': 'Cut',
+                    'operator_user_id': 8,
+                    'operator_username': 'worker',
+                    'quantity': 20,
+                    'production_time': '2026-03-01T00:00:00Z',
+                    'production_time_text': '2026-03-01 08:00:00',
+                    'order_status': 'in_progress',
+                  },
+                ],
+                'chart_data': {
+                  'single_day': false,
+                  'model_output': [
+                    {'product_name': 'Product-A', 'quantity': 20},
+                  ],
+                  'trend_output': [
+                    {'bucket': '2026-03-01', 'quantity': 20},
+                  ],
+                  'pie_output': [
+                    {'name': '筛选结果', 'quantity': 20},
+                    {'name': '其余产量', 'quantity': 10},
+                  ],
+                },
+                'query_signature': '{"view":"manual"}',
+              },
+            },
+          );
+        },
+        'POST /production/data/manual/export': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['stat_mode'], 'main_order');
+          expect(body['product_ids'], [10]);
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'file_name': 'production_manual.csv',
+                'mime_type': 'text/csv',
+                'content_base64': 'YWJj',
+              },
+            },
+          );
+        },
         'GET /products': (_) => TestResponse.json(
           200,
           body: {
@@ -542,6 +667,22 @@ void main() {
       final overview = await service.getOverviewStats();
       final processStats = await service.getProcessStats();
       final operatorStats = await service.getOperatorStats();
+      final todayData = await service.getTodayRealtimeData(
+        statMode: 'sub_order',
+        productIds: const [10],
+      );
+      final unfinishedData = await service.getUnfinishedProgressData(
+        orderStatus: 'in_progress',
+      );
+      final manualData = await service.getManualProductionData(
+        statMode: 'main_order',
+        startDate: DateTime(2026, 3, 1),
+        endDate: DateTime(2026, 3, 2),
+      );
+      final manualExport = await service.exportManualProductionData(
+        statMode: 'main_order',
+        productIds: const [10],
+      );
       final productOptions = await service.listProductOptions();
       final processOptions = await service.listProcessOptions();
       final assistUsers = await service.listAssistUserOptions(
@@ -580,13 +721,17 @@ void main() {
       expect(overview.totalOrders, 10);
       expect(processStats.single.processName, 'Cut');
       expect(operatorStats.single.operatorUsername, 'worker');
+      expect(todayData.summary.totalQuantity, 300);
+      expect(unfinishedData.tableRows.single.progressPercent, 40.0);
+      expect(manualData.tableRows.single.quantity, 20);
+      expect(manualExport.fileName, 'production_manual.csv');
       expect(productOptions.single.id, 10);
       expect(processOptions.single.code, '01-01');
       expect(assistUsers.items.length, 2);
       expect(assistList.total, 1);
       expect(assistCreated.id, 100);
       expect(assistReviewed.status, 'approved');
-      expect(server.requests.length, 21);
+      expect(server.requests.length, 25);
     });
 
     test('throws ApiException on backend errors', () async {

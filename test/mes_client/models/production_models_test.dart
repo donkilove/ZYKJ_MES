@@ -219,4 +219,104 @@ void main() {
     expect(step.toJson(), {'step_order': 1, 'stage_id': 1, 'process_id': 3});
     expect(MyOrderListResult(total: 1, items: [myOrder]).items.single.orderId, 9);
   });
+
+  test('production data query models parse today/unfinished/manual payloads', () {
+    final today = ProductionTodayRealtimeResult.fromJson({
+      'stat_mode': 'main_order',
+      'summary': {
+        'total_products': 1,
+        'total_quantity': 20,
+      },
+      'table_rows': [
+        {
+          'product_id': 1,
+          'product_name': '产品A',
+          'quantity': 20,
+          'latest_time': '2026-03-02T08:00:00Z',
+          'latest_time_text': '2026-03-02 16:00:00',
+        },
+      ],
+      'chart_data': [
+        {'label': '产品A', 'value': 20},
+      ],
+      'query_signature': '{"view":"today_realtime"}',
+    });
+
+    final unfinished = ProductionUnfinishedProgressResult.fromJson({
+      'summary': {
+        'total_orders': 2,
+        'avg_progress_percent': 34.5,
+      },
+      'table_rows': [
+        {
+          'order_id': 11,
+          'order_code': 'PO-11',
+          'product_id': 1,
+          'product_name': '产品A',
+          'order_status': 'in_progress',
+          'process_count': 3,
+          'produced_total': 120,
+          'target_total': 300,
+          'progress_percent': 40.0,
+        },
+      ],
+      'query_signature': '{"view":"unfinished_progress"}',
+    });
+
+    final manual = ProductionManualQueryResult.fromJson({
+      'stat_mode': 'sub_order',
+      'summary': {
+        'rows': 1,
+        'filtered_total': 15,
+        'time_range_total': 20,
+        'ratio_percent': 75,
+      },
+      'table_rows': [
+        {
+          'order_id': 12,
+          'order_code': 'PO-12',
+          'product_id': 2,
+          'product_name': '产品B',
+          'stage_id': 1,
+          'stage_code': '01',
+          'stage_name': '切割段',
+          'process_id': 3,
+          'process_code': '01-01',
+          'process_name': '切割',
+          'operator_user_id': 9,
+          'operator_username': 'worker',
+          'quantity': 15,
+          'production_time': '2026-03-02T10:00:00Z',
+          'production_time_text': '2026-03-02 18:00:00',
+          'order_status': 'in_progress',
+        },
+      ],
+      'chart_data': {
+        'single_day': true,
+        'model_output': [
+          {'product_name': '产品B', 'quantity': 15},
+        ],
+        'trend_output': [
+          {'bucket': '10:00', 'quantity': 15},
+        ],
+        'pie_output': [
+          {'name': '筛选结果', 'quantity': 15},
+          {'name': '其余产量', 'quantity': 5},
+        ],
+      },
+      'query_signature': '{"view":"manual"}',
+    });
+
+    final export = ProductionManualExportResult.fromJson({
+      'file_name': 'production_manual_20260302_100000.csv',
+      'mime_type': 'text/csv',
+      'content_base64': 'YWJj',
+    });
+
+    expect(today.summary.totalQuantity, 20);
+    expect(today.tableRows.single.latestTimeText, contains('2026-03-02'));
+    expect(unfinished.tableRows.single.targetTotal, 300);
+    expect(manual.chartData.pieOutput.length, 2);
+    expect(export.fileName, contains('.csv'));
+  });
 }

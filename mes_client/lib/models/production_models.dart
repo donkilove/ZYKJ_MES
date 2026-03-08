@@ -748,6 +748,408 @@ class ProductionOperatorStatItem {
   }
 }
 
+class ProductionTodayRealtimeRow {
+  ProductionTodayRealtimeRow({
+    required this.productId,
+    required this.productName,
+    required this.quantity,
+    required this.latestTime,
+    required this.latestTimeText,
+  });
+
+  final int productId;
+  final String productName;
+  final int quantity;
+  final DateTime? latestTime;
+  final String latestTimeText;
+
+  factory ProductionTodayRealtimeRow.fromJson(Map<String, dynamic> json) {
+    return ProductionTodayRealtimeRow(
+      productId: (json['product_id'] as int?) ?? 0,
+      productName: (json['product_name'] as String?) ?? '',
+      quantity: (json['quantity'] as int?) ?? 0,
+      latestTime: _parseDateOrNull(json['latest_time']),
+      latestTimeText: (json['latest_time_text'] as String?) ?? '',
+    );
+  }
+}
+
+class ProductionTodayRealtimeChartItem {
+  ProductionTodayRealtimeChartItem({required this.label, required this.value});
+
+  final String label;
+  final int value;
+
+  factory ProductionTodayRealtimeChartItem.fromJson(Map<String, dynamic> json) {
+    return ProductionTodayRealtimeChartItem(
+      label: (json['label'] as String?) ?? '',
+      value: (json['value'] as int?) ?? 0,
+    );
+  }
+}
+
+class ProductionTodayRealtimeSummary {
+  ProductionTodayRealtimeSummary({
+    required this.totalProducts,
+    required this.totalQuantity,
+  });
+
+  final int totalProducts;
+  final int totalQuantity;
+
+  factory ProductionTodayRealtimeSummary.fromJson(Map<String, dynamic> json) {
+    return ProductionTodayRealtimeSummary(
+      totalProducts: (json['total_products'] as int?) ?? 0,
+      totalQuantity: (json['total_quantity'] as int?) ?? 0,
+    );
+  }
+}
+
+class ProductionTodayRealtimeResult {
+  ProductionTodayRealtimeResult({
+    required this.statMode,
+    required this.summary,
+    required this.tableRows,
+    required this.chartData,
+    required this.querySignature,
+  });
+
+  final String statMode;
+  final ProductionTodayRealtimeSummary summary;
+  final List<ProductionTodayRealtimeRow> tableRows;
+  final List<ProductionTodayRealtimeChartItem> chartData;
+  final String querySignature;
+
+  factory ProductionTodayRealtimeResult.fromJson(Map<String, dynamic> json) {
+    return ProductionTodayRealtimeResult(
+      statMode: (json['stat_mode'] as String?) ?? 'main_order',
+      summary: ProductionTodayRealtimeSummary.fromJson(
+        json['summary'] as Map<String, dynamic>? ?? const {},
+      ),
+      tableRows: (json['table_rows'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) =>
+                ProductionTodayRealtimeRow.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(),
+      chartData: (json['chart_data'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => ProductionTodayRealtimeChartItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+      querySignature: (json['query_signature'] as String?) ?? '',
+    );
+  }
+}
+
+class ProductionUnfinishedProgressRow {
+  ProductionUnfinishedProgressRow({
+    required this.orderId,
+    required this.orderCode,
+    required this.productId,
+    required this.productName,
+    required this.orderStatus,
+    required this.processCount,
+    required this.producedTotal,
+    required this.targetTotal,
+    required this.progressPercent,
+  });
+
+  final int orderId;
+  final String orderCode;
+  final int productId;
+  final String productName;
+  final String orderStatus;
+  final int processCount;
+  final int producedTotal;
+  final int targetTotal;
+  final double progressPercent;
+
+  factory ProductionUnfinishedProgressRow.fromJson(Map<String, dynamic> json) {
+    return ProductionUnfinishedProgressRow(
+      orderId: (json['order_id'] as int?) ?? 0,
+      orderCode: (json['order_code'] as String?) ?? '',
+      productId: (json['product_id'] as int?) ?? 0,
+      productName: (json['product_name'] as String?) ?? '',
+      orderStatus: (json['order_status'] as String?) ?? '',
+      processCount: (json['process_count'] as int?) ?? 0,
+      producedTotal: (json['produced_total'] as int?) ?? 0,
+      targetTotal: (json['target_total'] as int?) ?? 0,
+      progressPercent: ((json['progress_percent'] as num?) ?? 0).toDouble(),
+    );
+  }
+}
+
+class ProductionUnfinishedProgressSummary {
+  ProductionUnfinishedProgressSummary({
+    required this.totalOrders,
+    required this.avgProgressPercent,
+  });
+
+  final int totalOrders;
+  final double avgProgressPercent;
+
+  factory ProductionUnfinishedProgressSummary.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ProductionUnfinishedProgressSummary(
+      totalOrders: (json['total_orders'] as int?) ?? 0,
+      avgProgressPercent: ((json['avg_progress_percent'] as num?) ?? 0)
+          .toDouble(),
+    );
+  }
+}
+
+class ProductionUnfinishedProgressResult {
+  ProductionUnfinishedProgressResult({
+    required this.summary,
+    required this.tableRows,
+    required this.querySignature,
+  });
+
+  final ProductionUnfinishedProgressSummary summary;
+  final List<ProductionUnfinishedProgressRow> tableRows;
+  final String querySignature;
+
+  factory ProductionUnfinishedProgressResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return ProductionUnfinishedProgressResult(
+      summary: ProductionUnfinishedProgressSummary.fromJson(
+        json['summary'] as Map<String, dynamic>? ?? const {},
+      ),
+      tableRows: (json['table_rows'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) =>
+                ProductionUnfinishedProgressRow.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(),
+      querySignature: (json['query_signature'] as String?) ?? '',
+    );
+  }
+}
+
+class ProductionManualRow {
+  ProductionManualRow({
+    required this.orderId,
+    required this.orderCode,
+    required this.productId,
+    required this.productName,
+    required this.stageId,
+    required this.stageCode,
+    required this.stageName,
+    required this.processId,
+    required this.processCode,
+    required this.processName,
+    required this.operatorUserId,
+    required this.operatorUsername,
+    required this.quantity,
+    required this.productionTime,
+    required this.productionTimeText,
+    required this.orderStatus,
+  });
+
+  final int orderId;
+  final String orderCode;
+  final int productId;
+  final String productName;
+  final int? stageId;
+  final String? stageCode;
+  final String? stageName;
+  final int processId;
+  final String processCode;
+  final String processName;
+  final int? operatorUserId;
+  final String operatorUsername;
+  final int quantity;
+  final DateTime? productionTime;
+  final String productionTimeText;
+  final String orderStatus;
+
+  factory ProductionManualRow.fromJson(Map<String, dynamic> json) {
+    return ProductionManualRow(
+      orderId: (json['order_id'] as int?) ?? 0,
+      orderCode: (json['order_code'] as String?) ?? '',
+      productId: (json['product_id'] as int?) ?? 0,
+      productName: (json['product_name'] as String?) ?? '',
+      stageId: json['stage_id'] as int?,
+      stageCode: json['stage_code'] as String?,
+      stageName: json['stage_name'] as String?,
+      processId: (json['process_id'] as int?) ?? 0,
+      processCode: (json['process_code'] as String?) ?? '',
+      processName: (json['process_name'] as String?) ?? '',
+      operatorUserId: json['operator_user_id'] as int?,
+      operatorUsername: (json['operator_username'] as String?) ?? '',
+      quantity: (json['quantity'] as int?) ?? 0,
+      productionTime: _parseDateOrNull(json['production_time']),
+      productionTimeText: (json['production_time_text'] as String?) ?? '',
+      orderStatus: (json['order_status'] as String?) ?? '',
+    );
+  }
+}
+
+class ProductionManualModelChartItem {
+  ProductionManualModelChartItem({
+    required this.productName,
+    required this.quantity,
+  });
+
+  final String productName;
+  final int quantity;
+
+  factory ProductionManualModelChartItem.fromJson(Map<String, dynamic> json) {
+    return ProductionManualModelChartItem(
+      productName: (json['product_name'] as String?) ?? '',
+      quantity: (json['quantity'] as int?) ?? 0,
+    );
+  }
+}
+
+class ProductionManualTrendChartItem {
+  ProductionManualTrendChartItem({required this.bucket, required this.quantity});
+
+  final String bucket;
+  final int quantity;
+
+  factory ProductionManualTrendChartItem.fromJson(Map<String, dynamic> json) {
+    return ProductionManualTrendChartItem(
+      bucket: (json['bucket'] as String?) ?? '',
+      quantity: (json['quantity'] as int?) ?? 0,
+    );
+  }
+}
+
+class ProductionManualPieChartItem {
+  ProductionManualPieChartItem({required this.name, required this.quantity});
+
+  final String name;
+  final int quantity;
+
+  factory ProductionManualPieChartItem.fromJson(Map<String, dynamic> json) {
+    return ProductionManualPieChartItem(
+      name: (json['name'] as String?) ?? '',
+      quantity: (json['quantity'] as int?) ?? 0,
+    );
+  }
+}
+
+class ProductionManualChartData {
+  ProductionManualChartData({
+    required this.singleDay,
+    required this.modelOutput,
+    required this.trendOutput,
+    required this.pieOutput,
+  });
+
+  final bool singleDay;
+  final List<ProductionManualModelChartItem> modelOutput;
+  final List<ProductionManualTrendChartItem> trendOutput;
+  final List<ProductionManualPieChartItem> pieOutput;
+
+  factory ProductionManualChartData.fromJson(Map<String, dynamic> json) {
+    return ProductionManualChartData(
+      singleDay: (json['single_day'] as bool?) ?? false,
+      modelOutput: (json['model_output'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => ProductionManualModelChartItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+      trendOutput: (json['trend_output'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => ProductionManualTrendChartItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+      pieOutput: (json['pie_output'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) =>
+                ProductionManualPieChartItem.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(),
+    );
+  }
+}
+
+class ProductionManualSummary {
+  ProductionManualSummary({
+    required this.rows,
+    required this.filteredTotal,
+    required this.timeRangeTotal,
+    required this.ratioPercent,
+  });
+
+  final int rows;
+  final int filteredTotal;
+  final int timeRangeTotal;
+  final double ratioPercent;
+
+  factory ProductionManualSummary.fromJson(Map<String, dynamic> json) {
+    return ProductionManualSummary(
+      rows: (json['rows'] as int?) ?? 0,
+      filteredTotal: (json['filtered_total'] as int?) ?? 0,
+      timeRangeTotal: (json['time_range_total'] as int?) ?? 0,
+      ratioPercent: ((json['ratio_percent'] as num?) ?? 0).toDouble(),
+    );
+  }
+}
+
+class ProductionManualQueryResult {
+  ProductionManualQueryResult({
+    required this.statMode,
+    required this.summary,
+    required this.tableRows,
+    required this.chartData,
+    required this.querySignature,
+  });
+
+  final String statMode;
+  final ProductionManualSummary summary;
+  final List<ProductionManualRow> tableRows;
+  final ProductionManualChartData chartData;
+  final String querySignature;
+
+  factory ProductionManualQueryResult.fromJson(Map<String, dynamic> json) {
+    return ProductionManualQueryResult(
+      statMode: (json['stat_mode'] as String?) ?? 'main_order',
+      summary: ProductionManualSummary.fromJson(
+        json['summary'] as Map<String, dynamic>? ?? const {},
+      ),
+      tableRows: (json['table_rows'] as List<dynamic>? ?? const [])
+          .map((entry) => ProductionManualRow.fromJson(entry as Map<String, dynamic>))
+          .toList(),
+      chartData: ProductionManualChartData.fromJson(
+        json['chart_data'] as Map<String, dynamic>? ?? const {},
+      ),
+      querySignature: (json['query_signature'] as String?) ?? '',
+    );
+  }
+}
+
+class ProductionManualExportResult {
+  ProductionManualExportResult({
+    required this.fileName,
+    required this.mimeType,
+    required this.contentBase64,
+  });
+
+  final String fileName;
+  final String mimeType;
+  final String contentBase64;
+
+  factory ProductionManualExportResult.fromJson(Map<String, dynamic> json) {
+    return ProductionManualExportResult(
+      fileName: (json['file_name'] as String?) ?? '',
+      mimeType: (json['mime_type'] as String?) ?? 'text/csv',
+      contentBase64: (json['content_base64'] as String?) ?? '',
+    );
+  }
+}
+
 class ProductionProductOption {
   ProductionProductOption({required this.id, required this.name});
 
