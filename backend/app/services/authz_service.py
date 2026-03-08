@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import defaultdict
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,13 +10,15 @@ from app.core.authz_catalog import (
     PERMISSION_CATALOG,
     PermissionCatalogItem,
     default_permission_granted,
-    list_permission_catalog,
 )
-from app.core.rbac import ROLE_SYSTEM_ADMIN
+from app.core.rbac import ROLE_DEFINITIONS, ROLE_SYSTEM_ADMIN
 from app.models.permission_catalog import PermissionCatalog
 from app.models.role import Role
 from app.models.role_permission_grant import RolePermissionGrant
 from app.models.user import User
+
+
+ROLE_SORT_ORDER = {str(item["code"]): index for index, item in enumerate(ROLE_DEFINITIONS)}
 
 
 def _ensure_role_rows(db: Session) -> None:
@@ -135,6 +139,62 @@ def list_permission_catalog_rows(
     return db.execute(stmt).scalars().all()
 
 
+def list_permission_modules(db: Session) -> list[str]:
+    rows = list_permission_catalog_rows(db)
+    return sorted({row.module_code for row in rows if row.module_code})
+
+
+def _normalize_module_code(module_code: str) -> str:
+    normalized = module_code.strip()
+    if not normalized:
+        raise ValueError("module_code is required")
+    return normalized
+
+
+def _role_sort_key(role: Role) -> tuple[int, str]:
+    return ROLE_SORT_ORDER.get(role.code, 9999), role.code
+
+
+def _normalize_requested_permission_codes(
+    *,
+    granted_permission_codes: list[str],
+    valid_codes: set[str],
+) -> set[str]:
+    target_codes = {code.strip() for code in granted_permission_codes if code and code.strip()}
+    invalid_codes = sorted(target_codes.difference(valid_codes))
+    if invalid_codes:
+        raise ValueError(f"invalid permission codes: {', '.join(invalid_codes)}")
+    return target_codes
+
+
+def _normalize_permission_codes_with_dependencies(
+    *,
+    requested_codes: set[str],
+    parent_by_code: dict[str, str | None],
+) -> tuple[set[str], list[str], list[str]]:
+    normalized = set(requested_codes)
+    auto_granted: set[str] = set()
+
+    changed = True
+    while changed:
+        changed = False
+        for permission_code in list(normalized):
+            parent_code = parent_by_code.get(permission_code)
+            if parent_code and parent_code not in normalized:
+                normalized.add(parent_code)
+                auto_granted.add(parent_code)
+                changed = True
+
+    return normalized, sorted(auto_granted), []
+
+
+def _list_catalog_rows_by_module(db: Session, *, module_code: str) -> list[PermissionCatalog]:
+    rows = list_permission_catalog_rows(db, module_code=module_code)
+    if not rows:
+        raise ValueError(f"module_code is invalid: {module_code}")
+    return rows
+
+
 def _user_role_codes(user: User) -> list[str]:
     return sorted({role.code for role in user.roles})
 
@@ -247,14 +307,27 @@ def get_role_permission_items(
 
     catalog_rows = list_permission_catalog_rows(db, module_code=module_code)
     catalog_codes = [row.permission_code for row in catalog_rows]
-
-    grant_rows = db.execute(
-        select(RolePermissionGrant).where(
-            RolePermissionGrant.role_code == role_code,
-            RolePermissionGrant.permission_code.in_(catalog_codes),
+    parent_by_code = {
+        row.permission_code: (
+            row.parent_permission_code if row.parent_permission_code in catalog_codes else None
         )
-    ).scalars().all()
-    granted_map = {row.permission_code: bool(row.granted) for row in grant_rows}
+        for row in catalog_rows
+    }
+
+    if role_code == ROLE_SYSTEM_ADMIN:
+        granted_codes = set(catalog_codes)
+    else:
+        grant_rows = db.execute(
+            select(RolePermissionGrant).where(
+                RolePermissionGrant.role_code == role_code,
+                RolePermissionGrant.permission_code.in_(catalog_codes),
+            )
+        ).scalars().all()
+        granted_codes = {row.permission_code for row in grant_rows if row.granted}
+        granted_codes, _, _ = _normalize_permission_codes_with_dependencies(
+            requested_codes=granted_codes,
+            parent_by_code=parent_by_code,
+        )
 
     items: list[dict[str, object]] = []
     for row in catalog_rows:
@@ -267,11 +340,219 @@ def get_role_permission_items(
                 "module_code": row.module_code,
                 "resource_type": row.resource_type,
                 "parent_permission_code": row.parent_permission_code,
-                "granted": bool(granted_map.get(row.permission_code, False)),
+                "granted": row.permission_code in granted_codes,
                 "is_enabled": bool(row.is_enabled),
             }
         )
     return role_row.name, items
+
+
+def get_role_permission_matrix(
+    db: Session,
+    *,
+    module_code: str,
+) -> dict[str, object]:
+    normalized_module = _normalize_module_code(module_code)
+    ensure_authz_defaults(db)
+    catalog_rows = _list_catalog_rows_by_module(db, module_code=normalized_module)
+    module_codes = list_permission_modules(db)
+    valid_codes = [row.permission_code for row in catalog_rows]
+
+    role_rows = db.execute(select(Role)).scalars().all()
+    role_rows.sort(key=_role_sort_key)
+    role_codes = [row.code for row in role_rows]
+
+    grants_by_role: dict[str, set[str]] = defaultdict(set)
+    if role_codes and valid_codes:
+        grant_rows = db.execute(
+            select(RolePermissionGrant).where(
+                RolePermissionGrant.role_code.in_(role_codes),
+                RolePermissionGrant.permission_code.in_(valid_codes),
+                RolePermissionGrant.granted.is_(True),
+            )
+        ).scalars().all()
+        for row in grant_rows:
+            grants_by_role[row.role_code].add(row.permission_code)
+
+    role_items: list[dict[str, object]] = []
+    for role_row in role_rows:
+        readonly = role_row.code == ROLE_SYSTEM_ADMIN
+        granted_codes = sorted(valid_codes if readonly else grants_by_role.get(role_row.code, set()))
+        role_items.append(
+            {
+                "role_code": role_row.code,
+                "role_name": role_row.name,
+                "readonly": readonly,
+                "is_system_admin": readonly,
+                "granted_permission_codes": granted_codes,
+            }
+        )
+
+    return {
+        "module_code": normalized_module,
+        "module_codes": module_codes,
+        "permissions": [
+            {
+                "permission_code": row.permission_code,
+                "permission_name": row.permission_name,
+                "module_code": row.module_code,
+                "resource_type": row.resource_type,
+                "parent_permission_code": row.parent_permission_code,
+                "is_enabled": bool(row.is_enabled),
+            }
+            for row in catalog_rows
+        ],
+        "role_items": role_items,
+    }
+
+
+def update_role_permission_matrix(
+    db: Session,
+    *,
+    module_code: str,
+    role_items: list[dict[str, object]],
+    dry_run: bool = False,
+    operator: User | None,
+    remark: str | None = None,
+) -> dict[str, object]:
+    _ = operator
+    _ = remark
+    normalized_module = _normalize_module_code(module_code)
+
+    ensure_authz_defaults(db)
+    catalog_rows = _list_catalog_rows_by_module(db, module_code=normalized_module)
+    valid_codes = {row.permission_code for row in catalog_rows}
+    parent_by_code = {
+        row.permission_code: (
+            row.parent_permission_code if row.parent_permission_code in valid_codes else None
+        )
+        for row in catalog_rows
+    }
+
+    role_rows = db.execute(select(Role)).scalars().all()
+    role_map = {row.code: row for row in role_rows}
+    role_input_map: dict[str, set[str]] = {}
+    for item in role_items:
+        role_code = str(item.get("role_code", "")).strip()
+        if not role_code:
+            raise ValueError("role_code is required")
+        if role_code in role_input_map:
+            raise ValueError(f"duplicate role_code: {role_code}")
+        if role_code not in role_map:
+            raise ValueError(f"Role not found: {role_code}")
+        raw_codes = item.get("granted_permission_codes")
+        if raw_codes is None:
+            requested_codes: list[str] = []
+        elif isinstance(raw_codes, list):
+            requested_codes = [str(code) for code in raw_codes]
+        else:
+            raise ValueError(f"invalid granted_permission_codes for role: {role_code}")
+        role_input_map[role_code] = _normalize_requested_permission_codes(
+            granted_permission_codes=requested_codes,
+            valid_codes=valid_codes,
+        )
+
+    if not role_input_map:
+        if dry_run:
+            db.rollback()
+        else:
+            db.rollback()
+        return {
+            "module_code": normalized_module,
+            "dry_run": dry_run,
+            "role_results": [],
+        }
+
+    selected_role_codes = sorted(role_input_map.keys())
+    grant_rows = db.execute(
+        select(RolePermissionGrant).where(
+            RolePermissionGrant.role_code.in_(selected_role_codes),
+            RolePermissionGrant.permission_code.in_(valid_codes),
+        )
+    ).scalars().all()
+    row_by_key = {(row.role_code, row.permission_code): row for row in grant_rows}
+    granted_before_by_role: dict[str, set[str]] = defaultdict(set)
+    for row in grant_rows:
+        if row.granted:
+            granted_before_by_role[row.role_code].add(row.permission_code)
+
+    role_results: list[dict[str, object]] = []
+    total_updated_count = 0
+    ordered_role_codes = sorted(selected_role_codes, key=lambda code: _role_sort_key(role_map[code]))
+    valid_codes_sorted = sorted(valid_codes)
+
+    for role_code in ordered_role_codes:
+        role_row = role_map[role_code]
+        is_system_admin = role_code == ROLE_SYSTEM_ADMIN
+        before_codes = set(valid_codes if is_system_admin else granted_before_by_role.get(role_code, set()))
+        requested_codes = role_input_map[role_code]
+        if is_system_admin:
+            after_codes = set(valid_codes)
+            auto_granted: list[str] = []
+            auto_revoked: list[str] = []
+            ignored_input = True
+        else:
+            after_codes, auto_granted, auto_revoked = _normalize_permission_codes_with_dependencies(
+                requested_codes=requested_codes,
+                parent_by_code=parent_by_code,
+            )
+            ignored_input = False
+
+        added_codes = sorted(after_codes.difference(before_codes))
+        removed_codes = sorted(before_codes.difference(after_codes))
+        updated_count = 0
+
+        if not dry_run and not is_system_admin:
+            for permission_code in valid_codes_sorted:
+                should_grant = permission_code in after_codes
+                row = row_by_key.get((role_code, permission_code))
+                if row is None:
+                    if should_grant:
+                        db.add(
+                            RolePermissionGrant(
+                                role_code=role_code,
+                                permission_code=permission_code,
+                                granted=True,
+                            )
+                        )
+                        updated_count += 1
+                    continue
+                if bool(row.granted) != should_grant:
+                    row.granted = should_grant
+                    updated_count += 1
+        else:
+            updated_count = len(added_codes) + len(removed_codes)
+
+        total_updated_count += updated_count
+        role_results.append(
+            {
+                "role_code": role_code,
+                "role_name": role_row.name,
+                "readonly": is_system_admin,
+                "is_system_admin": is_system_admin,
+                "ignored_input": ignored_input,
+                "before_permission_codes": sorted(before_codes),
+                "after_permission_codes": sorted(after_codes),
+                "added_permission_codes": added_codes,
+                "removed_permission_codes": removed_codes,
+                "auto_granted_permission_codes": auto_granted,
+                "auto_revoked_permission_codes": auto_revoked,
+                "updated_count": updated_count,
+            }
+        )
+
+    if dry_run:
+        db.rollback()
+    elif total_updated_count > 0:
+        db.commit()
+    else:
+        db.rollback()
+
+    return {
+        "module_code": normalized_module,
+        "dry_run": dry_run,
+        "role_results": role_results,
+    }
 
 
 def replace_role_permissions_for_module(
@@ -283,60 +564,27 @@ def replace_role_permissions_for_module(
     operator: User | None,
     remark: str | None = None,
 ) -> tuple[int, list[str], list[str]]:
-    _ = operator
-    _ = remark
-    normalized_module = module_code.strip()
-    if not normalized_module:
-        raise ValueError("module_code is required")
-
-    ensure_authz_defaults(db)
-    role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
-    if role_row is None:
-        raise ValueError(f"Role not found: {role_code}")
-
-    catalog_items = list_permission_catalog(normalized_module)
-    if not catalog_items:
-        raise ValueError(f"module_code is invalid: {normalized_module}")
-    valid_codes = {item.permission_code for item in catalog_items}
-    target_codes = {code.strip() for code in granted_permission_codes if code and code.strip()}
-    invalid_codes = sorted(target_codes.difference(valid_codes))
-    if invalid_codes:
-        raise ValueError(f"invalid permission codes: {', '.join(invalid_codes)}")
-
-    rows = db.execute(
-        select(RolePermissionGrant).where(
-            RolePermissionGrant.role_code == role_code,
-            RolePermissionGrant.permission_code.in_(valid_codes),
-        )
-    ).scalars().all()
-    row_by_code = {row.permission_code: row for row in rows}
-
-    before_granted = sorted([row.permission_code for row in rows if row.granted])
-    updated_count = 0
-    for permission_code in sorted(valid_codes):
-        should_grant = permission_code in target_codes
-        row = row_by_code.get(permission_code)
-        if row is None:
-            db.add(
-                RolePermissionGrant(
-                    role_code=role_code,
-                    permission_code=permission_code,
-                    granted=should_grant,
-                )
-            )
-            updated_count += 1
-            continue
-        if bool(row.granted) != should_grant:
-            row.granted = should_grant
-            updated_count += 1
-
-    if updated_count > 0:
-        after_granted = sorted(target_codes)
-        db.commit()
-        return updated_count, before_granted, after_granted
-
-    db.rollback()
-    return 0, before_granted, before_granted
+    result = update_role_permission_matrix(
+        db,
+        module_code=module_code,
+        role_items=[
+            {
+                "role_code": role_code,
+                "granted_permission_codes": granted_permission_codes,
+            }
+        ],
+        dry_run=False,
+        operator=operator,
+        remark=remark,
+    )
+    role_results = result.get("role_results", [])
+    if not role_results:
+        return 0, [], []
+    role_result = role_results[0]
+    updated_count = int(role_result.get("updated_count", 0))
+    before_codes = [str(code) for code in role_result.get("before_permission_codes", [])]
+    after_codes = [str(code) for code in role_result.get("after_permission_codes", [])]
+    return updated_count, before_codes, after_codes
 
 
 def validate_permission_code(permission_code: str) -> PermissionCatalogItem:

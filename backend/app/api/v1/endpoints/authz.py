@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db, require_permission
@@ -12,6 +12,11 @@ from app.schemas.authz import (
     MyPermissionsResult,
     PermissionCatalogItem,
     PermissionCatalogResult,
+    RolePermissionMatrixItem,
+    RolePermissionMatrixResult,
+    RolePermissionMatrixRoleResult,
+    RolePermissionMatrixUpdateRequest,
+    RolePermissionMatrixUpdateResult,
     RolePermissionItem,
     RolePermissionResult,
     RolePermissionUpdateRequest,
@@ -20,9 +25,11 @@ from app.schemas.authz import (
 from app.schemas.common import ApiResponse, success_response
 from app.services.authz_service import (
     get_role_permission_items,
+    get_role_permission_matrix,
     get_user_permission_codes,
     list_permission_catalog_rows,
     replace_role_permissions_for_module,
+    update_role_permission_matrix,
 )
 
 
@@ -94,6 +101,76 @@ def get_role_permissions_api(
     )
 
 
+@router.get(
+    "/role-permissions/matrix",
+    response_model=ApiResponse[RolePermissionMatrixResult],
+)
+def get_role_permissions_matrix_api(
+    module: str = Query(min_length=2, max_length=64),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_VIEW)),
+) -> ApiResponse[RolePermissionMatrixResult]:
+    try:
+        payload = get_role_permission_matrix(
+            db,
+            module_code=module,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+
+    return success_response(
+        RolePermissionMatrixResult(
+            module_code=str(payload.get("module_code", "")),
+            module_codes=[str(code) for code in payload.get("module_codes", [])],
+            permissions=[
+                PermissionCatalogItem(**item)
+                for item in payload.get("permissions", [])
+                if isinstance(item, dict)
+            ],
+            role_items=[
+                RolePermissionMatrixItem(**item)
+                for item in payload.get("role_items", [])
+                if isinstance(item, dict)
+            ],
+        )
+    )
+
+
+@router.put(
+    "/role-permissions/matrix",
+    response_model=ApiResponse[RolePermissionMatrixUpdateResult],
+)
+def put_role_permissions_matrix_api(
+    payload: RolePermissionMatrixUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+) -> ApiResponse[RolePermissionMatrixUpdateResult]:
+    try:
+        result = update_role_permission_matrix(
+            db,
+            module_code=payload.module_code,
+            role_items=[item.model_dump() for item in payload.role_items],
+            dry_run=payload.dry_run,
+            operator=current_user,
+            remark=payload.remark,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+
+    return success_response(
+        RolePermissionMatrixUpdateResult(
+            module_code=str(result.get("module_code", "")),
+            dry_run=bool(result.get("dry_run", False)),
+            role_results=[
+                RolePermissionMatrixRoleResult(**item)
+                for item in result.get("role_results", [])
+                if isinstance(item, dict)
+            ],
+        ),
+        message="updated",
+    )
+
+
 @router.put(
     "/role-permissions/{role_code}",
     response_model=ApiResponse[RolePermissionUpdateResult],
@@ -104,14 +181,17 @@ def put_role_permissions_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[RolePermissionUpdateResult]:
-    updated_count, before_codes, after_codes = replace_role_permissions_for_module(
-        db,
-        role_code=role_code,
-        module_code=payload.module_code,
-        granted_permission_codes=payload.granted_permission_codes,
-        operator=current_user,
-        remark=payload.remark,
-    )
+    try:
+        updated_count, before_codes, after_codes = replace_role_permissions_for_module(
+            db,
+            role_code=role_code,
+            module_code=payload.module_code,
+            granted_permission_codes=payload.granted_permission_codes,
+            operator=current_user,
+            remark=payload.remark,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     return success_response(
         RolePermissionUpdateResult(
             role_code=role_code,

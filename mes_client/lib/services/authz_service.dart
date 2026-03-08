@@ -25,8 +25,9 @@ class AuthzService {
     if (moduleCode != null && moduleCode.trim().isNotEmpty) {
       query['module'] = moduleCode.trim();
     }
-    final uri = Uri.parse('$_basePath/permissions/me')
-        .replace(queryParameters: query.isEmpty ? null : query);
+    final uri = Uri.parse(
+      '$_basePath/permissions/me',
+    ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -36,7 +37,8 @@ class AuthzService {
       );
     }
     final data = body['data'] as Map<String, dynamic>;
-    return (data['permission_codes'] as List<dynamic>? ?? const []).cast<String>();
+    return (data['permission_codes'] as List<dynamic>? ?? const [])
+        .cast<String>();
   }
 
   Future<List<PermissionCatalogItem>> listPermissionCatalog({
@@ -46,8 +48,9 @@ class AuthzService {
     if (moduleCode != null && moduleCode.trim().isNotEmpty) {
       query['module'] = moduleCode.trim();
     }
-    final uri = Uri.parse('$_basePath/permissions/catalog')
-        .replace(queryParameters: query.isEmpty ? null : query);
+    final uri = Uri.parse(
+      '$_basePath/permissions/catalog',
+    ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -58,7 +61,10 @@ class AuthzService {
     }
     final data = body['data'] as Map<String, dynamic>;
     return (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => PermissionCatalogItem.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) =>
+              PermissionCatalogItem.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
   }
 
@@ -66,12 +72,9 @@ class AuthzService {
     required String roleCode,
     required String moduleCode,
   }) async {
-    final uri = Uri.parse('$_basePath/role-permissions').replace(
-      queryParameters: {
-        'role_code': roleCode,
-        'module': moduleCode,
-      },
-    );
+    final uri = Uri.parse(
+      '$_basePath/role-permissions',
+    ).replace(queryParameters: {'role_code': roleCode, 'module': moduleCode});
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -109,6 +112,61 @@ class AuthzService {
     }
     final data = body['data'] as Map<String, dynamic>;
     return RolePermissionUpdateResult.fromJson(data);
+  }
+
+  Future<RolePermissionMatrixResult> loadRolePermissionMatrix({
+    required String moduleCode,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/role-permissions/matrix',
+    ).replace(queryParameters: {'module': moduleCode});
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return RolePermissionMatrixResult.fromJson(data);
+  }
+
+  Future<RolePermissionMatrixUpdateResult> updateRolePermissionMatrix({
+    required String moduleCode,
+    required Map<String, List<String>> grantedByRoleCode,
+    bool dryRun = false,
+    String? remark,
+  }) async {
+    final roleCodes = grantedByRoleCode.keys.toList()..sort();
+    final uri = Uri.parse('$_basePath/role-permissions/matrix');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'module_code': moduleCode,
+        'dry_run': dryRun,
+        'role_items': roleCodes
+            .map(
+              (roleCode) => {
+                'role_code': roleCode,
+                'granted_permission_codes':
+                    grantedByRoleCode[roleCode] ?? const <String>[],
+              },
+            )
+            .toList(),
+        'remark': remark,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return RolePermissionMatrixUpdateResult.fromJson(data);
   }
 
   Map<String, dynamic> _decodeBody(http.Response response) {
