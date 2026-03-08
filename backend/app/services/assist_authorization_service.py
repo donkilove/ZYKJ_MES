@@ -6,7 +6,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.production_constants import ORDER_STATUS_COMPLETED, PROCESS_STATUS_COMPLETED
-from app.core.rbac import ROLE_PRODUCTION_ADMIN
+from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
@@ -201,7 +201,7 @@ def list_assist_authorizations(
             raise ValueError("Invalid assist authorization status")
         stmt = stmt.where(ProductionAssistAuthorization.status == status)
 
-    if not _has_role(current_user, ROLE_PRODUCTION_ADMIN):
+    if not (_has_role(current_user, ROLE_PRODUCTION_ADMIN) or _has_role(current_user, ROLE_SYSTEM_ADMIN)):
         stmt = stmt.where(
             or_(
                 ProductionAssistAuthorization.requester_user_id == current_user.id,

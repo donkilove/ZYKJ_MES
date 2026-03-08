@@ -524,6 +524,7 @@ def _build_manual_rows(
 def _build_manual_chart_data(
     table_rows: list[dict[str, Any]],
     *,
+    filtered_records: list[ProductionRecord],
     start_date: date,
     end_date: date,
 ) -> dict[str, Any]:
@@ -539,12 +540,11 @@ def _build_manual_chart_data(
     single_day = start_date == end_date
     if single_day:
         hour_counter = {index: 0 for index in range(24)}
-        for row in table_rows:
-            production_time = row.get("production_time")
-            if isinstance(production_time, datetime):
-                hour_counter[int(production_time.hour)] = int(hour_counter[int(production_time.hour)]) + int(
-                    row.get("quantity", 0) or 0
-                )
+        for record in filtered_records:
+            if not isinstance(record.created_at, datetime):
+                continue
+            local_time = record.created_at.astimezone() if record.created_at.tzinfo is not None else record.created_at
+            hour_counter[int(local_time.hour)] = int(hour_counter[int(local_time.hour)]) + int(record.production_quantity or 0)
         trend_output = [
             {"bucket": f"{hour:02d}:00", "quantity": int(hour_counter[hour])}
             for hour in range(24)
@@ -556,12 +556,13 @@ def _build_manual_chart_data(
             key = cursor.strftime("%Y-%m-%d")
             day_counter[key] = 0
             cursor += timedelta(days=1)
-        for row in table_rows:
-            production_time = row.get("production_time")
-            if isinstance(production_time, datetime):
-                key = production_time.strftime("%Y-%m-%d")
-                if key in day_counter:
-                    day_counter[key] = int(day_counter[key]) + int(row.get("quantity", 0) or 0)
+        for record in filtered_records:
+            if not isinstance(record.created_at, datetime):
+                continue
+            local_time = record.created_at.astimezone() if record.created_at.tzinfo is not None else record.created_at
+            key = local_time.strftime("%Y-%m-%d")
+            if key in day_counter:
+                day_counter[key] = int(day_counter[key]) + int(record.production_quantity or 0)
         trend_output = [
             {"bucket": key, "quantity": int(value)}
             for key, value in sorted(day_counter.items(), key=lambda item: item[0])
@@ -592,6 +593,15 @@ def get_manual_production_data(
     )
     order_ids = {row.order_id for row in rows}
     last_process_order_map = _build_last_process_order_map(db, order_ids=order_ids)
+    filtered_records = [
+        row
+        for row in rows
+        if _record_matches_common_filters(
+            row,
+            filters=filters,
+            last_process_order_map=last_process_order_map,
+        )
+    ]
     table_rows = _build_manual_rows(
         rows,
         filters=filters,
@@ -609,6 +619,7 @@ def get_manual_production_data(
 
     chart_data = _build_manual_chart_data(
         table_rows,
+        filtered_records=filtered_records,
         start_date=filters.start_date,
         end_date=filters.end_date,
     )

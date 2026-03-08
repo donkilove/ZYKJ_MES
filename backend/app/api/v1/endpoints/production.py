@@ -600,6 +600,7 @@ def get_my_orders_api(
 def get_my_order_context_api(
     order_id: int,
     view_mode: str = "own",
+    order_process_id: int | None = None,
     proxy_operator_user_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(
@@ -608,10 +609,13 @@ def get_my_order_context_api(
 ) -> ApiResponse[MyOrderContextResult]:
     if proxy_operator_user_id is not None and proxy_operator_user_id <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="proxy_operator_user_id must be > 0")
+    if order_process_id is not None and order_process_id <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="order_process_id must be > 0")
     try:
         item = get_my_order_context(
             db,
             order_id=order_id,
+            order_process_id=order_process_id,
             current_user=current_user,
             view_mode=view_mode,
             proxy_operator_user_id=proxy_operator_user_id,
@@ -1142,7 +1146,7 @@ def get_assist_user_options_api(
     keyword: str | None = Query(default=None),
     role_code: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_OPERATOR])),
 ) -> ApiResponse[AssistUserOptionListResult]:
     allowed_role_codes = {
         ROLE_SYSTEM_ADMIN,

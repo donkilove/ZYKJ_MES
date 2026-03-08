@@ -738,3 +738,89 @@ def test_order_detail_access_and_my_order_context(db, factory) -> None:
         order_id=order.id,
         current_user=admin,
     )
+
+
+def test_get_my_order_context_can_lock_to_specific_process(db, factory) -> None:
+    _, _, process_a, process_b, operator, admin, product = _prepare_two_process_order_env(db, factory)
+
+    order = production_order_service.create_order(
+        db,
+        order_code="ORD-CTX-PROCESS",
+        product_id=product.id,
+        quantity=8,
+        start_date=None,
+        due_date=None,
+        remark="ctx-process",
+        process_codes=[process_a.code, process_b.code],
+        template_id=None,
+        process_steps=None,
+        save_as_template=False,
+        new_template_name=None,
+        new_template_set_default=False,
+        operator=admin,
+    )
+    process_rows = (
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(ProductionOrderProcess.order_id == order.id)
+            .order_by(ProductionOrderProcess.process_order.asc())
+        )
+        .scalars()
+        .all()
+    )
+    assert len(process_rows) == 2
+    first_process = process_rows[0]
+    second_process = process_rows[1]
+
+    production_order_service.update_order_pipeline_mode(
+        db,
+        order_id=order.id,
+        enabled=True,
+        process_codes=[first_process.process_code, second_process.process_code],
+        operator=admin,
+    )
+    production_execution_service.submit_first_article(
+        db,
+        order_id=order.id,
+        order_process_id=first_process.id,
+        verification_code=settings.production_default_verification_code,
+        remark="first-start",
+        operator=operator,
+    )
+    production_execution_service.end_production(
+        db,
+        order_id=order.id,
+        order_process_id=first_process.id,
+        quantity=3,
+        remark="first-partial",
+        operator=operator,
+    )
+
+    # Without explicit process context, the API may return any visible process row for this order.
+    context_any = production_order_service.get_my_order_context(
+        db,
+        order_id=order.id,
+        current_user=operator,
+        view_mode="own",
+    )
+    assert context_any is not None
+
+    context_first = production_order_service.get_my_order_context(
+        db,
+        order_id=order.id,
+        order_process_id=first_process.id,
+        current_user=operator,
+        view_mode="own",
+    )
+    assert context_first is not None
+    assert context_first["current_process_id"] == first_process.id
+
+    context_second = production_order_service.get_my_order_context(
+        db,
+        order_id=order.id,
+        order_process_id=second_process.id,
+        current_user=operator,
+        view_mode="own",
+    )
+    assert context_second is not None
+    assert context_second["current_process_id"] == second_process.id

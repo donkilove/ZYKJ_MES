@@ -1330,6 +1330,7 @@ def _collect_my_order_items(
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
     exact_order_id: int | None = None,
+    exact_order_process_id: int | None = None,
 ) -> list[dict[str, object]]:
     if view_mode not in {"own", "proxy", "assist"}:
         raise ValueError("Invalid work view mode")
@@ -1364,6 +1365,8 @@ def _collect_my_order_items(
         )
         if exact_order_id is not None:
             stmt = stmt.where(ProductionOrder.id == exact_order_id)
+        if exact_order_process_id is not None:
+            stmt = stmt.where(ProductionSubOrder.order_process_id == exact_order_process_id)
         if keyword:
             like_pattern = f"%{keyword.strip()}%"
             stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
@@ -1408,6 +1411,8 @@ def _collect_my_order_items(
         )
         if exact_order_id is not None:
             stmt = stmt.where(ProductionAssistAuthorization.order_id == exact_order_id)
+        if exact_order_process_id is not None:
+            stmt = stmt.where(ProductionAssistAuthorization.order_process_id == exact_order_process_id)
         assist_rows = db.execute(stmt).scalars().all()
         for assist_row in assist_rows:
             order = assist_row.order
@@ -1485,11 +1490,16 @@ def _collect_my_order_items(
         orders = db.execute(stmt).scalars().all()
         for order in orders:
             process_rows = sorted(order.processes, key=lambda row: (row.process_order, row.id))
-            current_process = next(
-                (row for row in process_rows if row.status != PROCESS_STATUS_COMPLETED),
-                None,
-            )
+            if exact_order_process_id is not None:
+                current_process = next((row for row in process_rows if row.id == exact_order_process_id), None)
+            else:
+                current_process = next(
+                    (row for row in process_rows if row.status != PROCESS_STATUS_COMPLETED),
+                    None,
+                )
             if current_process is None:
+                continue
+            if current_process.status == PROCESS_STATUS_COMPLETED:
                 continue
             items.append(
                 _build_my_order_item(
@@ -1524,6 +1534,8 @@ def _collect_my_order_items(
         )
         if exact_order_id is not None:
             stmt = stmt.where(ProductionOrder.id == exact_order_id)
+        if exact_order_process_id is not None:
+            stmt = stmt.where(ProductionSubOrder.order_process_id == exact_order_process_id)
         if keyword:
             like_pattern = f"%{keyword.strip()}%"
             stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
@@ -1578,6 +1590,7 @@ def get_my_order_context(
     db: Session,
     *,
     order_id: int,
+    order_process_id: int | None = None,
     current_user: User,
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
@@ -1589,6 +1602,7 @@ def get_my_order_context(
         view_mode=view_mode,
         proxy_operator_user_id=proxy_operator_user_id,
         exact_order_id=order_id,
+        exact_order_process_id=order_process_id,
     )
     if not items:
         return None

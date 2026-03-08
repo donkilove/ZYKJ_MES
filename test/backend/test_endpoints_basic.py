@@ -540,6 +540,17 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
     assert assist_operator_options.data.total >= 1
     assert all(ROLE_OPERATOR in item.role_codes for item in assist_operator_options.data.items)
 
+    assist_user_options_for_quality = production.get_assist_user_options_api(
+        page=1,
+        page_size=20,
+        keyword=None,
+        role_code=ROLE_OPERATOR,
+        db=db,
+        _=qa_admin,
+    )
+    assert assist_user_options_for_quality.data.total >= 1
+    assert all(ROLE_OPERATOR in item.role_codes for item in assist_user_options_for_quality.data.items)
+
     with pytest.raises(HTTPException) as invalid_role_error:
         production.get_assist_user_options_api(
             page=1,
@@ -576,6 +587,7 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
     assist_context = production.get_my_order_context_api(
         order_id_2,
         view_mode="assist",
+        order_process_id=process_id_2,
         proxy_operator_user_id=None,
         db=db,
         current_user=admin,
@@ -615,6 +627,7 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
     consumed_context = production.get_my_order_context_api(
         order_id_2,
         view_mode="assist",
+        order_process_id=process_id_2,
         proxy_operator_user_id=None,
         db=db,
         current_user=admin,
