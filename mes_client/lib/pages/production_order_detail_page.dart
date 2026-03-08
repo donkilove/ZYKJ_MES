@@ -165,7 +165,8 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
         widget.canDeleteOrder && order.status == 'pending' && !_acting;
     final canComplete =
         widget.canCompleteOrder && order.status != 'completed' && !_acting;
-    final canPipeline = widget.canUpdatePipelineMode && !_acting;
+    final canPipeline =
+        widget.canUpdatePipelineMode && order.status != 'completed' && !_acting;
 
     return Wrap(
       spacing: 8,
