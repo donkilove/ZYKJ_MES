@@ -29,7 +29,7 @@ class _ProductionAssistApprovalPageState
 
   bool _loading = false;
   String _message = '';
-  String _statusFilter = 'approved';
+  String? _statusFilter;
   int _total = 0;
   List<AssistAuthorizationItem> _items = const [];
 
@@ -118,23 +118,29 @@ class _ProductionAssistApprovalPageState
               const Spacer(),
               SizedBox(
                 width: 180,
-                child: DropdownButtonFormField<String>(
-                  value: _statusFilter,
+                child: DropdownButtonFormField<String?>(
+                  key: ValueKey<String?>(_statusFilter),
+                  initialValue: _statusFilter,
                   decoration: const InputDecoration(
                     labelText: '状态筛选',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'pending', child: Text('待审批')),
-                    DropdownMenuItem(value: 'approved', child: Text('已生效')),
-                    DropdownMenuItem(value: 'rejected', child: Text('已拒绝')),
-                    DropdownMenuItem(value: 'consumed', child: Text('已消耗')),
+                    DropdownMenuItem<String?>(value: null, child: Text('全部')),
+                    DropdownMenuItem<String?>(
+                      value: 'approved',
+                      child: Text('已生效'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'consumed',
+                      child: Text('已消耗'),
+                    ),
                   ],
                   onChanged: _loading
                       ? null
                       : (value) {
-                          if (value == null || value == _statusFilter) {
+                          if (value == _statusFilter) {
                             return;
                           }
                           setState(() {
@@ -169,7 +175,7 @@ class _ProductionAssistApprovalPageState
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(
-                '当前账号无查看权限',
+                '当前账号无查看权限。',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.error,
                 ),
@@ -187,10 +193,10 @@ class _ProductionAssistApprovalPageState
                           DataColumn(label: Text('订单号')),
                           DataColumn(label: Text('工序')),
                           DataColumn(label: Text('目标操作员')),
-                          DataColumn(label: Text('申请人')),
+                          DataColumn(label: Text('发起人')),
                           DataColumn(label: Text('代班人')),
                           DataColumn(label: Text('状态')),
-                          DataColumn(label: Text('申请时间')),
+                          DataColumn(label: Text('创建时间')),
                         ],
                         rows: _items.map((item) {
                           return DataRow(
@@ -201,7 +207,9 @@ class _ProductionAssistApprovalPageState
                               DataCell(Text(item.requesterUsername)),
                               DataCell(Text(item.helperUsername)),
                               DataCell(
-                                Text(assistAuthorizationStatusLabel(item.status)),
+                                Text(
+                                  assistAuthorizationStatusLabel(item.status),
+                                ),
                               ),
                               DataCell(Text(_formatDateTime(item.createdAt))),
                             ],
