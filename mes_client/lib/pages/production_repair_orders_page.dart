@@ -57,12 +57,14 @@ class ProductionRepairOrdersPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canComplete,
+    required this.canExport,
     this.service,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canComplete;
+  final bool canExport;
   final ProductionService? service;
 
   @override
@@ -155,7 +157,7 @@ class _ProductionRepairOrdersPageState
   }
 
   Future<void> _export() async {
-    if (!widget.canComplete) {
+    if (!widget.canExport) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('当前角色无导出权限')));
@@ -618,7 +620,7 @@ class _ProductionRepairOrdersPageState
                 label: const Text('查询'),
               ),
               FilledButton.tonalIcon(
-                onPressed: _exporting ? null : _export,
+                onPressed: (!widget.canExport || _exporting) ? null : _export,
                 icon: const Icon(Icons.download),
                 label: const Text('导出CSV'),
               ),

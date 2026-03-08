@@ -6,7 +6,39 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_role_codes
+from app.api.deps import require_permission
+from app.core.authz_catalog import (
+    PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE,
+    PERM_PROD_ASSIST_AUTHORIZATIONS_LIST,
+    PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW,
+    PERM_PROD_ASSIST_USER_OPTIONS_LIST,
+    PERM_PROD_DATA_MANUAL,
+    PERM_PROD_DATA_MANUAL_EXPORT,
+    PERM_PROD_DATA_TODAY_REALTIME,
+    PERM_PROD_DATA_UNFINISHED_PROGRESS,
+    PERM_PROD_EXECUTION_END_PRODUCTION,
+    PERM_PROD_EXECUTION_FIRST_ARTICLE,
+    PERM_PROD_MY_ORDERS_CONTEXT,
+    PERM_PROD_MY_ORDERS_LIST,
+    PERM_PROD_ORDERS_COMPLETE,
+    PERM_PROD_ORDERS_CREATE,
+    PERM_PROD_ORDERS_DELETE,
+    PERM_PROD_ORDERS_DETAIL,
+    PERM_PROD_ORDERS_LIST,
+    PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE,
+    PERM_PROD_ORDERS_PIPELINE_MODE_VIEW,
+    PERM_PROD_ORDERS_UPDATE,
+    PERM_PROD_REPAIR_ORDERS_COMPLETE,
+    PERM_PROD_REPAIR_ORDERS_CREATE_MANUAL,
+    PERM_PROD_REPAIR_ORDERS_EXPORT,
+    PERM_PROD_REPAIR_ORDERS_LIST,
+    PERM_PROD_REPAIR_ORDERS_PHENOMENA_SUMMARY,
+    PERM_PROD_SCRAP_STATISTICS_EXPORT,
+    PERM_PROD_SCRAP_STATISTICS_LIST,
+    PERM_PROD_STATS_OPERATORS,
+    PERM_PROD_STATS_OVERVIEW,
+    PERM_PROD_STATS_PROCESSES,
+)
 from app.core.production_constants import (
     ORDER_STATUS_ALL,
 )
@@ -345,7 +377,7 @@ def get_orders(
     keyword: str | None = Query(default=None),
     status_text: str | None = Query(default=None, alias="status"),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_ORDERS_LIST)),
 ) -> ApiResponse[OrderListResult]:
     if status_text and status_text not in ORDER_STATUS_ALL:
         raise HTTPException(
@@ -370,7 +402,7 @@ def get_orders(
 def create_order_api(
     payload: OrderCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_CREATE)),
 ) -> ApiResponse[OrderItem]:
     try:
         row = create_order(
@@ -402,7 +434,7 @@ def create_order_api(
 def get_order_detail_api(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_DETAIL)),
 ) -> ApiResponse[OrderDetail]:
     row = get_order_by_id(db, order_id, with_relations=True)
     if not row:
@@ -444,7 +476,7 @@ def get_order_detail_api(
 def get_order_pipeline_mode_api(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_PIPELINE_MODE_VIEW)),
 ) -> ApiResponse[OrderPipelineModeItem]:
     try:
         if not can_user_access_order_pipeline_mode(db, order_id=order_id, current_user=current_user):
@@ -463,7 +495,7 @@ def update_order_pipeline_mode_api(
     order_id: int,
     payload: OrderPipelineModeUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE)),
 ) -> ApiResponse[OrderPipelineModeItem]:
     try:
         updated = update_order_pipeline_mode(
@@ -486,7 +518,7 @@ def update_order_api(
     order_id: int,
     payload: OrderUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_UPDATE)),
 ) -> ApiResponse[OrderItem]:
     order = get_order_by_id(db, order_id, with_relations=False)
     if not order:
@@ -522,7 +554,7 @@ def update_order_api(
 def delete_order_api(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_ORDERS_DELETE)),
 ) -> ApiResponse[dict[str, bool]]:
     order = get_order_by_id(db, order_id, with_relations=False)
     if not order:
@@ -541,7 +573,7 @@ def delete_order_api(
 def complete_order_api(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_COMPLETE)),
 ) -> ApiResponse[OrderActionResult]:
     order = get_order_by_id(db, order_id, with_relations=True)
     if not order:
@@ -567,9 +599,7 @@ def get_my_orders_api(
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_OPERATOR])
-    ),
+    current_user: User = Depends(require_permission(PERM_PROD_MY_ORDERS_LIST)),
 ) -> ApiResponse[MyOrderListResult]:
     if proxy_operator_user_id is not None and proxy_operator_user_id <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="proxy_operator_user_id must be > 0")
@@ -603,9 +633,7 @@ def get_my_order_context_api(
     order_process_id: int | None = None,
     proxy_operator_user_id: int | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_OPERATOR])
-    ),
+    current_user: User = Depends(require_permission(PERM_PROD_MY_ORDERS_CONTEXT)),
 ) -> ApiResponse[MyOrderContextResult]:
     if proxy_operator_user_id is not None and proxy_operator_user_id <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="proxy_operator_user_id must be > 0")
@@ -635,7 +663,7 @@ def submit_first_article_api(
     order_id: int,
     payload: FirstArticleRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+    current_user: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
 ) -> ApiResponse[OrderActionResult]:
     try:
         row, _, _ = submit_first_article(
@@ -668,7 +696,7 @@ def end_production_api(
     order_id: int,
     payload: EndProductionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+    current_user: User = Depends(require_permission(PERM_PROD_EXECUTION_END_PRODUCTION)),
 ) -> ApiResponse[OrderActionResult]:
     try:
         row, _, _ = end_production(
@@ -700,7 +728,7 @@ def end_production_api(
 )
 def get_overview_stats_api(
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_STATS_OVERVIEW)),
 ) -> ApiResponse[ProductionStatsOverview]:
     payload = get_overview_stats(db)
     return success_response(ProductionStatsOverview(**payload))
@@ -712,7 +740,7 @@ def get_overview_stats_api(
 )
 def get_process_stats_api(
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_STATS_PROCESSES)),
 ) -> ApiResponse[ProductionProcessStatsResult]:
     rows = get_process_stats(db)
     return success_response(ProductionProcessStatsResult(items=[ProductionProcessStatItem(**row) for row in rows]))
@@ -724,7 +752,7 @@ def get_process_stats_api(
 )
 def get_operator_stats_api(
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_STATS_OPERATORS)),
 ) -> ApiResponse[ProductionOperatorStatsResult]:
     rows = get_operator_stats(db)
     return success_response(
@@ -744,7 +772,7 @@ def get_today_realtime_data_api(
     operator_user_ids: str | None = Query(default=None),
     order_status: str | None = Query(default="all"),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_DATA_TODAY_REALTIME)),
 ) -> ApiResponse[ProductionDataTodayRealtimeResult]:
     try:
         filters = build_today_filters(
@@ -772,7 +800,7 @@ def get_unfinished_progress_data_api(
     operator_user_ids: str | None = Query(default=None),
     order_status: str | None = Query(default="all"),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_DATA_UNFINISHED_PROGRESS)),
 ) -> ApiResponse[ProductionDataUnfinishedProgressResult]:
     try:
         payload = get_unfinished_progress_data(
@@ -802,7 +830,7 @@ def get_manual_production_data_api(
     operator_user_ids: str | None = Query(default=None),
     order_status: str | None = Query(default="all"),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_DATA_MANUAL)),
 ) -> ApiResponse[ProductionDataManualResult]:
     try:
         filters = build_manual_filters(
@@ -828,7 +856,7 @@ def get_manual_production_data_api(
 def export_manual_production_data_api(
     payload: ProductionDataManualExportRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    current_user: User = Depends(require_permission(PERM_PROD_DATA_MANUAL_EXPORT)),
 ) -> ApiResponse[ProductionDataManualExportResult]:
     try:
         filters = build_manual_filters(
@@ -863,7 +891,7 @@ def get_scrap_statistics_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_SCRAP_STATISTICS_LIST)),
 ) -> ApiResponse[ScrapStatisticsListResult]:
     try:
         total, rows = list_scrap_statistics(
@@ -894,7 +922,7 @@ def get_scrap_statistics_api(
 def export_scrap_statistics_api(
     payload: ScrapStatisticsExportRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    current_user: User = Depends(require_permission(PERM_PROD_SCRAP_STATISTICS_EXPORT)),
 ) -> ApiResponse[ProductionExportResult]:
     try:
         result = export_scrap_statistics_csv(
@@ -924,7 +952,7 @@ def get_repair_orders_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_REPAIR_ORDERS_LIST)),
 ) -> ApiResponse[RepairOrderListResult]:
     try:
         total, rows = list_repair_orders(
@@ -957,7 +985,7 @@ def create_manual_repair_order_api(
     order_id: int,
     payload: RepairOrderCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+    current_user: User = Depends(require_permission(PERM_PROD_REPAIR_ORDERS_CREATE_MANUAL)),
 ) -> ApiResponse[RepairOrderItem]:
     try:
         row = create_manual_repair_order(
@@ -983,7 +1011,7 @@ def create_manual_repair_order_api(
 def get_repair_order_phenomena_summary_api(
     repair_order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+    _: User = Depends(require_permission(PERM_PROD_REPAIR_ORDERS_PHENOMENA_SUMMARY)),
 ) -> ApiResponse[RepairOrderPhenomenaSummaryResult]:
     try:
         repair_row = get_repair_order_by_id(db, repair_order_id=repair_order_id)
@@ -1011,7 +1039,7 @@ def complete_repair_order_api(
     repair_order_id: int,
     payload: RepairOrderCompleteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    current_user: User = Depends(require_permission(PERM_PROD_REPAIR_ORDERS_COMPLETE)),
 ) -> ApiResponse[RepairOrderItem]:
     try:
         row = complete_repair_order(
@@ -1034,7 +1062,7 @@ def complete_repair_order_api(
 def export_repair_orders_api(
     payload: RepairOrdersExportRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    current_user: User = Depends(require_permission(PERM_PROD_REPAIR_ORDERS_EXPORT)),
 ) -> ApiResponse[ProductionExportResult]:
     try:
         result = export_repair_orders_csv(
@@ -1061,7 +1089,7 @@ def get_assist_authorizations_api(
     page_size: int = Query(default=20, ge=1, le=200),
     status_text: str | None = Query(default=None, alias="status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+    current_user: User = Depends(require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_LIST)),
 ) -> ApiResponse[AssistAuthorizationListResult]:
     try:
         total, rows = list_assist_authorizations(
@@ -1090,7 +1118,7 @@ def create_assist_authorization_api(
     order_id: int,
     payload: AssistAuthorizationCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+    current_user: User = Depends(require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE)),
 ) -> ApiResponse[AssistAuthorizationItem]:
     try:
         row = create_assist_authorization(
@@ -1118,7 +1146,7 @@ def review_assist_authorization_api(
     authorization_id: int,
     payload: AssistAuthorizationReviewRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+    current_user: User = Depends(require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW)),
 ) -> ApiResponse[AssistAuthorizationItem]:
     try:
         row = review_assist_authorization(
@@ -1146,7 +1174,7 @@ def get_assist_user_options_api(
     keyword: str | None = Query(default=None),
     role_code: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_OPERATOR])),
+    _: User = Depends(require_permission(PERM_PROD_ASSIST_USER_OPTIONS_LIST)),
 ) -> ApiResponse[AssistUserOptionListResult]:
     allowed_role_codes = {
         ROLE_SYSTEM_ADMIN,

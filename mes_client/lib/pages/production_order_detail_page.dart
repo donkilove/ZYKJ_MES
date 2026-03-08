@@ -12,7 +12,10 @@ class ProductionOrderDetailPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.orderId,
-    required this.canWrite,
+    required this.canEditOrder,
+    required this.canDeleteOrder,
+    required this.canCompleteOrder,
+    required this.canUpdatePipelineMode,
     required this.onEditOrder,
     required this.onDeleteOrder,
     required this.onCompleteOrder,
@@ -24,7 +27,10 @@ class ProductionOrderDetailPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final int orderId;
-  final bool canWrite;
+  final bool canEditOrder;
+  final bool canDeleteOrder;
+  final bool canCompleteOrder;
+  final bool canUpdatePipelineMode;
   final Future<bool> Function(ProductionOrderItem order) onEditOrder;
   final Future<bool> Function(ProductionOrderItem order) onDeleteOrder;
   final Future<bool> Function(ProductionOrderItem order) onCompleteOrder;
@@ -154,11 +160,12 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
   }
 
   Widget _buildActionBar(ProductionOrderItem order) {
-    final canEdit = widget.canWrite && order.status == 'pending' && !_acting;
-    final canDelete = widget.canWrite && order.status == 'pending' && !_acting;
+    final canEdit = widget.canEditOrder && order.status == 'pending' && !_acting;
+    final canDelete =
+        widget.canDeleteOrder && order.status == 'pending' && !_acting;
     final canComplete =
-        widget.canWrite && order.status != 'completed' && !_acting;
-    final canPipeline = widget.canWrite && !_acting;
+        widget.canCompleteOrder && order.status != 'completed' && !_acting;
+    final canPipeline = widget.canUpdatePipelineMode && !_acting;
 
     return Wrap(
       spacing: 8,

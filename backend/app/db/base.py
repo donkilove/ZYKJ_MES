@@ -8,6 +8,7 @@ from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
 from app.models.order_event_log import OrderEventLog
+from app.models.permission_catalog import PermissionCatalog
 from app.models.page_visibility import PageVisibility
 from app.models.product import Product
 from app.models.product_revision import ProductRevision
@@ -27,6 +28,7 @@ from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.models.registration_request import RegistrationRequest
 from app.models.role import Role
+from app.models.role_permission_grant import RolePermissionGrant
 from app.models.user import User
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.product_process_template_step import ProductProcessTemplateStep
@@ -48,6 +50,8 @@ __all__ = [
     "CraftSystemMasterTemplate",
     "CraftSystemMasterTemplateStep",
     "RegistrationRequest",
+    "PermissionCatalog",
+    "RolePermissionGrant",
     "PageVisibility",
     "Equipment",
     "MaintenanceItem",

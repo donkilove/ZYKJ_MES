@@ -51,14 +51,20 @@ class ProductionOrderQueryPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
-    required this.canOperate,
-    required this.isProductionAdmin,
+    required this.canFirstArticle,
+    required this.canEndProduction,
+    required this.canCreateManualRepairOrder,
+    required this.canCreateAssistAuthorization,
+    required this.canProxyView,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
-  final bool canOperate;
-  final bool isProductionAdmin;
+  final bool canFirstArticle;
+  final bool canEndProduction;
+  final bool canCreateManualRepairOrder;
+  final bool canCreateAssistAuthorization;
+  final bool canProxyView;
 
   @override
   State<ProductionOrderQueryPage> createState() =>
@@ -85,7 +91,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   void initState() {
     super.initState();
     _service = ProductionService(widget.session);
-    if (widget.isProductionAdmin) {
+    if (widget.canProxyView) {
       _loadProxyOperators();
     }
     _loadOrders();
@@ -212,14 +218,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
   }
 
-  Future<MyOrderContextResult> _fetchOrderContextInCurrentView(
-    int orderId,
-    int orderProcessId,
-  ) async {
+  Future<MyOrderContextResult> _fetchOrderContextInCurrentView(int orderId) async {
     try {
       return await _service.getMyOrderContext(
         orderId: orderId,
-        orderProcessId: orderProcessId,
         viewMode: _viewMode,
         proxyOperatorUserId: _proxyOperatorUserId,
       );
@@ -245,7 +247,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           session: widget.session,
           onLogout: widget.onLogout,
           orderId: item.orderId,
-          canOperate: widget.canOperate,
+          canFirstArticle: widget.canFirstArticle,
+          canEndProduction: widget.canEndProduction,
+          canCreateManualRepairOrder: widget.canCreateManualRepairOrder,
+          canCreateAssistAuthorization: widget.canCreateAssistAuthorization,
           initialOrderContext: item,
           onSubmitFirstArticle: (target) =>
               _showFirstArticleDialog(target, reloadAfterAction: false),
@@ -900,7 +905,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                       value: 'assist',
                       child: Text('我的代班工单'),
                     ),
-                    if (widget.isProductionAdmin)
+                    if (widget.canProxyView)
                       const DropdownMenuItem(
                         value: 'proxy',
                         child: Text('代理操作员视角'),
@@ -916,7 +921,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                   },
                 ),
               ),
-              if (widget.isProductionAdmin && _viewMode == 'proxy') ...[
+              if (widget.canProxyView && _viewMode == 'proxy') ...[
                 const SizedBox(width: 12),
                 SizedBox(
                   width: 260,

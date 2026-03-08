@@ -12,7 +12,10 @@ class ProductionOrderQueryDetailPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.orderId,
-    required this.canOperate,
+    required this.canFirstArticle,
+    required this.canEndProduction,
+    required this.canCreateManualRepairOrder,
+    required this.canCreateAssistAuthorization,
     required this.initialOrderContext,
     required this.onSubmitFirstArticle,
     required this.onEndProduction,
@@ -25,14 +28,16 @@ class ProductionOrderQueryDetailPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final int orderId;
-  final bool canOperate;
+  final bool canFirstArticle;
+  final bool canEndProduction;
+  final bool canCreateManualRepairOrder;
+  final bool canCreateAssistAuthorization;
   final MyOrderItem initialOrderContext;
   final Future<bool> Function(MyOrderItem item) onSubmitFirstArticle;
   final Future<bool> Function(MyOrderItem item) onEndProduction;
   final Future<bool> Function(MyOrderItem item) onCreateManualRepair;
   final Future<bool> Function(MyOrderItem item) onApplyAssist;
-  final Future<MyOrderContextResult> Function(int orderId, int orderProcessId)
-  onRefreshOrderContext;
+  final Future<MyOrderContextResult> Function(int orderId) onRefreshOrderContext;
   final ProductionService? service;
 
   @override
@@ -50,14 +55,12 @@ class _ProductionOrderQueryDetailPageState
   String _message = '';
   ProductionOrderDetail? _detail;
   MyOrderItem? _orderContext;
-  late int _contextProcessId;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? ProductionService(widget.session);
     _orderContext = widget.initialOrderContext;
-    _contextProcessId = widget.initialOrderContext.currentProcessId;
     _loadDetail();
   }
 
@@ -140,18 +143,12 @@ class _ProductionOrderQueryDetailPageState
   }
 
   Future<void> _refreshOrderContext() async {
-    final result = await widget.onRefreshOrderContext(
-      widget.orderId,
-      _contextProcessId,
-    );
+    final result = await widget.onRefreshOrderContext(widget.orderId);
     if (!mounted) {
       return;
     }
     setState(() {
       _orderContext = result.found ? result.item : null;
-      if (result.item != null) {
-        _contextProcessId = result.item!.currentProcessId;
-      }
     });
   }
 
@@ -190,16 +187,18 @@ class _ProductionOrderQueryDetailPageState
 
   Widget _buildActionBar() {
     final contextItem = _orderContext;
-    final canOperateCurrent =
-        widget.canOperate && !_acting && contextItem != null;
     final canFirstArticle =
-        widget.canOperate &&
+        widget.canFirstArticle &&
         !_acting &&
         (contextItem?.canFirstArticle ?? false);
     final canEndProduction =
-        widget.canOperate &&
+        widget.canEndProduction &&
         !_acting &&
         (contextItem?.canEndProduction ?? false);
+    final canCreateManualRepair =
+        widget.canCreateManualRepairOrder && !_acting && contextItem != null;
+    final canCreateAssist =
+        widget.canCreateAssistAuthorization && !_acting && contextItem != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,14 +222,14 @@ class _ProductionOrderQueryDetailPageState
               label: const Text('报工'),
             ),
             FilledButton.icon(
-              onPressed: canOperateCurrent
+              onPressed: canCreateManualRepair
                   ? () => _executeAction(widget.onCreateManualRepair)
                   : null,
               icon: const Icon(Icons.build_outlined),
               label: const Text('手工送修建单'),
             ),
             FilledButton.icon(
-              onPressed: canOperateCurrent
+              onPressed: canCreateAssist
                   ? () => _executeAction(widget.onApplyAssist)
                   : null,
               icon: const Icon(Icons.how_to_reg_outlined),

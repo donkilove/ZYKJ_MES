@@ -28,11 +28,13 @@ class ProductionDataPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    required this.canExport,
     this.service,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canExport;
   final ProductionService? service;
 
   @override
@@ -423,6 +425,12 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   }
 
   Future<void> _exportManual() async {
+    if (!widget.canExport) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前账号无导出权限')));
+      return;
+    }
     if (_manualStartDate.isAfter(_manualEndDate)) {
       setState(() {
         _manualMessage = '开始日期不能晚于结束日期';
@@ -1005,7 +1013,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
               label: const Text('筛选'),
             ),
             FilledButton.icon(
-              onPressed: (_loadingManual || _exportingManual)
+              onPressed: (!widget.canExport || _loadingManual || _exportingManual)
                   ? null
                   : _exportManual,
               icon: _exportingManual

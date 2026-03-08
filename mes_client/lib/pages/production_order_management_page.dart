@@ -30,12 +30,20 @@ class ProductionOrderManagementPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
-    required this.canWrite,
+    required this.canCreateOrder,
+    required this.canEditOrder,
+    required this.canDeleteOrder,
+    required this.canCompleteOrder,
+    required this.canUpdatePipelineMode,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
-  final bool canWrite;
+  final bool canCreateOrder;
+  final bool canEditOrder;
+  final bool canDeleteOrder;
+  final bool canCompleteOrder;
+  final bool canUpdatePipelineMode;
 
   @override
   State<ProductionOrderManagementPage> createState() =>
@@ -274,7 +282,10 @@ class _ProductionOrderManagementPageState
     ProductionOrderItem? existing,
     bool reloadAfterSave = true,
   }) async {
-    if (!widget.canWrite) {
+    final canWriteCurrent = existing == null
+        ? widget.canCreateOrder
+        : widget.canEditOrder;
+    if (!canWriteCurrent) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('无权限管理订单。')));
@@ -926,7 +937,7 @@ class _ProductionOrderManagementPageState
     ProductionOrderItem order, {
     bool reloadAfterAction = true,
   }) async {
-    if (!widget.canWrite) {
+    if (!widget.canDeleteOrder) {
       return false;
     }
     final confirmed = await showDialog<bool>(
@@ -980,7 +991,7 @@ class _ProductionOrderManagementPageState
     ProductionOrderItem order, {
     bool reloadAfterAction = true,
   }) async {
-    if (!widget.canWrite) {
+    if (!widget.canCompleteOrder) {
       return false;
     }
     final confirmed = await showDialog<bool>(
@@ -1037,7 +1048,10 @@ class _ProductionOrderManagementPageState
           session: widget.session,
           onLogout: widget.onLogout,
           orderId: order.id,
-          canWrite: widget.canWrite,
+          canEditOrder: widget.canEditOrder,
+          canDeleteOrder: widget.canDeleteOrder,
+          canCompleteOrder: widget.canCompleteOrder,
+          canUpdatePipelineMode: widget.canUpdatePipelineMode,
           onEditOrder: (targetOrder) =>
               _showOrderDialog(existing: targetOrder, reloadAfterSave: false),
           onDeleteOrder: (targetOrder) =>
@@ -1060,7 +1074,7 @@ class _ProductionOrderManagementPageState
     ProductionOrderItem order, {
     bool reloadAfterAction = true,
   }) async {
-    if (!widget.canWrite) {
+    if (!widget.canUpdatePipelineMode) {
       return false;
     }
     try {
@@ -1198,7 +1212,7 @@ class _ProductionOrderManagementPageState
     ProductionOrderItem order, {
     bool reloadAfterAction = true,
   }) async {
-    if (!widget.canWrite) {
+    if (!widget.canUpdatePipelineMode) {
       return false;
     }
     final confirmed = await showDialog<bool>(
@@ -1332,7 +1346,7 @@ class _ProductionOrderManagementPageState
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _loading || !widget.canWrite
+                onPressed: _loading || !widget.canCreateOrder
                     ? null
                     : () => _showOrderDialog(),
                 icon: const Icon(Icons.add),

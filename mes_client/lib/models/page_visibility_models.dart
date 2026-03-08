@@ -234,6 +234,20 @@ const fallbackPageCatalog = <PageCatalogItem>[
   ),
 
   PageCatalogItem(
+    code: 'function_permission_config',
+
+    name: '功能权限配置',
+
+    pageType: 'tab',
+
+    parentCode: 'user',
+
+    alwaysVisible: false,
+
+    sortOrder: 24,
+  ),
+
+  PageCatalogItem(
     code: 'product',
 
     name: '产品',

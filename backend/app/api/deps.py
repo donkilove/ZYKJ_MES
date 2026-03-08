@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import TokenPayload
 from app.services.online_status_service import touch_user
+from app.services.authz_service import has_permission, validate_permission_code
 from app.services.user_service import get_user_by_id
 
 
@@ -54,6 +55,20 @@ def require_role_codes(allowed_role_codes: list[str]) -> Callable[[User], User]:
     def dependency(current_user: User = Depends(get_current_active_user)) -> User:
         user_role_codes = {role.code for role in current_user.roles}
         if not user_role_codes.intersection(set(allowed_role_codes)):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        return current_user
+
+    return dependency
+
+
+def require_permission(permission_code: str) -> Callable[[User, Session], User]:
+    validate_permission_code(permission_code)
+
+    def dependency(
+        current_user: User = Depends(get_current_active_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        if not has_permission(db, user=current_user, permission_code=permission_code):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
         return current_user
 

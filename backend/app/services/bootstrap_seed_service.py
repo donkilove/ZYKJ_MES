@@ -9,6 +9,7 @@ from app.core.rbac import ROLE_DEFINITIONS, ROLE_SYSTEM_ADMIN
 from app.core.security import get_password_hash
 from app.models.role import Role
 from app.models.user import User
+from app.services.authz_service import ensure_authz_defaults
 
 
 @dataclass(slots=True)
@@ -93,6 +94,7 @@ def seed_initial_data(
         admin_username=admin_username,
         admin_password=admin_password,
     )
+    ensure_authz_defaults(db)
     db.commit()
     db.refresh(admin_user)
     return SeedResult(

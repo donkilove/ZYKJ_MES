@@ -20,7 +20,14 @@ from app.core.production_constants import (
     SUB_ORDER_STATUS_PENDING,
 )
 from app.core.product_lifecycle import PRODUCT_LIFECYCLE_EFFECTIVE
-from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
+from app.core.authz_catalog import (
+    PERM_PROD_MY_ORDERS_PROXY,
+    PERM_PROD_MY_ORDERS_VIEW_ALL,
+    PERM_PROD_ORDERS_DETAIL_ALL,
+    PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE,
+    PERM_PROD_ORDERS_PIPELINE_MODE_VIEW_ALL,
+)
+from app.core.rbac import ROLE_OPERATOR
 from app.models.process import Process
 from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
 from app.models.production_assist_authorization import ProductionAssistAuthorization
@@ -35,15 +42,8 @@ from app.models.production_sub_order import ProductionSubOrder
 from app.models.order_event_log import OrderEventLog
 from app.models.user import User
 from app.services.assist_authorization_service import ASSIST_STATUS_APPROVED, ASSIST_STATUS_CONSUMED
+from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
-
-
-ADMIN_QUERY_ROLE_CODES = {
-    ROLE_SYSTEM_ADMIN,
-    ROLE_PRODUCTION_ADMIN,
-    ROLE_QUALITY_ADMIN,
-}
-
 
 def _normalize_process_codes(process_codes: Iterable[str]) -> list[str]:
     normalized = [item.strip() for item in process_codes if item and item.strip()]
@@ -496,9 +496,13 @@ def can_user_access_order_pipeline_mode(
     order_id: int,
     current_user: User,
 ) -> bool:
-    role_codes = {role.code for role in current_user.roles}
-    if ROLE_SYSTEM_ADMIN in role_codes or ROLE_PRODUCTION_ADMIN in role_codes:
+    if has_permission(
+        db,
+        user=current_user,
+        permission_code=PERM_PROD_ORDERS_PIPELINE_MODE_VIEW_ALL,
+    ):
         return True
+    role_codes = {role.code for role in current_user.roles}
     if ROLE_OPERATOR not in role_codes:
         return False
     exists_stmt = (
@@ -517,9 +521,13 @@ def can_user_access_order_detail(
     order_id: int,
     current_user: User,
 ) -> bool:
-    role_codes = {role.code for role in current_user.roles}
-    if role_codes.intersection(ADMIN_QUERY_ROLE_CODES):
+    if has_permission(
+        db,
+        user=current_user,
+        permission_code=PERM_PROD_ORDERS_DETAIL_ALL,
+    ):
         return True
+    role_codes = {role.code for role in current_user.roles}
     if ROLE_OPERATOR not in role_codes:
         return False
 
@@ -653,9 +661,12 @@ def update_order_pipeline_mode(
     process_codes: list[str],
     operator: User,
 ) -> dict[str, object]:
-    role_codes = {role.code for role in operator.roles}
-    if ROLE_SYSTEM_ADMIN not in role_codes and ROLE_PRODUCTION_ADMIN not in role_codes:
-        raise PermissionError("Only system admin or production admin can update pipeline mode")
+    if not has_permission(
+        db,
+        user=operator,
+        permission_code=PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE,
+    ):
+        raise PermissionError("Current user has no permission to update pipeline mode")
 
     order = (
         db.execute(
@@ -1335,14 +1346,21 @@ def _collect_my_order_items(
     if view_mode not in {"own", "proxy", "assist"}:
         raise ValueError("Invalid work view mode")
 
-    role_codes = {role.code for role in current_user.roles}
-    is_admin_context = bool(role_codes.intersection(ADMIN_QUERY_ROLE_CODES))
-    is_production_admin = ROLE_PRODUCTION_ADMIN in role_codes
+    is_admin_context = has_permission(
+        db,
+        user=current_user,
+        permission_code=PERM_PROD_MY_ORDERS_VIEW_ALL,
+    )
+    can_proxy_view = has_permission(
+        db,
+        user=current_user,
+        permission_code=PERM_PROD_MY_ORDERS_PROXY,
+    )
 
     items: list[dict[str, object]] = []
     if view_mode == "proxy":
-        if not is_production_admin:
-            raise PermissionError("Proxy view is only available for production admin")
+        if not can_proxy_view:
+            raise PermissionError("Current user has no permission for proxy view")
         if proxy_operator_user_id is None:
             raise ValueError("proxy_operator_user_id is required for proxy view")
         stmt = (

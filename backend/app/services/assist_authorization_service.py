@@ -5,13 +5,14 @@ from datetime import datetime, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.authz_catalog import PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW
 from app.core.production_constants import ORDER_STATUS_COMPLETED, PROCESS_STATUS_COMPLETED
-from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_sub_order import ProductionSubOrder
 from app.models.user import User
+from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
 
 ASSIST_STATUS_PENDING = "pending"
@@ -27,10 +28,6 @@ ASSIST_STATUS_ALL = {
 
 ASSIST_OP_FIRST_ARTICLE = "first_article"
 ASSIST_OP_END_PRODUCTION = "end_production"
-
-
-def _has_role(user: User, role_code: str) -> bool:
-    return any(role.code == role_code for role in user.roles)
 
 
 def _get_order_and_process_for_update(
@@ -201,7 +198,12 @@ def list_assist_authorizations(
             raise ValueError("Invalid assist authorization status")
         stmt = stmt.where(ProductionAssistAuthorization.status == status)
 
-    if not (_has_role(current_user, ROLE_PRODUCTION_ADMIN) or _has_role(current_user, ROLE_SYSTEM_ADMIN)):
+    can_view_all = has_permission(
+        db,
+        user=current_user,
+        permission_code=PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW,
+    )
+    if not can_view_all:
         stmt = stmt.where(
             or_(
                 ProductionAssistAuthorization.requester_user_id == current_user.id,

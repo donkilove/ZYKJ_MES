@@ -15,11 +15,13 @@ class ProductionScrapStatisticsPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    required this.canExport,
     this.service,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canExport;
   final ProductionService? service;
 
   @override
@@ -159,6 +161,12 @@ class _ProductionScrapStatisticsPageState
   }
 
   Future<void> _export() async {
+    if (!widget.canExport) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前账号无导出权限')));
+      return;
+    }
     if (_startDate != null &&
         _endDate != null &&
         _startDate!.isAfter(_endDate!)) {
@@ -308,7 +316,7 @@ class _ProductionScrapStatisticsPageState
                 label: const Text('查询'),
               ),
               FilledButton.tonalIcon(
-                onPressed: _exporting ? null : _export,
+                onPressed: (!widget.canExport || _exporting) ? null : _export,
                 icon: const Icon(Icons.download),
                 label: const Text('导出CSV'),
               ),

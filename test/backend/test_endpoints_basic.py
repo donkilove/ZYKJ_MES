@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import date, timedelta
 from types import SimpleNamespace
@@ -11,7 +11,6 @@ from app.core.config import settings
 from app.core.production_constants import ORDER_STATUS_IN_PROGRESS
 from app.core.rbac import (
     ROLE_OPERATOR,
-    ROLE_PRODUCTION_ADMIN,
     ROLE_QUALITY_ADMIN,
     ROLE_SYSTEM_ADMIN,
 )
@@ -329,7 +328,7 @@ def test_products_and_craft_endpoints(db, factory) -> None:
 
 def test_production_quality_and_equipment_endpoints(db, factory) -> None:
     factory.ensure_default_roles()
-    admin = factory.user(username="prod_admin_ep", role_codes=[ROLE_PRODUCTION_ADMIN])
+    admin = factory.user(username="prod_admin_ep", role_codes=[ROLE_SYSTEM_ADMIN])
     qa_admin = factory.user(username="qa_admin_ep", role_codes=[ROLE_QUALITY_ADMIN])
 
     stage = craft.create_stage_api(ProcessStageCreate(code="74", name="工段74", sort_order=1), db, _=admin)

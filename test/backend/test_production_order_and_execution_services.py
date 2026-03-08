@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import date
 
@@ -13,7 +13,7 @@ from app.core.production_constants import (
     PROCESS_STATUS_IN_PROGRESS,
     PROCESS_STATUS_PARTIAL,
 )
-from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
+from app.core.rbac import ROLE_OPERATOR, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_sub_order import ProductionSubOrder
 from app.services import assist_authorization_service, production_execution_service, production_order_service
@@ -24,7 +24,7 @@ def _prepare_order_env(db, factory):
     stage = factory.stage(code="41", name="测试工段", sort_order=1)
     process = factory.process(stage=stage, code="41-01", name="测试工序")
     operator = factory.user(username="op_prod", role_codes=[ROLE_OPERATOR], processes=[process])
-    admin = factory.user(username="admin_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
+    admin = factory.user(username="admin_prod", role_codes=[ROLE_SYSTEM_ADMIN])
     product = factory.product(name="产线产品")
     db.commit()
     return stage, process, operator, admin, product
@@ -41,7 +41,7 @@ def _prepare_two_process_order_env(db, factory):
         role_codes=[ROLE_OPERATOR],
         processes=[process_a, process_b],
     )
-    admin = factory.user(username="admin_pipeline", role_codes=[ROLE_PRODUCTION_ADMIN])
+    admin = factory.user(username="admin_pipeline", role_codes=[ROLE_SYSTEM_ADMIN])
     product = factory.product(name="并行测试产品")
     db.commit()
     return stage_a, stage_b, process_a, process_b, operator, admin, product
@@ -654,7 +654,7 @@ def test_order_detail_access_and_my_order_context(db, factory) -> None:
         order_id=order.id,
         current_user=admin,
     )
-    assert production_order_service.can_user_access_order_detail(
+    assert not production_order_service.can_user_access_order_detail(
         db,
         order_id=order.id,
         current_user=quality_admin,

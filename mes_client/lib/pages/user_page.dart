@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import 'function_permission_config_page.dart';
 import 'page_visibility_config_page.dart';
 import 'registration_approval_page.dart';
 import 'user_management_page.dart';
@@ -9,6 +10,7 @@ const List<String> _defaultTabOrder = [
   'user_management',
   'registration_approval',
   'page_visibility_config',
+  'function_permission_config',
 ];
 
 class UserPage extends StatelessWidget {
@@ -74,6 +76,18 @@ class UserPage extends StatelessWidget {
                 session: session,
                 onLogout: onLogout,
                 onConfigSaved: onVisibilityConfigSaved,
+              ),
+            ),
+          );
+          break;
+        case 'function_permission_config':
+          tabs.add(
+            _UserTabItem(
+              code: code,
+              title: '功能权限配置',
+              child: FunctionPermissionConfigPage(
+                session: session,
+                onLogout: onLogout,
               ),
             ),
           );
