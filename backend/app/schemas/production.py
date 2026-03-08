@@ -343,3 +343,140 @@ class ProductionOperatorStatItem(BaseModel):
 
 class ProductionOperatorStatsResult(BaseModel):
     items: list[ProductionOperatorStatItem]
+
+
+class ProductionDataTodayRealtimeRow(BaseModel):
+    product_id: int
+    product_name: str
+    quantity: int
+    latest_time: datetime | None = None
+    latest_time_text: str = ""
+
+
+class ProductionDataTodayRealtimeChartItem(BaseModel):
+    label: str
+    value: int
+
+
+class ProductionDataTodayRealtimeSummary(BaseModel):
+    total_products: int
+    total_quantity: int
+
+
+class ProductionDataTodayRealtimeResult(BaseModel):
+    stat_mode: str
+    summary: ProductionDataTodayRealtimeSummary
+    table_rows: list[ProductionDataTodayRealtimeRow]
+    chart_data: list[ProductionDataTodayRealtimeChartItem]
+    query_signature: str
+
+
+class ProductionDataUnfinishedProgressRow(BaseModel):
+    order_id: int
+    order_code: str
+    product_id: int
+    product_name: str
+    order_status: str
+    process_count: int
+    produced_total: int
+    target_total: int
+    progress_percent: float
+
+
+class ProductionDataUnfinishedProgressSummary(BaseModel):
+    total_orders: int
+    avg_progress_percent: float
+
+
+class ProductionDataUnfinishedProgressResult(BaseModel):
+    summary: ProductionDataUnfinishedProgressSummary
+    table_rows: list[ProductionDataUnfinishedProgressRow]
+    query_signature: str
+
+
+class ProductionDataManualRow(BaseModel):
+    order_id: int
+    order_code: str
+    product_id: int
+    product_name: str
+    stage_id: int | None = None
+    stage_code: str | None = None
+    stage_name: str | None = None
+    process_id: int
+    process_code: str
+    process_name: str
+    operator_user_id: int | None = None
+    operator_username: str = ""
+    quantity: int
+    production_time: datetime | None = None
+    production_time_text: str = ""
+    order_status: str
+
+
+class ProductionDataManualModelChartItem(BaseModel):
+    product_name: str
+    quantity: int
+
+
+class ProductionDataManualTrendChartItem(BaseModel):
+    bucket: str
+    quantity: int
+
+
+class ProductionDataManualPieChartItem(BaseModel):
+    name: str
+    quantity: int
+
+
+class ProductionDataManualChartData(BaseModel):
+    single_day: bool
+    model_output: list[ProductionDataManualModelChartItem]
+    trend_output: list[ProductionDataManualTrendChartItem]
+    pie_output: list[ProductionDataManualPieChartItem]
+
+
+class ProductionDataManualSummary(BaseModel):
+    rows: int
+    filtered_total: int
+    time_range_total: int
+    ratio_percent: float
+
+
+class ProductionDataManualResult(BaseModel):
+    stat_mode: str
+    summary: ProductionDataManualSummary
+    table_rows: list[ProductionDataManualRow]
+    chart_data: ProductionDataManualChartData
+    query_signature: str
+
+
+class ProductionDataManualExportRequest(BaseModel):
+    stat_mode: str = Field(default="main_order")
+    start_date: date | None = None
+    end_date: date | None = None
+    product_ids: list[int] = Field(default_factory=list)
+    stage_ids: list[int] = Field(default_factory=list)
+    process_ids: list[int] = Field(default_factory=list)
+    operator_user_ids: list[int] = Field(default_factory=list)
+    order_status: str = Field(default="all")
+
+    @field_validator("product_ids", "stage_ids", "process_ids", "operator_user_ids")
+    @classmethod
+    def validate_positive_unique_ids(cls, value: list[int]) -> list[int]:
+        deduped = []
+        seen = set()
+        for item in value:
+            number = int(item)
+            if number <= 0:
+                raise ValueError("id list items must be > 0")
+            if number in seen:
+                continue
+            seen.add(number)
+            deduped.append(number)
+        return deduped
+
+
+class ProductionDataManualExportResult(BaseModel):
+    file_name: str
+    mime_type: str
+    content_base64: str

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -45,6 +47,11 @@ from app.schemas.production import (
     OrderUpdate,
     ProductionOperatorStatItem,
     ProductionOperatorStatsResult,
+    ProductionDataManualExportRequest,
+    ProductionDataManualExportResult,
+    ProductionDataManualResult,
+    ProductionDataTodayRealtimeResult,
+    ProductionDataUnfinishedProgressResult,
     ProductionOrderProcessItem,
     ProductionProcessStatItem,
     ProductionProcessStatsResult,
@@ -66,6 +73,15 @@ from app.services.production_order_service import (
     update_order_pipeline_mode,
     update_order,
 )
+from app.services.production_data_query_service import (
+    build_manual_filters,
+    build_today_filters,
+    export_manual_production_data_csv,
+    get_manual_production_data,
+    get_today_realtime_data,
+    get_unfinished_progress_data,
+    parse_id_list_param,
+)
 from app.services.production_statistics_service import (
     get_operator_stats,
     get_overview_stats,
@@ -86,6 +102,13 @@ def _raise_service_error(error: Exception) -> None:
     if "not found" in message_lower:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+
+def _parse_id_list_query(raw_value: str | None) -> list[int]:
+    try:
+        return parse_id_list_param(raw_value)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
 
 def _to_order_item(order: ProductionOrder) -> OrderItem:
@@ -594,6 +617,125 @@ def get_operator_stats_api(
     return success_response(
         ProductionOperatorStatsResult(items=[ProductionOperatorStatItem(**row) for row in rows])
     )
+
+
+@router.get(
+    "/data/today-realtime",
+    response_model=ApiResponse[ProductionDataTodayRealtimeResult],
+)
+def get_today_realtime_data_api(
+    stat_mode: str = Query(default="main_order"),
+    product_ids: str | None = Query(default=None),
+    stage_ids: str | None = Query(default=None),
+    process_ids: str | None = Query(default=None),
+    operator_user_ids: str | None = Query(default=None),
+    order_status: str | None = Query(default="all"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+) -> ApiResponse[ProductionDataTodayRealtimeResult]:
+    try:
+        filters = build_today_filters(
+            stat_mode=stat_mode,
+            product_ids=_parse_id_list_query(product_ids),
+            stage_ids=_parse_id_list_query(stage_ids),
+            process_ids=_parse_id_list_query(process_ids),
+            operator_user_ids=_parse_id_list_query(operator_user_ids),
+            order_status=order_status,
+        )
+        payload = get_today_realtime_data(db, filters=filters)
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(ProductionDataTodayRealtimeResult(**payload))
+
+
+@router.get(
+    "/data/unfinished-progress",
+    response_model=ApiResponse[ProductionDataUnfinishedProgressResult],
+)
+def get_unfinished_progress_data_api(
+    product_ids: str | None = Query(default=None),
+    stage_ids: str | None = Query(default=None),
+    process_ids: str | None = Query(default=None),
+    operator_user_ids: str | None = Query(default=None),
+    order_status: str | None = Query(default="all"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+) -> ApiResponse[ProductionDataUnfinishedProgressResult]:
+    try:
+        payload = get_unfinished_progress_data(
+            db,
+            product_ids=_parse_id_list_query(product_ids),
+            stage_ids=_parse_id_list_query(stage_ids),
+            process_ids=_parse_id_list_query(process_ids),
+            operator_user_ids=_parse_id_list_query(operator_user_ids),
+            order_status=order_status,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(ProductionDataUnfinishedProgressResult(**payload))
+
+
+@router.get(
+    "/data/manual",
+    response_model=ApiResponse[ProductionDataManualResult],
+)
+def get_manual_production_data_api(
+    stat_mode: str = Query(default="main_order"),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    product_ids: str | None = Query(default=None),
+    stage_ids: str | None = Query(default=None),
+    process_ids: str | None = Query(default=None),
+    operator_user_ids: str | None = Query(default=None),
+    order_status: str | None = Query(default="all"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+) -> ApiResponse[ProductionDataManualResult]:
+    try:
+        filters = build_manual_filters(
+            stat_mode=stat_mode,
+            start_date=start_date,
+            end_date=end_date,
+            product_ids=_parse_id_list_query(product_ids),
+            stage_ids=_parse_id_list_query(stage_ids),
+            process_ids=_parse_id_list_query(process_ids),
+            operator_user_ids=_parse_id_list_query(operator_user_ids),
+            order_status=order_status,
+        )
+        payload = get_manual_production_data(db, filters=filters)
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(ProductionDataManualResult(**payload))
+
+
+@router.post(
+    "/data/manual/export",
+    response_model=ApiResponse[ProductionDataManualExportResult],
+)
+def export_manual_production_data_api(
+    payload: ProductionDataManualExportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+) -> ApiResponse[ProductionDataManualExportResult]:
+    try:
+        filters = build_manual_filters(
+            stat_mode=payload.stat_mode,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            product_ids=payload.product_ids,
+            stage_ids=payload.stage_ids,
+            process_ids=payload.process_ids,
+            operator_user_ids=payload.operator_user_ids,
+            order_status=payload.order_status,
+        )
+        data = export_manual_production_data_csv(
+            db,
+            filters=filters,
+            operator=current_user,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(ProductionDataManualExportResult(**data))
 
 
 @router.get(
