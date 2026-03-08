@@ -7,6 +7,16 @@ import '../services/api_exception.dart';
 import '../services/authz_service.dart';
 import '../services/user_service.dart';
 
+class _PermissionGroup {
+  const _PermissionGroup({
+    required this.resourceType,
+    required this.items,
+  });
+
+  final String resourceType;
+  final List<PermissionCatalogItem> items;
+}
+
 class FunctionPermissionConfigPage extends StatefulWidget {
   const FunctionPermissionConfigPage({
     super.key,
@@ -67,6 +77,35 @@ class _FunctionPermissionConfigPageState
     final min = local.minute.toString().padLeft(2, '0');
     final sec = local.second.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd $hh:$min:$sec';
+  }
+
+  String _resourceTypeLabel(String resourceType) {
+    switch (resourceType) {
+      case 'page':
+        return '页面权限';
+      case 'action':
+        return '动作权限';
+      default:
+        return resourceType;
+    }
+  }
+
+  List<_PermissionGroup> _groupedPermissions() {
+    final grouped = <String, List<PermissionCatalogItem>>{};
+    for (final permission in _permissions) {
+      grouped.putIfAbsent(permission.resourceType, () => []).add(permission);
+    }
+    final groups = grouped.entries
+        .map(
+          (entry) => _PermissionGroup(
+            resourceType: entry.key,
+            items: entry.value.toList()
+              ..sort((a, b) => a.permissionCode.compareTo(b.permissionCode)),
+          ),
+        )
+        .toList();
+    groups.sort((a, b) => a.resourceType.compareTo(b.resourceType));
+    return groups;
   }
 
   Future<void> _loadData() async {
@@ -223,20 +262,29 @@ class _FunctionPermissionConfigPageState
     });
   }
 
-  List<PermissionCatalogItem> _sortedPermissions() {
-    final rows = _permissions.toList()
-      ..sort((a, b) {
-        if (a.resourceType != b.resourceType) {
-          return a.resourceType.compareTo(b.resourceType);
+  void _setGroupForRole({
+    required String roleCode,
+    required _PermissionGroup group,
+    required bool granted,
+  }) {
+    setState(() {
+      final current = {...(_draftGrantedByRole[roleCode] ?? <String>{})};
+      if (granted) {
+        for (final item in group.items) {
+          current.add(item.permissionCode);
         }
-        return a.permissionCode.compareTo(b.permissionCode);
-      });
-    return rows;
+      } else {
+        for (final item in group.items) {
+          current.remove(item.permissionCode);
+        }
+      }
+      _draftGrantedByRole[roleCode] = current;
+    });
   }
 
   Widget _buildRolePermissionPane(RoleItem role) {
     final granted = _draftGrantedByRole[role.code] ?? const <String>{};
-    final permissions = _sortedPermissions();
+    final groups = _groupedPermissions();
     return Column(
       children: [
         Padding(
@@ -245,7 +293,7 @@ class _FunctionPermissionConfigPageState
             children: [
               Text('角色：${role.name} (${role.code})'),
               const Spacer(),
-              Text('已授权 ${granted.length}/${permissions.length}'),
+              Text('已授权 ${granted.length}/${_permissions.length}'),
               const SizedBox(width: 12),
               OutlinedButton(
                 onPressed: _saving ? null : () => _setAllForRole(role.code, true),
@@ -261,30 +309,61 @@ class _FunctionPermissionConfigPageState
         ),
         const Divider(height: 1),
         Expanded(
-          child: permissions.isEmpty
+          child: groups.isEmpty
               ? const Center(child: Text('当前模块无可配置权限'))
-              : ListView.separated(
-                  itemCount: permissions.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final item = permissions[index];
-                    final checked = granted.contains(item.permissionCode);
-                    return SwitchListTile(
-                      dense: true,
-                      title: Text(item.permissionName),
-                      subtitle: Text(
-                        '${item.resourceType} | ${item.permissionCode}',
+              : ListView(
+                  children: groups.map((group) {
+                    final groupGrantedCount = group.items
+                        .where((item) => granted.contains(item.permissionCode))
+                        .length;
+                    final allGranted = groupGrantedCount == group.items.length;
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
                       ),
-                      value: checked,
-                      onChanged: _saving
-                          ? null
-                          : (enabled) => _togglePermission(
-                                roleCode: role.code,
-                                permissionCode: item.permissionCode,
-                                enabled: enabled,
-                              ),
+                      child: ExpansionTile(
+                        initiallyExpanded: group.resourceType == 'page',
+                        title: Text(
+                          '${_resourceTypeLabel(group.resourceType)} '
+                          '($groupGrantedCount/${group.items.length})',
+                        ),
+                        trailing: Wrap(
+                          spacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            TextButton(
+                              onPressed: _saving
+                                  ? null
+                                  : () => _setGroupForRole(
+                                        roleCode: role.code,
+                                        group: group,
+                                        granted: !allGranted,
+                                      ),
+                              child: Text(allGranted ? '清空组' : '全选组'),
+                            ),
+                            const Icon(Icons.expand_more),
+                          ],
+                        ),
+                        children: group.items.map((item) {
+                          final checked = granted.contains(item.permissionCode);
+                          return SwitchListTile(
+                            dense: true,
+                            title: Text(item.permissionName),
+                            subtitle: Text(item.permissionCode),
+                            value: checked,
+                            onChanged: _saving
+                                ? null
+                                : (enabled) => _togglePermission(
+                                      roleCode: role.code,
+                                      permissionCode: item.permissionCode,
+                                      enabled: enabled,
+                                    ),
+                          );
+                        }).toList(),
+                      ),
                     );
-                  },
+                  }).toList(),
                 ),
         ),
       ],
