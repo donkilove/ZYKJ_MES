@@ -16,6 +16,11 @@ from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
 from app.models.production_sub_order import ProductionSubOrder
 from app.models.production_assist_authorization import ProductionAssistAuthorization
+from app.models.production_scrap_statistics import ProductionScrapStatistics
+from app.models.repair_cause import RepairCause
+from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
+from app.models.repair_order import RepairOrder
+from app.models.repair_return_route import RepairReturnRoute
 from app.models.product_parameter import ProductParameter
 from app.models.product_parameter_history import ProductParameterHistory
 from app.models.process import Process
@@ -56,6 +61,11 @@ __all__ = [
     "ProductionOrderProcess",
     "ProductionSubOrder",
     "ProductionAssistAuthorization",
+    "ProductionScrapStatistics",
+    "RepairOrder",
+    "RepairDefectPhenomenon",
+    "RepairCause",
+    "RepairReturnRoute",
     "FirstArticleRecord",
     "DailyVerificationCode",
     "ProductionRecord",

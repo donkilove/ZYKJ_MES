@@ -37,6 +37,7 @@ from app.services.production_order_service import (
     ensure_sub_orders_visible_quantity,
     is_pipeline_parallel_edge_for_processes,
 )
+from app.services.production_repair_service import create_repair_order
 
 
 def _get_today_verification_code(
@@ -318,6 +319,7 @@ def end_production(
     operator: User,
     effective_operator_user_id: int | None = None,
     assist_authorization_id: int | None = None,
+    defect_items: list[dict[str, object]] | None = None,
 ) -> tuple[ProductionOrder, ProductionOrderProcess, ProductionSubOrder]:
     if quantity <= 0:
         raise ValueError("Quantity must be greater than 0")
@@ -409,6 +411,24 @@ def end_production(
             target_visible_quantity=next_process.visible_quantity,
         )
 
+    repair_row = None
+    if defect_items:
+        defect_quantity = sum(
+            int(item.get("quantity") or 0)
+            for item in defect_items
+            if isinstance(item, dict)
+        )
+        if defect_quantity > 0:
+            repair_row = create_repair_order(
+                db,
+                order_id=order.id,
+                order_process_id=process_row.id,
+                sender=operator,
+                production_quantity=quantity + defect_quantity,
+                defect_items=defect_items,
+                auto_created=True,
+            )
+
     db.add(
         ProductionRecord(
             order_id=order.id,
@@ -437,6 +457,8 @@ def end_production(
             "operator_user_id": operator.id,
             "effective_operator_user_id": effective_user_id,
             "assist_authorization_id": assist_row.id if assist_row else None,
+            "repair_order_id": repair_row.id if repair_row else None,
+            "repair_order_code": repair_row.repair_order_code if repair_row else None,
         },
     )
     if assist_row is not None:

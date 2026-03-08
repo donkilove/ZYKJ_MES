@@ -243,12 +243,18 @@ class FirstArticleRequest(BaseModel):
     assist_authorization_id: int | None = Field(default=None, gt=0)
 
 
+class ProductionDefectItem(BaseModel):
+    phenomenon: str = Field(min_length=1, max_length=128)
+    quantity: int = Field(gt=0)
+
+
 class EndProductionRequest(BaseModel):
     order_process_id: int = Field(gt=0)
     quantity: int = Field(gt=0)
     remark: str | None = Field(default=None, max_length=1024)
     effective_operator_user_id: int | None = Field(default=None, gt=0)
     assist_authorization_id: int | None = Field(default=None, gt=0)
+    defect_items: list[ProductionDefectItem] = Field(default_factory=list)
 
 
 class AssistAuthorizationCreateRequest(BaseModel):
@@ -480,3 +486,112 @@ class ProductionDataManualExportResult(BaseModel):
     file_name: str
     mime_type: str
     content_base64: str
+
+
+class RepairOrderCreateRequest(BaseModel):
+    order_process_id: int = Field(gt=0)
+    production_quantity: int = Field(gt=0)
+    defect_items: list[ProductionDefectItem] = Field(default_factory=list)
+
+
+class RepairCauseItem(BaseModel):
+    phenomenon: str = Field(min_length=1, max_length=128)
+    reason: str = Field(min_length=1, max_length=128)
+    quantity: int = Field(gt=0)
+    is_scrap: bool = False
+
+
+class RepairReturnAllocationItem(BaseModel):
+    target_order_process_id: int = Field(gt=0)
+    quantity: int = Field(gt=0)
+
+
+class RepairOrderCompleteRequest(BaseModel):
+    cause_items: list[RepairCauseItem] = Field(min_length=1)
+    scrap_replenished: bool = False
+    return_allocations: list[RepairReturnAllocationItem] = Field(default_factory=list)
+
+
+class RepairOrderItem(BaseModel):
+    id: int
+    repair_order_code: str
+    source_order_id: int | None = None
+    source_order_code: str | None = None
+    product_id: int | None = None
+    product_name: str | None = None
+    source_order_process_id: int | None = None
+    source_process_code: str
+    source_process_name: str
+    sender_user_id: int | None = None
+    sender_username: str | None = None
+    production_quantity: int
+    repair_quantity: int
+    repaired_quantity: int
+    scrap_quantity: int
+    scrap_replenished: bool
+    repair_time: datetime
+    status: str
+    completed_at: datetime | None = None
+    repair_operator_user_id: int | None = None
+    repair_operator_username: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RepairOrderListResult(BaseModel):
+    total: int
+    items: list[RepairOrderItem]
+
+
+class RepairOrderPhenomenonSummaryItem(BaseModel):
+    phenomenon: str
+    quantity: int
+
+
+class RepairOrderPhenomenaSummaryResult(BaseModel):
+    repair_order_id: int
+    items: list[RepairOrderPhenomenonSummaryItem]
+
+
+class ScrapStatisticsItem(BaseModel):
+    id: int
+    order_id: int | None = None
+    order_code: str | None = None
+    product_id: int | None = None
+    product_name: str | None = None
+    process_id: int | None = None
+    process_code: str | None = None
+    process_name: str | None = None
+    scrap_reason: str
+    scrap_quantity: int
+    last_scrap_time: datetime | None = None
+    progress: str
+    applied_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ScrapStatisticsListResult(BaseModel):
+    total: int
+    items: list[ScrapStatisticsItem]
+
+
+class ScrapStatisticsExportRequest(BaseModel):
+    keyword: str | None = Field(default=None, max_length=128)
+    progress: str | None = Field(default="all", max_length=32)
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class RepairOrdersExportRequest(BaseModel):
+    keyword: str | None = Field(default=None, max_length=128)
+    status: str | None = Field(default="all", max_length=32)
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class ProductionExportResult(BaseModel):
+    file_name: str
+    mime_type: str
+    content_base64: str
+    exported_count: int = 0

@@ -46,6 +46,13 @@ from app.schemas.production import (
     OrderCreate,
     OrderPipelineModeUpdateRequest,
     OrderUpdate,
+    ProductionDefectItem,
+    RepairCauseItem,
+    RepairOrderCompleteRequest,
+    RepairOrderCreateRequest,
+    RepairOrdersExportRequest,
+    RepairReturnAllocationItem,
+    ScrapStatisticsExportRequest,
 )
 from app.schemas.user import UserCreate, UserUpdate
 
@@ -603,6 +610,137 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
             current_user=admin,
         )
     assert consumed_error.value.status_code in {400, 404}
+
+    order_resp_3 = production.create_order_api(
+        OrderCreate(
+            order_code="EP-ORD-3",
+            product_id=product_resp.data.id,
+            quantity=2,
+            process_codes=[process.data.code],
+            template_id=None,
+            process_steps=None,
+            save_as_template=False,
+            new_template_name=None,
+            new_template_set_default=False,
+        ),
+        db,
+        current_user=admin,
+    )
+    order_id_3 = order_resp_3.data.id
+    detail_3 = production.get_order_detail_api(order_id_3, db=db, _=admin)
+    process_id_3 = detail_3.data.processes[0].id
+
+    production.submit_first_article_api(
+        order_id_3,
+        FirstArticleRequest(
+            order_process_id=process_id_3,
+            verification_code=settings.production_default_verification_code,
+            remark=None,
+        ),
+        db,
+        current_user=operator,
+    )
+    production.end_production_api(
+        order_id_3,
+        EndProductionRequest(
+            order_process_id=process_id_3,
+            quantity=1,
+            remark="auto-repair",
+            defect_items=[ProductionDefectItem(phenomenon="毛刺", quantity=1)],
+        ),
+        db,
+        current_user=operator,
+    )
+
+    repair_orders = production.get_repair_orders_api(
+        page=1,
+        page_size=20,
+        keyword="EP-ORD-3",
+        status_text="in_repair",
+        start_date=None,
+        end_date=None,
+        db=db,
+        _=qa_admin,
+    )
+    assert repair_orders.data.total >= 1
+    auto_repair = repair_orders.data.items[0]
+
+    manual_repair = production.create_manual_repair_order_api(
+        order_id_3,
+        RepairOrderCreateRequest(
+            order_process_id=process_id_3,
+            production_quantity=2,
+            defect_items=[ProductionDefectItem(phenomenon="划伤", quantity=1)],
+        ),
+        db=db,
+        current_user=operator,
+    )
+    assert manual_repair.data.status == "in_repair"
+
+    phenomena_summary = production.get_repair_order_phenomena_summary_api(
+        repair_order_id=auto_repair.id,
+        db=db,
+        _=qa_admin,
+    )
+    assert phenomena_summary.data.items
+
+    completed_repair = production.complete_repair_order_api(
+        repair_order_id=auto_repair.id,
+        payload=RepairOrderCompleteRequest(
+            cause_items=[
+                RepairCauseItem(
+                    phenomenon="毛刺",
+                    reason="刀具磨损",
+                    quantity=1,
+                    is_scrap=True,
+                )
+            ],
+            scrap_replenished=True,
+            return_allocations=[],
+        ),
+        db=db,
+        current_user=admin,
+    )
+    assert completed_repair.data.status == "completed"
+    assert completed_repair.data.scrap_quantity == 1
+
+    scrap_stats = production.get_scrap_statistics_api(
+        page=1,
+        page_size=20,
+        keyword="EP-ORD-3",
+        progress="all",
+        start_date=None,
+        end_date=None,
+        db=db,
+        _=qa_admin,
+    )
+    assert scrap_stats.data.total >= 1
+
+    scrap_export = production.export_scrap_statistics_api(
+        ScrapStatisticsExportRequest(
+            keyword="EP-ORD-3",
+            progress="all",
+            start_date=None,
+            end_date=None,
+        ),
+        db=db,
+        current_user=admin,
+    )
+    assert scrap_export.data.content_base64
+    assert scrap_export.data.file_name.endswith(".csv")
+
+    repair_export = production.export_repair_orders_api(
+        RepairOrdersExportRequest(
+            keyword="EP-ORD-3",
+            status="all",
+            start_date=None,
+            end_date=None,
+        ),
+        db=db,
+        current_user=admin,
+    )
+    assert repair_export.data.content_base64
+    assert repair_export.data.file_name.endswith(".csv")
 
     overview = production.get_overview_stats_api(db=db, _=qa_admin)
     assert overview.data.total_orders >= 1

@@ -21,7 +21,9 @@ from app.models.order_event_log import OrderEventLog
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
+from app.models.production_scrap_statistics import ProductionScrapStatistics
 from app.models.production_sub_order import ProductionSubOrder
+from app.models.repair_order import RepairOrder
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
@@ -49,9 +51,20 @@ from app.schemas.production import (
     ProductionOperatorStatsResult,
     ProductionDataManualExportRequest,
     ProductionDataManualExportResult,
+    ProductionExportResult,
     ProductionDataManualResult,
     ProductionDataTodayRealtimeResult,
     ProductionDataUnfinishedProgressResult,
+    RepairOrderCompleteRequest,
+    RepairOrderCreateRequest,
+    RepairOrderItem,
+    RepairOrderListResult,
+    RepairOrderPhenomenaSummaryResult,
+    RepairOrderPhenomenonSummaryItem,
+    RepairOrdersExportRequest,
+    ScrapStatisticsExportRequest,
+    ScrapStatisticsItem,
+    ScrapStatisticsListResult,
     ProductionOrderProcessItem,
     ProductionProcessStatItem,
     ProductionProcessStatsResult,
@@ -81,6 +94,18 @@ from app.services.production_data_query_service import (
     get_today_realtime_data,
     get_unfinished_progress_data,
     parse_id_list_param,
+)
+from app.services.production_repair_service import (
+    RepairListFilters,
+    ScrapStatisticsFilters,
+    complete_repair_order,
+    create_manual_repair_order,
+    export_repair_orders_csv,
+    export_scrap_statistics_csv,
+    get_repair_order_by_id,
+    get_repair_order_phenomena_summary,
+    list_repair_orders,
+    list_scrap_statistics,
 )
 from app.services.production_statistics_service import (
     get_operator_stats,
@@ -256,6 +281,54 @@ def _to_order_pipeline_mode_item(payload: dict[str, object]) -> OrderPipelineMod
         enabled=bool(payload.get("enabled")),
         process_codes=[str(code) for code in payload.get("process_codes") or []],
         available_process_codes=[str(code) for code in payload.get("available_process_codes") or []],
+    )
+
+
+def _to_repair_order_item(row: RepairOrder) -> RepairOrderItem:
+    return RepairOrderItem(
+        id=row.id,
+        repair_order_code=row.repair_order_code,
+        source_order_id=row.source_order_id,
+        source_order_code=row.source_order_code,
+        product_id=row.product_id,
+        product_name=row.product_name,
+        source_order_process_id=row.source_order_process_id,
+        source_process_code=row.source_process_code,
+        source_process_name=row.source_process_name,
+        sender_user_id=row.sender_user_id,
+        sender_username=row.sender_username,
+        production_quantity=row.production_quantity,
+        repair_quantity=row.repair_quantity,
+        repaired_quantity=row.repaired_quantity,
+        scrap_quantity=row.scrap_quantity,
+        scrap_replenished=row.scrap_replenished,
+        repair_time=row.repair_time,
+        status=row.status,
+        completed_at=row.completed_at,
+        repair_operator_user_id=row.repair_operator_user_id,
+        repair_operator_username=row.repair_operator_username,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _to_scrap_statistics_item(row: ProductionScrapStatistics) -> ScrapStatisticsItem:
+    return ScrapStatisticsItem(
+        id=row.id,
+        order_id=row.order_id,
+        order_code=row.order_code,
+        product_id=row.product_id,
+        product_name=row.product_name,
+        process_id=row.process_id,
+        process_code=row.process_code,
+        process_name=row.process_name,
+        scrap_reason=row.scrap_reason,
+        scrap_quantity=row.scrap_quantity,
+        last_scrap_time=row.last_scrap_time,
+        progress=row.progress,
+        applied_at=row.applied_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -568,6 +641,7 @@ def end_production_api(
             operator=current_user,
             effective_operator_user_id=payload.effective_operator_user_id,
             assist_authorization_id=payload.assist_authorization_id,
+            defect_items=[item.model_dump() for item in payload.defect_items] if payload.defect_items else None,
         )
     except Exception as error:
         _raise_service_error(error)
@@ -736,6 +810,207 @@ def export_manual_production_data_api(
     except Exception as error:
         _raise_service_error(error)
     return success_response(ProductionDataManualExportResult(**data))
+
+
+@router.get(
+    "/scrap-statistics",
+    response_model=ApiResponse[ScrapStatisticsListResult],
+)
+def get_scrap_statistics_api(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=500),
+    keyword: str | None = Query(default=None),
+    progress: str | None = Query(default="all"),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+) -> ApiResponse[ScrapStatisticsListResult]:
+    try:
+        total, rows = list_scrap_statistics(
+            db,
+            page=page,
+            page_size=page_size,
+            filters=ScrapStatisticsFilters(
+                keyword=keyword,
+                progress=progress,
+                start_date=start_date,
+                end_date=end_date,
+            ),
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(
+        ScrapStatisticsListResult(
+            total=total,
+            items=[_to_scrap_statistics_item(row) for row in rows],
+        )
+    )
+
+
+@router.post(
+    "/scrap-statistics/export",
+    response_model=ApiResponse[ProductionExportResult],
+)
+def export_scrap_statistics_api(
+    payload: ScrapStatisticsExportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+) -> ApiResponse[ProductionExportResult]:
+    try:
+        result = export_scrap_statistics_csv(
+            db,
+            filters=ScrapStatisticsFilters(
+                keyword=payload.keyword,
+                progress=payload.progress,
+                start_date=payload.start_date,
+                end_date=payload.end_date,
+            ),
+            operator=current_user,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(ProductionExportResult(**result))
+
+
+@router.get(
+    "/repair-orders",
+    response_model=ApiResponse[RepairOrderListResult],
+)
+def get_repair_orders_api(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=500),
+    keyword: str | None = Query(default=None),
+    status_text: str | None = Query(default="all", alias="status"),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+) -> ApiResponse[RepairOrderListResult]:
+    try:
+        total, rows = list_repair_orders(
+            db,
+            page=page,
+            page_size=page_size,
+            filters=RepairListFilters(
+                keyword=keyword,
+                status=status_text,
+                start_date=start_date,
+                end_date=end_date,
+            ),
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(
+        RepairOrderListResult(
+            total=total,
+            items=[_to_repair_order_item(row) for row in rows],
+        )
+    )
+
+
+@router.post(
+    "/orders/{order_id}/repair-orders",
+    response_model=ApiResponse[RepairOrderItem],
+    status_code=status.HTTP_201_CREATED,
+)
+def create_manual_repair_order_api(
+    order_id: int,
+    payload: RepairOrderCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR])),
+) -> ApiResponse[RepairOrderItem]:
+    try:
+        row = create_manual_repair_order(
+            db,
+            order_id=order_id,
+            order_process_id=payload.order_process_id,
+            production_quantity=payload.production_quantity,
+            defect_items=[item.model_dump() for item in payload.defect_items],
+            sender=current_user,
+        )
+        db.commit()
+        db.refresh(row)
+    except Exception as error:
+        db.rollback()
+        _raise_service_error(error)
+    return success_response(_to_repair_order_item(row), message="created")
+
+
+@router.get(
+    "/repair-orders/{repair_order_id}/phenomena-summary",
+    response_model=ApiResponse[RepairOrderPhenomenaSummaryResult],
+)
+def get_repair_order_phenomena_summary_api(
+    repair_order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN])),
+) -> ApiResponse[RepairOrderPhenomenaSummaryResult]:
+    try:
+        repair_row = get_repair_order_by_id(db, repair_order_id=repair_order_id)
+        if repair_row is None:
+            raise ValueError("Repair order not found")
+        rows = get_repair_order_phenomena_summary(
+            db,
+            repair_order_id=repair_order_id,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(
+        RepairOrderPhenomenaSummaryResult(
+            repair_order_id=repair_order_id,
+            items=[RepairOrderPhenomenonSummaryItem(**item) for item in rows],
+        )
+    )
+
+
+@router.post(
+    "/repair-orders/{repair_order_id}/complete",
+    response_model=ApiResponse[RepairOrderItem],
+)
+def complete_repair_order_api(
+    repair_order_id: int,
+    payload: RepairOrderCompleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+) -> ApiResponse[RepairOrderItem]:
+    try:
+        row = complete_repair_order(
+            db,
+            repair_order_id=repair_order_id,
+            cause_items=[item.model_dump() for item in payload.cause_items],
+            scrap_replenished=payload.scrap_replenished,
+            return_allocations=[item.model_dump() for item in payload.return_allocations],
+            operator=current_user,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(_to_repair_order_item(row), message="completed")
+
+
+@router.post(
+    "/repair-orders/export",
+    response_model=ApiResponse[ProductionExportResult],
+)
+def export_repair_orders_api(
+    payload: RepairOrdersExportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN])),
+) -> ApiResponse[ProductionExportResult]:
+    try:
+        result = export_repair_orders_csv(
+            db,
+            filters=RepairListFilters(
+                keyword=payload.keyword,
+                status=payload.status,
+                start_date=payload.start_date,
+                end_date=payload.end_date,
+            ),
+            operator=current_user,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(ProductionExportResult(**result))
 
 
 @router.get(

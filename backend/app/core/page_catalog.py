@@ -31,6 +31,8 @@ PAGE_PRODUCTION_ORDER_MANAGEMENT = "production_order_management"
 PAGE_PRODUCTION_ORDER_QUERY = "production_order_query"
 PAGE_PRODUCTION_ASSIST_APPROVAL = "production_assist_approval"
 PAGE_PRODUCTION_DATA_QUERY = "production_data_query"
+PAGE_PRODUCTION_SCRAP_STATISTICS = "production_scrap_statistics"
+PAGE_PRODUCTION_REPAIR_ORDERS = "production_repair_orders"
 PAGE_QUALITY = "quality"
 PAGE_FIRST_ARTICLE_MANAGEMENT = "first_article_management"
 PAGE_QUALITY_DATA_QUERY = "quality_data_query"
@@ -187,7 +189,7 @@ PAGE_CATALOG = [
     },
     {
         "code": PAGE_PRODUCTION_ASSIST_APPROVAL,
-        "name": "浠ｇ彮瀹℃壒",
+        "name": "代班审批",
         "page_type": PAGE_TYPE_TAB,
         "parent_code": PAGE_PRODUCTION,
         "always_visible": False,
@@ -200,6 +202,22 @@ PAGE_CATALOG = [
         "parent_code": PAGE_PRODUCTION,
         "always_visible": False,
         "sort_order": 54,
+    },
+    {
+        "code": PAGE_PRODUCTION_SCRAP_STATISTICS,
+        "name": "报废统计",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCTION,
+        "always_visible": False,
+        "sort_order": 55,
+    },
+    {
+        "code": PAGE_PRODUCTION_REPAIR_ORDERS,
+        "name": "维修订单",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCTION,
+        "always_visible": False,
+        "sort_order": 56,
     },
     {
         "code": PAGE_QUALITY,
@@ -289,7 +307,10 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCTION,
         PAGE_PRODUCTION_ORDER_MANAGEMENT,
         PAGE_PRODUCTION_ORDER_QUERY,
+        PAGE_PRODUCTION_ASSIST_APPROVAL,
         PAGE_PRODUCTION_DATA_QUERY,
+        PAGE_PRODUCTION_SCRAP_STATISTICS,
+        PAGE_PRODUCTION_REPAIR_ORDERS,
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,
@@ -315,6 +336,8 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCTION_ORDER_QUERY,
         PAGE_PRODUCTION_ASSIST_APPROVAL,
         PAGE_PRODUCTION_DATA_QUERY,
+        PAGE_PRODUCTION_SCRAP_STATISTICS,
+        PAGE_PRODUCTION_REPAIR_ORDERS,
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,
@@ -331,6 +354,8 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCTION,
         PAGE_PRODUCTION_ORDER_QUERY,
         PAGE_PRODUCTION_DATA_QUERY,
+        PAGE_PRODUCTION_SCRAP_STATISTICS,
+        PAGE_PRODUCTION_REPAIR_ORDERS,
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,
