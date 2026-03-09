@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/authz_models.dart';
-import '../services/authz_service.dart';
 import 'function_permission_config_page.dart';
 import 'registration_approval_page.dart';
 import 'user_management_page.dart';
@@ -19,12 +18,14 @@ class UserPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.visibleTabCodes,
+    required this.capabilityCodes,
     this.onVisibilityConfigSaved,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
+  final Set<String> capabilityCodes;
   final VoidCallback? onVisibilityConfigSaved;
 
   @override
@@ -32,59 +33,7 @@ class UserPage extends StatefulWidget {
 }
 
 class _UserPageState extends State<UserPage> {
-  late final AuthzService _authzService;
-  Set<String> _permissionCodes = const <String>{};
-  bool _loadingPermissions = true;
-  String _permissionMessage = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _authzService = AuthzService(widget.session);
-    _loadPermissions();
-  }
-
-  @override
-  void didUpdateWidget(covariant UserPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.session.accessToken != widget.session.accessToken) {
-      _loadPermissions();
-    }
-  }
-
-  Future<void> _loadPermissions() async {
-    setState(() {
-      _loadingPermissions = true;
-      _permissionMessage = '';
-    });
-    try {
-      final codes = await _authzService.getMyPermissionCodes(
-        moduleCode: 'user',
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _permissionCodes = codes.toSet();
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _permissionCodes = const <String>{};
-        _permissionMessage = '加载用户模块权限失败：$error';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingPermissions = false;
-        });
-      }
-    }
-  }
-
-  bool _hasPermission(String code) => _permissionCodes.contains(code);
+  bool _hasPermission(String code) => widget.capabilityCodes.contains(code);
 
   bool get _canManageUsers =>
       _hasPermission(UserFeaturePermissionCodes.userManagementManage);
@@ -146,6 +95,11 @@ class _UserPageState extends State<UserPage> {
               child: FunctionPermissionConfigPage(
                 session: widget.session,
                 onLogout: widget.onLogout,
+                onPermissionsChanged: widget.onVisibilityConfigSaved == null
+                    ? null
+                    : () async {
+                        widget.onVisibilityConfigSaved!();
+                      },
               ),
             ),
           );
@@ -157,9 +111,6 @@ class _UserPageState extends State<UserPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loadingPermissions) {
-      return const Center(child: CircularProgressIndicator());
-    }
     final tabs = _buildTabs();
     if (tabs.isEmpty) {
       return const Center(child: Text('当前账号没有可访问的用户模块页面。'));
@@ -167,13 +118,6 @@ class _UserPageState extends State<UserPage> {
 
     return Column(
       children: [
-        if (_permissionMessage.isNotEmpty)
-          Container(
-            width: double.infinity,
-            color: Theme.of(context).colorScheme.errorContainer,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text(_permissionMessage),
-          ),
         Expanded(
           child: DefaultTabController(
             key: ValueKey(tabs.map((item) => item.code).join('|')),

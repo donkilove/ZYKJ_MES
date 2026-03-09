@@ -20,6 +20,20 @@ class AuthzService {
     };
   }
 
+  Future<AuthzSnapshotResult> loadAuthzSnapshot() async {
+    final uri = Uri.parse('$_basePath/snapshot');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return AuthzSnapshotResult.fromJson(data);
+  }
+
   Future<List<String>> getMyPermissionCodes({String? moduleCode}) async {
     final query = <String, String>{};
     if (moduleCode != null && moduleCode.trim().isNotEmpty) {
@@ -337,13 +351,41 @@ class AuthzService {
     required String moduleCode,
     required List<CapabilityPackRoleDraftItem> roleItems,
   }) async {
-    final uri = Uri.parse('$_basePath/capability-packs/preview');
+    final uri = Uri.parse('$_basePath/capability-packs/batch-preview');
     final response = await http.post(
       uri,
       headers: _authHeaders,
       body: jsonEncode({
         'module_code': moduleCode,
         'role_items': roleItems.map((item) => item.toJson()).toList(),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return CapabilityPackPreviewResult.fromJson(data);
+  }
+
+  Future<CapabilityPackPreviewResult> applyCapabilityPacks({
+    required String moduleCode,
+    required List<CapabilityPackRoleDraftItem> roleItems,
+    required int expectedRevision,
+    String? remark,
+  }) async {
+    final uri = Uri.parse('$_basePath/capability-packs/batch-apply');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'module_code': moduleCode,
+        'role_items': roleItems.map((item) => item.toJson()).toList(),
+        'expected_revision': expectedRevision,
+        'remark': remark,
       }),
     );
     final body = _decodeBody(response);

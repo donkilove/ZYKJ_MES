@@ -1,4 +1,5 @@
 from app.models.daily_verification_code import DailyVerificationCode
+from app.models.authz_module_revision import AuthzModuleRevision
 from app.models.equipment import Equipment
 from app.models.first_article_record import FirstArticleRecord
 from app.models.maintenance_item import MaintenanceItem
@@ -39,6 +40,7 @@ from app.models.user import User
 __all__ = [
     "User",
     "Role",
+    "AuthzModuleRevision",
     "Process",
     "ProcessStage",
     "ProductProcessTemplate",

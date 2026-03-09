@@ -33,12 +33,17 @@ from app.core.rbac import (
     ROLE_SYSTEM_ADMIN,
 )
 from app.models.permission_catalog import PermissionCatalog
+from app.models.authz_module_revision import AuthzModuleRevision
 from app.models.role import Role
 from app.models.role_permission_grant import RolePermissionGrant
 from app.models.user import User
 
 
 ROLE_SORT_ORDER = {str(item["code"]): index for index, item in enumerate(ROLE_DEFINITIONS)}
+
+
+class AuthzRevisionConflictError(ValueError):
+    pass
 
 MODULE_NAME_FALLBACK_ZH_BY_CODE = {
     "system": "系统管理",
@@ -263,11 +268,71 @@ def ensure_role_permission_defaults(db: Session) -> bool:
     return changed
 
 
+def ensure_authz_module_revision_defaults(db: Session) -> bool:
+    existing_rows = db.execute(select(AuthzModuleRevision)).scalars().all()
+    row_by_module_code = {row.module_code: row for row in existing_rows}
+    changed = False
+
+    for item in MODULE_DEFINITIONS:
+        module_code = str(item.module_code).strip()
+        if not module_code or module_code in row_by_module_code:
+            continue
+        db.add(AuthzModuleRevision(module_code=module_code, revision=0))
+        changed = True
+
+    if changed:
+        db.flush()
+    return changed
+
+
 def ensure_authz_defaults(db: Session) -> None:
     catalog_changed = ensure_permission_catalog_defaults(db)
     grants_changed = ensure_role_permission_defaults(db)
-    if catalog_changed or grants_changed:
+    revision_changed = ensure_authz_module_revision_defaults(db)
+    if catalog_changed or grants_changed or revision_changed:
         db.commit()
+
+
+def get_authz_module_revision(db: Session, *, module_code: str) -> int:
+    ensure_authz_defaults(db)
+    normalized_module = _normalize_module_code(module_code)
+    row = db.execute(
+        select(AuthzModuleRevision).where(AuthzModuleRevision.module_code == normalized_module)
+    ).scalars().first()
+    if row is None:
+        row = AuthzModuleRevision(module_code=normalized_module, revision=0)
+        db.add(row)
+        db.flush()
+    return int(row.revision)
+
+
+def get_authz_module_revision_map(db: Session) -> dict[str, int]:
+    ensure_authz_defaults(db)
+    rows = db.execute(select(AuthzModuleRevision)).scalars().all()
+    revision_by_module = {str(row.module_code): int(row.revision) for row in rows}
+    for item in MODULE_DEFINITIONS:
+        revision_by_module.setdefault(str(item.module_code), 0)
+    return revision_by_module
+
+
+def _bump_authz_module_revision(
+    db: Session,
+    *,
+    module_code: str,
+    operator: User | None,
+) -> int:
+    normalized_module = _normalize_module_code(module_code)
+    row = db.execute(
+        select(AuthzModuleRevision).where(AuthzModuleRevision.module_code == normalized_module)
+    ).scalars().first()
+    if row is None:
+        row = AuthzModuleRevision(module_code=normalized_module, revision=0)
+        db.add(row)
+        db.flush()
+    row.revision = int(row.revision) + 1
+    row.updated_by_user_id = operator.id if operator is not None else None
+    db.flush()
+    return int(row.revision)
 
 
 def list_permission_catalog_rows(
@@ -413,30 +478,56 @@ def _effective_permission_codes_from_granted(
     effective.update(enabled_pages)
 
     enabled_features: set[str] = set()
-    for code in granted_codes:
-        row = row_by_code.get(code)
-        if row is None or row.resource_type != AUTHZ_RESOURCE_FEATURE:
-            continue
-        module_code_value = str(row.module_code).strip()
-        module_permission = MODULE_PERMISSION_BY_MODULE_CODE.get(
-            module_code_value,
-            module_permission_code(module_code_value),
-        )
-        if module_permission not in enabled_modules:
-            continue
-        feature_definition = FEATURE_BY_PERMISSION_CODE.get(code)
-        feature_page_code = (
-            PAGE_PERMISSION_BY_PAGE_CODE.get(feature_definition.page_code)
-            if feature_definition is not None
-            else row.parent_permission_code
-        )
-        if feature_page_code and feature_page_code not in enabled_pages:
-            continue
-        enabled_features.add(code)
+    remaining_feature_codes = {
+        code
+        for code in granted_codes
+        if (row := row_by_code.get(code)) is not None
+        and row.resource_type == AUTHZ_RESOURCE_FEATURE
+    }
+    changed = True
+    while changed:
+        changed = False
+        for code in list(remaining_feature_codes):
+            row = row_by_code.get(code)
+            if row is None:
+                remaining_feature_codes.discard(code)
+                continue
+            module_code_value = str(row.module_code).strip()
+            module_permission = MODULE_PERMISSION_BY_MODULE_CODE.get(
+                module_code_value,
+                module_permission_code(module_code_value),
+            )
+            if module_permission not in enabled_modules:
+                continue
+            feature_definition = FEATURE_BY_PERMISSION_CODE.get(code)
+            feature_page_code = (
+                PAGE_PERMISSION_BY_PAGE_CODE.get(feature_definition.page_code)
+                if feature_definition is not None
+                else row.parent_permission_code
+            )
+            if feature_page_code and feature_page_code not in enabled_pages:
+                continue
+            dependency_codes = (
+                set(feature_definition.dependency_permission_codes)
+                if feature_definition is not None
+                else set()
+            )
+            if dependency_codes and not dependency_codes.issubset(enabled_features):
+                continue
+            enabled_features.add(code)
+            remaining_feature_codes.discard(code)
+            changed = True
     effective.update(enabled_features)
 
+    linked_action_codes: set[str] = set()
+    for code in enabled_features:
+        feature_definition = FEATURE_BY_PERMISSION_CODE.get(code)
+        if feature_definition is None:
+            continue
+        linked_action_codes.update(feature_definition.action_permission_codes)
+
     enabled_actions: set[str] = set()
-    for code in granted_codes:
+    for code in granted_codes.union(linked_action_codes):
         row = row_by_code.get(code)
         if row is None or row.resource_type != AUTHZ_RESOURCE_ACTION:
             continue
@@ -468,35 +559,33 @@ def _effective_permission_codes_for_role_codes(
     normalized_roles = sorted({code for code in role_codes if code})
     if not normalized_roles:
         return set()
-    row_by_code = _catalog_rows_by_code(db, module_code=module_code)
+    row_by_code = _catalog_rows_by_code(db)
     if ROLE_SYSTEM_ADMIN in normalized_roles:
+        if module_code and module_code.strip():
+            normalized_module = module_code.strip()
+            return {
+                code
+                for code, row in row_by_code.items()
+                if str(row.module_code).strip() == normalized_module
+            }
         return {code for code in row_by_code}
     granted_codes = _load_granted_permission_codes_for_roles(
         db,
         role_codes=normalized_roles,
-        module_code=module_code,
     )
-    return _effective_permission_codes_from_granted(
+    effective_codes = _effective_permission_codes_from_granted(
         granted_codes=granted_codes,
         row_by_code=row_by_code,
     )
-
-
-def _resolve_permission_for_access(
-    *,
-    permission_code: str,
-    row_by_code: dict[str, PermissionCatalog],
-) -> str:
-    row = row_by_code.get(permission_code)
-    if row is None:
-        return permission_code
-    if (
-        row.resource_type == AUTHZ_RESOURCE_ACTION
-        and row.parent_permission_code
-        and row.parent_permission_code.startswith("page.")
-    ):
-        return row.parent_permission_code
-    return permission_code
+    if module_code and module_code.strip():
+        normalized_module = module_code.strip()
+        return {
+            code
+            for code in effective_codes
+            if (row := row_by_code.get(code)) is not None
+            and str(row.module_code).strip() == normalized_module
+        }
+    return effective_codes
 
 
 def _list_catalog_rows_by_module(db: Session, *, module_code: str) -> list[PermissionCatalog]:
@@ -551,16 +640,11 @@ def has_permission(
     if not role_codes:
         return False
     ensure_authz_defaults(db)
-    row_by_code = _catalog_rows_by_code(db)
-    required_code = _resolve_permission_for_access(
-        permission_code=permission_code,
-        row_by_code=row_by_code,
-    )
     effective_codes = _effective_permission_codes_for_role_codes(
         db,
         role_codes=role_codes,
     )
-    return required_code in effective_codes
+    return permission_code in effective_codes
 
 
 def get_role_permission_items(
@@ -829,6 +913,11 @@ def update_role_permission_matrix(
     if dry_run:
         db.rollback()
     elif total_updated_count > 0:
+        _bump_authz_module_revision(
+            db,
+            module_code=normalized_module,
+            operator=operator,
+        )
         db.commit()
     else:
         db.rollback()
@@ -1273,6 +1362,42 @@ def _calculate_role_hierarchy_update(
     }
 
 
+def _apply_role_permission_changes(
+    db: Session,
+    *,
+    role_code: str,
+    changed_codes: list[str],
+    after_granted_codes: set[str],
+) -> int:
+    if not changed_codes:
+        return 0
+    grant_rows = db.execute(
+        select(RolePermissionGrant).where(
+            RolePermissionGrant.role_code == role_code,
+            RolePermissionGrant.permission_code.in_(changed_codes),
+        )
+    ).scalars().all()
+    row_by_permission = {row.permission_code: row for row in grant_rows}
+    updated_count = 0
+    for permission_code in changed_codes:
+        should_grant = permission_code in after_granted_codes
+        row = row_by_permission.get(permission_code)
+        if row is None:
+            db.add(
+                RolePermissionGrant(
+                    role_code=role_code,
+                    permission_code=permission_code,
+                    granted=should_grant,
+                )
+            )
+            updated_count += 1
+            continue
+        if bool(row.granted) != should_grant:
+            row.granted = should_grant
+            updated_count += 1
+    return updated_count
+
+
 def get_permission_hierarchy_catalog(
     db: Session,
     *,
@@ -1351,6 +1476,7 @@ def update_permission_hierarchy_role_config(
     page_permission_codes: list[str],
     feature_permission_codes: list[str],
     dry_run: bool = False,
+    operator: User | None = None,
 ) -> dict[str, object]:
     ensure_authz_defaults(db)
     role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
@@ -1398,30 +1524,18 @@ def update_permission_hierarchy_role_config(
     updated_count = 0
 
     if not dry_run and changed_codes:
-        grant_rows = db.execute(
-            select(RolePermissionGrant).where(
-                RolePermissionGrant.role_code == role_code,
-                RolePermissionGrant.permission_code.in_(changed_codes),
-            )
-        ).scalars().all()
-        row_by_permission = {row.permission_code: row for row in grant_rows}
-        for permission_code in changed_codes:
-            should_grant = permission_code in after_granted_codes
-            row = row_by_permission.get(permission_code)
-            if row is None:
-                db.add(
-                    RolePermissionGrant(
-                        role_code=role_code,
-                        permission_code=permission_code,
-                        granted=should_grant,
-                    )
-                )
-                updated_count += 1
-                continue
-            if bool(row.granted) != should_grant:
-                row.granted = should_grant
-                updated_count += 1
+        updated_count = _apply_role_permission_changes(
+            db,
+            role_code=role_code,
+            changed_codes=changed_codes,
+            after_granted_codes=after_granted_codes,
+        )
         if updated_count > 0:
+            _bump_authz_module_revision(
+                db,
+                module_code=str(result["module_code"]),
+                operator=operator,
+            )
             db.commit()
         else:
             db.rollback()
@@ -1531,6 +1645,10 @@ def get_capability_pack_catalog(
         "module_code": normalized_module,
         "module_codes": available_module_codes,
         "module_name": _module_display_name(normalized_module),
+        "module_revision": get_authz_module_revision(
+            db,
+            module_code=normalized_module,
+        ),
         "module_permission_code": MODULE_PERMISSION_BY_MODULE_CODE.get(
             normalized_module,
             module_permission_code(normalized_module),
@@ -1594,8 +1712,16 @@ def _capability_request_to_granted_codes(
         if feature is None:
             continue
         page_permission_code = PAGE_PERMISSION_BY_PAGE_CODE.get(feature.page_code)
-        if page_permission_code:
-            requested_codes.add(page_permission_code)
+        current_page_permission = page_permission_code
+        while current_page_permission:
+            requested_codes.add(current_page_permission)
+            permission_item = PERMISSION_BY_CODE.get(current_page_permission)
+            parent_permission_code = (
+                permission_item.parent_permission_code if permission_item is not None else None
+            )
+            if not parent_permission_code or not parent_permission_code.startswith("page."):
+                break
+            current_page_permission = parent_permission_code
         if feature.module_code != module_code:
             requested_codes.add(
                 MODULE_PERMISSION_BY_MODULE_CODE.get(
@@ -1607,16 +1733,14 @@ def _capability_request_to_granted_codes(
     return requested_codes, auto_linked_dependencies
 
 
-def update_capability_pack_role_config(
+def _calculate_capability_pack_role_update(
     db: Session,
     *,
     role_code: str,
     module_code: str,
     module_enabled: bool,
     capability_codes: list[str],
-    dry_run: bool = False,
 ) -> dict[str, object]:
-    ensure_authz_defaults(db)
     role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
     if role_row is None:
         raise ValueError(f"Role not found: {role_code}")
@@ -1648,6 +1772,9 @@ def update_capability_pack_role_config(
             "effective_capability_codes": config["effective_capability_codes"],
             "effective_page_permission_codes": config["effective_page_permission_codes"],
             "updated_count": 0,
+            "before_granted_codes": set(),
+            "after_granted_codes": set(),
+            "changed_codes": [],
         }
 
     all_hierarchy_codes = _all_hierarchy_permission_codes()
@@ -1662,13 +1789,10 @@ def update_capability_pack_role_config(
         capability_codes=requested_capability_codes,
     )
 
-    module_hierarchy_codes = set(_hierarchy_permission_codes_for_module(normalized_module)["page_permission_codes"])
-    module_hierarchy_codes.update(
-        set(_hierarchy_permission_codes_for_module(normalized_module)["feature_permission_codes"])
-    )
-    module_hierarchy_codes.add(
-        str(_hierarchy_permission_codes_for_module(normalized_module)["module_permission_code"])
-    )
+    hierarchy_codes = _hierarchy_permission_codes_for_module(normalized_module)
+    module_hierarchy_codes = set(hierarchy_codes["page_permission_codes"])
+    module_hierarchy_codes.update(set(hierarchy_codes["feature_permission_codes"]))
+    module_hierarchy_codes.add(str(hierarchy_codes["module_permission_code"]))
 
     after_granted_codes = set(before_granted_codes)
     after_granted_codes.difference_update(module_hierarchy_codes)
@@ -1684,43 +1808,10 @@ def update_capability_pack_role_config(
         row_by_code=row_by_code,
     )
 
-    changed_codes = sorted(before_granted_codes.symmetric_difference(after_granted_codes))
-    updated_count = 0
-    if not dry_run and changed_codes:
-        grant_rows = db.execute(
-            select(RolePermissionGrant).where(
-                RolePermissionGrant.role_code == role_code,
-                RolePermissionGrant.permission_code.in_(changed_codes),
-            )
-        ).scalars().all()
-        row_by_permission = {row.permission_code: row for row in grant_rows}
-        for permission_code in changed_codes:
-            should_grant = permission_code in after_granted_codes
-            row = row_by_permission.get(permission_code)
-            if row is None:
-                db.add(
-                    RolePermissionGrant(
-                        role_code=role_code,
-                        permission_code=permission_code,
-                        granted=should_grant,
-                    )
-                )
-                updated_count += 1
-                continue
-            if bool(row.granted) != should_grant:
-                row.granted = should_grant
-                updated_count += 1
-        if updated_count > 0:
-            db.commit()
-        else:
-            db.rollback()
-    else:
-        updated_count = len(changed_codes)
-        db.rollback()
-
-    page_codes_in_module = set(_hierarchy_permission_codes_for_module(normalized_module)["page_permission_codes"])
+    page_codes_in_module = set(hierarchy_codes["page_permission_codes"])
     before_capabilities = sorted(before_granted_codes.intersection(module_capability_codes))
     after_capabilities = sorted(after_granted_codes.intersection(module_capability_codes))
+    changed_codes = sorted(before_granted_codes.symmetric_difference(after_granted_codes))
     return {
         "role_code": role_row.code,
         "role_name": role_row.name,
@@ -1734,7 +1825,185 @@ def update_capability_pack_role_config(
         "auto_linked_dependencies": auto_linked_dependencies,
         "effective_capability_codes": sorted(after_effective_codes.intersection(module_capability_codes)),
         "effective_page_permission_codes": sorted(after_effective_codes.intersection(page_codes_in_module)),
+        "updated_count": 0,
+        "before_granted_codes": before_granted_codes,
+        "after_granted_codes": after_granted_codes,
+        "changed_codes": changed_codes,
+    }
+
+
+def update_capability_pack_role_config(
+    db: Session,
+    *,
+    role_code: str,
+    module_code: str,
+    module_enabled: bool,
+    capability_codes: list[str],
+    dry_run: bool = False,
+    operator: User | None = None,
+) -> dict[str, object]:
+    ensure_authz_defaults(db)
+    result = _calculate_capability_pack_role_update(
+        db,
+        role_code=role_code,
+        module_code=module_code,
+        module_enabled=module_enabled,
+        capability_codes=capability_codes,
+    )
+    changed_codes = list(result["changed_codes"])
+    updated_count = 0
+    if not dry_run and changed_codes:
+        updated_count = _apply_role_permission_changes(
+            db,
+            role_code=role_code,
+            changed_codes=changed_codes,
+            after_granted_codes=set(result["after_granted_codes"]),
+        )
+        if updated_count > 0:
+            _bump_authz_module_revision(
+                db,
+                module_code=str(result["module_code"]),
+                operator=operator,
+            )
+            db.commit()
+        else:
+            db.rollback()
+    else:
+        updated_count = len(changed_codes)
+        db.rollback()
+
+    return {
+        "role_code": str(result["role_code"]),
+        "role_name": str(result["role_name"]),
+        "readonly": bool(result["readonly"]),
+        "ignored_input": bool(result["ignored_input"]),
+        "module_code": str(result["module_code"]),
+        "before_capability_codes": [str(code) for code in result["before_capability_codes"]],
+        "after_capability_codes": [str(code) for code in result["after_capability_codes"]],
+        "added_capability_codes": [str(code) for code in result["added_capability_codes"]],
+        "removed_capability_codes": [str(code) for code in result["removed_capability_codes"]],
+        "auto_linked_dependencies": [str(code) for code in result["auto_linked_dependencies"]],
+        "effective_capability_codes": [
+            str(code) for code in result["effective_capability_codes"]
+        ],
+        "effective_page_permission_codes": [
+            str(code) for code in result["effective_page_permission_codes"]
+        ],
         "updated_count": updated_count,
+    }
+
+
+def apply_capability_pack_role_configs(
+    db: Session,
+    *,
+    module_code: str,
+    role_items: list[dict[str, object]],
+    expected_revision: int | None = None,
+    operator: User | None,
+    remark: str | None = None,
+) -> dict[str, object]:
+    _ = remark
+    ensure_authz_defaults(db)
+    normalized_module = _normalize_module_code(module_code)
+    current_revision = get_authz_module_revision(db, module_code=normalized_module)
+    if expected_revision is not None and expected_revision != current_revision:
+        raise AuthzRevisionConflictError(
+            f"authz revision conflict: expected {expected_revision}, current {current_revision}"
+        )
+    if not role_items:
+        return {
+            "module_code": normalized_module,
+            "module_revision": current_revision,
+            "role_results": [],
+        }
+
+    role_rows = db.execute(select(Role)).scalars().all()
+    role_name_by_code = {row.code: row.name for row in role_rows}
+    visited_role_codes: set[str] = set()
+    results: list[dict[str, object]] = []
+    total_updated_count = 0
+
+    for item in role_items:
+        role_code = str(item.get("role_code", "")).strip()
+        if not role_code:
+            raise ValueError("role_code is required")
+        if role_code in visited_role_codes:
+            raise ValueError(f"duplicate role_code: {role_code}")
+        if role_code not in role_name_by_code:
+            raise ValueError(f"Role not found: {role_code}")
+        visited_role_codes.add(role_code)
+
+        raw_capabilities = item.get("capability_codes")
+        capability_codes = [str(code) for code in raw_capabilities] if isinstance(raw_capabilities, list) else []
+        result = _calculate_capability_pack_role_update(
+            db,
+            role_code=role_code,
+            module_code=normalized_module,
+            module_enabled=bool(item.get("module_enabled", False)),
+            capability_codes=capability_codes,
+        )
+        changed_codes = [str(code) for code in result["changed_codes"]]
+        result["updated_count"] = len(changed_codes)
+        if not bool(result["readonly"]) and changed_codes:
+            total_updated_count += _apply_role_permission_changes(
+                db,
+                role_code=role_code,
+                changed_codes=changed_codes,
+                after_granted_codes=set(result["after_granted_codes"]),
+            )
+        results.append(result)
+
+    if total_updated_count > 0:
+        current_revision = _bump_authz_module_revision(
+            db,
+            module_code=normalized_module,
+            operator=operator,
+        )
+        db.commit()
+    else:
+        db.rollback()
+
+    results.sort(
+        key=lambda item: (
+            ROLE_SORT_ORDER.get(str(item["role_code"]), 9999),
+            str(item["role_code"]),
+        )
+    )
+    return {
+        "module_code": normalized_module,
+        "module_revision": current_revision,
+        "role_results": [
+            {
+                "role_code": str(item["role_code"]),
+                "role_name": str(item["role_name"]),
+                "readonly": bool(item["readonly"]),
+                "ignored_input": bool(item["ignored_input"]),
+                "module_code": str(item["module_code"]),
+                "before_capability_codes": [
+                    str(code) for code in item["before_capability_codes"]
+                ],
+                "after_capability_codes": [
+                    str(code) for code in item["after_capability_codes"]
+                ],
+                "added_capability_codes": [
+                    str(code) for code in item["added_capability_codes"]
+                ],
+                "removed_capability_codes": [
+                    str(code) for code in item["removed_capability_codes"]
+                ],
+                "auto_linked_dependencies": [
+                    str(code) for code in item["auto_linked_dependencies"]
+                ],
+                "effective_capability_codes": [
+                    str(code) for code in item["effective_capability_codes"]
+                ],
+                "effective_page_permission_codes": [
+                    str(code) for code in item["effective_page_permission_codes"]
+                ],
+                "updated_count": int(item["updated_count"]),
+            }
+            for item in results
+        ],
     }
 
 
@@ -1747,7 +2016,14 @@ def preview_capability_packs(
     ensure_authz_defaults(db)
     normalized_module = _normalize_module_code(module_code)
     if not role_items:
-        return {"module_code": normalized_module, "role_results": []}
+        return {
+            "module_code": normalized_module,
+            "module_revision": get_authz_module_revision(
+                db,
+                module_code=normalized_module,
+            ),
+            "role_results": [],
+        }
 
     role_rows = db.execute(select(Role)).scalars().all()
     role_name_by_code = {row.code: row.name for row in role_rows}
@@ -1781,7 +2057,14 @@ def preview_capability_packs(
             str(item["role_code"]),
         )
     )
-    return {"module_code": normalized_module, "role_results": results}
+    return {
+        "module_code": normalized_module,
+        "module_revision": get_authz_module_revision(
+            db,
+            module_code=normalized_module,
+        ),
+        "role_results": results,
+    }
 
 
 def get_capability_pack_effective_explain(

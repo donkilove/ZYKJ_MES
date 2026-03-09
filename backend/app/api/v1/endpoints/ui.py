@@ -21,10 +21,10 @@ from app.schemas.page_visibility import (
 from app.services.page_visibility_service import (
     ensure_visibility_defaults,
     get_page_visibility_config,
-    get_user_visible_pages,
     list_page_catalog_items,
     update_page_visibility_config,
 )
+from app.services.authz_snapshot_service import get_authz_snapshot
 
 
 router = APIRouter()
@@ -44,12 +44,14 @@ def get_my_page_visibility(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[PageVisibilityMeResult]:
-    role_codes = [role.code for role in current_user.roles]
-    sidebar_codes, tab_codes_by_parent = get_user_visible_pages(db, role_codes)
+    snapshot = get_authz_snapshot(db, user=current_user)
     return success_response(
         PageVisibilityMeResult(
-            sidebar_codes=sidebar_codes,
-            tab_codes_by_parent=tab_codes_by_parent,
+            sidebar_codes=[str(code) for code in snapshot.get("visible_sidebar_codes", [])],
+            tab_codes_by_parent={
+                str(parent_code): [str(code) for code in codes]
+                for parent_code, codes in dict(snapshot.get("tab_codes_by_parent", {})).items()
+            },
         )
     )
 

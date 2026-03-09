@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+import pytest
+
+from fastapi import HTTPException
+
 from app.api.v1.endpoints import authz
 from app.core.authz_catalog import (
     MODULE_PERMISSION_BY_MODULE_CODE,
     PERM_PROD_ORDERS_CREATE,
     PERM_PROD_ORDERS_LIST,
+    PERM_PROD_MY_ORDERS_LIST,
     PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW,
     PERM_PAGE_PRODUCTION_VIEW,
 )
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.schemas.authz import (
+    CapabilityPackBatchApplyRequest,
     RolePermissionMatrixRoleUpdateItem,
     RolePermissionMatrixUpdateRequest,
     RolePermissionUpdateRequest,
 )
+from app.services.authz_service import has_permission
 
 
 def test_authz_catalog_and_my_permissions(db, factory) -> None:
@@ -219,7 +226,7 @@ def test_authz_hierarchy_endpoints(db, factory) -> None:
             feature_permission_codes=["feature.production.order_query.execute"],
         ),
         db=db,
-        _=sys_admin,
+        current_user=sys_admin,
     )
     assert update_resp.data.role_code == ROLE_PRODUCTION_ADMIN
     assert MODULE_PERMISSION_BY_MODULE_CODE["production"] in update_resp.data.after_permission_codes
@@ -280,7 +287,7 @@ def test_authz_capability_pack_endpoints(db, factory) -> None:
             dry_run=False,
         ),
         db=db,
-        _=sys_admin,
+        current_user=sys_admin,
     )
     assert update_resp.data.role_code == ROLE_PRODUCTION_ADMIN
     assert update_resp.data.updated_count >= 1
@@ -298,3 +305,122 @@ def test_authz_capability_pack_endpoints(db, factory) -> None:
     me_prod = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
     assert MODULE_PERMISSION_BY_MODULE_CODE["production"] in me_prod.data.permission_codes
     assert PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW in me_prod.data.permission_codes
+
+
+def test_page_permission_no_longer_grants_action_access(db, factory) -> None:
+    factory.ensure_default_roles()
+    sys_admin = factory.user(username="authz_page_only_admin", role_codes=[ROLE_SYSTEM_ADMIN])
+    prod_admin = factory.user(username="authz_page_only_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
+    db.commit()
+
+    authz.put_role_permissions_matrix_api(
+        RolePermissionMatrixUpdateRequest(
+            module_code="production",
+            dry_run=False,
+            role_items=[
+                RolePermissionMatrixRoleUpdateItem(
+                    role_code=ROLE_PRODUCTION_ADMIN,
+                    granted_permission_codes=[PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW],
+                )
+            ],
+            remark="page only",
+        ),
+        db=db,
+        current_user=sys_admin,
+    )
+
+    me_prod = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
+    assert PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW in me_prod.data.permission_codes
+    assert PERM_PROD_MY_ORDERS_LIST not in me_prod.data.permission_codes
+    assert has_permission(db, user=prod_admin, permission_code=PERM_PROD_MY_ORDERS_LIST) is False
+
+
+def test_authz_snapshot_and_batch_apply_expose_linked_actions(db, factory) -> None:
+    factory.ensure_default_roles()
+    sys_admin = factory.user(username="authz_snapshot_admin", role_codes=[ROLE_SYSTEM_ADMIN])
+    prod_admin = factory.user(username="authz_snapshot_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
+    db.commit()
+
+    catalog_resp = authz.get_capability_pack_catalog_api(
+        module="production",
+        db=db,
+        _=sys_admin,
+    )
+    apply_resp = authz.apply_capability_packs_batch_api(
+        CapabilityPackBatchApplyRequest(
+            module_code="production",
+            expected_revision=catalog_resp.data.module_revision,
+            role_items=[
+                {
+                    "role_code": ROLE_PRODUCTION_ADMIN,
+                    "module_enabled": True,
+                    "capability_codes": ["feature.production.order_query.execute"],
+                }
+            ],
+            remark="batch apply",
+        ),
+        db=db,
+        current_user=sys_admin,
+    )
+    assert apply_resp.data.module_revision >= catalog_resp.data.module_revision
+
+    me_prod = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
+    assert PERM_PROD_MY_ORDERS_LIST in me_prod.data.permission_codes
+
+    snapshot_resp = authz.get_authz_snapshot_api(db=db, current_user=prod_admin)
+    production_module = next(
+        item for item in snapshot_resp.data.module_items if item.module_code == "production"
+    )
+    assert "production" in snapshot_resp.data.visible_sidebar_codes
+    assert PERM_PROD_MY_ORDERS_LIST in production_module.effective_action_permission_codes
+    assert has_permission(db, user=prod_admin, permission_code=PERM_PROD_MY_ORDERS_LIST) is True
+
+
+def test_capability_pack_batch_apply_rejects_stale_revision(db, factory) -> None:
+    factory.ensure_default_roles()
+    sys_admin = factory.user(username="authz_revision_admin", role_codes=[ROLE_SYSTEM_ADMIN])
+    factory.user(username="authz_revision_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
+    db.commit()
+
+    catalog_resp = authz.get_capability_pack_catalog_api(
+        module="production",
+        db=db,
+        _=sys_admin,
+    )
+    authz.apply_capability_packs_batch_api(
+        CapabilityPackBatchApplyRequest(
+            module_code="production",
+            expected_revision=catalog_resp.data.module_revision,
+            role_items=[
+                {
+                    "role_code": ROLE_PRODUCTION_ADMIN,
+                    "module_enabled": True,
+                    "capability_codes": ["feature.production.order_query.execute"],
+                }
+            ],
+            remark="first update",
+        ),
+        db=db,
+        current_user=sys_admin,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        authz.apply_capability_packs_batch_api(
+            CapabilityPackBatchApplyRequest(
+                module_code="production",
+                expected_revision=catalog_resp.data.module_revision,
+                role_items=[
+                    {
+                        "role_code": ROLE_PRODUCTION_ADMIN,
+                        "module_enabled": True,
+                        "capability_codes": ["feature.production.order_query.proxy"],
+                    }
+                ],
+                remark="stale update",
+            ),
+            db=db,
+            current_user=sys_admin,
+        )
+
+    assert exc_info.value.status_code == 409
+    assert "authz revision conflict" in str(exc_info.value.detail)

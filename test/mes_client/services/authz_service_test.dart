@@ -355,6 +355,41 @@ void main() {
 
     test('loads capability pack endpoints', () async {
       final server = await TestHttpServer.start({
+        'GET /authz/snapshot': (_) {
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'revision': 3,
+                'role_codes': ['production_admin'],
+                'visible_sidebar_codes': ['production'],
+                'tab_codes_by_parent': {
+                  'production': ['production_order_query'],
+                },
+                'module_items': [
+                  {
+                    'module_code': 'production',
+                    'module_name': '生产管理',
+                    'module_revision': 3,
+                    'module_enabled': true,
+                    'effective_permission_codes': [
+                      'page.production_order_query.view',
+                    ],
+                    'effective_page_permission_codes': [
+                      'page.production_order_query.view',
+                    ],
+                    'effective_capability_codes': [
+                      'feature.production.order_query.execute',
+                    ],
+                    'effective_action_permission_codes': [
+                      'production.my_orders.list',
+                    ],
+                  },
+                ],
+              },
+            },
+          );
+        },
         'GET /authz/capability-packs/catalog': (request) {
           expect(request.uri.queryParameters['module'], 'production');
           return TestResponse.json(
@@ -364,6 +399,7 @@ void main() {
                 'module_code': 'production',
                 'module_codes': ['production', 'system'],
                 'module_name': '生产管理',
+                'module_revision': 3,
                 'module_permission_code': 'module.production.access',
                 'capability_packs': [
                   {
@@ -458,7 +494,7 @@ void main() {
             },
           );
         },
-        'POST /authz/capability-packs/preview': (request) {
+        'POST /authz/capability-packs/batch-preview': (request) {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['module_code'], 'production');
           return TestResponse.json(
@@ -466,6 +502,7 @@ void main() {
             body: {
               'data': {
                 'module_code': 'production',
+                'module_revision': 3,
                 'role_results': [
                   {
                     'role_code': 'production_admin',
@@ -490,6 +527,46 @@ void main() {
                     ],
                     'updated_count': 1,
                     'dry_run': true,
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'PUT /authz/capability-packs/batch-apply': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['module_code'], 'production');
+          expect(body['expected_revision'], 3);
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'module_code': 'production',
+                'module_revision': 4,
+                'role_results': [
+                  {
+                    'role_code': 'production_admin',
+                    'role_name': '生产管理员',
+                    'readonly': false,
+                    'ignored_input': false,
+                    'module_code': 'production',
+                    'before_capability_codes': [],
+                    'after_capability_codes': [
+                      'feature.production.order_query.execute',
+                    ],
+                    'added_capability_codes': [
+                      'feature.production.order_query.execute',
+                    ],
+                    'removed_capability_codes': [],
+                    'auto_linked_dependencies': [],
+                    'effective_capability_codes': [
+                      'feature.production.order_query.execute',
+                    ],
+                    'effective_page_permission_codes': [
+                      'page.production_order_query.view',
+                    ],
+                    'updated_count': 1,
+                    'dry_run': false,
                   },
                 ],
               },
@@ -533,6 +610,7 @@ void main() {
         AppSession(baseUrl: server.baseUrl, accessToken: 'token-abc'),
       );
 
+      final snapshot = await service.loadAuthzSnapshot();
       final catalog = await service.loadCapabilityPackCatalog(
         moduleCode: 'production',
       );
@@ -550,6 +628,18 @@ void main() {
           ),
         ],
       );
+      final batchApplied = await service.applyCapabilityPacks(
+        moduleCode: 'production',
+        roleItems: const [
+          CapabilityPackRoleDraftItem(
+            roleCode: 'production_admin',
+            moduleEnabled: true,
+            capabilityCodes: ['feature.production.order_query.execute'],
+          ),
+        ],
+        expectedRevision: 3,
+        remark: 'batch apply',
+      );
       final updated = await service.updateCapabilityPackRoleConfig(
         roleCode: 'production_admin',
         moduleCode: 'production',
@@ -561,10 +651,18 @@ void main() {
         moduleCode: 'production',
       );
 
+      expect(snapshot.revision, 3);
+      expect(
+        snapshot.capabilityCodesForModule('production'),
+        contains('feature.production.order_query.execute'),
+      );
       expect(catalog.moduleCode, 'production');
+      expect(catalog.moduleRevision, 3);
       expect(catalog.capabilityPacks, hasLength(1));
       expect(roleConfig.moduleEnabled, isTrue);
+      expect(preview.moduleRevision, 3);
       expect(preview.roleResults, hasLength(1));
+      expect(batchApplied.moduleRevision, 4);
       expect(updated.updatedCount, 1);
       expect(
         updated.afterCapabilityCodes,

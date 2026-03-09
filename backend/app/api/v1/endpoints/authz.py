@@ -9,7 +9,9 @@ from app.core.authz_catalog import (
 )
 from app.models.user import User
 from app.schemas.authz import (
+    AuthzSnapshotResult,
     CapabilityPackCatalogResult,
+    CapabilityPackBatchApplyRequest,
     CapabilityPackPreviewRequest,
     CapabilityPackPreviewResult,
     CapabilityPackRoleConfigResult,
@@ -37,6 +39,8 @@ from app.schemas.authz import (
 )
 from app.schemas.common import ApiResponse, success_response
 from app.services.authz_service import (
+    AuthzRevisionConflictError,
+    apply_capability_pack_role_configs,
     get_capability_pack_catalog,
     get_capability_pack_effective_explain,
     get_capability_pack_role_config,
@@ -53,6 +57,7 @@ from app.services.authz_service import (
     update_role_permission_matrix,
     preview_capability_packs,
 )
+from app.services.authz_snapshot_service import get_authz_snapshot
 
 
 router = APIRouter()
@@ -96,6 +101,17 @@ def get_my_permissions_api(
 ) -> ApiResponse[MyPermissionsResult]:
     permission_codes = sorted(get_user_permission_codes(db, user=current_user, module_code=module))
     return success_response(MyPermissionsResult(permission_codes=permission_codes))
+
+
+@router.get(
+    "/snapshot",
+    response_model=ApiResponse[AuthzSnapshotResult],
+)
+def get_authz_snapshot_api(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> ApiResponse[AuthzSnapshotResult]:
+    return success_response(AuthzSnapshotResult(**get_authz_snapshot(db, user=current_user)))
 
 
 @router.get(
@@ -238,7 +254,7 @@ def put_permission_hierarchy_role_config_api(
     role_code: str,
     payload: PermissionHierarchyRoleConfigUpdateRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+    current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[PermissionHierarchyRoleConfigUpdateResult]:
     try:
         result = update_permission_hierarchy_role_config(
@@ -249,6 +265,7 @@ def put_permission_hierarchy_role_config_api(
             page_permission_codes=payload.page_permission_codes,
             feature_permission_codes=payload.feature_permission_codes,
             dry_run=payload.dry_run,
+            operator=current_user,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
@@ -327,7 +344,7 @@ def put_capability_pack_role_config_api(
     role_code: str,
     payload: CapabilityPackRoleConfigUpdateRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+    current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[CapabilityPackRoleConfigUpdateResult]:
     try:
         result = update_capability_pack_role_config(
@@ -337,6 +354,7 @@ def put_capability_pack_role_config_api(
             module_enabled=payload.module_enabled,
             capability_codes=payload.capability_codes,
             dry_run=payload.dry_run,
+            operator=current_user,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
@@ -367,6 +385,51 @@ def preview_capability_packs_api(
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     return success_response(CapabilityPackPreviewResult(**result), message="previewed")
+
+
+@router.post(
+    "/capability-packs/batch-preview",
+    response_model=ApiResponse[CapabilityPackPreviewResult],
+)
+def preview_capability_packs_batch_api(
+    payload: CapabilityPackPreviewRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+) -> ApiResponse[CapabilityPackPreviewResult]:
+    try:
+        result = preview_capability_packs(
+            db,
+            module_code=payload.module_code,
+            role_items=[item.model_dump() for item in payload.role_items],
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(CapabilityPackPreviewResult(**result), message="previewed")
+
+
+@router.put(
+    "/capability-packs/batch-apply",
+    response_model=ApiResponse[CapabilityPackPreviewResult],
+)
+def apply_capability_packs_batch_api(
+    payload: CapabilityPackBatchApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+) -> ApiResponse[CapabilityPackPreviewResult]:
+    try:
+        result = apply_capability_pack_role_configs(
+            db,
+            module_code=payload.module_code,
+            role_items=[item.model_dump() for item in payload.role_items],
+            expected_revision=payload.expected_revision,
+            operator=current_user,
+            remark=payload.remark,
+        )
+    except AuthzRevisionConflictError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(CapabilityPackPreviewResult(**result), message="updated")
 
 
 @router.get(

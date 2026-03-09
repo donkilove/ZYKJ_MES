@@ -1,4 +1,5 @@
 from app.models.base import Base
+from app.models.authz_module_revision import AuthzModuleRevision
 from app.models.daily_verification_code import DailyVerificationCode
 from app.models.equipment import Equipment
 from app.models.first_article_record import FirstArticleRecord
@@ -39,6 +40,7 @@ from app.models.craft_system_master_template_step import CraftSystemMasterTempla
 
 __all__ = [
     "Base",
+    "AuthzModuleRevision",
     "User",
     "Role",
     "Process",

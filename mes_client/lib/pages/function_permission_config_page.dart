@@ -39,10 +39,12 @@ class FunctionPermissionConfigPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    this.onPermissionsChanged,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final Future<void> Function()? onPermissionsChanged;
 
   @override
   State<FunctionPermissionConfigPage> createState() =>
@@ -453,6 +455,7 @@ class _FunctionPermissionConfigPageState
     if (_saving || !_hasDirty || moduleCode == null) {
       return;
     }
+    final moduleRevision = _catalogByModule[moduleCode]?.moduleRevision ?? 0;
     final preview = await _preview(activatePanel: false);
     if (preview == null) {
       return;
@@ -493,7 +496,7 @@ class _FunctionPermissionConfigPageState
     });
     final snapshot = _cloneDraftMap(_originByRole);
     try {
-      final roleResults = <CapabilityPackRoleUpdateResult>[];
+      final dirtyRoleItems = <CapabilityPackRoleDraftItem>[];
       for (final role in _roles) {
         if (!_hasDirtyRole(role.code)) {
           continue;
@@ -502,29 +505,31 @@ class _FunctionPermissionConfigPageState
         if (draft == null) {
           continue;
         }
-        final result = await _authzService.updateCapabilityPackRoleConfig(
-          roleCode: role.code,
-          moduleCode: moduleCode,
-          moduleEnabled: draft.moduleEnabled,
-          capabilityCodes: draft.capabilityCodes.toList()..sort(),
-          dryRun: false,
-          remark: '能力包权限配置保存',
+        dirtyRoleItems.add(
+          CapabilityPackRoleDraftItem(
+            roleCode: role.code,
+            moduleEnabled: draft.moduleEnabled,
+            capabilityCodes: draft.capabilityCodes.toList()..sort(),
+          ),
         );
-        roleResults.add(result);
       }
+
+      final savedPreview = await _authzService.applyCapabilityPacks(
+        moduleCode: moduleCode,
+        roleItems: dirtyRoleItems,
+        expectedRevision: moduleRevision,
+        remark: '能力包权限配置保存',
+      );
 
       await _loadModuleData(
         moduleCode,
         roles: _roles,
         moduleCodes: _moduleCodes,
       );
+      await widget.onPermissionsChanged?.call();
       if (!mounted) {
         return;
       }
-      final savedPreview = CapabilityPackPreviewResult(
-        moduleCode: moduleCode,
-        roleResults: roleResults,
-      );
       setState(() {
         _lastSavedBeforeSnapshot = snapshot;
         _lastSavedSnapshotModuleCode = moduleCode;
@@ -557,30 +562,38 @@ class _FunctionPermissionConfigPageState
     if (!_canRollbackLastSave || moduleCode == null || snapshot == null) {
       return;
     }
+    final moduleRevision = _catalogByModule[moduleCode]?.moduleRevision ?? 0;
     setState(() {
       _saving = true;
       _message = '';
     });
     try {
+      final rollbackRoleItems = <CapabilityPackRoleDraftItem>[];
       for (final role in _roles) {
         final target = snapshot[role.code];
         if (target == null) {
           continue;
         }
-        await _authzService.updateCapabilityPackRoleConfig(
-          roleCode: role.code,
-          moduleCode: moduleCode,
-          moduleEnabled: target.moduleEnabled,
-          capabilityCodes: target.capabilityCodes.toList()..sort(),
-          dryRun: false,
-          remark: '能力包权限配置回退',
+        rollbackRoleItems.add(
+          CapabilityPackRoleDraftItem(
+            roleCode: role.code,
+            moduleEnabled: target.moduleEnabled,
+            capabilityCodes: target.capabilityCodes.toList()..sort(),
+          ),
         );
       }
+      await _authzService.applyCapabilityPacks(
+        moduleCode: moduleCode,
+        roleItems: rollbackRoleItems,
+        expectedRevision: moduleRevision,
+        remark: '能力包权限配置回退',
+      );
       await _loadModuleData(
         moduleCode,
         roles: _roles,
         moduleCodes: _moduleCodes,
       );
+      await widget.onPermissionsChanged?.call();
       if (!mounted) {
         return;
       }

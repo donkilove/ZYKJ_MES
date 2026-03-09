@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/authz_models.dart';
-import '../services/authz_service.dart';
 import 'production_assist_approval_page.dart';
 import 'production_data_page.dart';
 import 'production_order_management_page.dart';
@@ -33,13 +32,13 @@ class ProductionPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.visibleTabCodes,
-    required this.currentRoleCodes,
+    required this.capabilityCodes,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
-  final List<String> currentRoleCodes;
+  final Set<String> capabilityCodes;
 
   @override
   State<ProductionPage> createState() => _ProductionPageState();
@@ -47,20 +46,14 @@ class ProductionPage extends StatefulWidget {
 
 class _ProductionPageState extends State<ProductionPage>
     with SingleTickerProviderStateMixin {
-  late final AuthzService _authzService;
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
-  Set<String> _permissionCodes = const <String>{};
-  bool _loadingPermissions = true;
-  String _permissionMessage = '';
 
   @override
   void initState() {
     super.initState();
-    _authzService = AuthzService(widget.session);
     _orderedVisibleTabCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
     _rebuildTabController();
-    _loadPermissions();
   }
 
   @override
@@ -72,9 +65,6 @@ class _ProductionPageState extends State<ProductionPage>
       _orderedVisibleTabCodes = updatedCodes;
       _rebuildTabController(preferredCode: selectedCode);
     }
-    if (oldWidget.session.accessToken != widget.session.accessToken) {
-      _loadPermissions();
-    }
   }
 
   @override
@@ -83,39 +73,7 @@ class _ProductionPageState extends State<ProductionPage>
     super.dispose();
   }
 
-  bool _hasPermission(String code) => _permissionCodes.contains(code);
-
-  Future<void> _loadPermissions() async {
-    setState(() {
-      _loadingPermissions = true;
-      _permissionMessage = '';
-    });
-    try {
-      final codes = await _authzService.getMyPermissionCodes(
-        moduleCode: 'production',
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _permissionCodes = codes.toSet();
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _permissionCodes = const <String>{};
-        _permissionMessage = '加载功能权限失败：$error';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingPermissions = false;
-        });
-      }
-    }
-  }
+  bool _hasPermission(String code) => widget.capabilityCodes.contains(code);
 
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
     final visibleSet = tabCodes.toSet();
@@ -264,22 +222,12 @@ class _ProductionPageState extends State<ProductionPage>
 
   @override
   Widget build(BuildContext context) {
-    if (_loadingPermissions) {
-      return const Center(child: CircularProgressIndicator());
-    }
     if (_orderedVisibleTabCodes.isEmpty || _tabController == null) {
       return const Center(child: Text('当前账号无可见生产页面'));
     }
 
     return Column(
       children: [
-        if (_permissionMessage.isNotEmpty)
-          Container(
-            width: double.infinity,
-            color: Theme.of(context).colorScheme.errorContainer,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text(_permissionMessage),
-          ),
         Material(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: TabBar(

@@ -18,6 +18,25 @@ class MyPermissionsResult(BaseModel):
     permission_codes: list[str]
 
 
+class AuthzSnapshotModuleItem(BaseModel):
+    module_code: str
+    module_name: str
+    module_revision: int = 0
+    module_enabled: bool = False
+    effective_permission_codes: list[str] = Field(default_factory=list)
+    effective_page_permission_codes: list[str] = Field(default_factory=list)
+    effective_capability_codes: list[str] = Field(default_factory=list)
+    effective_action_permission_codes: list[str] = Field(default_factory=list)
+
+
+class AuthzSnapshotResult(BaseModel):
+    revision: int = 0
+    role_codes: list[str] = Field(default_factory=list)
+    visible_sidebar_codes: list[str] = Field(default_factory=list)
+    tab_codes_by_parent: dict[str, list[str]] = Field(default_factory=dict)
+    module_items: list[AuthzSnapshotModuleItem] = Field(default_factory=list)
+
+
 class RolePermissionItem(BaseModel):
     role_code: str
     role_name: str
@@ -202,6 +221,7 @@ class CapabilityPackCatalogResult(BaseModel):
     module_code: str
     module_codes: list[str]
     module_name: str
+    module_revision: int = 0
     module_permission_code: str
     capability_packs: list[CapabilityPackItem]
     role_templates: list[CapabilityPackRoleTemplateItem] = Field(default_factory=list)
@@ -257,7 +277,15 @@ class CapabilityPackPreviewRequest(BaseModel):
 
 class CapabilityPackPreviewResult(BaseModel):
     module_code: str
+    module_revision: int = 0
     role_results: list[CapabilityPackRoleConfigUpdateResult]
+
+
+class CapabilityPackBatchApplyRequest(BaseModel):
+    module_code: str = Field(min_length=2, max_length=64)
+    role_items: list[CapabilityPackPreviewRoleItem] = Field(default_factory=list)
+    expected_revision: int | None = Field(default=None, ge=0)
+    remark: str | None = Field(default=None, max_length=255)
 
 
 class PermissionExplainCapabilityItem(BaseModel):

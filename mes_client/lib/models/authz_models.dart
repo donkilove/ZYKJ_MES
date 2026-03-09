@@ -93,6 +93,109 @@ class RolePermissionResult {
   }
 }
 
+class AuthzSnapshotModuleItem {
+  const AuthzSnapshotModuleItem({
+    required this.moduleCode,
+    required this.moduleName,
+    required this.moduleRevision,
+    required this.moduleEnabled,
+    required this.effectivePermissionCodes,
+    required this.effectivePagePermissionCodes,
+    required this.effectiveCapabilityCodes,
+    required this.effectiveActionPermissionCodes,
+  });
+
+  final String moduleCode;
+  final String moduleName;
+  final int moduleRevision;
+  final bool moduleEnabled;
+  final List<String> effectivePermissionCodes;
+  final List<String> effectivePagePermissionCodes;
+  final List<String> effectiveCapabilityCodes;
+  final List<String> effectiveActionPermissionCodes;
+
+  factory AuthzSnapshotModuleItem.fromJson(Map<String, dynamic> json) {
+    return AuthzSnapshotModuleItem(
+      moduleCode: json['module_code'] as String,
+      moduleName: json['module_name'] as String,
+      moduleRevision: (json['module_revision'] as int?) ?? 0,
+      moduleEnabled: (json['module_enabled'] as bool?) ?? false,
+      effectivePermissionCodes:
+          (json['effective_permission_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      effectivePagePermissionCodes:
+          (json['effective_page_permission_codes'] as List<dynamic>? ??
+                  const [])
+              .cast<String>(),
+      effectiveCapabilityCodes:
+          (json['effective_capability_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      effectiveActionPermissionCodes:
+          (json['effective_action_permission_codes'] as List<dynamic>? ??
+                  const [])
+              .cast<String>(),
+    );
+  }
+}
+
+class AuthzSnapshotResult {
+  const AuthzSnapshotResult({
+    required this.revision,
+    required this.roleCodes,
+    required this.visibleSidebarCodes,
+    required this.tabCodesByParent,
+    required this.moduleItems,
+  });
+
+  final int revision;
+  final List<String> roleCodes;
+  final List<String> visibleSidebarCodes;
+  final Map<String, List<String>> tabCodesByParent;
+  final List<AuthzSnapshotModuleItem> moduleItems;
+
+  Map<String, AuthzSnapshotModuleItem> get moduleByCode {
+    return {for (final item in moduleItems) item.moduleCode: item};
+  }
+
+  Set<String> capabilityCodesForModule(String moduleCode) {
+    return moduleByCode[moduleCode]?.effectiveCapabilityCodes.toSet() ??
+        const <String>{};
+  }
+
+  Set<String> permissionCodesForModule(String moduleCode) {
+    return moduleByCode[moduleCode]?.effectivePermissionCodes.toSet() ??
+        const <String>{};
+  }
+
+  int moduleRevisionFor(String moduleCode) {
+    return moduleByCode[moduleCode]?.moduleRevision ?? 0;
+  }
+
+  factory AuthzSnapshotResult.fromJson(Map<String, dynamic> json) {
+    final rawTabs =
+        json['tab_codes_by_parent'] as Map<String, dynamic>? ??
+        const <String, dynamic>{};
+    return AuthzSnapshotResult(
+      revision: (json['revision'] as int?) ?? 0,
+      roleCodes: (json['role_codes'] as List<dynamic>? ?? const [])
+          .cast<String>(),
+      visibleSidebarCodes:
+          (json['visible_sidebar_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      tabCodesByParent: rawTabs.map(
+        (key, value) =>
+            MapEntry(key, (value as List<dynamic>? ?? const []).cast<String>()),
+      ),
+      moduleItems: (json['module_items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) =>
+                AuthzSnapshotModuleItem.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(),
+    );
+  }
+}
+
 class RolePermissionUpdateResult {
   const RolePermissionUpdateResult({
     required this.roleCode,
@@ -608,6 +711,7 @@ class CapabilityPackCatalogResult {
     required this.moduleCode,
     required this.moduleCodes,
     required this.moduleName,
+    required this.moduleRevision,
     required this.modulePermissionCode,
     required this.capabilityPacks,
     required this.roleTemplates,
@@ -616,6 +720,7 @@ class CapabilityPackCatalogResult {
   final String moduleCode;
   final List<String> moduleCodes;
   final String moduleName;
+  final int moduleRevision;
   final String modulePermissionCode;
   final List<CapabilityPackItem> capabilityPacks;
   final List<CapabilityPackRoleTemplateItem> roleTemplates;
@@ -626,6 +731,7 @@ class CapabilityPackCatalogResult {
       moduleCodes: (json['module_codes'] as List<dynamic>? ?? const [])
           .cast<String>(),
       moduleName: json['module_name'] as String,
+      moduleRevision: (json['module_revision'] as int?) ?? 0,
       modulePermissionCode: json['module_permission_code'] as String,
       capabilityPacks: (json['capability_packs'] as List<dynamic>? ?? const [])
           .map(
@@ -782,15 +888,18 @@ class CapabilityPackRoleUpdateResult {
 class CapabilityPackPreviewResult {
   const CapabilityPackPreviewResult({
     required this.moduleCode,
+    required this.moduleRevision,
     required this.roleResults,
   });
 
   final String moduleCode;
+  final int moduleRevision;
   final List<CapabilityPackRoleUpdateResult> roleResults;
 
   factory CapabilityPackPreviewResult.fromJson(Map<String, dynamic> json) {
     return CapabilityPackPreviewResult(
       moduleCode: json['module_code'] as String,
+      moduleRevision: (json['module_revision'] as int?) ?? 0,
       roleResults: (json['role_results'] as List<dynamic>? ?? const [])
           .map(
             (entry) => CapabilityPackRoleUpdateResult.fromJson(

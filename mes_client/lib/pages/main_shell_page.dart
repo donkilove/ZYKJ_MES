@@ -4,11 +4,15 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 
+import '../models/authz_models.dart';
+
 import '../models/current_user.dart';
 
 import '../models/page_visibility_models.dart';
 
 import '../services/api_exception.dart';
+
+import '../services/authz_service.dart';
 
 import '../services/auth_service.dart';
 
@@ -80,6 +84,7 @@ class MainShellPage extends StatefulWidget {
 class _MainShellPageState extends State<MainShellPage>
     with WidgetsBindingObserver {
   final AuthService _authService = AuthService();
+  late final AuthzService _authzService;
 
   late final PageVisibilityService _pageVisibilityService;
 
@@ -92,6 +97,8 @@ class _MainShellPageState extends State<MainShellPage>
   String _message = '';
 
   CurrentUser? _currentUser;
+
+  AuthzSnapshotResult? _authzSnapshot;
 
   List<PageCatalogItem> _catalog = fallbackPageCatalog;
 
@@ -107,6 +114,7 @@ class _MainShellPageState extends State<MainShellPage>
 
     WidgetsBinding.instance.addObserver(this);
 
+    _authzService = AuthzService(widget.session);
     _pageVisibilityService = PageVisibilityService(widget.session);
 
     _loadCurrentUserAndVisibility();
@@ -327,13 +335,13 @@ class _MainShellPageState extends State<MainShellPage>
         }
       }
 
-      final visibility = await _pageVisibilityService.getMyVisibility();
+      final snapshot = await _authzService.loadAuthzSnapshot();
 
       final sortedCatalog = [...catalog]
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
       final sortedTabCodes = _sortTabsByCatalog(
-        visibility.tabCodesByParent,
+        snapshot.tabCodesByParent,
 
         sortedCatalog,
       );
@@ -341,7 +349,7 @@ class _MainShellPageState extends State<MainShellPage>
       final menus = _buildMenus(
         catalog: sortedCatalog,
 
-        visibleSidebarCodes: visibility.sidebarCodes,
+        visibleSidebarCodes: snapshot.visibleSidebarCodes,
       );
 
       if (!mounted) {
@@ -349,6 +357,7 @@ class _MainShellPageState extends State<MainShellPage>
       }
 
       setState(() {
+        _authzSnapshot = snapshot;
         _catalog = sortedCatalog;
 
         _tabCodesByParent = sortedTabCodes;
@@ -380,7 +389,7 @@ class _MainShellPageState extends State<MainShellPage>
 
       if (!silent) {
         setState(() {
-          _message = '加载页面可见性失败：${_errorMessage(error)}';
+          _message = '加载权限快照失败：${_errorMessage(error)}';
         });
       }
     } finally {
@@ -389,7 +398,7 @@ class _MainShellPageState extends State<MainShellPage>
   }
 
   Future<void> _handleVisibilityConfigSaved() async {
-    await _refreshVisibility(loadCatalog: true);
+    await _refreshVisibility(loadCatalog: false);
   }
 
   List<String> _visibleUserTabCodes() {
@@ -440,6 +449,11 @@ class _MainShellPageState extends State<MainShellPage>
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
+  Set<String> _capabilityCodesForModule(String moduleCode) {
+    return _authzSnapshot?.capabilityCodesForModule(moduleCode) ??
+        const <String>{};
+  }
+
   Widget _buildContent(String pageCode) {
     switch (pageCode) {
       case _homePageCode:
@@ -460,7 +474,11 @@ class _MainShellPageState extends State<MainShellPage>
 
           visibleTabCodes: _visibleUserTabCodes(),
 
-          onVisibilityConfigSaved: _handleVisibilityConfigSaved,
+          capabilityCodes: _capabilityCodesForModule('user'),
+
+          onVisibilityConfigSaved: () {
+            _handleVisibilityConfigSaved();
+          },
         );
 
       case _productPageCode:
@@ -471,7 +489,7 @@ class _MainShellPageState extends State<MainShellPage>
 
           visibleTabCodes: _visibleProductTabCodes(),
 
-          currentRoleCodes: _currentUser!.roleCodes,
+          capabilityCodes: _capabilityCodesForModule('product'),
         );
 
       case _equipmentPageCode:
@@ -482,7 +500,7 @@ class _MainShellPageState extends State<MainShellPage>
 
           visibleTabCodes: _visibleEquipmentTabCodes(),
 
-          currentRoleCodes: _currentUser!.roleCodes,
+          capabilityCodes: _capabilityCodesForModule('equipment'),
         );
 
       case _productionPageCode:
@@ -493,7 +511,7 @@ class _MainShellPageState extends State<MainShellPage>
 
           visibleTabCodes: _visibleProductionTabCodes(),
 
-          currentRoleCodes: _currentUser!.roleCodes,
+          capabilityCodes: _capabilityCodesForModule('production'),
         );
 
       case _qualityPageCode:
@@ -503,6 +521,8 @@ class _MainShellPageState extends State<MainShellPage>
           onLogout: widget.onLogout,
 
           visibleTabCodes: _visibleQualityTabCodes(),
+
+          capabilityCodes: _capabilityCodesForModule('quality'),
         );
 
       case _craftPageCode:
@@ -513,7 +533,7 @@ class _MainShellPageState extends State<MainShellPage>
 
           visibleTabCodes: _visibleCraftTabCodes(),
 
-          currentRoleCodes: _currentUser!.roleCodes,
+          capabilityCodes: _capabilityCodesForModule('craft'),
         );
 
       default:
