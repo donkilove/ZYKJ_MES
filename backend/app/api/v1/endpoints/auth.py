@@ -2,8 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_role_codes
-from app.core.rbac import ROLE_SYSTEM_ADMIN
+from app.api.deps import get_current_active_user, require_permission
 from app.core.config import settings
 from app.core.security import create_access_token, verify_password
 from app.db.session import get_db
@@ -151,7 +150,7 @@ def get_registration_requests(
     page_size: int = Query(default=20, ge=1, le=100),
     keyword: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    _: User = Depends(require_permission("user.registration_requests.list")),
 ) -> ApiResponse[RegistrationRequestListResult]:
     total, items = list_registration_requests(db, page=page, page_size=page_size, keyword=keyword)
     return success_response(
@@ -167,7 +166,7 @@ def approve_registration(
     request_id: int,
     payload: ApproveRegistrationRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    _: User = Depends(require_permission("user.registration_requests.approve")),
 ) -> ApiResponse[RegistrationActionResult]:
     request = get_registration_request_by_id(db, request_id)
     if not request:
@@ -204,7 +203,7 @@ def approve_registration(
 def reject_registration(
     request_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    _: User = Depends(require_permission("user.registration_requests.reject")),
 ) -> ApiResponse[RegistrationActionResult]:
     request = get_registration_request_by_id(db, request_id)
     if not request:

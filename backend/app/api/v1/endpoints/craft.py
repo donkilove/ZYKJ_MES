@@ -7,8 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import require_role_codes
-from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
+from app.api.deps import require_permission
 from app.db.session import get_db
 from app.models.craft_system_master_template import CraftSystemMasterTemplate
 from app.models.process import Process
@@ -86,9 +85,6 @@ from app.services.craft_service import (
 
 
 router = APIRouter()
-
-
-WRITE_ROLE_CODES = [ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN]
 
 
 def _to_stage_item(row: ProcessStage) -> ProcessStageItem:
@@ -246,7 +242,7 @@ def get_stages(
     keyword: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.stages.list")),
 ) -> ApiResponse[ProcessStageListResult]:
     total, rows = list_stages(
         db,
@@ -262,7 +258,7 @@ def get_stages(
 def create_stage_api(
     payload: ProcessStageCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.stages.create")),
 ) -> ApiResponse[ProcessStageItem]:
     try:
         row = create_stage(
@@ -281,7 +277,7 @@ def update_stage_api(
     stage_id: int,
     payload: ProcessStageUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.stages.update")),
 ) -> ApiResponse[ProcessStageItem]:
     row = get_stage_by_id(db, stage_id)
     if not row:
@@ -304,7 +300,7 @@ def update_stage_api(
 def delete_stage_api(
     stage_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.stages.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     row = get_stage_by_id(db, stage_id)
     if not row:
@@ -324,7 +320,7 @@ def get_processes_api(
     stage_id: int | None = Query(default=None, ge=1),
     enabled: bool | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.processes.list")),
 ) -> ApiResponse[CraftProcessListResult]:
     total, rows = list_craft_processes(
         db,
@@ -341,7 +337,7 @@ def get_processes_api(
 def create_process_api(
     payload: CraftProcessCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.processes.create")),
 ) -> ApiResponse[CraftProcessItem]:
     try:
         row = create_process(
@@ -360,7 +356,7 @@ def update_process_api(
     process_id: int,
     payload: CraftProcessUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.processes.update")),
 ) -> ApiResponse[CraftProcessItem]:
     row = db.execute(select(Process).where(Process.id == process_id).options(selectinload(Process.stage))).scalars().first()
     if not row:
@@ -384,7 +380,7 @@ def update_process_api(
 def delete_process_api(
     process_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.processes.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     row = db.execute(select(Process).where(Process.id == process_id)).scalars().first()
     if not row:
@@ -399,7 +395,7 @@ def delete_process_api(
 @router.get("/system-master-template", response_model=ApiResponse[SystemMasterTemplateItem | None])
 def get_system_master_template_api(
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.system_master_template.view")),
 ) -> ApiResponse[SystemMasterTemplateItem | None]:
     row = get_system_master_template(db)
     if row is None:
@@ -411,7 +407,7 @@ def get_system_master_template_api(
 def create_system_master_template_api(
     payload: SystemMasterTemplateUpsertRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("craft.system_master_template.create")),
 ) -> ApiResponse[SystemMasterTemplateItem]:
     try:
         row = create_system_master_template(
@@ -428,7 +424,7 @@ def create_system_master_template_api(
 def update_system_master_template_api(
     payload: SystemMasterTemplateUpsertRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("craft.system_master_template.update")),
 ) -> ApiResponse[SystemMasterTemplateItem]:
     try:
         row = update_system_master_template(
@@ -448,7 +444,7 @@ def get_craft_kanban_process_metrics_api(
     product_id: int = Query(ge=1),
     limit: int = Query(default=5, ge=1, le=20),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.kanban.process_metrics.view")),
 ) -> ApiResponse[CraftKanbanProcessMetricsResult]:
     try:
         result = get_craft_kanban_process_metrics(
@@ -473,7 +469,7 @@ def get_templates_api(
     enabled: bool | None = Query(default=True),
     lifecycle_status: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.templates.list")),
 ) -> ApiResponse[ProductProcessTemplateListResult]:
     total, rows = list_templates(
         db,
@@ -491,7 +487,7 @@ def get_templates_api(
 def create_template_api(
     payload: ProductProcessTemplateCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("craft.templates.create")),
 ) -> ApiResponse[ProductProcessTemplateDetail]:
     try:
         row = create_template(
@@ -514,7 +510,7 @@ def export_templates_api(
     enabled: bool | None = Query(default=None),
     lifecycle_status: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.templates.export")),
 ) -> ApiResponse[TemplateBatchExportResult]:
     try:
         rows = export_templates(
@@ -559,7 +555,7 @@ def export_templates_api(
 def import_templates_api(
     payload: TemplateBatchImportRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("craft.templates.import")),
 ) -> ApiResponse[TemplateBatchImportResult]:
     try:
         rows, created, updated, skipped = import_templates(
@@ -599,7 +595,7 @@ def import_templates_api(
 def get_template_detail_api(
     template_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.templates.detail")),
 ) -> ApiResponse[ProductProcessTemplateDetail]:
     row = get_template_by_id(db, template_id)
     if not row:
@@ -611,7 +607,7 @@ def get_template_detail_api(
 def get_template_impact_analysis_api(
     template_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.templates.impact.analysis")),
 ) -> ApiResponse[TemplateImpactAnalysisResult]:
     row = get_template_by_id(db, template_id)
     if not row:
@@ -648,7 +644,7 @@ def publish_template_api(
     template_id: int,
     payload: TemplatePublishRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("craft.templates.publish")),
 ) -> ApiResponse[ProductProcessTemplateUpdateResult]:
     row = get_template_by_id(db, template_id)
     if not row:
@@ -690,7 +686,7 @@ def publish_template_api(
 def list_template_versions_api(
     template_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.templates.versions.list")),
 ) -> ApiResponse[TemplateVersionListResult]:
     row = get_template_by_id(db, template_id)
     if not row:
@@ -717,7 +713,7 @@ def compare_template_versions_api(
     from_version: int = Query(ge=1),
     to_version: int = Query(ge=1),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.templates.versions.compare")),
 ) -> ApiResponse[TemplateVersionCompareResult]:
     row = get_template_by_id(db, template_id)
     if not row:
@@ -759,7 +755,7 @@ def rollback_template_api(
     template_id: int,
     payload: TemplateRollbackRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("craft.templates.rollback")),
 ) -> ApiResponse[ProductProcessTemplateUpdateResult]:
     row = get_template_by_id(db, template_id)
     if not row:
@@ -803,7 +799,7 @@ def update_template_api(
     template_id: int,
     payload: ProductProcessTemplateUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("craft.templates.update")),
 ) -> ApiResponse[ProductProcessTemplateUpdateResult]:
     row = get_template_by_id(db, template_id)
     if not row:
@@ -868,7 +864,7 @@ def update_template_api(
 def delete_template_api(
     template_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("craft.templates.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     row = get_template_by_id(db, template_id)
     if not row:

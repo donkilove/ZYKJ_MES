@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_role_codes
-from app.core.rbac import ROLE_SYSTEM_ADMIN
+from app.api.deps import require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
@@ -47,7 +46,7 @@ def get_users(
     page_size: int = Query(default=20, ge=1, le=100),
     keyword: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    _: User = Depends(require_permission("user.users.list")),
 ) -> ApiResponse[UserListResult]:
     total, users = list_users(db, page, page_size, keyword)
     result = UserListResult(total=total, items=[to_user_item(user) for user in users])
@@ -58,7 +57,7 @@ def get_users(
 def create_user_api(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    _: User = Depends(require_permission("user.users.create")),
 ) -> ApiResponse[UserItem]:
     existing = get_user_by_username(db, payload.username)
     if existing:
@@ -76,7 +75,7 @@ def create_user_api(
 def get_user_detail(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    _: User = Depends(require_permission("user.users.detail")),
 ) -> ApiResponse[UserItem]:
     user = get_user_by_id(db, user_id)
     if not user:
@@ -89,7 +88,7 @@ def update_user_api(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    _: User = Depends(require_permission("user.users.update")),
 ) -> ApiResponse[UserItem]:
     user = get_user_by_id(db, user_id)
     if not user:
@@ -107,7 +106,7 @@ def update_user_api(
 def delete_user_api(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    current_user: User = Depends(require_permission("user.users.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     if user_id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete current login user")

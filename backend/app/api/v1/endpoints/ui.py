@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_role_codes
-from app.core.rbac import ROLE_SYSTEM_ADMIN
+from app.api.deps import get_current_active_user, require_permission
+from app.core.authz_catalog import (
+    PERM_UI_PAGE_VISIBILITY_CONFIG_UPDATE,
+    PERM_UI_PAGE_VISIBILITY_CONFIG_VIEW,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
@@ -55,7 +58,7 @@ def get_my_page_visibility(
 @router.get("/page-visibility/config", response_model=ApiResponse[PageVisibilityConfigResult])
 def get_page_visibility_configuration(
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    _: User = Depends(require_permission(PERM_UI_PAGE_VISIBILITY_CONFIG_VIEW)),
 ) -> ApiResponse[PageVisibilityConfigResult]:
     ensure_visibility_defaults(db)
     items = [PageVisibilityConfigItem(**item) for item in get_page_visibility_config(db)]
@@ -66,7 +69,7 @@ def get_page_visibility_configuration(
 def update_page_visibility_configuration(
     payload: PageVisibilityConfigUpdateRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    _: User = Depends(require_permission(PERM_UI_PAGE_VISIBILITY_CONFIG_UPDATE)),
 ) -> ApiResponse[PageVisibilityConfigUpdateResult]:
     updates = [item.model_dump() for item in payload.items]
     updated_count, invalid_items = update_page_visibility_config(db, updates)

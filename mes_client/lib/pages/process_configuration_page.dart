@@ -26,12 +26,14 @@ class ProcessConfigurationPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
-    required this.currentRoleCodes,
+    required this.canManageTemplates,
+    required this.canManageSystemMasterTemplate,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
-  final List<String> currentRoleCodes;
+  final bool canManageTemplates;
+  final bool canManageSystemMasterTemplate;
 
   @override
   State<ProcessConfigurationPage> createState() =>
@@ -39,9 +41,6 @@ class ProcessConfigurationPage extends StatefulWidget {
 }
 
 class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
-  static const String _roleSystemAdmin = 'system_admin';
-  static const String _roleProductionAdmin = 'production_admin';
-
   late final CraftService _craftService;
   late final ProductionService _productionService;
 
@@ -70,15 +69,25 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   bool get _canManageSystemMasterTemplate {
-    return widget.currentRoleCodes.contains(_roleSystemAdmin) ||
-        widget.currentRoleCodes.contains(_roleProductionAdmin);
+    return widget.canManageSystemMasterTemplate;
   }
+
+  bool get _canManageTemplates => widget.canManageTemplates;
 
   String _errorMessage(Object error) {
     if (error is ApiException) {
       return error.message;
     }
     return error.toString();
+  }
+
+  void _showNoPermission() {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('当前账号没有操作权限')));
   }
 
   Future<void> _loadData() async {
@@ -202,6 +211,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   Future<void> _showTemplateDialog({CraftTemplateItem? existing}) async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
     if (_products.isEmpty || _stages.isEmpty || _processes.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -557,6 +570,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   Future<void> _showSystemMasterTemplateDialog() async {
+    if (!_canManageSystemMasterTemplate) {
+      _showNoPermission();
+      return;
+    }
     if (_stages.isEmpty || _processes.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -809,6 +826,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   Future<void> _deleteTemplate(CraftTemplateItem item) async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1024,6 +1045,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   Future<void> _showPublishDialog(CraftTemplateItem item) async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
     final noteController = TextEditingController();
     bool applyOrderSync = false;
     bool confirmed = false;
@@ -1556,6 +1581,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   Future<void> _showExportDialog() async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
     try {
       final result = await _craftService.exportTemplates(
         productId: _productFilterId,
@@ -1622,6 +1651,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   Future<void> _showImportDialog() async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
     final payloadController = TextEditingController();
     bool overwriteExisting = false;
     bool publishAfterImport = false;
@@ -1749,6 +1782,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     _TemplateAction action,
     CraftTemplateItem item,
   ) async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
     switch (action) {
       case _TemplateAction.edit:
         await _showTemplateDialog(existing: item);
@@ -1841,19 +1878,25 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 ),
               if (_canManageSystemMasterTemplate) const SizedBox(width: 8),
               FilledButton.icon(
-                onPressed: _loading ? null : () => _showTemplateDialog(),
+                onPressed: (_loading || !_canManageTemplates)
+                    ? null
+                    : () => _showTemplateDialog(),
                 icon: const Icon(Icons.add),
                 label: const Text('新增模板'),
               ),
               const SizedBox(width: 8),
               OutlinedButton.icon(
-                onPressed: _loading ? null : _showExportDialog,
+                onPressed: (_loading || !_canManageTemplates)
+                    ? null
+                    : _showExportDialog,
                 icon: const Icon(Icons.download),
                 label: const Text('导出模板'),
               ),
               const SizedBox(width: 8),
               OutlinedButton.icon(
-                onPressed: _loading ? null : _showImportDialog,
+                onPressed: (_loading || !_canManageTemplates)
+                    ? null
+                    : _showImportDialog,
                 icon: const Icon(Icons.upload),
                 label: const Text('批量导入'),
               ),

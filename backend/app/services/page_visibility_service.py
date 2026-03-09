@@ -4,9 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.authz_catalog import (
-    AUTHZ_MODULE_PRODUCTION,
-    PRODUCTION_PAGE_CODES,
-    PRODUCTION_PAGE_PERMISSION_BY_PAGE_CODE,
+    PAGE_PERMISSION_BY_PAGE_CODE,
 )
 from app.core.page_catalog import (
     PAGE_BY_CODE,
@@ -53,71 +51,40 @@ def _is_visible_for_role(
     return default_page_visible(role_code, page_code)
 
 
-def _is_production_managed_page(page_code: str) -> bool:
-    return page_code in PRODUCTION_PAGE_CODES
-
-
-def _is_production_page_visible(
-    page_code: str,
-    *,
-    permission_codes: set[str],
-    production_sidebar_visible: bool,
-) -> bool:
-    if page_code == "production":
-        permission_code = PRODUCTION_PAGE_PERMISSION_BY_PAGE_CODE.get(page_code)
-        return bool(permission_code and permission_code in permission_codes)
-    permission_code = PRODUCTION_PAGE_PERMISSION_BY_PAGE_CODE.get(page_code)
-    if permission_code is None:
-        return False
-    return production_sidebar_visible and permission_code in permission_codes
-
-
 def get_user_visible_pages(
     db: Session,
     role_codes: list[str],
 ) -> tuple[list[str], dict[str, list[str]]]:
-    rows = _load_all_visibility_rows(db)
-    lookup = _build_visibility_lookup(rows)
     effective_roles = [code for code in role_codes if code in ROLE_CODE_SET]
-    production_permission_codes = get_permission_codes_for_role_codes(
+    permission_codes = get_permission_codes_for_role_codes(
         db,
         role_codes=effective_roles,
-        module_code=AUTHZ_MODULE_PRODUCTION,
-    )
-    production_sidebar_visible = _is_production_page_visible(
-        "production",
-        permission_codes=production_permission_codes,
-        production_sidebar_visible=True,
     )
 
     sidebar_codes: list[str] = []
     tab_codes_by_parent: dict[str, list[str]] = {}
+    visible_sidebar_set: set[str] = set()
 
     for page in PAGE_CATALOG:
         page_code = str(page["code"])
         page_type = str(page["page_type"])
         parent_code = page.get("parent_code")
         visible = False
-        if _is_production_managed_page(page_code):
-            visible = _is_production_page_visible(
-                page_code,
-                permission_codes=production_permission_codes,
-                production_sidebar_visible=production_sidebar_visible,
-            )
-        elif is_always_visible_page(page_code):
+        if is_always_visible_page(page_code):
             visible = True
         else:
-            visible = any(
-                _is_visible_for_role(role_code, page_code, lookup)
-                for role_code in effective_roles
-            )
+            permission_code = PAGE_PERMISSION_BY_PAGE_CODE.get(page_code)
+            visible = bool(permission_code and permission_code in permission_codes)
 
         if not visible:
             continue
 
         if page_type == PAGE_TYPE_SIDEBAR:
             sidebar_codes.append(page_code)
+            visible_sidebar_set.add(page_code)
         elif page_type == PAGE_TYPE_TAB and isinstance(parent_code, str):
+            if parent_code not in visible_sidebar_set:
+                continue
             tab_codes_by_parent.setdefault(parent_code, []).append(page_code)
 
     return sidebar_codes, tab_codes_by_parent
@@ -133,8 +100,6 @@ def get_page_visibility_config(db: Session) -> list[dict[str, object]]:
         role_name = role_name_by_code.get(role_code, role_code)
         for page in PAGE_CATALOG:
             page_code = str(page["code"])
-            if _is_production_managed_page(page_code):
-                continue
             always_visible = bool(page.get("always_visible", False))
             is_visible = (
                 True
@@ -174,9 +139,6 @@ def update_page_visibility_config(
             continue
         if not is_valid_page_code(page_code):
             invalid_items.append(f"invalid page_code: {page_code}")
-            continue
-        if _is_production_managed_page(page_code):
-            invalid_items.append(f"page_code managed by authz: {page_code}")
             continue
         if is_always_visible_page(page_code):
             continue
@@ -221,8 +183,6 @@ def ensure_visibility_defaults(db: Session) -> None:
         for page in PAGE_CATALOG:
             page_code = str(page["code"])
             if is_always_visible_page(page_code):
-                continue
-            if _is_production_managed_page(page_code):
                 continue
             key = (role_code, page_code)
             if key in row_keys:

@@ -108,7 +108,10 @@ void main() {
           session: AppSession(baseUrl: '', accessToken: ''),
           onLogout: () {},
           orderId: 1,
-          canWrite: true,
+          canEditOrder: true,
+          canDeleteOrder: true,
+          canCompleteOrder: true,
+          canUpdatePipelineMode: true,
           service: _FakeProductionOrderDetailService(),
           onEditOrder: (_) async {
             editCalled = true;

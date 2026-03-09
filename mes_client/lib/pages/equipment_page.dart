@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import '../models/authz_models.dart';
+import '../services/authz_service.dart';
 import 'equipment_ledger_page.dart';
 import 'maintenance_execution_page.dart';
 import 'maintenance_item_page.dart';
@@ -42,26 +44,35 @@ class EquipmentPage extends StatefulWidget {
 
 class _EquipmentPageState extends State<EquipmentPage>
     with SingleTickerProviderStateMixin {
+  late final AuthzService _authzService;
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
+
+  Set<String> _permissionCodes = const <String>{};
+  bool _loadingPermissions = true;
+  String _permissionMessage = '';
 
   @override
   void initState() {
     super.initState();
+    _authzService = AuthzService(widget.session);
     _orderedVisibleTabCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
     _rebuildTabController();
+    _loadPermissions();
   }
 
   @override
   void didUpdateWidget(covariant EquipmentPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     final updatedCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
-    if (listEquals(updatedCodes, _orderedVisibleTabCodes)) {
-      return;
+    if (!listEquals(updatedCodes, _orderedVisibleTabCodes)) {
+      final selectedCode = _currentSelectedTabCode();
+      _orderedVisibleTabCodes = updatedCodes;
+      _rebuildTabController(preferredCode: selectedCode);
     }
-    final selectedCode = _currentSelectedTabCode();
-    _orderedVisibleTabCodes = updatedCodes;
-    _rebuildTabController(preferredCode: selectedCode);
+    if (oldWidget.session.accessToken != widget.session.accessToken) {
+      _loadPermissions();
+    }
   }
 
   @override
@@ -70,14 +81,62 @@ class _EquipmentPageState extends State<EquipmentPage>
     super.dispose();
   }
 
-  bool get _canWrite =>
-      widget.currentRoleCodes.contains('system_admin') ||
-      widget.currentRoleCodes.contains('production_admin');
+  bool _hasPermission(String code) => _permissionCodes.contains(code);
+
+  Future<void> _loadPermissions() async {
+    setState(() {
+      _loadingPermissions = true;
+      _permissionMessage = '';
+    });
+    try {
+      final codes = await _authzService.getMyPermissionCodes(
+        moduleCode: 'equipment',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _permissionCodes = codes.toSet();
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _permissionCodes = const <String>{};
+        _permissionMessage = '加载设备模块权限失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingPermissions = false;
+        });
+      }
+    }
+  }
+
+  bool get _canWriteLedger =>
+      _hasPermission(EquipmentPermissionCodes.ledgerCreate) ||
+      _hasPermission(EquipmentPermissionCodes.ledgerUpdate) ||
+      _hasPermission(EquipmentPermissionCodes.ledgerToggle) ||
+      _hasPermission(EquipmentPermissionCodes.ledgerDelete);
+
+  bool get _canWriteItems =>
+      _hasPermission(EquipmentPermissionCodes.itemsCreate) ||
+      _hasPermission(EquipmentPermissionCodes.itemsUpdate) ||
+      _hasPermission(EquipmentPermissionCodes.itemsToggle) ||
+      _hasPermission(EquipmentPermissionCodes.itemsDelete);
+
+  bool get _canWritePlans =>
+      _hasPermission(EquipmentPermissionCodes.plansCreate) ||
+      _hasPermission(EquipmentPermissionCodes.plansUpdate) ||
+      _hasPermission(EquipmentPermissionCodes.plansToggle) ||
+      _hasPermission(EquipmentPermissionCodes.plansDelete) ||
+      _hasPermission(EquipmentPermissionCodes.plansGenerate);
 
   bool get _canExecute =>
-      widget.currentRoleCodes.contains('system_admin') ||
-      widget.currentRoleCodes.contains('production_admin') ||
-      widget.currentRoleCodes.contains('operator');
+      _hasPermission(EquipmentPermissionCodes.executionsStart) ||
+      _hasPermission(EquipmentPermissionCodes.executionsComplete);
 
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
     final visibleSet = tabCodes.toSet();
@@ -146,19 +205,19 @@ class _EquipmentPageState extends State<EquipmentPage>
         return EquipmentLedgerPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canWrite: _canWrite,
+          canWrite: _canWriteLedger,
         );
       case maintenanceItemTabCode:
         return MaintenanceItemPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canWrite: _canWrite,
+          canWrite: _canWriteItems,
         );
       case maintenancePlanTabCode:
         return MaintenancePlanPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canWrite: _canWrite,
+          canWrite: _canWritePlans,
         );
       case maintenanceExecutionTabCode:
         return MaintenanceExecutionPage(
@@ -178,12 +237,22 @@ class _EquipmentPageState extends State<EquipmentPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingPermissions) {
+      return const Center(child: CircularProgressIndicator());
+    }
     if (_orderedVisibleTabCodes.isEmpty || _tabController == null) {
       return const Center(child: Text('当前账号没有可访问的设备模块页面。'));
     }
 
     return Column(
       children: [
+        if (_permissionMessage.isNotEmpty)
+          Container(
+            width: double.infinity,
+            color: Theme.of(context).colorScheme.errorContainer,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text(_permissionMessage),
+          ),
         Material(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: TabBar(

@@ -145,7 +145,10 @@ void main() {
           session: AppSession(baseUrl: '', accessToken: ''),
           onLogout: () {},
           orderId: 1,
-          canOperate: true,
+          canFirstArticle: true,
+          canEndProduction: true,
+          canCreateManualRepairOrder: true,
+          canCreateAssistAuthorization: true,
           initialOrderContext: _buildMyOrderItem(),
           service: _FakeProductionOrderQueryDetailService(),
           onSubmitFirstArticle: (_) async {
@@ -164,10 +167,8 @@ void main() {
             applyAssistCalled = true;
             return true;
           },
-          onRefreshOrderContext: (_, __) async => MyOrderContextResult(
-            found: true,
-            item: _buildMyOrderItem(),
-          ),
+          onRefreshOrderContext: (_) async =>
+              MyOrderContextResult(found: true, item: _buildMyOrderItem()),
         ),
       ),
     );
@@ -205,43 +206,47 @@ void main() {
     expect(find.text('worker'), findsOneWidget);
   });
 
-  testWidgets('query detail page falls back to readonly when context not found', (
-    tester,
-  ) async {
-    var firstCalled = false;
+  testWidgets(
+    'query detail page falls back to readonly when context not found',
+    (tester) async {
+      var firstCalled = false;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ProductionOrderQueryDetailPage(
-          session: AppSession(baseUrl: '', accessToken: ''),
-          onLogout: () {},
-          orderId: 1,
-          canOperate: true,
-          initialOrderContext: _buildMyOrderItem(),
-          service: _FakeProductionOrderQueryDetailService(),
-          onSubmitFirstArticle: (_) async {
-            firstCalled = true;
-            return true;
-          },
-          onEndProduction: (_) async => false,
-          onCreateManualRepair: (_) async => false,
-          onApplyAssist: (_) async => false,
-          onRefreshOrderContext: (_, __) async =>
-              MyOrderContextResult(found: false, item: null),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProductionOrderQueryDetailPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            orderId: 1,
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            initialOrderContext: _buildMyOrderItem(),
+            service: _FakeProductionOrderQueryDetailService(),
+            onSubmitFirstArticle: (_) async {
+              firstCalled = true;
+              return true;
+            },
+            onEndProduction: (_) async => false,
+            onCreateManualRepair: (_) async => false,
+            onApplyAssist: (_) async => false,
+            onRefreshOrderContext: (_) async =>
+                MyOrderContextResult(found: false, item: null),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(find.text('首件'));
-    await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.text('首件'));
+      await tester.pumpAndSettle();
 
-    expect(firstCalled, isTrue);
-    expect(find.textContaining('仅保留详情查看'), findsOneWidget);
-    final firstButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, '首件'),
-    );
-    expect(firstButton.onPressed, isNull);
-  });
+      expect(firstCalled, isTrue);
+      expect(find.textContaining('仅保留详情查看'), findsOneWidget);
+      final firstButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, '首件'),
+      );
+      expect(firstButton.onPressed, isNull);
+    },
+  );
 }

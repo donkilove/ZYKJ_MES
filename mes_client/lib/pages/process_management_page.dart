@@ -16,10 +16,12 @@ class ProcessManagementPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    required this.canWrite,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canWrite;
 
   @override
   State<ProcessManagementPage> createState() => _ProcessManagementPageState();
@@ -49,6 +51,15 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       return error.message;
     }
     return error.toString();
+  }
+
+  void _showNoPermission() {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('当前账号没有操作权限')));
   }
 
   Future<void> _loadData() async {
@@ -119,6 +130,10 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   }
 
   Future<void> _showStageDialog({CraftStageItem? existing}) async {
+    if (!widget.canWrite) {
+      _showNoPermission();
+      return;
+    }
     final isEdit = existing != null;
     final codeController = TextEditingController(text: existing?.code ?? '');
     final nameController = TextEditingController(text: existing?.name ?? '');
@@ -281,6 +296,10 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   }
 
   Future<void> _showProcessDialog({CraftProcessItem? existing}) async {
+    if (!widget.canWrite) {
+      _showNoPermission();
+      return;
+    }
     if (_stages.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -495,6 +514,10 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     _StageAction action,
     CraftStageItem item,
   ) async {
+    if (!widget.canWrite) {
+      _showNoPermission();
+      return;
+    }
     switch (action) {
       case _StageAction.edit:
         await _showStageDialog(existing: item);
@@ -564,6 +587,10 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     _ProcessAction action,
     CraftProcessItem item,
   ) async {
+    if (!widget.canWrite) {
+      _showNoPermission();
+      return;
+    }
     switch (action) {
       case _ProcessAction.edit:
         await _showProcessDialog(existing: item);
@@ -712,13 +739,17 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
               ),
               const Spacer(),
               FilledButton.icon(
-                onPressed: _loading ? null : () => _showStageDialog(),
+                onPressed: (_loading || !widget.canWrite)
+                    ? null
+                    : () => _showStageDialog(),
                 icon: const Icon(Icons.add),
                 label: const Text('新增工段'),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
-                onPressed: _loading ? null : () => _showProcessDialog(),
+                onPressed: (_loading || !widget.canWrite)
+                    ? null
+                    : () => _showProcessDialog(),
                 icon: const Icon(Icons.add),
                 label: const Text('新增工序'),
               ),

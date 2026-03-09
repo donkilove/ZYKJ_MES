@@ -26,14 +26,30 @@ class ProductManagementPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
-    required this.isSystemAdmin,
+    required this.canCreateProduct,
+    required this.canDeleteProduct,
+    required this.canUpdateLifecycle,
+    required this.canViewVersions,
+    required this.canCompareVersions,
+    required this.canRollbackVersion,
+    required this.canViewImpactAnalysis,
+    required this.canViewParameters,
+    required this.canEditParameters,
     required this.onViewParameters,
     required this.onEditParameters,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
-  final bool isSystemAdmin;
+  final bool canCreateProduct;
+  final bool canDeleteProduct;
+  final bool canUpdateLifecycle;
+  final bool canViewVersions;
+  final bool canCompareVersions;
+  final bool canRollbackVersion;
+  final bool canViewImpactAnalysis;
+  final bool canViewParameters;
+  final bool canEditParameters;
   final ValueChanged<ProductItem> onViewParameters;
   final ValueChanged<ProductItem> onEditParameters;
 
@@ -72,6 +88,15 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       return error.message;
     }
     return error.toString();
+  }
+
+  void _showPermissionDenied(String actionLabel) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('没有权限执行“$actionLabel”')));
   }
 
   String _formatTime(DateTime value) {
@@ -209,6 +234,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     ProductItem product,
     String targetStatus,
   ) async {
+    if (!widget.canUpdateLifecycle) {
+      _showPermissionDenied('更新产品生命周期');
+      return;
+    }
+
     String? inactiveReason;
     if (targetStatus == 'inactive') {
       inactiveReason = await _promptInactiveReason();
@@ -218,14 +248,30 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     }
 
     bool confirmed = false;
-    final impact = await _productService.getProductImpactAnalysis(
-      productId: product.id,
-      operation: 'lifecycle',
-      targetStatus: targetStatus,
-    );
-    if (impact.requiresConfirmation) {
-      confirmed = await _confirmImpact(impact, title: '变更影响确认');
-      if (!confirmed) {
+    if (widget.canViewImpactAnalysis) {
+      try {
+        final impact = await _productService.getProductImpactAnalysis(
+          productId: product.id,
+          operation: 'lifecycle',
+          targetStatus: targetStatus,
+        );
+        if (impact.requiresConfirmation) {
+          confirmed = await _confirmImpact(impact, title: '变更影响确认');
+          if (!confirmed) {
+            return;
+          }
+        }
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载影响分析失败：${_errorMessage(error)}')),
+        );
         return;
       }
     }
@@ -261,6 +307,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   }
 
   Future<void> _showVersionDialog(ProductItem product) async {
+    if (!widget.canViewVersions) {
+      _showPermissionDenied('查看产品版本');
+      return;
+    }
+
     ProductVersionListResult versions;
     try {
       versions = await _productService.listProductVersions(
@@ -349,7 +400,10 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                             },
                           ),
                           FilledButton(
-                            onPressed: fromVersion == null || toVersion == null
+                            onPressed:
+                                !widget.canCompareVersions ||
+                                    fromVersion == null ||
+                                    toVersion == null
                                 ? null
                                 : () async {
                                     try {
@@ -412,59 +466,68 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                             '${_formatTime(item.createdAt)} ${item.createdByUsername ?? '-'} ${item.note ?? ''}',
                           ),
                           trailing: TextButton(
-                            onPressed: () async {
-                              try {
-                                final impact = await _productService
-                                    .getProductImpactAnalysis(
-                                      productId: product.id,
-                                      operation: 'rollback',
-                                      targetVersion: item.version,
-                                    );
-                                var confirmed = false;
-                                if (impact.requiresConfirmation) {
-                                  confirmed = await _confirmImpact(
-                                    impact,
-                                    title: '回滚影响确认',
-                                  );
-                                  if (!confirmed) {
-                                    return;
-                                  }
-                                }
-                                await _productService.rollbackProduct(
-                                  productId: product.id,
-                                  targetVersion: item.version,
-                                  confirmed: confirmed,
-                                  note: '回滚到v${item.version}',
-                                );
-                                if (context.mounted) {
-                                  Navigator.of(context).pop();
-                                }
-                                if (mounted) {
-                                  ScaffoldMessenger.of(
-                                    this.context,
-                                  ).showSnackBar(
-                                    SnackBar(
-                                      content: Text('已回滚到 v${item.version}'),
-                                    ),
-                                  );
-                                  await _loadProducts();
-                                }
-                              } catch (error) {
-                                if (_isUnauthorized(error)) {
-                                  widget.onLogout();
-                                  return;
-                                }
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        '版本回滚失败：${_errorMessage(error)}',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              }
-                            },
+                            onPressed: !widget.canRollbackVersion
+                                ? null
+                                : () async {
+                                    try {
+                                      var confirmed = false;
+                                      if (widget.canViewImpactAnalysis) {
+                                        final impact = await _productService
+                                            .getProductImpactAnalysis(
+                                              productId: product.id,
+                                              operation: 'rollback',
+                                              targetVersion: item.version,
+                                            );
+                                        if (impact.requiresConfirmation) {
+                                          confirmed = await _confirmImpact(
+                                            impact,
+                                            title: '回滚影响确认',
+                                          );
+                                          if (!confirmed) {
+                                            return;
+                                          }
+                                        }
+                                      }
+
+                                      await _productService.rollbackProduct(
+                                        productId: product.id,
+                                        targetVersion: item.version,
+                                        confirmed: confirmed,
+                                        note: '回滚到v${item.version}',
+                                      );
+                                      if (context.mounted) {
+                                        Navigator.of(context).pop();
+                                      }
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(
+                                          this.context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              '已回滚到 v${item.version}',
+                                            ),
+                                          ),
+                                        );
+                                        await _loadProducts();
+                                      }
+                                    } catch (error) {
+                                      if (_isUnauthorized(error)) {
+                                        widget.onLogout();
+                                        return;
+                                      }
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              '版本回滚失败：${_errorMessage(error)}',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
                             child: const Text('回滚到此版本'),
                           ),
                         ),
@@ -526,6 +589,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   }
 
   Future<void> _showCreateProductDialog() async {
+    if (!widget.canCreateProduct) {
+      _showPermissionDenied('创建产品');
+      return;
+    }
+
     final nameController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
@@ -594,12 +662,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   }
 
   Future<void> _deleteProduct(ProductItem product) async {
-    if (!widget.isSystemAdmin) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('无权限删除产品')));
-      }
+    if (!widget.canDeleteProduct) {
+      _showPermissionDenied('删除产品');
       return;
     }
 
@@ -687,63 +751,94 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     ProductItem product,
   ) {
     final items = <PopupMenuEntry<_ProductTableAction>>[];
-    switch (product.lifecycleStatus) {
-      case 'draft':
-        items.add(
-          const PopupMenuItem(
-            value: _ProductTableAction.submitReview,
-            child: Text('提交审核'),
-          ),
-        );
-        items.add(
-          const PopupMenuItem(
-            value: _ProductTableAction.activateDirect,
-            child: Text('直接生效'),
-          ),
-        );
-        break;
-      case 'pending_review':
-        items.add(
-          const PopupMenuItem(
-            value: _ProductTableAction.backToDraft,
-            child: Text('退回草稿'),
-          ),
-        );
-        items.add(
-          const PopupMenuItem(
-            value: _ProductTableAction.publishEffective,
-            child: Text('发布生效'),
-          ),
-        );
-        break;
-      case 'effective':
-        items.add(
-          const PopupMenuItem(
-            value: _ProductTableAction.deactivate,
-            child: Text('停用'),
-          ),
-        );
-        break;
-      case 'inactive':
-        items.add(
-          const PopupMenuItem(
-            value: _ProductTableAction.reactivate,
-            child: Text('重新生效'),
-          ),
-        );
-        break;
-      default:
-        break;
+    if (widget.canUpdateLifecycle) {
+      switch (product.lifecycleStatus) {
+        case 'draft':
+          items.add(
+            const PopupMenuItem(
+              value: _ProductTableAction.submitReview,
+              child: Text('提交审核'),
+            ),
+          );
+          items.add(
+            const PopupMenuItem(
+              value: _ProductTableAction.activateDirect,
+              child: Text('直接生效'),
+            ),
+          );
+          break;
+        case 'pending_review':
+          items.add(
+            const PopupMenuItem(
+              value: _ProductTableAction.backToDraft,
+              child: Text('退回草稿'),
+            ),
+          );
+          items.add(
+            const PopupMenuItem(
+              value: _ProductTableAction.publishEffective,
+              child: Text('发布生效'),
+            ),
+          );
+          break;
+        case 'effective':
+          items.add(
+            const PopupMenuItem(
+              value: _ProductTableAction.deactivate,
+              child: Text('停用'),
+            ),
+          );
+          break;
+        case 'inactive':
+          items.add(
+            const PopupMenuItem(
+              value: _ProductTableAction.reactivate,
+              child: Text('重新生效'),
+            ),
+          );
+          break;
+        default:
+          break;
+      }
     }
-    if (items.isNotEmpty) {
+
+    final utilityItems = <PopupMenuEntry<_ProductTableAction>>[];
+    if (widget.canViewVersions) {
+      utilityItems.add(
+        const PopupMenuItem(
+          value: _ProductTableAction.version,
+          child: Text('版本管理'),
+        ),
+      );
+    }
+    if (widget.canViewParameters) {
+      utilityItems.add(
+        const PopupMenuItem(
+          value: _ProductTableAction.viewParams,
+          child: Text('查看参数'),
+        ),
+      );
+    }
+    if (widget.canEditParameters) {
+      utilityItems.add(
+        const PopupMenuItem(
+          value: _ProductTableAction.editParams,
+          child: Text('编辑参数'),
+        ),
+      );
+    }
+    if (widget.canDeleteProduct) {
+      utilityItems.add(
+        const PopupMenuItem(
+          value: _ProductTableAction.delete,
+          child: Text('删除产品'),
+        ),
+      );
+    }
+    if (items.isNotEmpty && utilityItems.isNotEmpty) {
       items.add(const PopupMenuDivider());
     }
-    items.addAll(const [
-      PopupMenuItem(value: _ProductTableAction.version, child: Text('版本管理')),
-      PopupMenuItem(value: _ProductTableAction.viewParams, child: Text('查看参数')),
-      PopupMenuItem(value: _ProductTableAction.editParams, child: Text('编辑参数')),
-      PopupMenuItem(value: _ProductTableAction.delete, child: Text('删除产品')),
-    ]);
+    items.addAll(utilityItems);
     return items;
   }
 
@@ -827,7 +922,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _loading ? null : _showCreateProductDialog,
+                onPressed: _loading || !widget.canCreateProduct
+                    ? null
+                    : _showCreateProductDialog,
                 icon: const Icon(Icons.add),
                 label: const Text('添加产品'),
               ),
@@ -870,6 +967,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                             ),
                           ],
                           rows: _products.map((product) {
+                            final actions = _buildProductActionMenuItems(
+                              product,
+                            );
                             return DataRow(
                               cells: [
                                 DataCell(Text(product.name)),
@@ -889,19 +989,20 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                 DataCell(Text(_formatTime(product.createdAt))),
                                 DataCell(Text(_formatTime(product.updatedAt))),
                                 DataCell(
-                                  UnifiedListTableHeaderStyle.actionMenuButton<
-                                    _ProductTableAction
-                                  >(
-                                    theme: theme,
-                                    onSelected: (action) {
-                                      _handleProductTableAction(
-                                        action,
-                                        product,
-                                      );
-                                    },
-                                    itemBuilder: (context) =>
-                                        _buildProductActionMenuItems(product),
-                                  ),
+                                  actions.isEmpty
+                                      ? const Text('-')
+                                      : UnifiedListTableHeaderStyle.actionMenuButton<
+                                          _ProductTableAction
+                                        >(
+                                          theme: theme,
+                                          onSelected: (action) {
+                                            _handleProductTableAction(
+                                              action,
+                                              product,
+                                            );
+                                          },
+                                          itemBuilder: (context) => actions,
+                                        ),
                                 ),
                               ],
                             );

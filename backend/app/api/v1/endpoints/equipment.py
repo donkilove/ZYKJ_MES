@@ -3,13 +3,7 @@ from datetime import date as date_type
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_role_codes
-from app.core.rbac import (
-    ROLE_OPERATOR,
-    ROLE_PRODUCTION_ADMIN,
-    ROLE_QUALITY_ADMIN,
-    ROLE_SYSTEM_ADMIN,
-)
+from app.api.deps import require_permission
 from app.db.session import get_db
 from app.models.equipment import Equipment
 from app.models.maintenance_item import MaintenanceItem
@@ -70,22 +64,6 @@ from app.services.craft_service import get_stage_by_code, resolve_user_stage_cod
 
 
 router = APIRouter()
-
-EQUIPMENT_READ_ROLE_CODES = [ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN]
-EQUIPMENT_WRITE_ROLE_CODES = [ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN]
-EXECUTION_READ_ROLE_CODES = [
-    ROLE_SYSTEM_ADMIN,
-    ROLE_PRODUCTION_ADMIN,
-    ROLE_QUALITY_ADMIN,
-    ROLE_OPERATOR,
-]
-EXECUTION_WRITE_ROLE_CODES = [ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN, ROLE_OPERATOR]
-RECORD_READ_ROLE_CODES = [
-    ROLE_SYSTEM_ADMIN,
-    ROLE_PRODUCTION_ADMIN,
-    ROLE_QUALITY_ADMIN,
-    ROLE_OPERATOR,
-]
 
 
 def to_equipment_item(row: Equipment) -> EquipmentLedgerItem:
@@ -181,7 +159,7 @@ def to_maintenance_record_item(row: MaintenanceRecord) -> MaintenanceRecordItem:
 @router.get("/admin-owners", response_model=ApiResponse[EquipmentOwnerOptionListResult])
 def get_admin_owners(
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.admin_owners.list")),
 ) -> ApiResponse[EquipmentOwnerOptionListResult]:
     users = list_active_system_admin_owners(db)
     return success_response(
@@ -202,7 +180,7 @@ def get_equipment_ledger(
     keyword: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_READ_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.ledger.list")),
 ) -> ApiResponse[EquipmentLedgerListResult]:
     total, rows = list_equipment(
         db,
@@ -224,7 +202,7 @@ def get_equipment_ledger(
 def create_equipment_ledger(
     payload: EquipmentLedgerUpsertRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.ledger.create")),
 ) -> ApiResponse[EquipmentLedgerItem]:
     try:
         row = create_equipment(
@@ -246,7 +224,7 @@ def update_equipment_ledger(
     equipment_id: int,
     payload: EquipmentLedgerUpsertRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.ledger.update")),
 ) -> ApiResponse[EquipmentLedgerItem]:
     row = get_equipment_by_id(db, equipment_id)
     if not row:
@@ -273,7 +251,7 @@ def toggle_equipment_ledger(
     equipment_id: int,
     payload: ToggleEnabledRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.ledger.toggle")),
 ) -> ApiResponse[EquipmentLedgerItem]:
     row = get_equipment_by_id(db, equipment_id)
     if not row:
@@ -286,7 +264,7 @@ def toggle_equipment_ledger(
 def disable_equipment_ledger(
     equipment_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.ledger.toggle")),
 ) -> ApiResponse[EquipmentLedgerItem]:
     row = get_equipment_by_id(db, equipment_id)
     if not row:
@@ -299,7 +277,7 @@ def disable_equipment_ledger(
 def delete_equipment_ledger(
     equipment_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.ledger.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     row = get_equipment_by_id(db, equipment_id)
     if not row:
@@ -318,7 +296,7 @@ def get_maintenance_items(
     keyword: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_READ_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.items.list")),
 ) -> ApiResponse[MaintenanceItemListResult]:
     total, rows = list_maintenance_items(
         db,
@@ -343,7 +321,7 @@ def get_maintenance_items(
 def create_maintenance_item_api(
     payload: MaintenanceItemUpsertRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.items.create")),
 ) -> ApiResponse[MaintenanceItemEntry]:
     try:
         row = create_maintenance_item(
@@ -361,7 +339,7 @@ def update_maintenance_item_api(
     item_id: int,
     payload: MaintenanceItemUpsertRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.items.update")),
 ) -> ApiResponse[MaintenanceItemEntry]:
     row = get_maintenance_item_by_id(db, item_id)
     if not row:
@@ -385,7 +363,7 @@ def toggle_maintenance_item_api(
     item_id: int,
     payload: ToggleEnabledRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.items.toggle")),
 ) -> ApiResponse[MaintenanceItemEntry]:
     row = get_maintenance_item_by_id(db, item_id)
     if not row:
@@ -398,7 +376,7 @@ def toggle_maintenance_item_api(
 def disable_maintenance_item_api(
     item_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.items.toggle")),
 ) -> ApiResponse[MaintenanceItemEntry]:
     row = get_maintenance_item_by_id(db, item_id)
     if not row:
@@ -411,7 +389,7 @@ def disable_maintenance_item_api(
 def delete_maintenance_item_api(
     item_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.items.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     row = get_maintenance_item_by_id(db, item_id)
     if not row:
@@ -431,7 +409,7 @@ def get_maintenance_plans(
     item_id: int | None = Query(default=None, ge=1),
     enabled: bool | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_READ_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.plans.list")),
 ) -> ApiResponse[MaintenancePlanListResult]:
     total, rows = list_maintenance_plans(
         db,
@@ -457,7 +435,7 @@ def get_maintenance_plans(
 def create_maintenance_plan_api(
     payload: MaintenancePlanUpsertRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.plans.create")),
 ) -> ApiResponse[MaintenancePlanItem]:
     try:
         row = create_maintenance_plan(
@@ -480,7 +458,7 @@ def update_maintenance_plan_api(
     plan_id: int,
     payload: MaintenancePlanUpsertRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.plans.update")),
 ) -> ApiResponse[MaintenancePlanItem]:
     row = get_maintenance_plan_by_id(db, plan_id)
     if not row:
@@ -507,7 +485,7 @@ def toggle_maintenance_plan_api(
     plan_id: int,
     payload: MaintenancePlanToggleRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.plans.toggle")),
 ) -> ApiResponse[MaintenancePlanItem]:
     row = get_maintenance_plan_by_id(db, plan_id)
     if not row:
@@ -520,7 +498,7 @@ def toggle_maintenance_plan_api(
 def delete_maintenance_plan_api(
     plan_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.plans.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     row = get_maintenance_plan_by_id(db, plan_id)
     if not row:
@@ -536,7 +514,7 @@ def delete_maintenance_plan_api(
 def generate_plan_work_order_api(
     plan_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(EQUIPMENT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("equipment.plans.generate")),
 ) -> ApiResponse[MaintenancePlanGenerateResult]:
     row = get_maintenance_plan_by_id(db, plan_id)
     if not row:
@@ -567,7 +545,7 @@ def get_maintenance_executions(
     keyword: str | None = Query(default=None),
     mine: bool = Query(default=False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(EXECUTION_READ_ROLE_CODES)),
+    current_user: User = Depends(require_permission("equipment.executions.list")),
 ) -> ApiResponse[MaintenanceWorkOrderListResult]:
     try:
         total, rows = list_work_orders(
@@ -604,7 +582,7 @@ def get_maintenance_executions(
 def start_maintenance_execution(
     work_order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(EXECUTION_WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("equipment.executions.start")),
 ) -> ApiResponse[MaintenanceWorkOrderItem]:
     row = get_work_order_by_id(db, work_order_id)
     if not row:
@@ -635,7 +613,7 @@ def complete_maintenance_execution(
     work_order_id: int,
     payload: MaintenanceWorkOrderCompleteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(EXECUTION_WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("equipment.executions.complete")),
 ) -> ApiResponse[MaintenanceWorkOrderItem]:
     row = get_work_order_by_id(db, work_order_id)
     if not row:
@@ -670,7 +648,7 @@ def get_maintenance_records(
     start_date: date_type | None = Query(default=None),
     end_date: date_type | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(RECORD_READ_ROLE_CODES)),
+    current_user: User = Depends(require_permission("equipment.records.list")),
 ) -> ApiResponse[MaintenanceRecordListResult]:
     if (
         start_date is not None

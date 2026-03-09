@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import '../services/authz_service.dart';
 import 'daily_first_article_page.dart';
 import 'quality_data_page.dart';
 
@@ -31,32 +32,63 @@ class QualityPage extends StatefulWidget {
 
 class _QualityPageState extends State<QualityPage>
     with SingleTickerProviderStateMixin {
+  late final AuthzService _authzService;
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
+
+  bool _loadingPermissions = true;
+  String _permissionMessage = '';
 
   @override
   void initState() {
     super.initState();
+    _authzService = AuthzService(widget.session);
     _orderedVisibleTabCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
     _rebuildTabController();
+    _loadPermissions();
   }
 
   @override
   void didUpdateWidget(covariant QualityPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     final updatedCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
-    if (listEquals(updatedCodes, _orderedVisibleTabCodes)) {
-      return;
+    if (!listEquals(updatedCodes, _orderedVisibleTabCodes)) {
+      final selectedCode = _currentSelectedTabCode();
+      _orderedVisibleTabCodes = updatedCodes;
+      _rebuildTabController(preferredCode: selectedCode);
     }
-    final selectedCode = _currentSelectedTabCode();
-    _orderedVisibleTabCodes = updatedCodes;
-    _rebuildTabController(preferredCode: selectedCode);
+    if (oldWidget.session.accessToken != widget.session.accessToken) {
+      _loadPermissions();
+    }
   }
 
   @override
   void dispose() {
     _tabController?.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPermissions() async {
+    setState(() {
+      _loadingPermissions = true;
+      _permissionMessage = '';
+    });
+    try {
+      await _authzService.getMyPermissionCodes(moduleCode: 'quality');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _permissionMessage = '加载质量模块权限失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingPermissions = false;
+        });
+      }
+    }
   }
 
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
@@ -108,7 +140,7 @@ class _QualityPageState extends State<QualityPage>
       case firstArticleManagementTabCode:
         return '每日首件';
       case qualityDataQueryTabCode:
-        return '品质数据';
+        return '质量数据';
       default:
         return code;
     }
@@ -133,12 +165,22 @@ class _QualityPageState extends State<QualityPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingPermissions) {
+      return const Center(child: CircularProgressIndicator());
+    }
     if (_orderedVisibleTabCodes.isEmpty || _tabController == null) {
-      return const Center(child: Text('当前账号无可见品质页面。'));
+      return const Center(child: Text('当前账号无可见质量页面。'));
     }
 
     return Column(
       children: [
+        if (_permissionMessage.isNotEmpty)
+          Container(
+            width: double.infinity,
+            color: Theme.of(context).colorScheme.errorContainer,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text(_permissionMessage),
+          ),
         Material(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: TabBar(

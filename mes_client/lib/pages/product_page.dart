@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import '../models/authz_models.dart';
 import '../models/product_models.dart';
+import '../services/authz_service.dart';
 import 'product_management_page.dart';
 import 'product_parameter_management_page.dart';
 import 'product_parameter_query_page.dart';
@@ -37,8 +39,13 @@ class ProductPage extends StatefulWidget {
 
 class _ProductPageState extends State<ProductPage>
     with SingleTickerProviderStateMixin {
+  late final AuthzService _authzService;
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
+
+  Set<String> _permissionCodes = const <String>{};
+  bool _loadingPermissions = true;
+  String _permissionMessage = '';
 
   ProductJumpCommand? _jumpCommand;
   int _jumpSeq = 0;
@@ -46,26 +53,64 @@ class _ProductPageState extends State<ProductPage>
   @override
   void initState() {
     super.initState();
+    _authzService = AuthzService(widget.session);
     _orderedVisibleTabCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
     _rebuildTabController();
+    _loadPermissions();
   }
 
   @override
   void didUpdateWidget(covariant ProductPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     final updatedCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
-    if (listEquals(updatedCodes, _orderedVisibleTabCodes)) {
-      return;
+    if (!listEquals(updatedCodes, _orderedVisibleTabCodes)) {
+      final selectedCode = _currentSelectedTabCode();
+      _orderedVisibleTabCodes = updatedCodes;
+      _rebuildTabController(preferredCode: selectedCode);
     }
-    final selectedCode = _currentSelectedTabCode();
-    _orderedVisibleTabCodes = updatedCodes;
-    _rebuildTabController(preferredCode: selectedCode);
+    if (oldWidget.session.accessToken != widget.session.accessToken) {
+      _loadPermissions();
+    }
   }
 
   @override
   void dispose() {
     _tabController?.dispose();
     super.dispose();
+  }
+
+  bool _hasPermission(String code) => _permissionCodes.contains(code);
+
+  Future<void> _loadPermissions() async {
+    setState(() {
+      _loadingPermissions = true;
+      _permissionMessage = '';
+    });
+    try {
+      final codes = await _authzService.getMyPermissionCodes(
+        moduleCode: 'product',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _permissionCodes = codes.toSet();
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _permissionCodes = const <String>{};
+        _permissionMessage = '加载产品模块权限失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingPermissions = false;
+        });
+      }
+    }
   }
 
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
@@ -164,7 +209,29 @@ class _ProductPageState extends State<ProductPage>
         return ProductManagementPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          isSystemAdmin: widget.currentRoleCodes.contains('system_admin'),
+          canCreateProduct: _hasPermission(
+            ProductPermissionCodes.productsCreate,
+          ),
+          canDeleteProduct: _hasPermission(
+            ProductPermissionCodes.productsDelete,
+          ),
+          canUpdateLifecycle: _hasPermission(
+            ProductPermissionCodes.lifecycleUpdate,
+          ),
+          canViewVersions: _hasPermission(ProductPermissionCodes.versionsList),
+          canCompareVersions: _hasPermission(
+            ProductPermissionCodes.versionsCompare,
+          ),
+          canRollbackVersion: _hasPermission(ProductPermissionCodes.rollback),
+          canViewImpactAnalysis: _hasPermission(
+            ProductPermissionCodes.impactAnalysis,
+          ),
+          canViewParameters: _hasPermission(
+            ProductPermissionCodes.parametersView,
+          ),
+          canEditParameters: _hasPermission(
+            ProductPermissionCodes.parametersUpdate,
+          ),
           onViewParameters: (product) {
             _dispatchJump(
               targetTabCode: productParameterQueryTabCode,
@@ -203,12 +270,22 @@ class _ProductPageState extends State<ProductPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingPermissions) {
+      return const Center(child: CircularProgressIndicator());
+    }
     if (_orderedVisibleTabCodes.isEmpty || _tabController == null) {
       return const Center(child: Text('当前账号没有可访问的产品模块页面。'));
     }
 
     return Column(
       children: [
+        if (_permissionMessage.isNotEmpty)
+          Container(
+            width: double.infinity,
+            color: Theme.of(context).colorScheme.errorContainer,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text(_permissionMessage),
+          ),
         Material(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: TabBar(

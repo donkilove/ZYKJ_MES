@@ -17,10 +17,12 @@ class UserManagementPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    required this.canWrite,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canWrite;
 
   @override
   State<UserManagementPage> createState() => _UserManagementPageState();
@@ -85,6 +87,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
       return error.message;
     }
     return error.toString();
+  }
+
+  void _showNoPermission() {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('当前账号没有操作权限')));
   }
 
   String? _pickPreferredRoleCode(List<String> roleCodes) {
@@ -328,6 +339,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _showCreateUserDialog() async {
+    if (!widget.canWrite) {
+      _showNoPermission();
+      return;
+    }
     final accountController = TextEditingController();
     final passwordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -536,6 +551,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _showEditUserDialog(UserItem user) async {
+    if (!widget.canWrite) {
+      _showNoPermission();
+      return;
+    }
     final accountController = TextEditingController(text: user.username);
     final passwordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -808,6 +827,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _handleUserAction(_UserAction action, UserItem user) async {
+    if (!widget.canWrite) {
+      _showNoPermission();
+      return;
+    }
     switch (action) {
       case _UserAction.edit:
         await _showEditUserDialog(user);
@@ -864,7 +887,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _loading ? null : _showCreateUserDialog,
+                onPressed: (_loading || !widget.canWrite)
+                    ? null
+                    : _showCreateUserDialog,
                 icon: const Icon(Icons.person_add),
                 label: const Text('新建用户'),
               ),

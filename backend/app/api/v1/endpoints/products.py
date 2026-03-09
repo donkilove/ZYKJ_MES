@@ -2,13 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_role_codes
-from app.core.rbac import (
-    ROLE_OPERATOR,
-    ROLE_PRODUCTION_ADMIN,
-    ROLE_QUALITY_ADMIN,
-    ROLE_SYSTEM_ADMIN,
-)
+from app.api.deps import require_permission
 from app.core.security import verify_password
 from app.db.session import get_db
 from app.models.product import Product
@@ -59,14 +53,6 @@ from app.services.product_service import (
 
 router = APIRouter()
 
-PRODUCT_READ_ROLE_CODES = [
-    ROLE_SYSTEM_ADMIN,
-    ROLE_PRODUCTION_ADMIN,
-    ROLE_QUALITY_ADMIN,
-    ROLE_OPERATOR,
-]
-PRODUCT_WRITE_ROLE_CODES = [ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN]
-
 
 def to_product_item(
     product: Product,
@@ -99,7 +85,7 @@ def get_products(
     page_size: int = Query(default=50, ge=1, le=200),
     keyword: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_READ_ROLE_CODES)),
+    _: User = Depends(require_permission("product.products.list")),
 ) -> ApiResponse[ProductListResult]:
     total, products, latest_map = list_products(db, page, page_size, keyword)
     return success_response(
@@ -114,7 +100,7 @@ def get_products(
 def create_product_api(
     payload: ProductCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("product.products.create")),
 ) -> ApiResponse[ProductItem]:
     normalized_name = payload.name.strip()
     existing = get_product_by_name(db, normalized_name)
@@ -134,7 +120,7 @@ def delete_product_api(
     product_id: int,
     payload: ProductDeleteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes([ROLE_SYSTEM_ADMIN])),
+    current_user: User = Depends(require_permission("product.products.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     if not verify_password(payload.password, current_user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password is incorrect")
@@ -151,7 +137,7 @@ def delete_product_api(
 def get_product_parameters(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_READ_ROLE_CODES)),
+    _: User = Depends(require_permission("product.parameters.view")),
 ) -> ApiResponse[ProductParameterListResult]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -185,7 +171,7 @@ def update_parameters(
     product_id: int,
     payload: ProductParameterUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("product.parameters.update")),
 ) -> ApiResponse[ProductParameterUpdateResult]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -220,7 +206,7 @@ def get_product_impact_analysis(
     target_status: str | None = Query(default=None),
     target_version: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
+    _: User = Depends(require_permission("product.impact.analysis")),
 ) -> ApiResponse[ProductImpactAnalysisResult]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -269,7 +255,7 @@ def update_product_lifecycle(
     product_id: int,
     payload: ProductLifecycleUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("product.lifecycle.update")),
 ) -> ApiResponse[ProductItem]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -294,7 +280,7 @@ def update_product_lifecycle(
 def get_product_versions(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_READ_ROLE_CODES)),
+    _: User = Depends(require_permission("product.versions.list")),
 ) -> ApiResponse[ProductVersionListResult]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -326,7 +312,7 @@ def compare_product_version_api(
     from_version: int = Query(ge=1),
     to_version: int = Query(ge=1),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_READ_ROLE_CODES)),
+    _: User = Depends(require_permission("product.versions.compare")),
 ) -> ApiResponse[ProductVersionCompareResult]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -365,7 +351,7 @@ def rollback_product_api(
     product_id: int,
     payload: ProductRollbackRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role_codes(PRODUCT_WRITE_ROLE_CODES)),
+    current_user: User = Depends(require_permission("product.rollback")),
 ) -> ApiResponse[ProductRollbackResult]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -404,7 +390,7 @@ def get_parameter_history(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(PRODUCT_READ_ROLE_CODES)),
+    _: User = Depends(require_permission("product.parameter_history.list")),
 ) -> ApiResponse[ProductParameterHistoryListResult]:
     product = get_product_by_id(db, product_id)
     if not product:

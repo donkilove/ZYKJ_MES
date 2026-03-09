@@ -9,6 +9,116 @@ import '../services/user_service.dart';
 
 const String _systemAdminRoleCode = 'system_admin';
 
+const Map<String, String> _moduleNameZhByCode = {
+  'system': '系统',
+  'user': '用户',
+  'product': '产品',
+  'equipment': '设备',
+  'craft': '工艺',
+  'quality': '质量',
+  'production': '生产',
+};
+
+const Map<String, String> _pageNameZhByCode = {
+  'user': '用户模块',
+  'user_management': '用户管理',
+  'registration_approval': '注册审批',
+  'page_visibility_config': '页面可见性配置（旧）',
+  'function_permission_config': '功能权限配置',
+  'product': '产品模块',
+  'product_management': '产品管理',
+  'product_parameter_management': '产品参数管理',
+  'product_parameter_query': '产品参数查询',
+  'equipment': '设备模块',
+  'equipment_ledger': '设备台账',
+  'maintenance_item': '保养项目',
+  'maintenance_plan': '保养计划',
+  'maintenance_execution': '保养执行',
+  'maintenance_record': '保养记录',
+  'production': '生产模块',
+  'production_order_management': '订单管理',
+  'production_order_query': '订单查询',
+  'production_assist_approval': '代班记录',
+  'production_data_query': '生产数据',
+  'production_scrap_statistics': '报废统计',
+  'production_repair_orders': '维修订单',
+  'quality': '质量模块',
+  'first_article_management': '每日首件',
+  'quality_data_query': '质量数据',
+  'craft': '工艺模块',
+  'process_management': '工序管理',
+  'production_process_config': '生产工序配置',
+  'craft_kanban': '工艺看板',
+};
+
+const Map<String, String> _permissionTokenZhByCode = {
+  'authz': '功能权限',
+  'permissions': '权限',
+  'role_permissions': '角色权限',
+  'page_visibility_config': '页面可见性',
+  'orders': '订单',
+  'my_orders': '我的工单',
+  'execution': '生产执行',
+  'stats': '统计',
+  'data': '数据',
+  'scrap_statistics': '报废统计',
+  'repair_orders': '维修订单',
+  'assist_authorizations': '代班授权',
+  'assist_user_options': '代班用户选项',
+  'products': '产品',
+  'parameters': '参数',
+  'impact': '影响分析',
+  'lifecycle': '生命周期',
+  'versions': '版本',
+  'parameter_history': '参数历史',
+  'users': '用户',
+  'roles': '角色',
+  'processes': '工序',
+  'registration_requests': '注册申请',
+  'admin_owners': '负责人',
+  'ledger': '设备台账',
+  'items': '保养项目',
+  'plans': '保养计划',
+  'executions': '保养执行',
+  'records': '保养记录',
+  'stages': '工段',
+  'templates': '模板',
+  'system_master_template': '系统母版',
+  'kanban': '看板',
+  'process_metrics': '工序指标',
+  'first_articles': '每日首件',
+  'pipeline_mode': '并行模式',
+  'today_realtime': '今日实时',
+  'unfinished_progress': '未完工进度',
+  'manual': '手动筛选',
+  'manual_export': '手动筛选导出',
+  'phenomena_summary': '现象汇总',
+  'create_manual': '手工创建',
+  'list': '查看列表',
+  'view': '查看',
+  'me': '我的权限',
+  'create': '创建',
+  'update': '更新',
+  'delete': '删除',
+  'toggle': '启停',
+  'generate': '生成',
+  'start': '开始',
+  'complete': '完成',
+  'approve': '通过',
+  'reject': '拒绝',
+  'export': '导出',
+  'import': '导入',
+  'detail': '详情',
+  'compare': '对比',
+  'rollback': '回滚',
+  'publish': '发布',
+  'analysis': '分析',
+  'context': '上下文',
+  'proxy': '代理',
+  'first_article': '首件',
+  'end_production': '报工',
+};
+
 enum _ModuleSwitchDecision { saveAndSwitch, discardAndSwitch, cancel }
 
 class _PermissionGroup {
@@ -151,6 +261,81 @@ class _FunctionPermissionConfigPageState
     return _readonlyByRole[roleCode] ?? false;
   }
 
+  String _moduleLabel(String moduleCode) {
+    final normalized = moduleCode.trim();
+    if (normalized.isEmpty) {
+      return moduleCode;
+    }
+    return _moduleNameZhByCode[normalized] ?? normalized;
+  }
+
+  bool _containsChinese(String value) {
+    return RegExp(r'[\u4e00-\u9fff]').hasMatch(value);
+  }
+
+  String _permissionTokenLabel(String token) {
+    final normalized = token.trim();
+    if (normalized.isEmpty) {
+      return token;
+    }
+    return _permissionTokenZhByCode[normalized] ?? normalized;
+  }
+
+  String _pageLabelByCode(String pageCode) {
+    final normalized = pageCode.trim();
+    if (normalized.isEmpty) {
+      return pageCode;
+    }
+    return _pageNameZhByCode[normalized] ?? normalized;
+  }
+
+  String _fallbackPermissionName(String permissionCode) {
+    if (permissionCode.startsWith('page.') &&
+        permissionCode.endsWith('.view')) {
+      final pageCode = permissionCode.substring(
+        'page.'.length,
+        permissionCode.length - '.view'.length,
+      );
+      return '页面访问：${_pageLabelByCode(pageCode)}';
+    }
+
+    final tokens = permissionCode
+        .split('.')
+        .where((token) => token.trim().isNotEmpty)
+        .toList();
+    if (tokens.isEmpty) {
+      return permissionCode;
+    }
+
+    final labels = <String>[];
+    for (var index = 0; index < tokens.length; index += 1) {
+      final token = tokens[index];
+      if (index == 0 && _moduleNameZhByCode.containsKey(token)) {
+        labels.add(_moduleNameZhByCode[token]!);
+        continue;
+      }
+      labels.add(_permissionTokenLabel(token));
+    }
+    return labels.join(' / ');
+  }
+
+  String _permissionDisplayName(PermissionCatalogItem permission) {
+    final name = permission.permissionName.trim();
+    if (name.isNotEmpty && _containsChinese(name)) {
+      return name;
+    }
+    return _fallbackPermissionName(permission.permissionCode);
+  }
+
+  String _permissionDisplayNameByCode(String permissionCode) {
+    for (final permission in _permissions) {
+      if (permission.permissionCode == permissionCode) {
+        return _permissionDisplayName(permission);
+      }
+    }
+    return _fallbackPermissionName(permissionCode);
+  }
+
   String _groupCodeOfPermission(PermissionCatalogItem permission) {
     final parts = permission.permissionCode.split('.');
     if (parts.isEmpty) {
@@ -170,9 +355,18 @@ class _FunctionPermissionConfigPageState
 
   String _groupLabel(String groupCode) {
     if (groupCode.startsWith('page.')) {
-      return '页面分组：$groupCode';
+      final pageCode = groupCode.substring('page.'.length);
+      return '页面分组：${_pageLabelByCode(pageCode)} ($groupCode)';
     }
-    return '业务分组：$groupCode';
+    final parts = groupCode.split('.');
+    if (parts.isEmpty) {
+      return '业务分组：$groupCode';
+    }
+    final module = _moduleLabel(parts.first);
+    final resource = parts.length >= 2
+        ? _permissionTokenLabel(parts[1])
+        : _permissionTokenLabel(parts.first);
+    return '业务分组：$module / $resource ($groupCode)';
   }
 
   List<PermissionCatalogItem> _filteredPermissions() {
@@ -185,7 +379,8 @@ class _FunctionPermissionConfigPageState
       if (keyword.isEmpty) {
         return true;
       }
-      return permission.permissionName.toLowerCase().contains(keyword) ||
+      final displayName = _permissionDisplayName(permission).toLowerCase();
+      return displayName.contains(keyword) ||
           permission.permissionCode.toLowerCase().contains(keyword);
     }).toList();
   }
@@ -893,6 +1088,7 @@ class _FunctionPermissionConfigPageState
       return const SizedBox.shrink();
     }
     final moduleCode = _selectedModuleCode ?? preview.moduleCode;
+    final moduleLabel = _moduleLabel(moduleCode);
     final roleNameByCode = {for (final role in _roles) role.code: role.name};
 
     return Card(
@@ -907,7 +1103,7 @@ class _FunctionPermissionConfigPageState
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 6),
-            Text('模块：$moduleCode'),
+            Text('模块：$moduleLabel（$moduleCode）'),
             const SizedBox(height: 10),
             ...preview.roleResults.map((roleResult) {
               final roleName =
@@ -1028,7 +1224,7 @@ class _FunctionPermissionConfigPageState
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    '提示：system_admin 始终拥有全部权限，该角色仅用于只读展示。',
+                    '提示：系统管理员（system_admin）始终拥有全部权限，该角色仅用于只读展示。',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.primary,
                       fontSize: 12,
@@ -1080,10 +1276,10 @@ class _FunctionPermissionConfigPageState
                           final checked = granted.contains(item.permissionCode);
                           final subtitle = item.parentPermissionCode == null
                               ? item.permissionCode
-                              : '${item.permissionCode}\n父权限：${item.parentPermissionCode}';
+                              : '${item.permissionCode}\n父权限：${_permissionDisplayNameByCode(item.parentPermissionCode!)}';
                           return SwitchListTile(
                             dense: true,
-                            title: Text(item.permissionName),
+                            title: Text(_permissionDisplayName(item)),
                             subtitle: Text(subtitle),
                             value: checked,
                             onChanged: readonly || _saving
@@ -1150,7 +1346,7 @@ class _FunctionPermissionConfigPageState
                     borderRadius: BorderRadius.circular(999),
                     color: Theme.of(context).colorScheme.secondaryContainer,
                   ),
-                  child: const Text('system_admin 固定全权限'),
+                  child: const Text('系统管理员固定全权限'),
                 ),
                 const Spacer(),
                 SizedBox(
@@ -1166,7 +1362,7 @@ class _FunctionPermissionConfigPageState
                         .map(
                           (code) => DropdownMenuItem<String>(
                             value: code,
-                            child: Text(code),
+                            child: Text('${_moduleLabel(code)}（$code）'),
                           ),
                         )
                         .toList(),

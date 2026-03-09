@@ -13,10 +13,12 @@ class RegistrationApprovalPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    required this.canReviewAction,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canReviewAction;
 
   @override
   State<RegistrationApprovalPage> createState() =>
@@ -65,6 +67,15 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       return error.message;
     }
     return error.toString();
+  }
+
+  void _showNoPermission() {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('当前账号没有审批权限')));
   }
 
   String _formatTime(DateTime dateTime) {
@@ -224,6 +235,10 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   }
 
   Future<void> _openApproveDialog(RegistrationRequestItem item) async {
+    if (!widget.canReviewAction) {
+      _showNoPermission();
+      return;
+    }
     if (_roles.isEmpty) {
       setState(() {
         _message = '角色数据为空，无法审批。';
@@ -411,6 +426,10 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   }
 
   Future<void> _rejectRequest(RegistrationRequestItem item) async {
+    if (!widget.canReviewAction) {
+      _showNoPermission();
+      return;
+    }
     try {
       await _userService.rejectRegistrationRequest(requestId: item.id);
       if (!mounted) {
@@ -435,6 +454,10 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   }
 
   Future<void> _confirmReject(RegistrationRequestItem item) async {
+    if (!widget.canReviewAction) {
+      _showNoPermission();
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -552,7 +575,9 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       InkWell(
-                                        onTap: () => _openApproveDialog(item),
+                                        onTap: widget.canReviewAction
+                                            ? () => _openApproveDialog(item)
+                                            : null,
                                         borderRadius: BorderRadius.circular(20),
                                         child: Container(
                                           alignment: Alignment.center,
@@ -580,7 +605,9 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                         ),
                                       ),
                                       InkWell(
-                                        onTap: () => _confirmReject(item),
+                                        onTap: widget.canReviewAction
+                                            ? () => _confirmReject(item)
+                                            : null,
                                         borderRadius: BorderRadius.circular(20),
                                         child: Container(
                                           alignment: Alignment.center,

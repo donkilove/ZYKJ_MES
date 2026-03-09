@@ -308,3 +308,149 @@ class ProductionPermissionCodes {
   static const String repairCreateManual =
       'production.repair_orders.create_manual';
 }
+
+class SystemPermissionCodes {
+  static const String pageFunctionPermissionConfigView =
+      'page.function_permission_config.view';
+  static const String pageVisibilityConfigView =
+      'page.page_visibility_config.view';
+  static const String rolePermissionsView = 'authz.role_permissions.view';
+  static const String rolePermissionsUpdate = 'authz.role_permissions.update';
+}
+
+class UserPermissionCodes {
+  static const String pageUserView = 'page.user.view';
+  static const String pageUserManagementView = 'page.user_management.view';
+  static const String pageRegistrationApprovalView =
+      'page.registration_approval.view';
+
+  static const String usersList = 'user.users.list';
+  static const String usersCreate = 'user.users.create';
+  static const String usersDetail = 'user.users.detail';
+  static const String usersUpdate = 'user.users.update';
+  static const String usersDelete = 'user.users.delete';
+
+  static const String rolesList = 'user.roles.list';
+  static const String rolesDetail = 'user.roles.detail';
+  static const String processesList = 'user.processes.list';
+
+  static const String registrationRequestsList =
+      'user.registration_requests.list';
+  static const String registrationRequestsApprove =
+      'user.registration_requests.approve';
+  static const String registrationRequestsReject =
+      'user.registration_requests.reject';
+}
+
+class ProductPermissionCodes {
+  static const String pageProductView = 'page.product.view';
+  static const String pageProductManagementView =
+      'page.product_management.view';
+  static const String pageProductParameterManagementView =
+      'page.product_parameter_management.view';
+  static const String pageProductParameterQueryView =
+      'page.product_parameter_query.view';
+
+  static const String productsList = 'product.products.list';
+  static const String productsCreate = 'product.products.create';
+  static const String productsDelete = 'product.products.delete';
+  static const String lifecycleUpdate = 'product.lifecycle.update';
+  static const String versionsList = 'product.versions.list';
+  static const String versionsCompare = 'product.versions.compare';
+  static const String rollback = 'product.rollback';
+  static const String impactAnalysis = 'product.impact.analysis';
+  static const String parametersView = 'product.parameters.view';
+  static const String parametersUpdate = 'product.parameters.update';
+  static const String parameterHistoryList = 'product.parameter_history.list';
+}
+
+class EquipmentPermissionCodes {
+  static const String pageEquipmentView = 'page.equipment.view';
+  static const String pageEquipmentLedgerView = 'page.equipment_ledger.view';
+  static const String pageMaintenanceItemView = 'page.maintenance_item.view';
+  static const String pageMaintenancePlanView = 'page.maintenance_plan.view';
+  static const String pageMaintenanceExecutionView =
+      'page.maintenance_execution.view';
+  static const String pageMaintenanceRecordView =
+      'page.maintenance_record.view';
+
+  static const String adminOwnersList = 'equipment.admin_owners.list';
+  static const String ledgerList = 'equipment.ledger.list';
+  static const String ledgerCreate = 'equipment.ledger.create';
+  static const String ledgerUpdate = 'equipment.ledger.update';
+  static const String ledgerToggle = 'equipment.ledger.toggle';
+  static const String ledgerDelete = 'equipment.ledger.delete';
+
+  static const String itemsList = 'equipment.items.list';
+  static const String itemsCreate = 'equipment.items.create';
+  static const String itemsUpdate = 'equipment.items.update';
+  static const String itemsToggle = 'equipment.items.toggle';
+  static const String itemsDelete = 'equipment.items.delete';
+
+  static const String plansList = 'equipment.plans.list';
+  static const String plansCreate = 'equipment.plans.create';
+  static const String plansUpdate = 'equipment.plans.update';
+  static const String plansToggle = 'equipment.plans.toggle';
+  static const String plansDelete = 'equipment.plans.delete';
+  static const String plansGenerate = 'equipment.plans.generate';
+
+  static const String executionsList = 'equipment.executions.list';
+  static const String executionsStart = 'equipment.executions.start';
+  static const String executionsComplete = 'equipment.executions.complete';
+  static const String recordsList = 'equipment.records.list';
+}
+
+class CraftPermissionCodes {
+  static const String pageCraftView = 'page.craft.view';
+  static const String pageProcessManagementView =
+      'page.process_management.view';
+  static const String pageProductionProcessConfigView =
+      'page.production_process_config.view';
+  static const String pageCraftKanbanView = 'page.craft_kanban.view';
+
+  static const String stagesList = 'craft.stages.list';
+  static const String stagesCreate = 'craft.stages.create';
+  static const String stagesUpdate = 'craft.stages.update';
+  static const String stagesDelete = 'craft.stages.delete';
+
+  static const String processesList = 'craft.processes.list';
+  static const String processesCreate = 'craft.processes.create';
+  static const String processesUpdate = 'craft.processes.update';
+  static const String processesDelete = 'craft.processes.delete';
+
+  static const String systemMasterTemplateView =
+      'craft.system_master_template.view';
+  static const String systemMasterTemplateCreate =
+      'craft.system_master_template.create';
+  static const String systemMasterTemplateUpdate =
+      'craft.system_master_template.update';
+  static const String kanbanProcessMetricsView =
+      'craft.kanban.process_metrics.view';
+
+  static const String templatesList = 'craft.templates.list';
+  static const String templatesCreate = 'craft.templates.create';
+  static const String templatesExport = 'craft.templates.export';
+  static const String templatesImport = 'craft.templates.import';
+  static const String templatesDetail = 'craft.templates.detail';
+  static const String templatesImpactAnalysis =
+      'craft.templates.impact.analysis';
+  static const String templatesPublish = 'craft.templates.publish';
+  static const String templatesVersionsList = 'craft.templates.versions.list';
+  static const String templatesVersionsCompare =
+      'craft.templates.versions.compare';
+  static const String templatesRollback = 'craft.templates.rollback';
+  static const String templatesUpdate = 'craft.templates.update';
+  static const String templatesDelete = 'craft.templates.delete';
+}
+
+class QualityPermissionCodes {
+  static const String pageQualityView = 'page.quality.view';
+  static const String pageFirstArticleManagementView =
+      'page.first_article_management.view';
+  static const String pageQualityDataQueryView = 'page.quality_data_query.view';
+
+  static const String firstArticlesList = 'quality.first_articles.list';
+  static const String statsOverview = 'quality.stats.overview';
+  static const String statsProcesses = 'quality.stats.processes';
+  static const String statsOperators = 'quality.stats.operators';
+}

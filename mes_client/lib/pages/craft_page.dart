@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import '../models/authz_models.dart';
+import '../services/authz_service.dart';
 import 'craft_kanban_page.dart';
 import 'process_configuration_page.dart';
 import 'process_management_page.dart';
@@ -36,26 +38,35 @@ class CraftPage extends StatefulWidget {
 
 class _CraftPageState extends State<CraftPage>
     with SingleTickerProviderStateMixin {
+  late final AuthzService _authzService;
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
+
+  Set<String> _permissionCodes = const <String>{};
+  bool _loadingPermissions = true;
+  String _permissionMessage = '';
 
   @override
   void initState() {
     super.initState();
+    _authzService = AuthzService(widget.session);
     _orderedVisibleTabCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
     _rebuildTabController();
+    _loadPermissions();
   }
 
   @override
   void didUpdateWidget(covariant CraftPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     final updatedCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
-    if (listEquals(updatedCodes, _orderedVisibleTabCodes)) {
-      return;
+    if (!listEquals(updatedCodes, _orderedVisibleTabCodes)) {
+      final selectedCode = _currentSelectedTabCode();
+      _orderedVisibleTabCodes = updatedCodes;
+      _rebuildTabController(preferredCode: selectedCode);
     }
-    final selectedCode = _currentSelectedTabCode();
-    _orderedVisibleTabCodes = updatedCodes;
-    _rebuildTabController(preferredCode: selectedCode);
+    if (oldWidget.session.accessToken != widget.session.accessToken) {
+      _loadPermissions();
+    }
   }
 
   @override
@@ -63,6 +74,61 @@ class _CraftPageState extends State<CraftPage>
     _tabController?.dispose();
     super.dispose();
   }
+
+  bool _hasPermission(String code) => _permissionCodes.contains(code);
+
+  Future<void> _loadPermissions() async {
+    setState(() {
+      _loadingPermissions = true;
+      _permissionMessage = '';
+    });
+    try {
+      final codes = await _authzService.getMyPermissionCodes(
+        moduleCode: 'craft',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _permissionCodes = codes.toSet();
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _permissionCodes = const <String>{};
+        _permissionMessage = '加载工艺模块权限失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingPermissions = false;
+        });
+      }
+    }
+  }
+
+  bool get _canWriteProcessBasics =>
+      _hasPermission(CraftPermissionCodes.stagesCreate) ||
+      _hasPermission(CraftPermissionCodes.stagesUpdate) ||
+      _hasPermission(CraftPermissionCodes.stagesDelete) ||
+      _hasPermission(CraftPermissionCodes.processesCreate) ||
+      _hasPermission(CraftPermissionCodes.processesUpdate) ||
+      _hasPermission(CraftPermissionCodes.processesDelete);
+
+  bool get _canManageTemplates =>
+      _hasPermission(CraftPermissionCodes.templatesCreate) ||
+      _hasPermission(CraftPermissionCodes.templatesUpdate) ||
+      _hasPermission(CraftPermissionCodes.templatesDelete) ||
+      _hasPermission(CraftPermissionCodes.templatesPublish) ||
+      _hasPermission(CraftPermissionCodes.templatesExport) ||
+      _hasPermission(CraftPermissionCodes.templatesImport) ||
+      _hasPermission(CraftPermissionCodes.templatesRollback);
+
+  bool get _canManageSystemMasterTemplate =>
+      _hasPermission(CraftPermissionCodes.systemMasterTemplateCreate) ||
+      _hasPermission(CraftPermissionCodes.systemMasterTemplateUpdate);
 
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
     final visibleSet = tabCodes.toSet();
@@ -127,12 +193,14 @@ class _CraftPageState extends State<CraftPage>
         return ProcessManagementPage(
           session: widget.session,
           onLogout: widget.onLogout,
+          canWrite: _canWriteProcessBasics,
         );
       case productionProcessConfigTabCode:
         return ProcessConfigurationPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          currentRoleCodes: widget.currentRoleCodes,
+          canManageTemplates: _canManageTemplates,
+          canManageSystemMasterTemplate: _canManageSystemMasterTemplate,
         );
       case craftKanbanTabCode:
         return CraftKanbanPage(
@@ -146,12 +214,22 @@ class _CraftPageState extends State<CraftPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingPermissions) {
+      return const Center(child: CircularProgressIndicator());
+    }
     if (_orderedVisibleTabCodes.isEmpty || _tabController == null) {
       return const Center(child: Text('当前账号无可见工艺页面。'));
     }
 
     return Column(
       children: [
+        if (_permissionMessage.isNotEmpty)
+          Container(
+            width: double.infinity,
+            color: Theme.of(context).colorScheme.errorContainer,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text(_permissionMessage),
+          ),
         Material(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           child: TabBar(

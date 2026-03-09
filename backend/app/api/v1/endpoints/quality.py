@@ -5,8 +5,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_role_codes
-from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
+from app.api.deps import require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
@@ -28,7 +27,6 @@ from app.services.quality_service import (
 
 
 router = APIRouter()
-QUALITY_ALLOWED_ROLES = [ROLE_SYSTEM_ADMIN, ROLE_QUALITY_ADMIN, ROLE_PRODUCTION_ADMIN]
 
 
 def _validate_date_range(start_date: date | None, end_date: date | None) -> None:
@@ -46,7 +44,7 @@ def get_first_articles_api(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(QUALITY_ALLOWED_ROLES)),
+    _: User = Depends(require_permission("quality.first_articles.list")),
 ) -> ApiResponse[FirstArticleListResult]:
     target_date = query_date or date.today()
     payload = list_first_articles(
@@ -72,7 +70,7 @@ def get_quality_overview_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(QUALITY_ALLOWED_ROLES)),
+    _: User = Depends(require_permission("quality.stats.overview")),
 ) -> ApiResponse[QualityStatsOverview]:
     _validate_date_range(start_date, end_date)
     payload = get_quality_overview(
@@ -88,7 +86,7 @@ def get_quality_process_stats_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(QUALITY_ALLOWED_ROLES)),
+    _: User = Depends(require_permission("quality.stats.processes")),
 ) -> ApiResponse[QualityProcessStatsResult]:
     _validate_date_range(start_date, end_date)
     rows = get_quality_process_stats(
@@ -104,7 +102,7 @@ def get_quality_operator_stats_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role_codes(QUALITY_ALLOWED_ROLES)),
+    _: User = Depends(require_permission("quality.stats.operators")),
 ) -> ApiResponse[QualityOperatorStatsResult]:
     _validate_date_range(start_date, end_date)
     rows = get_quality_operator_stats(

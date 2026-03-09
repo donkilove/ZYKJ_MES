@@ -5,22 +5,29 @@ from dataclasses import dataclass
 from app.core.rbac import ROLE_SYSTEM_ADMIN
 
 
-AUTHZ_MODULE_PRODUCTION = "production"
 AUTHZ_MODULE_SYSTEM = "system"
+AUTHZ_MODULE_USER = "user"
+AUTHZ_MODULE_PRODUCT = "product"
+AUTHZ_MODULE_EQUIPMENT = "equipment"
+AUTHZ_MODULE_CRAFT = "craft"
+AUTHZ_MODULE_QUALITY = "quality"
+AUTHZ_MODULE_PRODUCTION = "production"
 
 AUTHZ_RESOURCE_PAGE = "page"
 AUTHZ_RESOURCE_ACTION = "action"
 
 
-# System permissions.
+# Core/system permissions.
 PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW = "page.function_permission_config.view"
 PERM_AUTHZ_PERMISSION_CATALOG_VIEW = "authz.permissions.catalog.view"
 PERM_AUTHZ_MY_PERMISSIONS_VIEW = "authz.permissions.me.view"
 PERM_AUTHZ_ROLE_PERMISSIONS_VIEW = "authz.role_permissions.view"
 PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE = "authz.role_permissions.update"
+PERM_UI_PAGE_VISIBILITY_CONFIG_VIEW = "system.page_visibility_config.view"
+PERM_UI_PAGE_VISIBILITY_CONFIG_UPDATE = "system.page_visibility_config.update"
 
 
-# Production page visibility permissions.
+# Production page permissions.
 PERM_PAGE_PRODUCTION_VIEW = "page.production.view"
 PERM_PAGE_PRODUCTION_ORDER_MANAGEMENT_VIEW = "page.production_order_management.view"
 PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW = "page.production_order_query.view"
@@ -67,19 +74,6 @@ PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW = "production.assist_authorizations.revie
 PERM_PROD_ASSIST_USER_OPTIONS_LIST = "production.assist_user_options.list"
 
 
-PRODUCTION_PAGE_PERMISSION_BY_PAGE_CODE: dict[str, str] = {
-    "production": PERM_PAGE_PRODUCTION_VIEW,
-    "production_order_management": PERM_PAGE_PRODUCTION_ORDER_MANAGEMENT_VIEW,
-    "production_order_query": PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW,
-    "production_assist_approval": PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW,
-    "production_data_query": PERM_PAGE_PRODUCTION_DATA_QUERY_VIEW,
-    "production_scrap_statistics": PERM_PAGE_PRODUCTION_SCRAP_STATISTICS_VIEW,
-    "production_repair_orders": PERM_PAGE_PRODUCTION_REPAIR_ORDERS_VIEW,
-}
-
-PRODUCTION_PAGE_CODES = set(PRODUCTION_PAGE_PERMISSION_BY_PAGE_CODE.keys())
-
-
 @dataclass(frozen=True, slots=True)
 class PermissionCatalogItem:
     permission_code: str
@@ -90,124 +84,200 @@ class PermissionCatalogItem:
     is_enabled: bool = True
 
 
-PERMISSION_CATALOG: list[PermissionCatalogItem] = [
-    PermissionCatalogItem(
-        permission_code=PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
-        permission_name="Function permission config page view",
-        module_code=AUTHZ_MODULE_SYSTEM,
-        resource_type=AUTHZ_RESOURCE_PAGE,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_AUTHZ_PERMISSION_CATALOG_VIEW,
-        permission_name="View permission catalog",
-        module_code=AUTHZ_MODULE_SYSTEM,
-        resource_type=AUTHZ_RESOURCE_ACTION,
-        parent_permission_code=PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_AUTHZ_MY_PERMISSIONS_VIEW,
-        permission_name="View my permissions",
-        module_code=AUTHZ_MODULE_SYSTEM,
-        resource_type=AUTHZ_RESOURCE_ACTION,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_AUTHZ_ROLE_PERMISSIONS_VIEW,
-        permission_name="View role permission config",
-        module_code=AUTHZ_MODULE_SYSTEM,
-        resource_type=AUTHZ_RESOURCE_ACTION,
-        parent_permission_code=PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
-        permission_name="Update role permission config",
-        module_code=AUTHZ_MODULE_SYSTEM,
-        resource_type=AUTHZ_RESOURCE_ACTION,
-        parent_permission_code=PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_PAGE_PRODUCTION_VIEW,
-        permission_name="Production module view",
-        module_code=AUTHZ_MODULE_PRODUCTION,
-        resource_type=AUTHZ_RESOURCE_PAGE,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_PAGE_PRODUCTION_ORDER_MANAGEMENT_VIEW,
-        permission_name="Production order management tab view",
-        module_code=AUTHZ_MODULE_PRODUCTION,
-        resource_type=AUTHZ_RESOURCE_PAGE,
-        parent_permission_code=PERM_PAGE_PRODUCTION_VIEW,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW,
-        permission_name="Production order query tab view",
-        module_code=AUTHZ_MODULE_PRODUCTION,
-        resource_type=AUTHZ_RESOURCE_PAGE,
-        parent_permission_code=PERM_PAGE_PRODUCTION_VIEW,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW,
-        permission_name="Production assist records tab view",
-        module_code=AUTHZ_MODULE_PRODUCTION,
-        resource_type=AUTHZ_RESOURCE_PAGE,
-        parent_permission_code=PERM_PAGE_PRODUCTION_VIEW,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_PAGE_PRODUCTION_DATA_QUERY_VIEW,
-        permission_name="Production data tab view",
-        module_code=AUTHZ_MODULE_PRODUCTION,
-        resource_type=AUTHZ_RESOURCE_PAGE,
-        parent_permission_code=PERM_PAGE_PRODUCTION_VIEW,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_PAGE_PRODUCTION_SCRAP_STATISTICS_VIEW,
-        permission_name="Production scrap statistics tab view",
-        module_code=AUTHZ_MODULE_PRODUCTION,
-        resource_type=AUTHZ_RESOURCE_PAGE,
-        parent_permission_code=PERM_PAGE_PRODUCTION_VIEW,
-    ),
-    PermissionCatalogItem(
-        permission_code=PERM_PAGE_PRODUCTION_REPAIR_ORDERS_VIEW,
-        permission_name="Production repair orders tab view",
-        module_code=AUTHZ_MODULE_PRODUCTION,
-        resource_type=AUTHZ_RESOURCE_PAGE,
-        parent_permission_code=PERM_PAGE_PRODUCTION_VIEW,
-    ),
-    PermissionCatalogItem(PERM_PROD_ORDERS_LIST, "List production orders", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ORDERS_CREATE, "Create production order", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ORDERS_DETAIL, "View production order detail", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ORDERS_DETAIL_ALL, "View all production order detail", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ORDERS_UPDATE, "Update production order", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ORDERS_DELETE, "Delete production order", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ORDERS_COMPLETE, "Complete production order", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ORDERS_PIPELINE_MODE_VIEW, "View pipeline mode", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ORDERS_PIPELINE_MODE_VIEW_ALL, "View all pipeline mode", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE, "Update pipeline mode", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_MY_ORDERS_LIST, "List my orders", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_MY_ORDERS_PROXY, "Proxy my orders view", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_MY_ORDERS_VIEW_ALL, "My orders view all", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_MY_ORDERS_CONTEXT, "Get my order context", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_EXECUTION_FIRST_ARTICLE, "Submit first article", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_EXECUTION_END_PRODUCTION, "Submit end production", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_STATS_OVERVIEW, "View production overview stats", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_STATS_PROCESSES, "View production process stats", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_STATS_OPERATORS, "View production operator stats", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_DATA_TODAY_REALTIME, "View today realtime production data", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_DATA_UNFINISHED_PROGRESS, "View unfinished progress", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_DATA_MANUAL, "View manual production data", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_DATA_MANUAL_EXPORT, "Export manual production data", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_SCRAP_STATISTICS_LIST, "List scrap statistics", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_SCRAP_STATISTICS_EXPORT, "Export scrap statistics", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_REPAIR_ORDERS_LIST, "List repair orders", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_REPAIR_ORDERS_CREATE_MANUAL, "Create manual repair order", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_REPAIR_ORDERS_PHENOMENA_SUMMARY, "View repair phenomena summary", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_REPAIR_ORDERS_COMPLETE, "Complete repair order", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_REPAIR_ORDERS_EXPORT, "Export repair orders", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ASSIST_AUTHORIZATIONS_LIST, "List assist records", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE, "Create assist authorization", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW, "Review assist authorization (compat)", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
-    PermissionCatalogItem(PERM_PROD_ASSIST_USER_OPTIONS_LIST, "List assist user options", AUTHZ_MODULE_PRODUCTION, AUTHZ_RESOURCE_ACTION),
+PAGE_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
+    ("user", "用户模块", AUTHZ_MODULE_USER, None),
+    ("user_management", "用户管理", AUTHZ_MODULE_USER, "user"),
+    ("registration_approval", "注册审批", AUTHZ_MODULE_USER, "user"),
+    ("page_visibility_config", "页面可见性配置（旧）", AUTHZ_MODULE_SYSTEM, "user"),
+    ("function_permission_config", "功能权限配置", AUTHZ_MODULE_SYSTEM, "user"),
+    ("product", "产品模块", AUTHZ_MODULE_PRODUCT, None),
+    ("product_management", "产品管理", AUTHZ_MODULE_PRODUCT, "product"),
+    ("product_parameter_management", "产品参数管理", AUTHZ_MODULE_PRODUCT, "product"),
+    ("product_parameter_query", "产品参数查询", AUTHZ_MODULE_PRODUCT, "product"),
+    ("equipment", "设备模块", AUTHZ_MODULE_EQUIPMENT, None),
+    ("equipment_ledger", "设备台账", AUTHZ_MODULE_EQUIPMENT, "equipment"),
+    ("maintenance_item", "保养项目", AUTHZ_MODULE_EQUIPMENT, "equipment"),
+    ("maintenance_plan", "保养计划", AUTHZ_MODULE_EQUIPMENT, "equipment"),
+    ("maintenance_execution", "保养执行", AUTHZ_MODULE_EQUIPMENT, "equipment"),
+    ("maintenance_record", "保养记录", AUTHZ_MODULE_EQUIPMENT, "equipment"),
+    ("production", "生产模块", AUTHZ_MODULE_PRODUCTION, None),
+    ("production_order_management", "订单管理", AUTHZ_MODULE_PRODUCTION, "production"),
+    ("production_order_query", "订单查询", AUTHZ_MODULE_PRODUCTION, "production"),
+    ("production_assist_approval", "代班记录", AUTHZ_MODULE_PRODUCTION, "production"),
+    ("production_data_query", "生产数据", AUTHZ_MODULE_PRODUCTION, "production"),
+    ("production_scrap_statistics", "报废统计", AUTHZ_MODULE_PRODUCTION, "production"),
+    ("production_repair_orders", "维修订单", AUTHZ_MODULE_PRODUCTION, "production"),
+    ("quality", "质量模块", AUTHZ_MODULE_QUALITY, None),
+    ("first_article_management", "每日首件", AUTHZ_MODULE_QUALITY, "quality"),
+    ("quality_data_query", "质量数据", AUTHZ_MODULE_QUALITY, "quality"),
+    ("craft", "工艺模块", AUTHZ_MODULE_CRAFT, None),
+    ("process_management", "工序管理", AUTHZ_MODULE_CRAFT, "craft"),
+    ("production_process_config", "生产工序配置", AUTHZ_MODULE_CRAFT, "craft"),
+    ("craft_kanban", "工艺看板", AUTHZ_MODULE_CRAFT, "craft"),
 ]
 
+PAGE_PERMISSION_BY_PAGE_CODE: dict[str, str] = {
+    page_code: f"page.{page_code}.view"
+    for page_code, _, _, _ in PAGE_DEFINITIONS
+}
+
+PRODUCTION_PAGE_PERMISSION_BY_PAGE_CODE: dict[str, str] = {
+    "production": PERM_PAGE_PRODUCTION_VIEW,
+    "production_order_management": PERM_PAGE_PRODUCTION_ORDER_MANAGEMENT_VIEW,
+    "production_order_query": PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW,
+    "production_assist_approval": PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW,
+    "production_data_query": PERM_PAGE_PRODUCTION_DATA_QUERY_VIEW,
+    "production_scrap_statistics": PERM_PAGE_PRODUCTION_SCRAP_STATISTICS_VIEW,
+    "production_repair_orders": PERM_PAGE_PRODUCTION_REPAIR_ORDERS_VIEW,
+}
+PRODUCTION_PAGE_CODES = set(PRODUCTION_PAGE_PERMISSION_BY_PAGE_CODE.keys())
+
+
+PAGE_PERMISSION_CATALOG: list[PermissionCatalogItem] = []
+for page_code, page_name, module_code, parent_code in PAGE_DEFINITIONS:
+    PAGE_PERMISSION_CATALOG.append(
+        PermissionCatalogItem(
+            permission_code=PAGE_PERMISSION_BY_PAGE_CODE[page_code],
+            permission_name=f"页面访问：{page_name}",
+            module_code=module_code,
+            resource_type=AUTHZ_RESOURCE_PAGE,
+            parent_permission_code=(
+                PAGE_PERMISSION_BY_PAGE_CODE[parent_code] if parent_code else None
+            ),
+        )
+    )
+
+
+def _page_perm(code: str) -> str:
+    return PAGE_PERMISSION_BY_PAGE_CODE[code]
+
+
+ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
+    (PERM_AUTHZ_PERMISSION_CATALOG_VIEW, "查看权限目录", AUTHZ_MODULE_SYSTEM, "function_permission_config"),
+    (PERM_AUTHZ_MY_PERMISSIONS_VIEW, "查看我的权限", AUTHZ_MODULE_SYSTEM, None),
+    (PERM_AUTHZ_ROLE_PERMISSIONS_VIEW, "查看角色权限配置", AUTHZ_MODULE_SYSTEM, "function_permission_config"),
+    (PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE, "更新角色权限配置", AUTHZ_MODULE_SYSTEM, "function_permission_config"),
+    (PERM_UI_PAGE_VISIBILITY_CONFIG_VIEW, "查看页面可见性配置（旧）", AUTHZ_MODULE_SYSTEM, "page_visibility_config"),
+    (PERM_UI_PAGE_VISIBILITY_CONFIG_UPDATE, "更新页面可见性配置（旧）", AUTHZ_MODULE_SYSTEM, "page_visibility_config"),
+    ("user.users.list", "查看用户列表", AUTHZ_MODULE_USER, "user_management"),
+    ("user.users.create", "创建用户", AUTHZ_MODULE_USER, "user_management"),
+    ("user.users.detail", "查看用户详情", AUTHZ_MODULE_USER, "user_management"),
+    ("user.users.update", "编辑用户", AUTHZ_MODULE_USER, "user_management"),
+    ("user.users.delete", "删除用户", AUTHZ_MODULE_USER, "user_management"),
+    ("user.roles.list", "查看角色列表", AUTHZ_MODULE_USER, "user_management"),
+    ("user.roles.detail", "查看角色详情", AUTHZ_MODULE_USER, "user_management"),
+    ("user.processes.list", "查看工序列表（用户配置）", AUTHZ_MODULE_USER, "user_management"),
+    ("user.registration_requests.list", "查看注册申请", AUTHZ_MODULE_USER, "registration_approval"),
+    ("user.registration_requests.approve", "通过注册申请", AUTHZ_MODULE_USER, "registration_approval"),
+    ("user.registration_requests.reject", "拒绝注册申请", AUTHZ_MODULE_USER, "registration_approval"),
+    ("product.products.list", "查看产品列表", AUTHZ_MODULE_PRODUCT, "product_management"),
+    ("product.products.create", "创建产品", AUTHZ_MODULE_PRODUCT, "product_management"),
+    ("product.products.delete", "删除产品", AUTHZ_MODULE_PRODUCT, "product_management"),
+    ("product.parameters.view", "查看产品参数", AUTHZ_MODULE_PRODUCT, "product_parameter_query"),
+    ("product.parameters.update", "更新产品参数", AUTHZ_MODULE_PRODUCT, "product_parameter_management"),
+    ("product.impact.analysis", "查看产品影响分析", AUTHZ_MODULE_PRODUCT, "product_management"),
+    ("product.lifecycle.update", "更新产品生命周期", AUTHZ_MODULE_PRODUCT, "product_management"),
+    ("product.versions.list", "查看产品版本列表", AUTHZ_MODULE_PRODUCT, "product_management"),
+    ("product.versions.compare", "比较产品版本", AUTHZ_MODULE_PRODUCT, "product_management"),
+    ("product.rollback", "回滚产品版本", AUTHZ_MODULE_PRODUCT, "product_management"),
+    ("product.parameter_history.list", "查看参数历史", AUTHZ_MODULE_PRODUCT, "product_parameter_query"),
+    ("equipment.admin_owners.list", "查看设备负责人选项", AUTHZ_MODULE_EQUIPMENT, "equipment_ledger"),
+    ("equipment.ledger.list", "查看设备台账", AUTHZ_MODULE_EQUIPMENT, "equipment_ledger"),
+    ("equipment.ledger.create", "新增设备台账", AUTHZ_MODULE_EQUIPMENT, "equipment_ledger"),
+    ("equipment.ledger.update", "编辑设备台账", AUTHZ_MODULE_EQUIPMENT, "equipment_ledger"),
+    ("equipment.ledger.toggle", "启停设备台账", AUTHZ_MODULE_EQUIPMENT, "equipment_ledger"),
+    ("equipment.ledger.delete", "删除设备台账", AUTHZ_MODULE_EQUIPMENT, "equipment_ledger"),
+    ("equipment.items.list", "查看保养项目", AUTHZ_MODULE_EQUIPMENT, "maintenance_item"),
+    ("equipment.items.create", "新增保养项目", AUTHZ_MODULE_EQUIPMENT, "maintenance_item"),
+    ("equipment.items.update", "编辑保养项目", AUTHZ_MODULE_EQUIPMENT, "maintenance_item"),
+    ("equipment.items.toggle", "启停保养项目", AUTHZ_MODULE_EQUIPMENT, "maintenance_item"),
+    ("equipment.items.delete", "删除保养项目", AUTHZ_MODULE_EQUIPMENT, "maintenance_item"),
+    ("equipment.plans.list", "查看保养计划", AUTHZ_MODULE_EQUIPMENT, "maintenance_plan"),
+    ("equipment.plans.create", "新增保养计划", AUTHZ_MODULE_EQUIPMENT, "maintenance_plan"),
+    ("equipment.plans.update", "编辑保养计划", AUTHZ_MODULE_EQUIPMENT, "maintenance_plan"),
+    ("equipment.plans.toggle", "启停保养计划", AUTHZ_MODULE_EQUIPMENT, "maintenance_plan"),
+    ("equipment.plans.delete", "删除保养计划", AUTHZ_MODULE_EQUIPMENT, "maintenance_plan"),
+    ("equipment.plans.generate", "生成保养工单", AUTHZ_MODULE_EQUIPMENT, "maintenance_plan"),
+    ("equipment.executions.list", "查看保养执行", AUTHZ_MODULE_EQUIPMENT, "maintenance_execution"),
+    ("equipment.executions.start", "开始保养执行", AUTHZ_MODULE_EQUIPMENT, "maintenance_execution"),
+    ("equipment.executions.complete", "完成保养执行", AUTHZ_MODULE_EQUIPMENT, "maintenance_execution"),
+    ("equipment.records.list", "查看保养记录", AUTHZ_MODULE_EQUIPMENT, "maintenance_record"),
+    ("craft.stages.list", "查看工段", AUTHZ_MODULE_CRAFT, "process_management"),
+    ("craft.stages.create", "新增工段", AUTHZ_MODULE_CRAFT, "process_management"),
+    ("craft.stages.update", "编辑工段", AUTHZ_MODULE_CRAFT, "process_management"),
+    ("craft.stages.delete", "删除工段", AUTHZ_MODULE_CRAFT, "process_management"),
+    ("craft.processes.list", "查看工序", AUTHZ_MODULE_CRAFT, "process_management"),
+    ("craft.processes.create", "新增工序", AUTHZ_MODULE_CRAFT, "process_management"),
+    ("craft.processes.update", "编辑工序", AUTHZ_MODULE_CRAFT, "process_management"),
+    ("craft.processes.delete", "删除工序", AUTHZ_MODULE_CRAFT, "process_management"),
+    ("craft.system_master_template.view", "查看系统母版", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.system_master_template.create", "创建系统母版", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.system_master_template.update", "更新系统母版", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.kanban.process_metrics.view", "查看工艺看板", AUTHZ_MODULE_CRAFT, "craft_kanban"),
+    ("craft.templates.list", "查看模板列表", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.create", "创建模板", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.export", "导出模板", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.import", "导入模板", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.detail", "查看模板详情", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.impact.analysis", "查看模板影响分析", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.publish", "发布模板", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.versions.list", "查看模板版本", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.versions.compare", "对比模板版本", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.rollback", "回滚模板版本", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.update", "更新模板", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("craft.templates.delete", "删除模板", AUTHZ_MODULE_CRAFT, "production_process_config"),
+    ("quality.first_articles.list", "查看每日首件", AUTHZ_MODULE_QUALITY, "first_article_management"),
+    ("quality.stats.overview", "查看质量总览统计", AUTHZ_MODULE_QUALITY, "quality_data_query"),
+    ("quality.stats.processes", "查看质量工序统计", AUTHZ_MODULE_QUALITY, "quality_data_query"),
+    ("quality.stats.operators", "查看质量人员统计", AUTHZ_MODULE_QUALITY, "quality_data_query"),
+    (PERM_PROD_ORDERS_LIST, "查看生产订单列表", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_ORDERS_CREATE, "创建生产订单", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_ORDERS_DETAIL, "查看生产订单详情", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_ORDERS_DETAIL_ALL, "查看全部生产订单详情", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_ORDERS_UPDATE, "编辑生产订单", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_ORDERS_DELETE, "删除生产订单", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_ORDERS_COMPLETE, "结束生产订单", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_ORDERS_PIPELINE_MODE_VIEW, "查看并行模式配置", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_ORDERS_PIPELINE_MODE_VIEW_ALL, "查看全部并行模式配置", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE, "更新并行模式配置", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_MY_ORDERS_LIST, "查看我的工单", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
+    (PERM_PROD_MY_ORDERS_PROXY, "查看代理工单", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
+    (PERM_PROD_MY_ORDERS_VIEW_ALL, "查看全部工单", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
+    (PERM_PROD_MY_ORDERS_CONTEXT, "查看工单上下文", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
+    (PERM_PROD_EXECUTION_FIRST_ARTICLE, "首件报检", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
+    (PERM_PROD_EXECUTION_END_PRODUCTION, "报工", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
+    (PERM_PROD_STATS_OVERVIEW, "查看生产总览统计", AUTHZ_MODULE_PRODUCTION, "production_data_query"),
+    (PERM_PROD_STATS_PROCESSES, "查看生产工序统计", AUTHZ_MODULE_PRODUCTION, "production_data_query"),
+    (PERM_PROD_STATS_OPERATORS, "查看生产人员统计", AUTHZ_MODULE_PRODUCTION, "production_data_query"),
+    (PERM_PROD_DATA_TODAY_REALTIME, "查看今日实时数据", AUTHZ_MODULE_PRODUCTION, "production_data_query"),
+    (PERM_PROD_DATA_UNFINISHED_PROGRESS, "查看未完工进度", AUTHZ_MODULE_PRODUCTION, "production_data_query"),
+    (PERM_PROD_DATA_MANUAL, "查看手动筛选数据", AUTHZ_MODULE_PRODUCTION, "production_data_query"),
+    (PERM_PROD_DATA_MANUAL_EXPORT, "导出手动筛选数据", AUTHZ_MODULE_PRODUCTION, "production_data_query"),
+    (PERM_PROD_SCRAP_STATISTICS_LIST, "查看报废统计", AUTHZ_MODULE_PRODUCTION, "production_scrap_statistics"),
+    (PERM_PROD_SCRAP_STATISTICS_EXPORT, "导出报废统计", AUTHZ_MODULE_PRODUCTION, "production_scrap_statistics"),
+    (PERM_PROD_REPAIR_ORDERS_LIST, "查看维修订单", AUTHZ_MODULE_PRODUCTION, "production_repair_orders"),
+    (PERM_PROD_REPAIR_ORDERS_CREATE_MANUAL, "手工创建维修单", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
+    (PERM_PROD_REPAIR_ORDERS_PHENOMENA_SUMMARY, "查看维修现象汇总", AUTHZ_MODULE_PRODUCTION, "production_repair_orders"),
+    (PERM_PROD_REPAIR_ORDERS_COMPLETE, "完成维修单", AUTHZ_MODULE_PRODUCTION, "production_repair_orders"),
+    (PERM_PROD_REPAIR_ORDERS_EXPORT, "导出维修订单", AUTHZ_MODULE_PRODUCTION, "production_repair_orders"),
+    (PERM_PROD_ASSIST_AUTHORIZATIONS_LIST, "查看代班记录", AUTHZ_MODULE_PRODUCTION, "production_assist_approval"),
+    (PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE, "发起代班", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
+    (PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW, "审批代班（兼容）", AUTHZ_MODULE_PRODUCTION, "production_assist_approval"),
+    (PERM_PROD_ASSIST_USER_OPTIONS_LIST, "查看代班用户选项", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
+]
+
+ACTION_PERMISSION_CATALOG = [
+    PermissionCatalogItem(
+        permission_code=code,
+        permission_name=name,
+        module_code=module_code,
+        resource_type=AUTHZ_RESOURCE_ACTION,
+        parent_permission_code=(_page_perm(parent_page) if parent_page else None),
+    )
+    for code, name, module_code, parent_page in ACTION_DEFINITIONS
+]
+
+PERMISSION_CATALOG: list[PermissionCatalogItem] = PAGE_PERMISSION_CATALOG + ACTION_PERMISSION_CATALOG
 PERMISSION_BY_CODE = {item.permission_code: item for item in PERMISSION_CATALOG}
 
 
