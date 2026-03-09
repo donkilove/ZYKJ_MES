@@ -9,7 +9,14 @@ from app.core.authz_catalog import (
 )
 from app.models.user import User
 from app.schemas.authz import (
+    CapabilityPackCatalogResult,
+    CapabilityPackPreviewRequest,
+    CapabilityPackPreviewResult,
+    CapabilityPackRoleConfigResult,
+    CapabilityPackRoleConfigUpdateRequest,
+    CapabilityPackRoleConfigUpdateResult,
     MyPermissionsResult,
+    PermissionExplainResult,
     PermissionHierarchyCatalogResult,
     PermissionHierarchyPreviewRequest,
     PermissionHierarchyPreviewResult,
@@ -30,6 +37,9 @@ from app.schemas.authz import (
 )
 from app.schemas.common import ApiResponse, success_response
 from app.services.authz_service import (
+    get_capability_pack_catalog,
+    get_capability_pack_effective_explain,
+    get_capability_pack_role_config,
     get_permission_hierarchy_catalog,
     get_permission_hierarchy_role_config,
     get_role_permission_items,
@@ -38,8 +48,10 @@ from app.services.authz_service import (
     list_permission_catalog_rows,
     preview_permission_hierarchy,
     replace_role_permissions_for_module,
+    update_capability_pack_role_config,
     update_permission_hierarchy_role_config,
     update_role_permission_matrix,
+    preview_capability_packs,
 )
 
 
@@ -268,6 +280,114 @@ def preview_permission_hierarchy_api(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
     return success_response(PermissionHierarchyPreviewResult(**result), message="previewed")
+
+
+@router.get(
+    "/capability-packs/catalog",
+    response_model=ApiResponse[CapabilityPackCatalogResult],
+)
+def get_capability_pack_catalog_api(
+    module: str = Query(min_length=2, max_length=64),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_VIEW)),
+) -> ApiResponse[CapabilityPackCatalogResult]:
+    try:
+        payload = get_capability_pack_catalog(db, module_code=module)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(CapabilityPackCatalogResult(**payload))
+
+
+@router.get(
+    "/capability-packs/role-config",
+    response_model=ApiResponse[CapabilityPackRoleConfigResult],
+)
+def get_capability_pack_role_config_api(
+    role_code: str = Query(min_length=2, max_length=64),
+    module: str = Query(min_length=2, max_length=64),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_VIEW)),
+) -> ApiResponse[CapabilityPackRoleConfigResult]:
+    try:
+        payload = get_capability_pack_role_config(
+            db,
+            role_code=role_code,
+            module_code=module,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(CapabilityPackRoleConfigResult(**payload))
+
+
+@router.put(
+    "/capability-packs/role-config/{role_code}",
+    response_model=ApiResponse[CapabilityPackRoleConfigUpdateResult],
+)
+def put_capability_pack_role_config_api(
+    role_code: str,
+    payload: CapabilityPackRoleConfigUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+) -> ApiResponse[CapabilityPackRoleConfigUpdateResult]:
+    try:
+        result = update_capability_pack_role_config(
+            db,
+            role_code=role_code,
+            module_code=payload.module_code,
+            module_enabled=payload.module_enabled,
+            capability_codes=payload.capability_codes,
+            dry_run=payload.dry_run,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(
+        CapabilityPackRoleConfigUpdateResult(
+            **result,
+            dry_run=payload.dry_run,
+        ),
+        message="updated" if not payload.dry_run else "previewed",
+    )
+
+
+@router.post(
+    "/capability-packs/preview",
+    response_model=ApiResponse[CapabilityPackPreviewResult],
+)
+def preview_capability_packs_api(
+    payload: CapabilityPackPreviewRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+) -> ApiResponse[CapabilityPackPreviewResult]:
+    try:
+        result = preview_capability_packs(
+            db,
+            module_code=payload.module_code,
+            role_items=[item.model_dump() for item in payload.role_items],
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(CapabilityPackPreviewResult(**result), message="previewed")
+
+
+@router.get(
+    "/capability-packs/effective",
+    response_model=ApiResponse[PermissionExplainResult],
+)
+def get_capability_pack_effective_api(
+    role_code: str = Query(min_length=2, max_length=64),
+    module: str = Query(min_length=2, max_length=64),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_VIEW)),
+) -> ApiResponse[PermissionExplainResult]:
+    try:
+        payload = get_capability_pack_effective_explain(
+            db,
+            role_code=role_code,
+            module_code=module,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(PermissionExplainResult(**payload))
 
 
 @router.put(

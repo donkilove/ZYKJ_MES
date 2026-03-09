@@ -265,6 +265,117 @@ class AuthzService {
     return PermissionHierarchyPreviewResult.fromJson(data);
   }
 
+  Future<CapabilityPackCatalogResult> loadCapabilityPackCatalog({
+    required String moduleCode,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/capability-packs/catalog',
+    ).replace(queryParameters: {'module': moduleCode});
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return CapabilityPackCatalogResult.fromJson(data);
+  }
+
+  Future<CapabilityPackRoleConfigResult> loadCapabilityPackRoleConfig({
+    required String roleCode,
+    required String moduleCode,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/capability-packs/role-config',
+    ).replace(queryParameters: {'role_code': roleCode, 'module': moduleCode});
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return CapabilityPackRoleConfigResult.fromJson(data);
+  }
+
+  Future<CapabilityPackRoleUpdateResult> updateCapabilityPackRoleConfig({
+    required String roleCode,
+    required String moduleCode,
+    required bool moduleEnabled,
+    required List<String> capabilityCodes,
+    bool dryRun = false,
+    String? remark,
+  }) async {
+    final uri = Uri.parse('$_basePath/capability-packs/role-config/$roleCode');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'module_code': moduleCode,
+        'module_enabled': moduleEnabled,
+        'capability_codes': capabilityCodes,
+        'dry_run': dryRun,
+        'remark': remark,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return CapabilityPackRoleUpdateResult.fromJson(data);
+  }
+
+  Future<CapabilityPackPreviewResult> previewCapabilityPacks({
+    required String moduleCode,
+    required List<CapabilityPackRoleDraftItem> roleItems,
+  }) async {
+    final uri = Uri.parse('$_basePath/capability-packs/preview');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'module_code': moduleCode,
+        'role_items': roleItems.map((item) => item.toJson()).toList(),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return CapabilityPackPreviewResult.fromJson(data);
+  }
+
+  Future<PermissionExplainResult> loadCapabilityPackEffective({
+    required String roleCode,
+    required String moduleCode,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/capability-packs/effective',
+    ).replace(queryParameters: {'role_code': roleCode, 'module': moduleCode});
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return PermissionExplainResult.fromJson(data);
+  }
+
   Map<String, dynamic> _decodeBody(http.Response response) {
     if (response.body.isEmpty) {
       return {};

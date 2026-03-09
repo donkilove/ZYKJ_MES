@@ -177,3 +177,102 @@ class PermissionHierarchyPreviewRequest(BaseModel):
 class PermissionHierarchyPreviewResult(BaseModel):
     module_code: str
     role_results: list[PermissionHierarchyRoleConfigUpdateResult]
+
+
+class CapabilityPackItem(BaseModel):
+    capability_code: str
+    capability_name: str
+    group_code: str
+    group_name: str
+    page_code: str
+    page_name: str
+    description: str | None = None
+    dependency_capability_codes: list[str] = Field(default_factory=list)
+    linked_action_permission_codes: list[str] = Field(default_factory=list)
+
+
+class CapabilityPackRoleTemplateItem(BaseModel):
+    role_code: str
+    role_name: str
+    capability_codes: list[str] = Field(default_factory=list)
+    description: str | None = None
+
+
+class CapabilityPackCatalogResult(BaseModel):
+    module_code: str
+    module_codes: list[str]
+    module_name: str
+    module_permission_code: str
+    capability_packs: list[CapabilityPackItem]
+    role_templates: list[CapabilityPackRoleTemplateItem] = Field(default_factory=list)
+
+
+class CapabilityPackRoleConfigResult(BaseModel):
+    role_code: str
+    role_name: str
+    readonly: bool = False
+    module_code: str
+    module_enabled: bool
+    granted_capability_codes: list[str] = Field(default_factory=list)
+    effective_capability_codes: list[str] = Field(default_factory=list)
+    effective_page_permission_codes: list[str] = Field(default_factory=list)
+    auto_linked_dependencies: list[str] = Field(default_factory=list)
+
+
+class CapabilityPackRoleConfigUpdateRequest(BaseModel):
+    module_code: str = Field(min_length=2, max_length=64)
+    module_enabled: bool = False
+    capability_codes: list[str] = Field(default_factory=list)
+    dry_run: bool = False
+    remark: str | None = Field(default=None, max_length=255)
+
+
+class CapabilityPackRoleConfigUpdateResult(BaseModel):
+    role_code: str
+    role_name: str
+    readonly: bool = False
+    ignored_input: bool = False
+    module_code: str
+    before_capability_codes: list[str] = Field(default_factory=list)
+    after_capability_codes: list[str] = Field(default_factory=list)
+    added_capability_codes: list[str] = Field(default_factory=list)
+    removed_capability_codes: list[str] = Field(default_factory=list)
+    auto_linked_dependencies: list[str] = Field(default_factory=list)
+    effective_capability_codes: list[str] = Field(default_factory=list)
+    effective_page_permission_codes: list[str] = Field(default_factory=list)
+    updated_count: int = 0
+    dry_run: bool = False
+
+
+class CapabilityPackPreviewRoleItem(BaseModel):
+    role_code: str = Field(min_length=2, max_length=64)
+    module_enabled: bool = False
+    capability_codes: list[str] = Field(default_factory=list)
+
+
+class CapabilityPackPreviewRequest(BaseModel):
+    module_code: str = Field(min_length=2, max_length=64)
+    role_items: list[CapabilityPackPreviewRoleItem] = Field(default_factory=list)
+
+
+class CapabilityPackPreviewResult(BaseModel):
+    module_code: str
+    role_results: list[CapabilityPackRoleConfigUpdateResult]
+
+
+class PermissionExplainCapabilityItem(BaseModel):
+    capability_code: str
+    capability_name: str
+    available: bool
+    reason_codes: list[str] = Field(default_factory=list)
+    reason_messages: list[str] = Field(default_factory=list)
+
+
+class PermissionExplainResult(BaseModel):
+    role_code: str
+    role_name: str
+    module_code: str
+    module_enabled: bool
+    effective_page_permission_codes: list[str] = Field(default_factory=list)
+    effective_capability_codes: list[str] = Field(default_factory=list)
+    capability_items: list[PermissionExplainCapabilityItem] = Field(default_factory=list)

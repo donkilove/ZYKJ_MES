@@ -537,6 +537,342 @@ class PermissionHierarchyPreviewResult {
   }
 }
 
+class CapabilityPackItem {
+  const CapabilityPackItem({
+    required this.capabilityCode,
+    required this.capabilityName,
+    required this.groupCode,
+    required this.groupName,
+    required this.pageCode,
+    required this.pageName,
+    required this.description,
+    required this.dependencyCapabilityCodes,
+    required this.linkedActionPermissionCodes,
+  });
+
+  final String capabilityCode;
+  final String capabilityName;
+  final String groupCode;
+  final String groupName;
+  final String pageCode;
+  final String pageName;
+  final String? description;
+  final List<String> dependencyCapabilityCodes;
+  final List<String> linkedActionPermissionCodes;
+
+  factory CapabilityPackItem.fromJson(Map<String, dynamic> json) {
+    return CapabilityPackItem(
+      capabilityCode: json['capability_code'] as String,
+      capabilityName: json['capability_name'] as String,
+      groupCode: json['group_code'] as String,
+      groupName: json['group_name'] as String,
+      pageCode: json['page_code'] as String,
+      pageName: json['page_name'] as String,
+      description: json['description'] as String?,
+      dependencyCapabilityCodes:
+          (json['dependency_capability_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      linkedActionPermissionCodes:
+          (json['linked_action_permission_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+    );
+  }
+}
+
+class CapabilityPackRoleTemplateItem {
+  const CapabilityPackRoleTemplateItem({
+    required this.roleCode,
+    required this.roleName,
+    required this.capabilityCodes,
+    required this.description,
+  });
+
+  final String roleCode;
+  final String roleName;
+  final List<String> capabilityCodes;
+  final String? description;
+
+  factory CapabilityPackRoleTemplateItem.fromJson(Map<String, dynamic> json) {
+    return CapabilityPackRoleTemplateItem(
+      roleCode: json['role_code'] as String,
+      roleName: json['role_name'] as String,
+      capabilityCodes: (json['capability_codes'] as List<dynamic>? ?? const [])
+          .cast<String>(),
+      description: json['description'] as String?,
+    );
+  }
+}
+
+class CapabilityPackCatalogResult {
+  const CapabilityPackCatalogResult({
+    required this.moduleCode,
+    required this.moduleCodes,
+    required this.moduleName,
+    required this.modulePermissionCode,
+    required this.capabilityPacks,
+    required this.roleTemplates,
+  });
+
+  final String moduleCode;
+  final List<String> moduleCodes;
+  final String moduleName;
+  final String modulePermissionCode;
+  final List<CapabilityPackItem> capabilityPacks;
+  final List<CapabilityPackRoleTemplateItem> roleTemplates;
+
+  factory CapabilityPackCatalogResult.fromJson(Map<String, dynamic> json) {
+    return CapabilityPackCatalogResult(
+      moduleCode: json['module_code'] as String,
+      moduleCodes: (json['module_codes'] as List<dynamic>? ?? const [])
+          .cast<String>(),
+      moduleName: json['module_name'] as String,
+      modulePermissionCode: json['module_permission_code'] as String,
+      capabilityPacks: (json['capability_packs'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) =>
+                CapabilityPackItem.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(),
+      roleTemplates: (json['role_templates'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => CapabilityPackRoleTemplateItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class CapabilityPackRoleConfigResult {
+  const CapabilityPackRoleConfigResult({
+    required this.roleCode,
+    required this.roleName,
+    required this.readonly,
+    required this.moduleCode,
+    required this.moduleEnabled,
+    required this.grantedCapabilityCodes,
+    required this.effectiveCapabilityCodes,
+    required this.effectivePagePermissionCodes,
+    required this.autoLinkedDependencies,
+  });
+
+  final String roleCode;
+  final String roleName;
+  final bool readonly;
+  final String moduleCode;
+  final bool moduleEnabled;
+  final List<String> grantedCapabilityCodes;
+  final List<String> effectiveCapabilityCodes;
+  final List<String> effectivePagePermissionCodes;
+  final List<String> autoLinkedDependencies;
+
+  factory CapabilityPackRoleConfigResult.fromJson(Map<String, dynamic> json) {
+    return CapabilityPackRoleConfigResult(
+      roleCode: json['role_code'] as String,
+      roleName: json['role_name'] as String,
+      readonly: (json['readonly'] as bool?) ?? false,
+      moduleCode: json['module_code'] as String,
+      moduleEnabled: (json['module_enabled'] as bool?) ?? false,
+      grantedCapabilityCodes:
+          (json['granted_capability_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      effectiveCapabilityCodes:
+          (json['effective_capability_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      effectivePagePermissionCodes:
+          (json['effective_page_permission_codes'] as List<dynamic>? ??
+                  const [])
+              .cast<String>(),
+      autoLinkedDependencies:
+          (json['auto_linked_dependencies'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+    );
+  }
+}
+
+class CapabilityPackRoleDraftItem {
+  const CapabilityPackRoleDraftItem({
+    required this.roleCode,
+    required this.moduleEnabled,
+    required this.capabilityCodes,
+  });
+
+  final String roleCode;
+  final bool moduleEnabled;
+  final List<String> capabilityCodes;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'role_code': roleCode,
+      'module_enabled': moduleEnabled,
+      'capability_codes': capabilityCodes,
+    };
+  }
+}
+
+class CapabilityPackRoleUpdateResult {
+  const CapabilityPackRoleUpdateResult({
+    required this.roleCode,
+    required this.roleName,
+    required this.readonly,
+    required this.ignoredInput,
+    required this.moduleCode,
+    required this.beforeCapabilityCodes,
+    required this.afterCapabilityCodes,
+    required this.addedCapabilityCodes,
+    required this.removedCapabilityCodes,
+    required this.autoLinkedDependencies,
+    required this.effectiveCapabilityCodes,
+    required this.effectivePagePermissionCodes,
+    required this.updatedCount,
+    required this.dryRun,
+  });
+
+  final String roleCode;
+  final String roleName;
+  final bool readonly;
+  final bool ignoredInput;
+  final String moduleCode;
+  final List<String> beforeCapabilityCodes;
+  final List<String> afterCapabilityCodes;
+  final List<String> addedCapabilityCodes;
+  final List<String> removedCapabilityCodes;
+  final List<String> autoLinkedDependencies;
+  final List<String> effectiveCapabilityCodes;
+  final List<String> effectivePagePermissionCodes;
+  final int updatedCount;
+  final bool dryRun;
+
+  factory CapabilityPackRoleUpdateResult.fromJson(Map<String, dynamic> json) {
+    return CapabilityPackRoleUpdateResult(
+      roleCode: json['role_code'] as String,
+      roleName: json['role_name'] as String,
+      readonly: (json['readonly'] as bool?) ?? false,
+      ignoredInput: (json['ignored_input'] as bool?) ?? false,
+      moduleCode: json['module_code'] as String,
+      beforeCapabilityCodes:
+          (json['before_capability_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      afterCapabilityCodes:
+          (json['after_capability_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      addedCapabilityCodes:
+          (json['added_capability_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      removedCapabilityCodes:
+          (json['removed_capability_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      autoLinkedDependencies:
+          (json['auto_linked_dependencies'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      effectiveCapabilityCodes:
+          (json['effective_capability_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      effectivePagePermissionCodes:
+          (json['effective_page_permission_codes'] as List<dynamic>? ??
+                  const [])
+              .cast<String>(),
+      updatedCount: (json['updated_count'] as int?) ?? 0,
+      dryRun: (json['dry_run'] as bool?) ?? false,
+    );
+  }
+}
+
+class CapabilityPackPreviewResult {
+  const CapabilityPackPreviewResult({
+    required this.moduleCode,
+    required this.roleResults,
+  });
+
+  final String moduleCode;
+  final List<CapabilityPackRoleUpdateResult> roleResults;
+
+  factory CapabilityPackPreviewResult.fromJson(Map<String, dynamic> json) {
+    return CapabilityPackPreviewResult(
+      moduleCode: json['module_code'] as String,
+      roleResults: (json['role_results'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => CapabilityPackRoleUpdateResult.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class PermissionExplainCapabilityItem {
+  const PermissionExplainCapabilityItem({
+    required this.capabilityCode,
+    required this.capabilityName,
+    required this.available,
+    required this.reasonCodes,
+    required this.reasonMessages,
+  });
+
+  final String capabilityCode;
+  final String capabilityName;
+  final bool available;
+  final List<String> reasonCodes;
+  final List<String> reasonMessages;
+
+  factory PermissionExplainCapabilityItem.fromJson(Map<String, dynamic> json) {
+    return PermissionExplainCapabilityItem(
+      capabilityCode: json['capability_code'] as String,
+      capabilityName: json['capability_name'] as String,
+      available: (json['available'] as bool?) ?? false,
+      reasonCodes: (json['reason_codes'] as List<dynamic>? ?? const [])
+          .cast<String>(),
+      reasonMessages: (json['reason_messages'] as List<dynamic>? ?? const [])
+          .cast<String>(),
+    );
+  }
+}
+
+class PermissionExplainResult {
+  const PermissionExplainResult({
+    required this.roleCode,
+    required this.roleName,
+    required this.moduleCode,
+    required this.moduleEnabled,
+    required this.effectivePagePermissionCodes,
+    required this.effectiveCapabilityCodes,
+    required this.capabilityItems,
+  });
+
+  final String roleCode;
+  final String roleName;
+  final String moduleCode;
+  final bool moduleEnabled;
+  final List<String> effectivePagePermissionCodes;
+  final List<String> effectiveCapabilityCodes;
+  final List<PermissionExplainCapabilityItem> capabilityItems;
+
+  factory PermissionExplainResult.fromJson(Map<String, dynamic> json) {
+    return PermissionExplainResult(
+      roleCode: json['role_code'] as String,
+      roleName: json['role_name'] as String,
+      moduleCode: json['module_code'] as String,
+      moduleEnabled: (json['module_enabled'] as bool?) ?? false,
+      effectivePagePermissionCodes:
+          (json['effective_page_permission_codes'] as List<dynamic>? ??
+                  const [])
+              .cast<String>(),
+      effectiveCapabilityCodes:
+          (json['effective_capability_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      capabilityItems: (json['capability_items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => PermissionExplainCapabilityItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
 class ProductionPermissionCodes {
   static const String pageProductionView = 'page.production.view';
   static const String pageOrderManagementView =

@@ -20,24 +20,16 @@ const Map<String, String> _moduleNameFallbackZh = {
 class _RoleDraft {
   const _RoleDraft({
     required this.moduleEnabled,
-    required this.pagePermissionCodes,
-    required this.featurePermissionCodes,
+    required this.capabilityCodes,
   });
 
   final bool moduleEnabled;
-  final Set<String> pagePermissionCodes;
-  final Set<String> featurePermissionCodes;
+  final Set<String> capabilityCodes;
 
-  _RoleDraft copyWith({
-    bool? moduleEnabled,
-    Set<String>? pagePermissionCodes,
-    Set<String>? featurePermissionCodes,
-  }) {
+  _RoleDraft copyWith({bool? moduleEnabled, Set<String>? capabilityCodes}) {
     return _RoleDraft(
       moduleEnabled: moduleEnabled ?? this.moduleEnabled,
-      pagePermissionCodes: pagePermissionCodes ?? this.pagePermissionCodes,
-      featurePermissionCodes:
-          featurePermissionCodes ?? this.featurePermissionCodes,
+      capabilityCodes: capabilityCodes ?? this.capabilityCodes,
     );
   }
 }
@@ -66,6 +58,7 @@ class _FunctionPermissionConfigPageState
   bool _loading = false;
   bool _saving = false;
   bool _previewing = false;
+  bool _showAdvanced = false;
   String _message = '';
 
   List<RoleItem> _roles = const [];
@@ -73,17 +66,17 @@ class _FunctionPermissionConfigPageState
   String? _selectedModuleCode;
   String? _selectedRoleCode;
 
-  final Map<String, PermissionHierarchyCatalogResult> _catalogByModule = {};
+  final Map<String, CapabilityPackCatalogResult> _catalogByModule = {};
   final Map<String, _RoleDraft> _originByRole = {};
   final Map<String, _RoleDraft> _draftByRole = {};
   final Map<String, bool> _readonlyByRole = {};
-  final Map<String, Set<String>> _effectivePagesByRole = {};
-  final Map<String, Set<String>> _effectiveFeaturesByRole = {};
+  final Map<String, Set<String>> _effectiveCapabilitiesByRole = {};
+  final Map<String, PermissionExplainResult> _explainByRole = {};
 
-  PermissionHierarchyPreviewResult? _activePreview;
+  CapabilityPackPreviewResult? _activePreview;
   bool _showPreview = false;
   bool _activePreviewIsSaved = false;
-  final Map<String, PermissionHierarchyPreviewResult> _lastSavedByModule = {};
+  final Map<String, CapabilityPackPreviewResult> _lastSavedByModule = {};
   Map<String, _RoleDraft>? _lastSavedBeforeSnapshot;
   String? _lastSavedSnapshotModuleCode;
 
@@ -123,13 +116,17 @@ class _FunctionPermissionConfigPageState
 
   String _moduleLabel(String moduleCode) {
     final fromCatalog = _catalogByModule[moduleCode]?.moduleName.trim();
+    final fallback = _moduleNameFallbackZh[moduleCode];
+    if (fallback != null && fallback.isNotEmpty) {
+      return fallback;
+    }
     if (fromCatalog != null && fromCatalog.isNotEmpty) {
       return fromCatalog;
     }
-    return _moduleNameFallbackZh[moduleCode] ?? moduleCode;
+    return moduleCode;
   }
 
-  PermissionHierarchyCatalogResult? get _catalog {
+  CapabilityPackCatalogResult? get _catalog {
     final moduleCode = _selectedModuleCode;
     if (moduleCode == null) {
       return null;
@@ -161,8 +158,7 @@ class _FunctionPermissionConfigPageState
         key,
         _RoleDraft(
           moduleEnabled: value.moduleEnabled,
-          pagePermissionCodes: {...value.pagePermissionCodes},
-          featurePermissionCodes: {...value.featurePermissionCodes},
+          capabilityCodes: {...value.capabilityCodes},
         ),
       ),
     );
@@ -172,12 +168,8 @@ class _FunctionPermissionConfigPageState
     if (a.moduleEnabled != b.moduleEnabled) {
       return false;
     }
-    if (a.pagePermissionCodes.length != b.pagePermissionCodes.length ||
-        !a.pagePermissionCodes.containsAll(b.pagePermissionCodes)) {
-      return false;
-    }
-    if (a.featurePermissionCodes.length != b.featurePermissionCodes.length ||
-        !a.featurePermissionCodes.containsAll(b.featurePermissionCodes)) {
+    if (a.capabilityCodes.length != b.capabilityCodes.length ||
+        !a.capabilityCodes.containsAll(b.capabilityCodes)) {
       return false;
     }
     return true;
@@ -218,7 +210,7 @@ class _FunctionPermissionConfigPageState
       if (roles.isEmpty) {
         throw StateError('未查询到角色');
       }
-      final bootstrap = await _authzService.loadPermissionHierarchyCatalog(
+      final bootstrap = await _authzService.loadCapabilityPackCatalog(
         moduleCode: _selectedModuleCode ?? 'production',
       );
       _catalogByModule[bootstrap.moduleCode] = bootstrap;
@@ -252,7 +244,7 @@ class _FunctionPermissionConfigPageState
     List<RoleItem>? roles,
     List<String>? moduleCodes,
   }) async {
-    final catalog = await _authzService.loadPermissionHierarchyCatalog(
+    final catalog = await _authzService.loadCapabilityPackCatalog(
       moduleCode: moduleCode,
     );
     _catalogByModule[catalog.moduleCode] = catalog;
@@ -260,7 +252,15 @@ class _FunctionPermissionConfigPageState
     final effectiveRoles = roles ?? _roles;
     final configs = await Future.wait(
       effectiveRoles.map(
-        (role) => _authzService.loadPermissionHierarchyRoleConfig(
+        (role) => _authzService.loadCapabilityPackRoleConfig(
+          roleCode: role.code,
+          moduleCode: catalog.moduleCode,
+        ),
+      ),
+    );
+    final explains = await Future.wait(
+      effectiveRoles.map(
+        (role) => _authzService.loadCapabilityPackEffective(
           roleCode: role.code,
           moduleCode: catalog.moduleCode,
         ),
@@ -270,27 +270,24 @@ class _FunctionPermissionConfigPageState
     final originByRole = <String, _RoleDraft>{};
     final draftByRole = <String, _RoleDraft>{};
     final readonlyByRole = <String, bool>{};
-    final effectivePagesByRole = <String, Set<String>>{};
-    final effectiveFeaturesByRole = <String, Set<String>>{};
+    final effectiveByRole = <String, Set<String>>{};
+    final explainByRole = <String, PermissionExplainResult>{};
     for (final config in configs) {
       final draft = _RoleDraft(
         moduleEnabled: config.moduleEnabled,
-        pagePermissionCodes: config.grantedPagePermissionCodes.toSet(),
-        featurePermissionCodes: config.grantedFeaturePermissionCodes.toSet(),
+        capabilityCodes: config.grantedCapabilityCodes.toSet(),
       );
       originByRole[config.roleCode] = draft;
       draftByRole[config.roleCode] = _RoleDraft(
         moduleEnabled: draft.moduleEnabled,
-        pagePermissionCodes: {...draft.pagePermissionCodes},
-        featurePermissionCodes: {...draft.featurePermissionCodes},
+        capabilityCodes: {...draft.capabilityCodes},
       );
       readonlyByRole[config.roleCode] = config.readonly;
-      effectivePagesByRole[config.roleCode] = config
-          .effectivePagePermissionCodes
+      effectiveByRole[config.roleCode] = config.effectiveCapabilityCodes
           .toSet();
-      effectiveFeaturesByRole[config.roleCode] = config
-          .effectiveFeaturePermissionCodes
-          .toSet();
+    }
+    for (final explain in explains) {
+      explainByRole[explain.roleCode] = explain;
     }
 
     if (!mounted) {
@@ -314,15 +311,16 @@ class _FunctionPermissionConfigPageState
       _readonlyByRole
         ..clear()
         ..addAll(readonlyByRole);
-      _effectivePagesByRole
+      _effectiveCapabilitiesByRole
         ..clear()
-        ..addAll(effectivePagesByRole);
-      _effectiveFeaturesByRole
+        ..addAll(effectiveByRole);
+      _explainByRole
         ..clear()
-        ..addAll(effectiveFeaturesByRole);
+        ..addAll(explainByRole);
       _showPreview = false;
       _activePreview = null;
       _activePreviewIsSaved = false;
+      _showAdvanced = false;
       _message = '';
     });
   }
@@ -384,26 +382,25 @@ class _FunctionPermissionConfigPageState
     }
   }
 
-  List<PermissionHierarchyRoleDraftItem> _roleDraftItems() {
-    final items = <PermissionHierarchyRoleDraftItem>[];
+  List<CapabilityPackRoleDraftItem> _roleDraftItems() {
+    final items = <CapabilityPackRoleDraftItem>[];
     for (final role in _roles) {
       final draft = _draftByRole[role.code];
       if (draft == null) {
         continue;
       }
       items.add(
-        PermissionHierarchyRoleDraftItem(
+        CapabilityPackRoleDraftItem(
           roleCode: role.code,
           moduleEnabled: draft.moduleEnabled,
-          pagePermissionCodes: draft.pagePermissionCodes.toList()..sort(),
-          featurePermissionCodes: draft.featurePermissionCodes.toList()..sort(),
+          capabilityCodes: draft.capabilityCodes.toList()..sort(),
         ),
       );
     }
     return items;
   }
 
-  Future<PermissionHierarchyPreviewResult?> _preview({
+  Future<CapabilityPackPreviewResult?> _preview({
     bool activatePanel = true,
   }) async {
     final moduleCode = _selectedModuleCode;
@@ -415,7 +412,7 @@ class _FunctionPermissionConfigPageState
       _message = '';
     });
     try {
-      final preview = await _authzService.previewPermissionHierarchy(
+      final preview = await _authzService.previewCapabilityPacks(
         moduleCode: moduleCode,
         roleItems: _roleDraftItems(),
       );
@@ -453,8 +450,7 @@ class _FunctionPermissionConfigPageState
 
   Future<void> _save() async {
     final moduleCode = _selectedModuleCode;
-    final catalog = _catalog;
-    if (_saving || !_hasDirty || moduleCode == null || catalog == null) {
+    if (_saving || !_hasDirty || moduleCode == null) {
       return;
     }
     final preview = await _preview(activatePanel: false);
@@ -464,6 +460,7 @@ class _FunctionPermissionConfigPageState
     if (!mounted) {
       return;
     }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -489,60 +486,44 @@ class _FunctionPermissionConfigPageState
       });
       return;
     }
+
     setState(() {
       _saving = true;
       _message = '';
     });
     final snapshot = _cloneDraftMap(_originByRole);
     try {
-      final results = <PermissionHierarchyRoleUpdateResult>[];
+      final roleResults = <CapabilityPackRoleUpdateResult>[];
       for (final role in _roles) {
+        if (!_hasDirtyRole(role.code)) {
+          continue;
+        }
         final draft = _draftByRole[role.code];
         if (draft == null) {
           continue;
         }
-        final result = await _authzService.updatePermissionHierarchyRoleConfig(
+        final result = await _authzService.updateCapabilityPackRoleConfig(
           roleCode: role.code,
           moduleCode: moduleCode,
           moduleEnabled: draft.moduleEnabled,
-          pagePermissionCodes: draft.pagePermissionCodes.toList()..sort(),
-          featurePermissionCodes: draft.featurePermissionCodes.toList()..sort(),
+          capabilityCodes: draft.capabilityCodes.toList()..sort(),
           dryRun: false,
-          remark: '功能权限分层保存',
+          remark: '能力包权限配置保存',
         );
-        results.add(result);
+        roleResults.add(result);
       }
 
-      for (final result in results) {
-        final after = result.afterPermissionCodes.toSet();
-        final pageCodes = catalog.pages
-            .map((item) => item.permissionCode)
-            .toSet();
-        final featureCodes = catalog.features
-            .map((item) => item.permissionCode)
-            .toSet();
-        final next = _RoleDraft(
-          moduleEnabled: after.contains(catalog.modulePermissionCode),
-          pagePermissionCodes: after.intersection(pageCodes),
-          featurePermissionCodes: after.intersection(featureCodes),
-        );
-        _originByRole[result.roleCode] = next;
-        _draftByRole[result.roleCode] = _RoleDraft(
-          moduleEnabled: next.moduleEnabled,
-          pagePermissionCodes: {...next.pagePermissionCodes},
-          featurePermissionCodes: {...next.featurePermissionCodes},
-        );
-        _effectivePagesByRole[result.roleCode] = result
-            .effectivePagePermissionCodes
-            .toSet();
-        _effectiveFeaturesByRole[result.roleCode] = result
-            .effectiveFeaturePermissionCodes
-            .toSet();
+      await _loadModuleData(
+        moduleCode,
+        roles: _roles,
+        moduleCodes: _moduleCodes,
+      );
+      if (!mounted) {
+        return;
       }
-
-      final savedPreview = PermissionHierarchyPreviewResult(
+      final savedPreview = CapabilityPackPreviewResult(
         moduleCode: moduleCode,
-        roleResults: results,
+        roleResults: roleResults,
       );
       setState(() {
         _lastSavedBeforeSnapshot = snapshot;
@@ -586,18 +567,20 @@ class _FunctionPermissionConfigPageState
         if (target == null) {
           continue;
         }
-        await _authzService.updatePermissionHierarchyRoleConfig(
+        await _authzService.updateCapabilityPackRoleConfig(
           roleCode: role.code,
           moduleCode: moduleCode,
           moduleEnabled: target.moduleEnabled,
-          pagePermissionCodes: target.pagePermissionCodes.toList()..sort(),
-          featurePermissionCodes: target.featurePermissionCodes.toList()
-            ..sort(),
+          capabilityCodes: target.capabilityCodes.toList()..sort(),
           dryRun: false,
-          remark: '功能权限分层回退',
+          remark: '能力包权限配置回退',
         );
       }
-      await _loadModuleData(moduleCode);
+      await _loadModuleData(
+        moduleCode,
+        roles: _roles,
+        moduleCodes: _moduleCodes,
+      );
       if (!mounted) {
         return;
       }
@@ -634,6 +617,33 @@ class _FunctionPermissionConfigPageState
     });
   }
 
+  void _applyRoleTemplate({
+    required RoleItem role,
+    required _RoleDraft draft,
+    required CapabilityPackCatalogResult catalog,
+  }) {
+    final templateItems = catalog.roleTemplates
+        .where((item) => item.roleCode == role.code)
+        .toList();
+    if (templateItems.isEmpty) {
+      return;
+    }
+    final template = templateItems.first;
+    final validCodes = catalog.capabilityPacks
+        .map((item) => item.capabilityCode)
+        .toSet();
+    final templateCodes = template.capabilityCodes.toSet().intersection(
+      validCodes,
+    );
+    setState(() {
+      _draftByRole[role.code] = draft.copyWith(
+        moduleEnabled: templateCodes.isNotEmpty ? true : draft.moduleEnabled,
+        capabilityCodes: templateCodes,
+      );
+      _message = '已套用岗位模板：${role.name}（${templateCodes.length} 项）';
+    });
+  }
+
   Widget _buildPreviewCard() {
     final preview = _activePreview;
     if (!_showPreview || preview == null) {
@@ -665,7 +675,7 @@ class _FunctionPermissionConfigPageState
             const SizedBox(height: 8),
             ...preview.roleResults.map(
               (item) => Text(
-                '${item.roleName}：变更 ${item.addedPermissionCodes.length + item.removedPermissionCodes.length}，自动补依赖 ${item.autoLinkedDependencies.length}',
+                '${item.roleName}：能力变更 ${item.addedCapabilityCodes.length + item.removedCapabilityCodes.length}，自动补依赖 ${item.autoLinkedDependencies.length}',
               ),
             ),
           ],
@@ -703,8 +713,7 @@ class _FunctionPermissionConfigPageState
                 final count = draft == null
                     ? 0
                     : (draft.moduleEnabled ? 1 : 0) +
-                          draft.pagePermissionCodes.length +
-                          draft.featurePermissionCodes.length;
+                          draft.capabilityCodes.length;
                 return ListTile(
                   dense: true,
                   selected: selected,
@@ -737,123 +746,56 @@ class _FunctionPermissionConfigPageState
     );
   }
 
-  Widget _buildModuleAndPagesCard({
+  Widget _buildCapabilityCard({
     required RoleItem role,
     required _RoleDraft draft,
     required bool readonly,
-    required List<PermissionHierarchyPageItem> pages,
+    required CapabilityPackCatalogResult catalog,
+    required List<CapabilityPackItem> capabilityPacks,
   }) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Text(
-            '页面链路',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('模块总开关'),
-            subtitle: Text(readonly ? '系统管理员固定全权限（只读）' : '关闭后保留下层配置，入口不可用'),
-            value: draft.moduleEnabled,
-            onChanged: readonly || _saving
-                ? null
-                : (value) => setState(
-                    () => _draftByRole[role.code] = draft.copyWith(
-                      moduleEnabled: value,
-                    ),
-                  ),
-          ),
-          const Divider(),
-          Text(
-            '页面开关（${pages.length}）',
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 6),
-          ...pages.map((item) {
-            final checked = draft.pagePermissionCodes.contains(
-              item.permissionCode,
-            );
-            final effective =
-                (_effectivePagesByRole[role.code] ?? const <String>{}).contains(
-                  item.permissionCode,
-                );
-            return SwitchListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: Text(item.pageName),
-              subtitle: Text(
-                checked ? (effective ? '当前可见' : '已配置但不可见') : '未开启',
-              ),
-              value: checked,
-              onChanged: readonly || _saving
-                  ? null
-                  : (value) => setState(() {
-                      final next = {...draft.pagePermissionCodes};
-                      if (value) {
-                        next.add(item.permissionCode);
-                      } else {
-                        next.remove(item.permissionCode);
-                      }
-                      _draftByRole[role.code] = draft.copyWith(
-                        pagePermissionCodes: next,
-                      );
-                    }),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Map<String, List<PermissionHierarchyFeatureItem>> _groupFeaturesByPage(
-    List<PermissionHierarchyFeatureItem> features,
-  ) {
-    final grouped = <String, List<PermissionHierarchyFeatureItem>>{};
-    for (final item in features) {
-      final key = item.pagePermissionCode ?? '__no_page__';
-      grouped.putIfAbsent(key, () => []).add(item);
-    }
-    for (final values in grouped.values) {
-      values.sort((a, b) => a.permissionCode.compareTo(b.permissionCode));
-    }
-    return grouped;
-  }
-
-  Widget _buildFeaturesCard({
-    required RoleItem role,
-    required PermissionHierarchyCatalogResult catalog,
-    required _RoleDraft draft,
-    required bool readonly,
-    required List<PermissionHierarchyFeatureItem> features,
-  }) {
-    final pageNameByPermission = {
-      for (final page in catalog.pages) page.permissionCode: page.pageName,
+    final capabilityNameByCode = {
+      for (final item in catalog.capabilityPacks)
+        item.capabilityCode: item.capabilityName,
     };
-    final effectiveFeatures =
-        _effectiveFeaturesByRole[role.code] ?? const <String>{};
-    final grouped = _groupFeaturesByPage(features);
+    final explainItems = _explainByRole[role.code]?.capabilityItems ?? const [];
+    final explainByCode = {
+      for (final item in explainItems) item.capabilityCode: item,
+    };
+    final effectiveCodes =
+        _effectiveCapabilitiesByRole[role.code] ?? const <String>{};
 
-    String featureStatus(PermissionHierarchyFeatureItem item, bool checked) {
-      final effective = effectiveFeatures.contains(item.permissionCode);
-      final pageEnabled =
-          item.pagePermissionCode == null ||
-          draft.pagePermissionCodes.contains(item.pagePermissionCode);
+    final grouped = <String, List<CapabilityPackItem>>{};
+    for (final item in capabilityPacks) {
+      grouped
+          .putIfAbsent(item.groupName, () => <CapabilityPackItem>[])
+          .add(item);
+    }
+    final groupNames = grouped.keys.toList()..sort();
+    for (final key in groupNames) {
+      grouped[key]!.sort(
+        (a, b) => a.capabilityName.compareTo(b.capabilityName),
+      );
+    }
+
+    String statusOf(
+      CapabilityPackItem capability,
+      bool checked,
+      PermissionExplainCapabilityItem? explainItem,
+    ) {
       if (!checked) {
         return '未开启';
       }
       if (!draft.moduleEnabled) {
-        return '已配置但不可用（模块未开启）';
+        return '已配置但不可用（模块入口关闭）';
       }
-      if (!pageEnabled) {
-        return '已配置但不可用（页面未开启）';
+      if (effectiveCodes.contains(capability.capabilityCode) ||
+          (explainItem?.available ?? false)) {
+        return '可用';
       }
-      return effective ? '可用' : '已配置待生效';
+      if (explainItem != null && explainItem.reasonMessages.isNotEmpty) {
+        return explainItem.reasonMessages.join('；');
+      }
+      return '已配置但不可用';
     }
 
     return Card(
@@ -861,45 +803,73 @@ class _FunctionPermissionConfigPageState
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Text(
-            '功能链开关（${features.length}）',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '能力包（${capabilityPacks.length}）',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Switch(
+                value: draft.moduleEnabled,
+                onChanged: readonly || _saving
+                    ? null
+                    : (value) => setState(() {
+                        _draftByRole[role.code] = draft.copyWith(
+                          moduleEnabled: value,
+                        );
+                      }),
+              ),
+              Text(
+                draft.moduleEnabled ? '模块已开启' : '模块已关闭',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          ...grouped.entries.map((entry) {
-            final pagePermissionCode = entry.key;
-            final pageName =
-                pageNameByPermission[pagePermissionCode] ?? '未绑定页面';
+          if (readonly)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text('系统管理员固定全权限（只读展示）', style: TextStyle(fontSize: 12)),
+            ),
+          ...groupNames.map((groupName) {
+            final items = grouped[groupName] ?? const <CapabilityPackItem>[];
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ExpansionTile(
                 initiallyExpanded: true,
-                title: Text('$pageName（${entry.value.length}）'),
-                children: entry.value.map((item) {
-                  final checked = draft.featurePermissionCodes.contains(
-                    item.permissionCode,
+                title: Text('$groupName（${items.length}）'),
+                children: items.map((capability) {
+                  final checked = draft.capabilityCodes.contains(
+                    capability.capabilityCode,
                   );
+                  final explainItem = explainByCode[capability.capabilityCode];
+                  final dependencies = capability.dependencyCapabilityCodes
+                      .map((code) => capabilityNameByCode[code] ?? code)
+                      .toList();
                   return SwitchListTile(
                     dense: true,
-                    title: Text(item.featureName),
+                    title: Text(capability.capabilityName),
                     subtitle: Text(
-                      '${featureStatus(item, checked)}\n'
-                      '依赖：${item.dependencyPermissionCodes.isEmpty ? '无' : item.dependencyPermissionCodes.join('、')}',
+                      '${statusOf(capability, checked, explainItem)}\n'
+                      '入口：${capability.pageName}'
+                      '${dependencies.isEmpty ? '' : '\n依赖：${dependencies.join('、')}'}'
+                      '${capability.description == null || capability.description!.isEmpty ? '' : '\n说明：${capability.description}'}',
                     ),
                     value: checked,
                     onChanged: readonly || _saving
                         ? null
                         : (value) => setState(() {
-                            final next = {...draft.featurePermissionCodes};
+                            final next = {...draft.capabilityCodes};
                             if (value) {
-                              next.add(item.permissionCode);
+                              next.add(capability.capabilityCode);
                             } else {
-                              next.remove(item.permissionCode);
+                              next.remove(capability.capabilityCode);
                             }
                             _draftByRole[role.code] = draft.copyWith(
-                              featurePermissionCodes: next,
+                              capabilityCodes: next,
                             );
                           }),
                   );
@@ -907,6 +877,50 @@ class _FunctionPermissionConfigPageState
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvancedPanel({
+    required RoleItem role,
+    required _RoleDraft draft,
+    required CapabilityPackCatalogResult catalog,
+  }) {
+    final explain = _explainByRole[role.code];
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ExpansionTile(
+        initiallyExpanded: _showAdvanced,
+        onExpansionChanged: (value) => setState(() => _showAdvanced = value),
+        title: const Text('高级模式（排障）'),
+        subtitle: const Text('默认隐藏，仅用于排查显示和可操作性问题'),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('角色：${role.name}（${role.code}）'),
+                Text('模块：${_moduleLabel(catalog.moduleCode)}'),
+                Text('模块开关：${draft.moduleEnabled ? '开启' : '关闭'}'),
+                const SizedBox(height: 8),
+                Text('草稿能力码（${draft.capabilityCodes.length}）：'),
+                SelectableText(
+                  (draft.capabilityCodes.toList()..sort()).join('\n'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '当前生效能力码（${explain?.effectiveCapabilityCodes.length ?? 0}）：',
+                ),
+                SelectableText(
+                  (explain?.effectiveCapabilityCodes ?? const <String>[]).join(
+                    '\n',
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -922,29 +936,34 @@ class _FunctionPermissionConfigPageState
     if (catalog == null || role == null) {
       return Center(child: Text(_message.isEmpty ? '暂无数据' : _message));
     }
-    final draft = _draftByRole[role.code]!;
+    final draft = _draftByRole[role.code];
+    if (draft == null) {
+      return const Center(child: Text('角色草稿异常'));
+    }
     final readonly = _isReadonly(role.code);
+
     final keyword = _searchController.text.trim().toLowerCase();
-    final pages =
-        catalog.pages
-            .where(
-              (item) =>
-                  keyword.isEmpty ||
-                  item.pageName.toLowerCase().contains(keyword) ||
-                  item.permissionCode.toLowerCase().contains(keyword),
-            )
-            .toList()
-          ..sort((a, b) => a.pageCode.compareTo(b.pageCode));
-    final features =
-        catalog.features
-            .where(
-              (item) =>
-                  keyword.isEmpty ||
-                  item.featureName.toLowerCase().contains(keyword) ||
-                  item.permissionCode.toLowerCase().contains(keyword),
-            )
-            .toList()
-          ..sort((a, b) => a.permissionCode.compareTo(b.permissionCode));
+    final capabilityPacks =
+        catalog.capabilityPacks.where((item) {
+          if (keyword.isEmpty) {
+            return true;
+          }
+          return item.capabilityName.toLowerCase().contains(keyword) ||
+              item.capabilityCode.toLowerCase().contains(keyword) ||
+              item.groupName.toLowerCase().contains(keyword) ||
+              item.pageName.toLowerCase().contains(keyword);
+        }).toList()..sort((a, b) {
+          final g = a.groupName.compareTo(b.groupName);
+          if (g != 0) {
+            return g;
+          }
+          return a.capabilityName.compareTo(b.capabilityName);
+        });
+
+    final roleTemplate = catalog.roleTemplates
+        .where((item) => item.roleCode == role.code)
+        .toList();
+    final hasTemplate = roleTemplate.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -961,7 +980,7 @@ class _FunctionPermissionConfigPageState
                     runSpacing: 8,
                     children: [
                       SizedBox(
-                        width: 250,
+                        width: 260,
                         child: DropdownButtonFormField<String>(
                           initialValue: _selectedModuleCode,
                           decoration: const InputDecoration(
@@ -981,13 +1000,13 @@ class _FunctionPermissionConfigPageState
                         ),
                       ),
                       SizedBox(
-                        width: 320,
+                        width: 340,
                         child: TextField(
                           controller: _searchController,
                           decoration: const InputDecoration(
                             isDense: true,
                             border: OutlineInputBorder(),
-                            hintText: '搜索页面/功能链',
+                            hintText: '搜索能力包名称 / 分组 / code',
                             prefixIcon: Icon(Icons.search),
                           ),
                         ),
@@ -1012,7 +1031,9 @@ class _FunctionPermissionConfigPageState
                             : () {
                                 final saved =
                                     _lastSavedByModule[_selectedModuleCode];
-                                if (saved == null) return;
+                                if (saved == null) {
+                                  return;
+                                }
                                 setState(() {
                                   _activePreview = saved;
                                   _showPreview = true;
@@ -1033,6 +1054,17 @@ class _FunctionPermissionConfigPageState
                             : _rollbackLastSave,
                         icon: const Icon(Icons.restore),
                         label: const Text('回退上次保存'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _saving || readonly || !hasTemplate
+                            ? null
+                            : () => _applyRoleTemplate(
+                                role: role,
+                                draft: draft,
+                                catalog: catalog,
+                              ),
+                        icon: const Icon(Icons.auto_fix_high),
+                        label: const Text('套用岗位模板'),
                       ),
                       FilledButton.icon(
                         onPressed: _saving || !_hasDirty ? null : _save,
@@ -1066,23 +1098,22 @@ class _FunctionPermissionConfigPageState
                         child: _buildRoleSelectorCard(role),
                       ),
                       const SizedBox(height: 8),
-                      SizedBox(
-                        height: 320,
-                        child: _buildModuleAndPagesCard(
+                      Expanded(
+                        child: _buildCapabilityCard(
                           role: role,
                           draft: draft,
                           readonly: readonly,
-                          pages: pages,
+                          catalog: catalog,
+                          capabilityPacks: capabilityPacks,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Expanded(
-                        child: _buildFeaturesCard(
+                      SizedBox(
+                        height: 220,
+                        child: _buildAdvancedPanel(
                           role: role,
-                          catalog: catalog,
                           draft: draft,
-                          readonly: readonly,
-                          features: features,
+                          catalog: catalog,
                         ),
                       ),
                     ],
@@ -1090,35 +1121,30 @@ class _FunctionPermissionConfigPageState
                 }
                 return Row(
                   children: [
-                    SizedBox(
-                      width: 360,
+                    SizedBox(width: 340, child: _buildRoleSelectorCard(role)),
+                    const SizedBox(width: 8),
+                    Expanded(
                       child: Column(
                         children: [
                           Expanded(
-                            flex: 5,
-                            child: _buildRoleSelectorCard(role),
-                          ),
-                          const SizedBox(height: 8),
-                          Expanded(
-                            flex: 7,
-                            child: _buildModuleAndPagesCard(
+                            child: _buildCapabilityCard(
                               role: role,
                               draft: draft,
                               readonly: readonly,
-                              pages: pages,
+                              catalog: catalog,
+                              capabilityPacks: capabilityPacks,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 220,
+                            child: _buildAdvancedPanel(
+                              role: role,
+                              draft: draft,
+                              catalog: catalog,
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildFeaturesCard(
-                        role: role,
-                        catalog: catalog,
-                        draft: draft,
-                        readonly: readonly,
-                        features: features,
                       ),
                     ),
                   ],

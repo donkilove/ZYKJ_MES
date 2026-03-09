@@ -25,7 +25,13 @@ from app.core.authz_hierarchy_catalog import (
     MODULE_NAME_BY_CODE,
     module_permission_code,
 )
-from app.core.rbac import ROLE_DEFINITIONS, ROLE_SYSTEM_ADMIN
+from app.core.rbac import (
+    ROLE_DEFINITIONS,
+    ROLE_OPERATOR,
+    ROLE_PRODUCTION_ADMIN,
+    ROLE_QUALITY_ADMIN,
+    ROLE_SYSTEM_ADMIN,
+)
 from app.models.permission_catalog import PermissionCatalog
 from app.models.role import Role
 from app.models.role_permission_grant import RolePermissionGrant
@@ -33,6 +39,134 @@ from app.models.user import User
 
 
 ROLE_SORT_ORDER = {str(item["code"]): index for index, item in enumerate(ROLE_DEFINITIONS)}
+
+MODULE_NAME_FALLBACK_ZH_BY_CODE = {
+    "system": "系统管理",
+    "user": "用户管理",
+    "product": "产品管理",
+    "equipment": "设备管理",
+    "craft": "工艺管理",
+    "quality": "质量管理",
+    "production": "生产管理",
+}
+
+PAGE_NAME_FALLBACK_ZH_BY_CODE = {
+    "user": "用户模块",
+    "user_management": "用户管理",
+    "registration_approval": "注册审批",
+    "page_visibility_config": "页面可见性配置（旧）",
+    "function_permission_config": "功能权限配置",
+    "product": "产品模块",
+    "product_management": "产品管理",
+    "product_parameter_management": "产品参数管理",
+    "product_parameter_query": "产品参数查询",
+    "equipment": "设备模块",
+    "equipment_ledger": "设备台账",
+    "maintenance_item": "保养项目",
+    "maintenance_plan": "保养计划",
+    "maintenance_execution": "保养执行",
+    "maintenance_record": "保养记录",
+    "production": "生产模块",
+    "production_order_management": "订单管理",
+    "production_order_query": "订单查询",
+    "production_assist_approval": "代班记录",
+    "production_data_query": "生产数据",
+    "production_scrap_statistics": "报废统计",
+    "production_repair_orders": "维修订单",
+    "quality": "质量模块",
+    "first_article_management": "每日首件",
+    "quality_data_query": "质量数据",
+    "craft": "工艺模块",
+    "process_management": "工段工序管理",
+    "production_process_config": "生产工序配置",
+    "craft_kanban": "工艺看板",
+}
+
+CAPABILITY_NAME_FALLBACK_ZH_BY_CODE = {
+    "feature.system.permission_catalog.view": "查看权限目录",
+    "feature.system.role_permissions.manage": "管理功能权限配置",
+    "feature.system.page_visibility_legacy.manage": "管理页面可见性（旧）",
+    "feature.user.user_management.view": "查看用户与角色信息",
+    "feature.user.user_management.manage": "维护用户信息",
+    "feature.user.registration_approval.review": "处理注册审批",
+    "feature.product.catalog.read": "查看产品目录",
+    "feature.product.product_management.manage": "维护产品主数据",
+    "feature.product.version_analysis.view": "查看产品版本与影响分析",
+    "feature.product.parameters.view": "查看产品参数",
+    "feature.product.parameters.edit": "编辑产品参数",
+    "feature.equipment.ledger.manage": "维护设备台账",
+    "feature.equipment.items.manage": "维护保养项目",
+    "feature.equipment.plans.manage": "维护保养计划",
+    "feature.equipment.executions.operate": "执行保养任务",
+    "feature.equipment.records.view": "查看保养记录",
+    "feature.craft.process_basics.view": "查看工段工序",
+    "feature.craft.process_basics.manage": "维护工段工序",
+    "feature.craft.process_templates.view": "查看工艺模板与系统母版",
+    "feature.craft.process_templates.manage": "维护工艺模板与系统母版",
+    "feature.craft.kanban.view": "查看工艺看板",
+    "feature.quality.first_articles.view": "查看每日首件",
+    "feature.quality.stats.view": "查看质量统计",
+    "feature.production.order_management.manage": "维护生产订单",
+    "feature.production.pipeline_mode.manage": "维护并行生产模式",
+    "feature.production.order_query.execute": "执行首件与报工",
+    "feature.production.order_query.proxy": "代理视角查看工单",
+    "feature.production.assist.launch": "发起代班",
+    "feature.production.assist.records.view": "查看代班记录",
+    "feature.production.data_query.view": "查看生产数据三视图",
+    "feature.production.data_export.use": "导出生产手动筛选数据",
+    "feature.production.scrap_statistics.view": "查看报废统计",
+    "feature.production.scrap_export.use": "导出报废统计",
+    "feature.production.repair_orders.manage": "处理维修订单",
+    "feature.production.repair_orders.export": "导出维修订单",
+    "feature.production.repair_orders.create_manual": "手工送修建单",
+}
+
+CAPABILITY_GROUP_META_BY_CODE = {
+    "feature.system.permission_catalog.view": ("system.catalog", "权限目录", "查看权限目录与个人权限集合"),
+    "feature.system.role_permissions.manage": (
+        "system.permission_config",
+        "功能权限配置",
+        "维护角色的功能权限与配置",
+    ),
+    "feature.system.page_visibility_legacy.manage": (
+        "system.legacy_visibility",
+        "兼容入口",
+        "兼容旧页面可见性配置（仅兼容）",
+    ),
+    "feature.user.user_management.view": ("user.accounts", "用户管理", "查看用户、角色和工序关联"),
+    "feature.user.user_management.manage": ("user.accounts", "用户管理", "创建、编辑、删除用户"),
+    "feature.user.registration_approval.review": ("user.registration", "注册审批", "处理注册申请"),
+    "feature.product.catalog.read": ("product.catalog", "产品目录", "查看产品列表"),
+    "feature.product.product_management.manage": ("product.catalog", "产品目录", "维护产品主数据"),
+    "feature.product.version_analysis.view": ("product.version", "版本分析", "查看版本与影响分析"),
+    "feature.product.parameters.view": ("product.parameters", "产品参数", "查看产品参数与历史"),
+    "feature.product.parameters.edit": ("product.parameters", "产品参数", "编辑产品参数"),
+    "feature.equipment.ledger.manage": ("equipment.ledger", "设备台账", "维护设备台账信息"),
+    "feature.equipment.items.manage": ("equipment.maintenance", "保养配置", "维护保养项目"),
+    "feature.equipment.plans.manage": ("equipment.maintenance", "保养配置", "维护保养计划"),
+    "feature.equipment.executions.operate": ("equipment.execution", "保养执行", "开始与完成保养任务"),
+    "feature.equipment.records.view": ("equipment.execution", "保养执行", "查看保养记录"),
+    "feature.craft.process_basics.view": ("craft.process", "工段工序", "查看工段与工序"),
+    "feature.craft.process_basics.manage": ("craft.process", "工段工序", "维护工段与工序"),
+    "feature.craft.process_templates.view": ("craft.template", "工艺模板", "查看工艺模板与系统母版"),
+    "feature.craft.process_templates.manage": ("craft.template", "工艺模板", "维护工艺模板与系统母版"),
+    "feature.craft.kanban.view": ("craft.kanban", "工艺看板", "查看工艺看板"),
+    "feature.quality.first_articles.view": ("quality.first_article", "每日首件", "查看每日首件记录"),
+    "feature.quality.stats.view": ("quality.stats", "质量统计", "查看质量统计数据"),
+    "feature.production.order_management.manage": ("production.orders", "订单管理", "创建、编辑、删除、结束订单"),
+    "feature.production.pipeline_mode.manage": ("production.orders", "订单管理", "设置并行生产模式"),
+    "feature.production.order_query.execute": ("production.execution", "生产执行", "执行首件与报工"),
+    "feature.production.order_query.proxy": ("production.execution", "生产执行", "代理/代班视角查询"),
+    "feature.production.assist.launch": ("production.assist", "代班", "发起代班授权"),
+    "feature.production.assist.records.view": ("production.assist", "代班", "查看代班记录"),
+    "feature.production.data_query.view": ("production.data", "生产数据", "查看今日实时、未完工、手动筛选"),
+    "feature.production.data_export.use": ("production.data", "生产数据", "导出手动筛选数据"),
+    "feature.production.scrap_statistics.view": ("production.repair_scrap", "维修与报废", "查看报废统计"),
+    "feature.production.scrap_export.use": ("production.repair_scrap", "维修与报废", "导出报废统计"),
+    "feature.production.repair_orders.manage": ("production.repair_scrap", "维修与报废", "处理维修单闭环"),
+    "feature.production.repair_orders.export": ("production.repair_scrap", "维修与报废", "导出维修订单"),
+    "feature.production.repair_orders.create_manual": ("production.repair_scrap", "维修与报废", "手工送修建单"),
+}
 
 
 def _ensure_role_rows(db: Session) -> None:
@@ -743,6 +877,202 @@ def _module_permission_catalog_rows(db: Session) -> list[PermissionCatalog]:
     return [row for row in rows if row.resource_type == AUTHZ_RESOURCE_MODULE]
 
 
+def _module_display_name(module_code: str) -> str:
+    from_catalog = MODULE_NAME_BY_CODE.get(module_code)
+    if from_catalog and from_catalog.strip():
+        fallback = MODULE_NAME_FALLBACK_ZH_BY_CODE.get(module_code)
+        if fallback:
+            return fallback
+        return from_catalog
+    return MODULE_NAME_FALLBACK_ZH_BY_CODE.get(module_code, module_code)
+
+
+def _page_name_by_code() -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for page_code, page_name, _, _ in PAGE_DEFINITIONS:
+        fallback = PAGE_NAME_FALLBACK_ZH_BY_CODE.get(page_code)
+        if fallback:
+            mapping[page_code] = fallback
+            continue
+        mapping[page_code] = page_name
+    return mapping
+
+
+def _capability_name(*, capability_code: str, raw_name: str) -> str:
+    fallback = CAPABILITY_NAME_FALLBACK_ZH_BY_CODE.get(capability_code)
+    if fallback:
+        return fallback
+    if raw_name.strip():
+        return raw_name
+    return capability_code
+
+
+def _capability_group_meta(
+    *,
+    capability_code: str,
+    module_code: str,
+    page_code: str,
+) -> tuple[str, str, str]:
+    explicit = CAPABILITY_GROUP_META_BY_CODE.get(capability_code)
+    if explicit is not None:
+        return explicit
+    page_name = _page_name_by_code().get(page_code, page_code)
+    return (f"{module_code}.{page_code}", page_name, f"{page_name}相关能力")
+
+
+def _capability_items_for_module(module_code: str) -> list[dict[str, object]]:
+    page_name_map = _page_name_by_code()
+    items: list[dict[str, object]] = []
+    for feature in FEATURE_DEFINITIONS:
+        if feature.module_code != module_code:
+            continue
+        group_code, group_name, description = _capability_group_meta(
+            capability_code=feature.permission_code,
+            module_code=module_code,
+            page_code=feature.page_code,
+        )
+        items.append(
+            {
+                "capability_code": feature.permission_code,
+                "capability_name": _capability_name(
+                    capability_code=feature.permission_code,
+                    raw_name=feature.permission_name,
+                ),
+                "group_code": group_code,
+                "group_name": group_name,
+                "page_code": feature.page_code,
+                "page_name": page_name_map.get(feature.page_code, feature.page_code),
+                "description": description,
+                "dependency_capability_codes": list(feature.dependency_permission_codes),
+                "linked_action_permission_codes": list(feature.action_permission_codes),
+            }
+        )
+    items.sort(key=lambda item: str(item["capability_code"]))
+    return items
+
+
+def _capability_permission_codes_for_module(module_code: str) -> set[str]:
+    return {
+        feature.permission_code
+        for feature in FEATURE_DEFINITIONS
+        if feature.module_code == module_code
+    }
+
+
+def _dependency_capability_codes_for_module(module_code: str) -> set[str]:
+    module_capability_codes = _capability_permission_codes_for_module(module_code)
+    dependency_map = _dependency_codes_by_permission_code()
+    discovered: set[str] = set()
+    pending = list(module_capability_codes)
+    while pending:
+        code = pending.pop()
+        for dependency_code in dependency_map.get(code, set()):
+            if dependency_code in discovered:
+                continue
+            discovered.add(dependency_code)
+            pending.append(dependency_code)
+    return discovered.difference(module_capability_codes)
+
+
+def _normalize_capability_codes_with_dependencies(
+    *,
+    requested_codes: set[str],
+) -> tuple[set[str], list[str]]:
+    dependency_map = _dependency_codes_by_permission_code()
+    all_feature_codes = {item.permission_code for item in FEATURE_DEFINITIONS}
+    normalized = {code for code in requested_codes if code in all_feature_codes}
+    auto_linked: set[str] = set()
+
+    changed = True
+    while changed:
+        changed = False
+        for code in list(normalized):
+            for dependency_code in dependency_map.get(code, set()):
+                if dependency_code not in all_feature_codes:
+                    continue
+                if dependency_code in normalized:
+                    continue
+                normalized.add(dependency_code)
+                auto_linked.add(dependency_code)
+                changed = True
+    return normalized, sorted(auto_linked)
+
+
+def _role_template_capability_codes(
+    *,
+    module_code: str,
+    role_code: str,
+    capability_codes: set[str],
+) -> list[str]:
+    if role_code == ROLE_SYSTEM_ADMIN:
+        return sorted(capability_codes)
+
+    if role_code == ROLE_PRODUCTION_ADMIN:
+        return sorted(capability_codes)
+
+    if role_code == ROLE_QUALITY_ADMIN:
+        if module_code == "quality":
+            return sorted(capability_codes)
+        if module_code == "production":
+            preferred = {
+                "feature.production.data_query.view",
+                "feature.production.scrap_statistics.view",
+                "feature.production.repair_orders.manage",
+                "feature.production.assist.records.view",
+            }
+            return sorted(capability_codes.intersection(preferred))
+        preferred = {
+            code for code in capability_codes if code.endswith(".view") or code.endswith(".read")
+        }
+        return sorted(preferred)
+
+    if role_code == ROLE_OPERATOR:
+        preferred_by_module = {
+            "production": {
+                "feature.production.order_query.execute",
+                "feature.production.assist.launch",
+                "feature.production.repair_orders.create_manual",
+            },
+            "equipment": {"feature.equipment.executions.operate"},
+            "quality": {"feature.quality.first_articles.view"},
+        }
+        return sorted(capability_codes.intersection(preferred_by_module.get(module_code, set())))
+
+    return []
+
+
+def _role_template_description(role_code: str) -> str:
+    if role_code == ROLE_SYSTEM_ADMIN:
+        return "系统管理员固定全权限，仅展示模板结果。"
+    if role_code == ROLE_PRODUCTION_ADMIN:
+        return "推荐授予当前模块全部能力。"
+    if role_code == ROLE_QUALITY_ADMIN:
+        return "推荐授予质量相关与统计分析能力。"
+    if role_code == ROLE_OPERATOR:
+        return "推荐授予执行链路相关能力。"
+    return "推荐模板"
+
+
+def _capability_role_template_items(module_code: str) -> list[dict[str, object]]:
+    role_items: list[dict[str, object]] = []
+    capability_codes = _capability_permission_codes_for_module(module_code)
+    for role in ROLE_DEFINITIONS:
+        role_code = str(role["code"])
+        role_items.append(
+            {
+                "role_code": role_code,
+                "role_name": str(role["name"]),
+                "capability_codes": _role_template_capability_codes(
+                    module_code=module_code,
+                    role_code=role_code,
+                    capability_codes=capability_codes,
+                ),
+                "description": _role_template_description(role_code),
+            }
+        )
+    return role_items
+
+
 def _page_items_for_module(module_code: str) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
     for page_code, page_name, page_module_code, parent_code in PAGE_DEFINITIONS:
@@ -1177,6 +1507,367 @@ def preview_permission_hierarchy(
     return {
         "module_code": normalized_module,
         "role_results": role_results,
+    }
+
+
+def get_capability_pack_catalog(
+    db: Session,
+    *,
+    module_code: str,
+) -> dict[str, object]:
+    normalized_module = _normalize_module_code(module_code)
+    ensure_authz_defaults(db)
+    available_module_codes = sorted(
+        {
+            row.module_code
+            for row in _module_permission_catalog_rows(db)
+            if row.module_code.strip()
+        }
+    )
+    if normalized_module not in available_module_codes:
+        raise ValueError(f"module_code is invalid: {normalized_module}")
+
+    return {
+        "module_code": normalized_module,
+        "module_codes": available_module_codes,
+        "module_name": _module_display_name(normalized_module),
+        "module_permission_code": MODULE_PERMISSION_BY_MODULE_CODE.get(
+            normalized_module,
+            module_permission_code(normalized_module),
+        ),
+        "capability_packs": _capability_items_for_module(normalized_module),
+        "role_templates": _capability_role_template_items(normalized_module),
+    }
+
+
+def get_capability_pack_role_config(
+    db: Session,
+    *,
+    role_code: str,
+    module_code: str,
+) -> dict[str, object]:
+    config = get_permission_hierarchy_role_config(
+        db,
+        role_code=role_code,
+        module_code=module_code,
+    )
+    module_capability_codes = _capability_permission_codes_for_module(config["module_code"])
+    granted_capability_codes = sorted(
+        set(config["granted_feature_permission_codes"]).intersection(module_capability_codes)
+    )
+    effective_capability_codes = sorted(
+        set(config["effective_feature_permission_codes"]).intersection(module_capability_codes)
+    )
+    return {
+        "role_code": config["role_code"],
+        "role_name": config["role_name"],
+        "readonly": config["readonly"],
+        "module_code": config["module_code"],
+        "module_enabled": config["module_enabled"],
+        "granted_capability_codes": granted_capability_codes,
+        "effective_capability_codes": effective_capability_codes,
+        "effective_page_permission_codes": config["effective_page_permission_codes"],
+        "auto_linked_dependencies": [],
+    }
+
+
+def _capability_request_to_granted_codes(
+    *,
+    module_code: str,
+    module_enabled: bool,
+    capability_codes: set[str],
+) -> tuple[set[str], list[str]]:
+    normalized_capabilities, auto_linked_dependencies = _normalize_capability_codes_with_dependencies(
+        requested_codes=capability_codes
+    )
+    requested_codes = set(normalized_capabilities)
+    if module_enabled:
+        requested_codes.add(
+            MODULE_PERMISSION_BY_MODULE_CODE.get(
+                module_code,
+                module_permission_code(module_code),
+            )
+        )
+
+    for capability_code in list(normalized_capabilities):
+        feature = FEATURE_BY_PERMISSION_CODE.get(capability_code)
+        if feature is None:
+            continue
+        page_permission_code = PAGE_PERMISSION_BY_PAGE_CODE.get(feature.page_code)
+        if page_permission_code:
+            requested_codes.add(page_permission_code)
+        if feature.module_code != module_code:
+            requested_codes.add(
+                MODULE_PERMISSION_BY_MODULE_CODE.get(
+                    feature.module_code,
+                    module_permission_code(feature.module_code),
+                )
+            )
+
+    return requested_codes, auto_linked_dependencies
+
+
+def update_capability_pack_role_config(
+    db: Session,
+    *,
+    role_code: str,
+    module_code: str,
+    module_enabled: bool,
+    capability_codes: list[str],
+    dry_run: bool = False,
+) -> dict[str, object]:
+    ensure_authz_defaults(db)
+    role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
+    if role_row is None:
+        raise ValueError(f"Role not found: {role_code}")
+
+    normalized_module = _normalize_module_code(module_code)
+    module_capability_codes = _capability_permission_codes_for_module(normalized_module)
+    requested_capability_codes = {code.strip() for code in capability_codes if code and code.strip()}
+    invalid_codes = sorted(requested_capability_codes.difference(module_capability_codes))
+    if invalid_codes:
+        raise ValueError(f"invalid capability codes: {', '.join(invalid_codes)}")
+
+    if role_row.code == ROLE_SYSTEM_ADMIN:
+        config = get_capability_pack_role_config(
+            db,
+            role_code=role_row.code,
+            module_code=normalized_module,
+        )
+        return {
+            "role_code": role_row.code,
+            "role_name": role_row.name,
+            "readonly": True,
+            "ignored_input": True,
+            "module_code": normalized_module,
+            "before_capability_codes": config["granted_capability_codes"],
+            "after_capability_codes": config["granted_capability_codes"],
+            "added_capability_codes": [],
+            "removed_capability_codes": [],
+            "auto_linked_dependencies": [],
+            "effective_capability_codes": config["effective_capability_codes"],
+            "effective_page_permission_codes": config["effective_page_permission_codes"],
+            "updated_count": 0,
+        }
+
+    all_hierarchy_codes = _all_hierarchy_permission_codes()
+    before_granted_codes = _role_granted_codes_for_hierarchy(
+        db,
+        role_code=role_code,
+        valid_codes=all_hierarchy_codes,
+    )
+    requested_codes, auto_linked_dependencies = _capability_request_to_granted_codes(
+        module_code=normalized_module,
+        module_enabled=module_enabled,
+        capability_codes=requested_capability_codes,
+    )
+
+    module_hierarchy_codes = set(_hierarchy_permission_codes_for_module(normalized_module)["page_permission_codes"])
+    module_hierarchy_codes.update(
+        set(_hierarchy_permission_codes_for_module(normalized_module)["feature_permission_codes"])
+    )
+    module_hierarchy_codes.add(
+        str(_hierarchy_permission_codes_for_module(normalized_module)["module_permission_code"])
+    )
+
+    after_granted_codes = set(before_granted_codes)
+    after_granted_codes.difference_update(module_hierarchy_codes)
+    after_granted_codes.update(requested_codes)
+
+    row_by_code = _catalog_rows_by_code(db)
+    before_effective_codes = _effective_permission_codes_from_granted(
+        granted_codes=before_granted_codes,
+        row_by_code=row_by_code,
+    )
+    after_effective_codes = _effective_permission_codes_from_granted(
+        granted_codes=after_granted_codes,
+        row_by_code=row_by_code,
+    )
+
+    changed_codes = sorted(before_granted_codes.symmetric_difference(after_granted_codes))
+    updated_count = 0
+    if not dry_run and changed_codes:
+        grant_rows = db.execute(
+            select(RolePermissionGrant).where(
+                RolePermissionGrant.role_code == role_code,
+                RolePermissionGrant.permission_code.in_(changed_codes),
+            )
+        ).scalars().all()
+        row_by_permission = {row.permission_code: row for row in grant_rows}
+        for permission_code in changed_codes:
+            should_grant = permission_code in after_granted_codes
+            row = row_by_permission.get(permission_code)
+            if row is None:
+                db.add(
+                    RolePermissionGrant(
+                        role_code=role_code,
+                        permission_code=permission_code,
+                        granted=should_grant,
+                    )
+                )
+                updated_count += 1
+                continue
+            if bool(row.granted) != should_grant:
+                row.granted = should_grant
+                updated_count += 1
+        if updated_count > 0:
+            db.commit()
+        else:
+            db.rollback()
+    else:
+        updated_count = len(changed_codes)
+        db.rollback()
+
+    page_codes_in_module = set(_hierarchy_permission_codes_for_module(normalized_module)["page_permission_codes"])
+    before_capabilities = sorted(before_granted_codes.intersection(module_capability_codes))
+    after_capabilities = sorted(after_granted_codes.intersection(module_capability_codes))
+    return {
+        "role_code": role_row.code,
+        "role_name": role_row.name,
+        "readonly": False,
+        "ignored_input": False,
+        "module_code": normalized_module,
+        "before_capability_codes": before_capabilities,
+        "after_capability_codes": after_capabilities,
+        "added_capability_codes": sorted(set(after_capabilities).difference(before_capabilities)),
+        "removed_capability_codes": sorted(set(before_capabilities).difference(after_capabilities)),
+        "auto_linked_dependencies": auto_linked_dependencies,
+        "effective_capability_codes": sorted(after_effective_codes.intersection(module_capability_codes)),
+        "effective_page_permission_codes": sorted(after_effective_codes.intersection(page_codes_in_module)),
+        "updated_count": updated_count,
+    }
+
+
+def preview_capability_packs(
+    db: Session,
+    *,
+    module_code: str,
+    role_items: list[dict[str, object]],
+) -> dict[str, object]:
+    ensure_authz_defaults(db)
+    normalized_module = _normalize_module_code(module_code)
+    if not role_items:
+        return {"module_code": normalized_module, "role_results": []}
+
+    role_rows = db.execute(select(Role)).scalars().all()
+    role_name_by_code = {row.code: row.name for row in role_rows}
+    visited_role_codes: set[str] = set()
+    results: list[dict[str, object]] = []
+    for item in role_items:
+        role_code = str(item.get("role_code", "")).strip()
+        if not role_code:
+            raise ValueError("role_code is required")
+        if role_code in visited_role_codes:
+            raise ValueError(f"duplicate role_code: {role_code}")
+        if role_code not in role_name_by_code:
+            raise ValueError(f"Role not found: {role_code}")
+        visited_role_codes.add(role_code)
+        raw_capabilities = item.get("capability_codes")
+        capability_codes = [str(code) for code in raw_capabilities] if isinstance(raw_capabilities, list) else []
+        result = update_capability_pack_role_config(
+            db,
+            role_code=role_code,
+            module_code=normalized_module,
+            module_enabled=bool(item.get("module_enabled", False)),
+            capability_codes=capability_codes,
+            dry_run=True,
+        )
+        results.append(result)
+
+    db.rollback()
+    results.sort(
+        key=lambda item: (
+            ROLE_SORT_ORDER.get(str(item["role_code"]), 9999),
+            str(item["role_code"]),
+        )
+    )
+    return {"module_code": normalized_module, "role_results": results}
+
+
+def get_capability_pack_effective_explain(
+    db: Session,
+    *,
+    role_code: str,
+    module_code: str,
+) -> dict[str, object]:
+    normalized_module = _normalize_module_code(module_code)
+    ensure_authz_defaults(db)
+    role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
+    if role_row is None:
+        raise ValueError(f"Role not found: {role_code}")
+
+    hierarchy_codes = _hierarchy_permission_codes_for_module(normalized_module)
+    module_permission = str(hierarchy_codes["module_permission_code"])
+    module_capability_codes = set(hierarchy_codes["feature_permission_codes"])
+    module_page_codes = set(hierarchy_codes["page_permission_codes"])
+    all_hierarchy_codes = _all_hierarchy_permission_codes()
+    granted_codes = _role_granted_codes_for_hierarchy(
+        db,
+        role_code=role_code,
+        valid_codes=all_hierarchy_codes,
+    )
+    row_by_code = _catalog_rows_by_code(db)
+    effective_codes = _effective_permission_codes_from_granted(
+        granted_codes=granted_codes,
+        row_by_code=row_by_code,
+    )
+    module_enabled = module_permission in granted_codes
+    capability_items = _capability_items_for_module(normalized_module)
+
+    capability_reasons: list[dict[str, object]] = []
+    for item in capability_items:
+        capability_code = str(item["capability_code"])
+        capability_name = str(item["capability_name"])
+        available = capability_code in effective_codes
+        reason_codes: list[str] = []
+        reason_messages: list[str] = []
+
+        if capability_code not in granted_codes:
+            reason_codes.append("capability_not_granted")
+            reason_messages.append("未开启该能力")
+        if module_permission not in effective_codes:
+            reason_codes.append("module_disabled")
+            reason_messages.append("模块入口未开启")
+
+        feature = FEATURE_BY_PERMISSION_CODE.get(capability_code)
+        page_permission = PAGE_PERMISSION_BY_PAGE_CODE.get(feature.page_code) if feature else None
+        if page_permission and page_permission not in effective_codes:
+            reason_codes.append("page_disabled")
+            reason_messages.append("入口页面未开启")
+
+        if feature is not None:
+            for dependency_code in feature.dependency_permission_codes:
+                if dependency_code in effective_codes:
+                    continue
+                reason_codes.append("dependency_missing")
+                dep_name = _capability_name(
+                    capability_code=dependency_code,
+                    raw_name=(
+                        FEATURE_BY_PERMISSION_CODE[dependency_code].permission_name
+                        if dependency_code in FEATURE_BY_PERMISSION_CODE
+                        else dependency_code
+                    ),
+                )
+                reason_messages.append(f"依赖未满足：{dep_name}")
+
+        capability_reasons.append(
+            {
+                "capability_code": capability_code,
+                "capability_name": capability_name,
+                "available": available,
+                "reason_codes": reason_codes,
+                "reason_messages": reason_messages,
+            }
+        )
+
+    return {
+        "role_code": role_row.code,
+        "role_name": role_row.name,
+        "module_code": normalized_module,
+        "module_enabled": module_enabled,
+        "effective_page_permission_codes": sorted(effective_codes.intersection(module_page_codes)),
+        "effective_capability_codes": sorted(effective_codes.intersection(module_capability_codes)),
+        "capability_items": capability_reasons,
     }
 
 

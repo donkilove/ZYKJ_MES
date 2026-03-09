@@ -227,3 +227,74 @@ def test_authz_hierarchy_endpoints(db, factory) -> None:
     me_prod = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
     assert MODULE_PERMISSION_BY_MODULE_CODE["production"] in me_prod.data.permission_codes
     assert PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW in me_prod.data.permission_codes
+
+
+def test_authz_capability_pack_endpoints(db, factory) -> None:
+    factory.ensure_default_roles()
+    sys_admin = factory.user(username="authz_capability_admin", role_codes=[ROLE_SYSTEM_ADMIN])
+    prod_admin = factory.user(username="authz_capability_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
+    db.commit()
+
+    catalog_resp = authz.get_capability_pack_catalog_api(
+        module="production",
+        db=db,
+        _=sys_admin,
+    )
+    assert catalog_resp.data.module_code == "production"
+    assert any(item.capability_code == "feature.production.order_query.execute" for item in catalog_resp.data.capability_packs)
+    assert any(item.role_code == ROLE_PRODUCTION_ADMIN for item in catalog_resp.data.role_templates)
+
+    role_config_resp = authz.get_capability_pack_role_config_api(
+        role_code=ROLE_PRODUCTION_ADMIN,
+        module="production",
+        db=db,
+        _=sys_admin,
+    )
+    assert role_config_resp.data.role_code == ROLE_PRODUCTION_ADMIN
+    assert role_config_resp.data.module_enabled is False
+
+    preview_resp = authz.preview_capability_packs_api(
+        authz.CapabilityPackPreviewRequest(
+            module_code="production",
+            role_items=[
+                {
+                    "role_code": ROLE_PRODUCTION_ADMIN,
+                    "module_enabled": True,
+                    "capability_codes": ["feature.production.order_query.execute"],
+                }
+            ],
+        ),
+        db=db,
+        _=sys_admin,
+    )
+    assert preview_resp.data.module_code == "production"
+    assert preview_resp.data.role_results[0].role_code == ROLE_PRODUCTION_ADMIN
+    assert "feature.production.order_query.execute" in preview_resp.data.role_results[0].after_capability_codes
+
+    update_resp = authz.put_capability_pack_role_config_api(
+        role_code=ROLE_PRODUCTION_ADMIN,
+        payload=authz.CapabilityPackRoleConfigUpdateRequest(
+            module_code="production",
+            module_enabled=True,
+            capability_codes=["feature.production.order_query.execute"],
+            dry_run=False,
+        ),
+        db=db,
+        _=sys_admin,
+    )
+    assert update_resp.data.role_code == ROLE_PRODUCTION_ADMIN
+    assert update_resp.data.updated_count >= 1
+    assert "feature.production.order_query.execute" in update_resp.data.after_capability_codes
+
+    effective_resp = authz.get_capability_pack_effective_api(
+        role_code=ROLE_PRODUCTION_ADMIN,
+        module="production",
+        db=db,
+        _=sys_admin,
+    )
+    assert effective_resp.data.role_code == ROLE_PRODUCTION_ADMIN
+    assert any(item.capability_code == "feature.production.order_query.execute" for item in effective_resp.data.capability_items)
+
+    me_prod = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
+    assert MODULE_PERMISSION_BY_MODULE_CODE["production"] in me_prod.data.permission_codes
+    assert PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW in me_prod.data.permission_codes
