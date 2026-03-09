@@ -186,14 +186,20 @@ class _ProductionPageState extends State<ProductionPage>
         return ProductionOrderManagementPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canCreateOrder: _hasPermission(ProductionPermissionCodes.ordersCreate),
-          canEditOrder: _hasPermission(ProductionPermissionCodes.ordersUpdate),
-          canDeleteOrder: _hasPermission(ProductionPermissionCodes.ordersDelete),
+          canCreateOrder: _hasPermission(
+            ProductionFeaturePermissionCodes.orderManagementManage,
+          ),
+          canEditOrder: _hasPermission(
+            ProductionFeaturePermissionCodes.orderManagementManage,
+          ),
+          canDeleteOrder: _hasPermission(
+            ProductionFeaturePermissionCodes.orderManagementManage,
+          ),
           canCompleteOrder: _hasPermission(
-            ProductionPermissionCodes.ordersComplete,
+            ProductionFeaturePermissionCodes.orderManagementManage,
           ),
           canUpdatePipelineMode: _hasPermission(
-            ProductionPermissionCodes.ordersPipelineUpdate,
+            ProductionFeaturePermissionCodes.pipelineModeManage,
           ),
         );
       case productionOrderQueryTabCode:
@@ -201,43 +207,55 @@ class _ProductionPageState extends State<ProductionPage>
           session: widget.session,
           onLogout: widget.onLogout,
           canFirstArticle: _hasPermission(
-            ProductionPermissionCodes.executionFirstArticle,
+            ProductionFeaturePermissionCodes.orderQueryExecute,
           ),
           canEndProduction: _hasPermission(
-            ProductionPermissionCodes.executionEndProduction,
+            ProductionFeaturePermissionCodes.orderQueryExecute,
           ),
           canCreateManualRepairOrder: _hasPermission(
-            ProductionPermissionCodes.repairCreateManual,
+            ProductionFeaturePermissionCodes.repairOrdersCreateManual,
           ),
           canCreateAssistAuthorization: _hasPermission(
-            ProductionPermissionCodes.assistCreate,
+            ProductionFeaturePermissionCodes.assistLaunch,
           ),
-          canProxyView: _hasPermission(ProductionPermissionCodes.myOrdersProxy),
+          canProxyView: _hasPermission(
+            ProductionFeaturePermissionCodes.orderQueryProxy,
+          ),
         );
       case productionAssistApprovalTabCode:
         return ProductionAssistApprovalPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canReview: _hasPermission(ProductionPermissionCodes.assistList),
+          canReview: _hasPermission(
+            ProductionFeaturePermissionCodes.assistRecordsView,
+          ),
         );
       case productionDataQueryTabCode:
         return ProductionDataPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canExport: _hasPermission(ProductionPermissionCodes.dataManualExport),
+          canExport: _hasPermission(
+            ProductionFeaturePermissionCodes.dataExportUse,
+          ),
         );
       case productionScrapStatisticsTabCode:
         return ProductionScrapStatisticsPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canExport: _hasPermission(ProductionPermissionCodes.scrapExport),
+          canExport: _hasPermission(
+            ProductionFeaturePermissionCodes.scrapExportUse,
+          ),
         );
       case productionRepairOrdersTabCode:
         return ProductionRepairOrdersPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canComplete: _hasPermission(ProductionPermissionCodes.repairComplete),
-          canExport: _hasPermission(ProductionPermissionCodes.repairExport),
+          canComplete: _hasPermission(
+            ProductionFeaturePermissionCodes.repairOrdersManage,
+          ),
+          canExport: _hasPermission(
+            ProductionFeaturePermissionCodes.repairOrdersExport,
+          ),
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));

@@ -95,6 +95,7 @@ void main() {
           body: ProductionScrapStatisticsPage(
             session: AppSession(baseUrl: '', accessToken: ''),
             onLogout: () {},
+            canExport: true,
             service: _FakeRepairAndScrapService(),
           ),
         ),
@@ -119,6 +120,7 @@ void main() {
             session: AppSession(baseUrl: '', accessToken: ''),
             onLogout: () {},
             canComplete: true,
+            canExport: true,
             service: _FakeRepairAndScrapService(),
           ),
         ),

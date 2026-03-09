@@ -110,25 +110,13 @@ class _CraftPageState extends State<CraftPage>
   }
 
   bool get _canWriteProcessBasics =>
-      _hasPermission(CraftPermissionCodes.stagesCreate) ||
-      _hasPermission(CraftPermissionCodes.stagesUpdate) ||
-      _hasPermission(CraftPermissionCodes.stagesDelete) ||
-      _hasPermission(CraftPermissionCodes.processesCreate) ||
-      _hasPermission(CraftPermissionCodes.processesUpdate) ||
-      _hasPermission(CraftPermissionCodes.processesDelete);
+      _hasPermission(CraftFeaturePermissionCodes.processBasicsManage);
 
   bool get _canManageTemplates =>
-      _hasPermission(CraftPermissionCodes.templatesCreate) ||
-      _hasPermission(CraftPermissionCodes.templatesUpdate) ||
-      _hasPermission(CraftPermissionCodes.templatesDelete) ||
-      _hasPermission(CraftPermissionCodes.templatesPublish) ||
-      _hasPermission(CraftPermissionCodes.templatesExport) ||
-      _hasPermission(CraftPermissionCodes.templatesImport) ||
-      _hasPermission(CraftPermissionCodes.templatesRollback);
+      _hasPermission(CraftFeaturePermissionCodes.processTemplatesManage);
 
   bool get _canManageSystemMasterTemplate =>
-      _hasPermission(CraftPermissionCodes.systemMasterTemplateCreate) ||
-      _hasPermission(CraftPermissionCodes.systemMasterTemplateUpdate);
+      _hasPermission(CraftFeaturePermissionCodes.processTemplatesManage);
 
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
     final visibleSet = tabCodes.toSet();

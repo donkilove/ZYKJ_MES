@@ -276,7 +276,7 @@ class _ProductionScrapStatisticsPageState
               SizedBox(
                 width: 140,
                 child: DropdownButtonFormField<String>(
-                  value: _progress,
+                  initialValue: _progress,
                   decoration: const InputDecoration(
                     labelText: '进度',
                     border: OutlineInputBorder(),

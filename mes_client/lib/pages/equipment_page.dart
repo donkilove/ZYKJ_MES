@@ -116,27 +116,16 @@ class _EquipmentPageState extends State<EquipmentPage>
   }
 
   bool get _canWriteLedger =>
-      _hasPermission(EquipmentPermissionCodes.ledgerCreate) ||
-      _hasPermission(EquipmentPermissionCodes.ledgerUpdate) ||
-      _hasPermission(EquipmentPermissionCodes.ledgerToggle) ||
-      _hasPermission(EquipmentPermissionCodes.ledgerDelete);
+      _hasPermission(EquipmentFeaturePermissionCodes.ledgerManage);
 
   bool get _canWriteItems =>
-      _hasPermission(EquipmentPermissionCodes.itemsCreate) ||
-      _hasPermission(EquipmentPermissionCodes.itemsUpdate) ||
-      _hasPermission(EquipmentPermissionCodes.itemsToggle) ||
-      _hasPermission(EquipmentPermissionCodes.itemsDelete);
+      _hasPermission(EquipmentFeaturePermissionCodes.itemsManage);
 
   bool get _canWritePlans =>
-      _hasPermission(EquipmentPermissionCodes.plansCreate) ||
-      _hasPermission(EquipmentPermissionCodes.plansUpdate) ||
-      _hasPermission(EquipmentPermissionCodes.plansToggle) ||
-      _hasPermission(EquipmentPermissionCodes.plansDelete) ||
-      _hasPermission(EquipmentPermissionCodes.plansGenerate);
+      _hasPermission(EquipmentFeaturePermissionCodes.plansManage);
 
   bool get _canExecute =>
-      _hasPermission(EquipmentPermissionCodes.executionsStart) ||
-      _hasPermission(EquipmentPermissionCodes.executionsComplete);
+      _hasPermission(EquipmentFeaturePermissionCodes.executionsOperate);
 
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
     final visibleSet = tabCodes.toSet();

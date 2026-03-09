@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
+import 'package:mes_client/models/authz_models.dart';
 import 'package:mes_client/services/api_exception.dart';
 import 'package:mes_client/services/authz_service.dart';
 
@@ -163,6 +164,192 @@ void main() {
               .having((e) => e.statusCode, 'statusCode', 400)
               .having((e) => e.message, 'message', 'module_code is invalid'),
         ),
+      );
+    });
+
+    test('loads and updates permission hierarchy endpoints', () async {
+      final server = await TestHttpServer.start({
+        'GET /authz/hierarchy/catalog': (request) {
+          expect(request.uri.queryParameters['module'], 'production');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'module_code': 'production',
+                'module_codes': ['production', 'system'],
+                'module_permission_code': 'module.production.access',
+                'module_name': '生产管理',
+                'pages': [
+                  {
+                    'page_code': 'production_order_management',
+                    'page_name': '订单管理',
+                    'permission_code': 'page.production_order_management.view',
+                    'parent_page_code': 'production',
+                  },
+                ],
+                'features': [
+                  {
+                    'feature_code': 'order_management.manage',
+                    'feature_name': '维护生产订单',
+                    'permission_code':
+                        'feature.production.order_management.manage',
+                    'page_permission_code':
+                        'page.production_order_management.view',
+                    'linked_action_permission_codes': [
+                      'production.orders.create',
+                    ],
+                    'dependency_permission_codes': [],
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'GET /authz/hierarchy/role-config': (request) {
+          expect(request.uri.queryParameters['role_code'], 'production_admin');
+          expect(request.uri.queryParameters['module'], 'production');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'role_code': 'production_admin',
+                'role_name': '生产管理员',
+                'readonly': false,
+                'module_code': 'production',
+                'module_enabled': true,
+                'granted_page_permission_codes': [
+                  'page.production_order_management.view',
+                ],
+                'granted_feature_permission_codes': [
+                  'feature.production.order_management.manage',
+                ],
+                'effective_page_permission_codes': [
+                  'page.production_order_management.view',
+                ],
+                'effective_feature_permission_codes': [
+                  'feature.production.order_management.manage',
+                ],
+              },
+            },
+          );
+        },
+        'PUT /authz/hierarchy/role-config/production_admin': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['module_code'], 'production');
+          expect(body['module_enabled'], true);
+          expect(
+            body['feature_permission_codes'],
+            contains('feature.production.order_management.manage'),
+          );
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'role_code': 'production_admin',
+                'role_name': '生产管理员',
+                'readonly': false,
+                'ignored_input': false,
+                'module_code': 'production',
+                'before_permission_codes': ['module.production.access'],
+                'after_permission_codes': [
+                  'module.production.access',
+                  'page.production_order_management.view',
+                  'feature.production.order_management.manage',
+                ],
+                'added_permission_codes': [
+                  'page.production_order_management.view',
+                ],
+                'removed_permission_codes': [],
+                'auto_linked_dependencies': [],
+                'effective_page_permission_codes': [
+                  'page.production_order_management.view',
+                ],
+                'effective_feature_permission_codes': [
+                  'feature.production.order_management.manage',
+                ],
+                'updated_count': 1,
+                'dry_run': false,
+              },
+            },
+          );
+        },
+        'POST /authz/hierarchy/preview': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['module_code'], 'production');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'module_code': 'production',
+                'role_results': [
+                  {
+                    'role_code': 'production_admin',
+                    'role_name': '生产管理员',
+                    'readonly': false,
+                    'ignored_input': false,
+                    'module_code': 'production',
+                    'before_permission_codes': ['module.production.access'],
+                    'after_permission_codes': [
+                      'module.production.access',
+                      'page.production_order_management.view',
+                    ],
+                    'added_permission_codes': [
+                      'page.production_order_management.view',
+                    ],
+                    'removed_permission_codes': [],
+                    'auto_linked_dependencies': [],
+                    'effective_page_permission_codes': [
+                      'page.production_order_management.view',
+                    ],
+                    'effective_feature_permission_codes': [],
+                    'updated_count': 1,
+                    'dry_run': true,
+                  },
+                ],
+              },
+            },
+          );
+        },
+      });
+      addTearDown(server.close);
+
+      final service = AuthzService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-abc'),
+      );
+
+      final catalog = await service.loadPermissionHierarchyCatalog(
+        moduleCode: 'production',
+      );
+      final roleConfig = await service.loadPermissionHierarchyRoleConfig(
+        roleCode: 'production_admin',
+        moduleCode: 'production',
+      );
+      final preview = await service.previewPermissionHierarchy(
+        moduleCode: 'production',
+        roleItems: const [
+          PermissionHierarchyRoleDraftItem(
+            roleCode: 'production_admin',
+            moduleEnabled: true,
+            pagePermissionCodes: ['page.production_order_management.view'],
+            featurePermissionCodes: [],
+          ),
+        ],
+      );
+      final updated = await service.updatePermissionHierarchyRoleConfig(
+        roleCode: 'production_admin',
+        moduleCode: 'production',
+        moduleEnabled: true,
+        pagePermissionCodes: ['page.production_order_management.view'],
+        featurePermissionCodes: ['feature.production.order_management.manage'],
+      );
+
+      expect(catalog.modulePermissionCode, 'module.production.access');
+      expect(roleConfig.moduleEnabled, isTrue);
+      expect(preview.roleResults, hasLength(1));
+      expect(updated.updatedCount, 1);
+      expect(
+        updated.afterPermissionCodes,
+        contains('feature.production.order_management.manage'),
       );
     });
   });

@@ -44,7 +44,6 @@ def get_my_page_visibility(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[PageVisibilityMeResult]:
-    ensure_visibility_defaults(db)
     role_codes = [role.code for role in current_user.roles]
     sidebar_codes, tab_codes_by_parent = get_user_visible_pages(db, role_codes)
     return success_response(

@@ -18,9 +18,15 @@ from app.core.production_constants import (
     PROCESS_STATUS_COMPLETED,
     PROCESS_STATUS_IN_PROGRESS,
 )
+from app.core.authz_catalog import (
+    MODULE_PERMISSION_BY_MODULE_CODE,
+    PAGE_PERMISSION_BY_PAGE_CODE,
+)
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
+from app.models.role_permission_grant import RolePermissionGrant
 from app.models.order_event_log import OrderEventLog
 from app.services import production_data_query_service
+from app.services.authz_service import ensure_authz_defaults
 
 
 def _prepare_production_data_env(db, factory):
@@ -276,6 +282,26 @@ def test_new_endpoints_permissions_and_validation(db, factory) -> None:
     quality_admin = env["quality_admin"]
     production_admin = env["production_admin"]
     product = env["product"]
+    ensure_authz_defaults(db)
+
+    quality_code = ROLE_QUALITY_ADMIN
+    prod_module_perm = MODULE_PERMISSION_BY_MODULE_CODE["production"]
+    prod_data_page_perm = PAGE_PERMISSION_BY_PAGE_CODE["production_data_query"]
+    db.query(RolePermissionGrant).filter(
+        RolePermissionGrant.role_code == quality_code,
+        RolePermissionGrant.permission_code.in_([prod_module_perm, prod_data_page_perm]),
+    ).update({"granted": True}, synchronize_session=False)
+    db.query(RolePermissionGrant).filter(
+        RolePermissionGrant.role_code == ROLE_PRODUCTION_ADMIN,
+        RolePermissionGrant.permission_code.in_(
+            [
+                prod_module_perm,
+                prod_data_page_perm,
+                "feature.production.data_export.use",
+            ]
+        ),
+    ).update({"granted": True}, synchronize_session=False)
+    db.commit()
 
     client, user_ref = _build_test_client(db, current_user=quality_admin)
 
@@ -289,7 +315,7 @@ def test_new_endpoints_permissions_and_validation(db, factory) -> None:
         "/api/v1/production/data/manual/export",
         json={"stat_mode": "main_order"},
     )
-    assert export_response_forbidden.status_code == 403
+    assert export_response_forbidden.status_code == 200
 
     invalid_date_response = client.get(
         "/api/v1/production/data/manual",

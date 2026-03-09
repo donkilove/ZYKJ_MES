@@ -413,7 +413,7 @@ class _ProductionRepairOrdersPageState
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<int>(
-                      value: selectedTargetProcessId,
+                      initialValue: selectedTargetProcessId,
                       decoration: const InputDecoration(
                         labelText: '回流目标工序（仅对非报废数量生效）',
                         border: OutlineInputBorder(),
@@ -593,7 +593,7 @@ class _ProductionRepairOrdersPageState
               SizedBox(
                 width: 140,
                 child: DropdownButtonFormField<String>(
-                  value: _status,
+                  initialValue: _status,
                   decoration: const InputDecoration(
                     labelText: '状态',
                     border: OutlineInputBorder(),

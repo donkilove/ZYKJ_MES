@@ -210,27 +210,31 @@ class _ProductPageState extends State<ProductPage>
           session: widget.session,
           onLogout: widget.onLogout,
           canCreateProduct: _hasPermission(
-            ProductPermissionCodes.productsCreate,
+            ProductFeaturePermissionCodes.productManagementManage,
           ),
           canDeleteProduct: _hasPermission(
-            ProductPermissionCodes.productsDelete,
+            ProductFeaturePermissionCodes.productManagementManage,
           ),
           canUpdateLifecycle: _hasPermission(
-            ProductPermissionCodes.lifecycleUpdate,
+            ProductFeaturePermissionCodes.productManagementManage,
           ),
-          canViewVersions: _hasPermission(ProductPermissionCodes.versionsList),
+          canViewVersions: _hasPermission(
+            ProductFeaturePermissionCodes.versionAnalysisView,
+          ),
           canCompareVersions: _hasPermission(
-            ProductPermissionCodes.versionsCompare,
+            ProductFeaturePermissionCodes.versionAnalysisView,
           ),
-          canRollbackVersion: _hasPermission(ProductPermissionCodes.rollback),
+          canRollbackVersion: _hasPermission(
+            ProductFeaturePermissionCodes.productManagementManage,
+          ),
           canViewImpactAnalysis: _hasPermission(
-            ProductPermissionCodes.impactAnalysis,
+            ProductFeaturePermissionCodes.versionAnalysisView,
           ),
           canViewParameters: _hasPermission(
-            ProductPermissionCodes.parametersView,
+            ProductFeaturePermissionCodes.parametersView,
           ),
           canEditParameters: _hasPermission(
-            ProductPermissionCodes.parametersUpdate,
+            ProductFeaturePermissionCodes.parametersEdit,
           ),
           onViewParameters: (product) {
             _dispatchJump(

@@ -271,6 +271,272 @@ class RolePermissionMatrixUpdateResult {
   }
 }
 
+class PermissionHierarchyPageItem {
+  const PermissionHierarchyPageItem({
+    required this.pageCode,
+    required this.pageName,
+    required this.permissionCode,
+    required this.parentPageCode,
+  });
+
+  final String pageCode;
+  final String pageName;
+  final String permissionCode;
+  final String? parentPageCode;
+
+  factory PermissionHierarchyPageItem.fromJson(Map<String, dynamic> json) {
+    return PermissionHierarchyPageItem(
+      pageCode: json['page_code'] as String,
+      pageName: json['page_name'] as String,
+      permissionCode: json['permission_code'] as String,
+      parentPageCode: json['parent_page_code'] as String?,
+    );
+  }
+}
+
+class PermissionHierarchyFeatureItem {
+  const PermissionHierarchyFeatureItem({
+    required this.featureCode,
+    required this.featureName,
+    required this.permissionCode,
+    required this.pagePermissionCode,
+    required this.linkedActionPermissionCodes,
+    required this.dependencyPermissionCodes,
+  });
+
+  final String featureCode;
+  final String featureName;
+  final String permissionCode;
+  final String? pagePermissionCode;
+  final List<String> linkedActionPermissionCodes;
+  final List<String> dependencyPermissionCodes;
+
+  factory PermissionHierarchyFeatureItem.fromJson(Map<String, dynamic> json) {
+    return PermissionHierarchyFeatureItem(
+      featureCode: json['feature_code'] as String,
+      featureName: json['feature_name'] as String,
+      permissionCode: json['permission_code'] as String,
+      pagePermissionCode: json['page_permission_code'] as String?,
+      linkedActionPermissionCodes:
+          (json['linked_action_permission_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      dependencyPermissionCodes:
+          (json['dependency_permission_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+    );
+  }
+}
+
+class PermissionHierarchyCatalogResult {
+  const PermissionHierarchyCatalogResult({
+    required this.moduleCode,
+    required this.moduleCodes,
+    required this.modulePermissionCode,
+    required this.moduleName,
+    required this.pages,
+    required this.features,
+  });
+
+  final String moduleCode;
+  final List<String> moduleCodes;
+  final String modulePermissionCode;
+  final String moduleName;
+  final List<PermissionHierarchyPageItem> pages;
+  final List<PermissionHierarchyFeatureItem> features;
+
+  factory PermissionHierarchyCatalogResult.fromJson(Map<String, dynamic> json) {
+    return PermissionHierarchyCatalogResult(
+      moduleCode: json['module_code'] as String,
+      moduleCodes: (json['module_codes'] as List<dynamic>? ?? const [])
+          .cast<String>(),
+      modulePermissionCode: json['module_permission_code'] as String,
+      moduleName: json['module_name'] as String,
+      pages: (json['pages'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => PermissionHierarchyPageItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+      features: (json['features'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => PermissionHierarchyFeatureItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class PermissionHierarchyRoleConfigResult {
+  const PermissionHierarchyRoleConfigResult({
+    required this.roleCode,
+    required this.roleName,
+    required this.readonly,
+    required this.moduleCode,
+    required this.moduleEnabled,
+    required this.grantedPagePermissionCodes,
+    required this.grantedFeaturePermissionCodes,
+    required this.effectivePagePermissionCodes,
+    required this.effectiveFeaturePermissionCodes,
+  });
+
+  final String roleCode;
+  final String roleName;
+  final bool readonly;
+  final String moduleCode;
+  final bool moduleEnabled;
+  final List<String> grantedPagePermissionCodes;
+  final List<String> grantedFeaturePermissionCodes;
+  final List<String> effectivePagePermissionCodes;
+  final List<String> effectiveFeaturePermissionCodes;
+
+  factory PermissionHierarchyRoleConfigResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return PermissionHierarchyRoleConfigResult(
+      roleCode: json['role_code'] as String,
+      roleName: json['role_name'] as String,
+      readonly: (json['readonly'] as bool?) ?? false,
+      moduleCode: json['module_code'] as String,
+      moduleEnabled: (json['module_enabled'] as bool?) ?? false,
+      grantedPagePermissionCodes:
+          (json['granted_page_permission_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      grantedFeaturePermissionCodes:
+          (json['granted_feature_permission_codes'] as List<dynamic>? ??
+                  const [])
+              .cast<String>(),
+      effectivePagePermissionCodes:
+          (json['effective_page_permission_codes'] as List<dynamic>? ??
+                  const [])
+              .cast<String>(),
+      effectiveFeaturePermissionCodes:
+          (json['effective_feature_permission_codes'] as List<dynamic>? ??
+                  const [])
+              .cast<String>(),
+    );
+  }
+}
+
+class PermissionHierarchyRoleDraftItem {
+  const PermissionHierarchyRoleDraftItem({
+    required this.roleCode,
+    required this.moduleEnabled,
+    required this.pagePermissionCodes,
+    required this.featurePermissionCodes,
+  });
+
+  final String roleCode;
+  final bool moduleEnabled;
+  final List<String> pagePermissionCodes;
+  final List<String> featurePermissionCodes;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'role_code': roleCode,
+      'module_enabled': moduleEnabled,
+      'page_permission_codes': pagePermissionCodes,
+      'feature_permission_codes': featurePermissionCodes,
+    };
+  }
+}
+
+class PermissionHierarchyRoleUpdateResult {
+  const PermissionHierarchyRoleUpdateResult({
+    required this.roleCode,
+    required this.roleName,
+    required this.readonly,
+    required this.ignoredInput,
+    required this.moduleCode,
+    required this.beforePermissionCodes,
+    required this.afterPermissionCodes,
+    required this.addedPermissionCodes,
+    required this.removedPermissionCodes,
+    required this.autoLinkedDependencies,
+    required this.effectivePagePermissionCodes,
+    required this.effectiveFeaturePermissionCodes,
+    required this.updatedCount,
+    required this.dryRun,
+  });
+
+  final String roleCode;
+  final String roleName;
+  final bool readonly;
+  final bool ignoredInput;
+  final String moduleCode;
+  final List<String> beforePermissionCodes;
+  final List<String> afterPermissionCodes;
+  final List<String> addedPermissionCodes;
+  final List<String> removedPermissionCodes;
+  final List<String> autoLinkedDependencies;
+  final List<String> effectivePagePermissionCodes;
+  final List<String> effectiveFeaturePermissionCodes;
+  final int updatedCount;
+  final bool dryRun;
+
+  factory PermissionHierarchyRoleUpdateResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return PermissionHierarchyRoleUpdateResult(
+      roleCode: json['role_code'] as String,
+      roleName: json['role_name'] as String,
+      readonly: (json['readonly'] as bool?) ?? false,
+      ignoredInput: (json['ignored_input'] as bool?) ?? false,
+      moduleCode: json['module_code'] as String,
+      beforePermissionCodes:
+          (json['before_permission_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      afterPermissionCodes:
+          (json['after_permission_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      addedPermissionCodes:
+          (json['added_permission_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      removedPermissionCodes:
+          (json['removed_permission_codes'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      autoLinkedDependencies:
+          (json['auto_linked_dependencies'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      effectivePagePermissionCodes:
+          (json['effective_page_permission_codes'] as List<dynamic>? ??
+                  const [])
+              .cast<String>(),
+      effectiveFeaturePermissionCodes:
+          (json['effective_feature_permission_codes'] as List<dynamic>? ??
+                  const [])
+              .cast<String>(),
+      updatedCount: (json['updated_count'] as int?) ?? 0,
+      dryRun: (json['dry_run'] as bool?) ?? false,
+    );
+  }
+}
+
+class PermissionHierarchyPreviewResult {
+  const PermissionHierarchyPreviewResult({
+    required this.moduleCode,
+    required this.roleResults,
+  });
+
+  final String moduleCode;
+  final List<PermissionHierarchyRoleUpdateResult> roleResults;
+
+  factory PermissionHierarchyPreviewResult.fromJson(Map<String, dynamic> json) {
+    return PermissionHierarchyPreviewResult(
+      moduleCode: json['module_code'] as String,
+      roleResults: (json['role_results'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => PermissionHierarchyRoleUpdateResult.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
 class ProductionPermissionCodes {
   static const String pageProductionView = 'page.production.view';
   static const String pageOrderManagementView =
@@ -453,4 +719,71 @@ class QualityPermissionCodes {
   static const String statsOverview = 'quality.stats.overview';
   static const String statsProcesses = 'quality.stats.processes';
   static const String statsOperators = 'quality.stats.operators';
+}
+
+class UserFeaturePermissionCodes {
+  static const String userManagementView = 'feature.user.user_management.view';
+  static const String userManagementManage =
+      'feature.user.user_management.manage';
+  static const String registrationApprovalReview =
+      'feature.user.registration_approval.review';
+}
+
+class ProductFeaturePermissionCodes {
+  static const String catalogRead = 'feature.product.catalog.read';
+  static const String productManagementManage =
+      'feature.product.product_management.manage';
+  static const String versionAnalysisView =
+      'feature.product.version_analysis.view';
+  static const String parametersView = 'feature.product.parameters.view';
+  static const String parametersEdit = 'feature.product.parameters.edit';
+}
+
+class EquipmentFeaturePermissionCodes {
+  static const String ledgerManage = 'feature.equipment.ledger.manage';
+  static const String itemsManage = 'feature.equipment.items.manage';
+  static const String plansManage = 'feature.equipment.plans.manage';
+  static const String executionsOperate =
+      'feature.equipment.executions.operate';
+  static const String recordsView = 'feature.equipment.records.view';
+}
+
+class CraftFeaturePermissionCodes {
+  static const String processBasicsView = 'feature.craft.process_basics.view';
+  static const String processBasicsManage =
+      'feature.craft.process_basics.manage';
+  static const String processTemplatesView =
+      'feature.craft.process_templates.view';
+  static const String processTemplatesManage =
+      'feature.craft.process_templates.manage';
+  static const String kanbanView = 'feature.craft.kanban.view';
+}
+
+class QualityFeaturePermissionCodes {
+  static const String firstArticlesView = 'feature.quality.first_articles.view';
+  static const String statsView = 'feature.quality.stats.view';
+}
+
+class ProductionFeaturePermissionCodes {
+  static const String orderManagementManage =
+      'feature.production.order_management.manage';
+  static const String pipelineModeManage =
+      'feature.production.pipeline_mode.manage';
+  static const String orderQueryExecute =
+      'feature.production.order_query.execute';
+  static const String orderQueryProxy = 'feature.production.order_query.proxy';
+  static const String assistLaunch = 'feature.production.assist.launch';
+  static const String assistRecordsView =
+      'feature.production.assist.records.view';
+  static const String dataQueryView = 'feature.production.data_query.view';
+  static const String dataExportUse = 'feature.production.data_export.use';
+  static const String scrapStatisticsView =
+      'feature.production.scrap_statistics.view';
+  static const String scrapExportUse = 'feature.production.scrap_export.use';
+  static const String repairOrdersManage =
+      'feature.production.repair_orders.manage';
+  static const String repairOrdersExport =
+      'feature.production.repair_orders.export';
+  static const String repairOrdersCreateManual =
+      'feature.production.repair_orders.create_manual';
 }

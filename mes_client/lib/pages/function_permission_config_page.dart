@@ -7,125 +7,39 @@ import '../services/api_exception.dart';
 import '../services/authz_service.dart';
 import '../services/user_service.dart';
 
-const String _systemAdminRoleCode = 'system_admin';
-
-const Map<String, String> _moduleNameZhByCode = {
-  'system': '系统',
-  'user': '用户',
-  'product': '产品',
-  'equipment': '设备',
-  'craft': '工艺',
-  'quality': '质量',
-  'production': '生产',
+const Map<String, String> _moduleNameFallbackZh = {
+  'system': '系统管理',
+  'user': '用户管理',
+  'product': '产品管理',
+  'equipment': '设备管理',
+  'craft': '工艺管理',
+  'quality': '质量管理',
+  'production': '生产管理',
 };
 
-const Map<String, String> _pageNameZhByCode = {
-  'user': '用户模块',
-  'user_management': '用户管理',
-  'registration_approval': '注册审批',
-  'page_visibility_config': '页面可见性配置（旧）',
-  'function_permission_config': '功能权限配置',
-  'product': '产品模块',
-  'product_management': '产品管理',
-  'product_parameter_management': '产品参数管理',
-  'product_parameter_query': '产品参数查询',
-  'equipment': '设备模块',
-  'equipment_ledger': '设备台账',
-  'maintenance_item': '保养项目',
-  'maintenance_plan': '保养计划',
-  'maintenance_execution': '保养执行',
-  'maintenance_record': '保养记录',
-  'production': '生产模块',
-  'production_order_management': '订单管理',
-  'production_order_query': '订单查询',
-  'production_assist_approval': '代班记录',
-  'production_data_query': '生产数据',
-  'production_scrap_statistics': '报废统计',
-  'production_repair_orders': '维修订单',
-  'quality': '质量模块',
-  'first_article_management': '每日首件',
-  'quality_data_query': '质量数据',
-  'craft': '工艺模块',
-  'process_management': '工序管理',
-  'production_process_config': '生产工序配置',
-  'craft_kanban': '工艺看板',
-};
+class _RoleDraft {
+  const _RoleDraft({
+    required this.moduleEnabled,
+    required this.pagePermissionCodes,
+    required this.featurePermissionCodes,
+  });
 
-const Map<String, String> _permissionTokenZhByCode = {
-  'authz': '功能权限',
-  'permissions': '权限',
-  'role_permissions': '角色权限',
-  'page_visibility_config': '页面可见性',
-  'orders': '订单',
-  'my_orders': '我的工单',
-  'execution': '生产执行',
-  'stats': '统计',
-  'data': '数据',
-  'scrap_statistics': '报废统计',
-  'repair_orders': '维修订单',
-  'assist_authorizations': '代班授权',
-  'assist_user_options': '代班用户选项',
-  'products': '产品',
-  'parameters': '参数',
-  'impact': '影响分析',
-  'lifecycle': '生命周期',
-  'versions': '版本',
-  'parameter_history': '参数历史',
-  'users': '用户',
-  'roles': '角色',
-  'processes': '工序',
-  'registration_requests': '注册申请',
-  'admin_owners': '负责人',
-  'ledger': '设备台账',
-  'items': '保养项目',
-  'plans': '保养计划',
-  'executions': '保养执行',
-  'records': '保养记录',
-  'stages': '工段',
-  'templates': '模板',
-  'system_master_template': '系统母版',
-  'kanban': '看板',
-  'process_metrics': '工序指标',
-  'first_articles': '每日首件',
-  'pipeline_mode': '并行模式',
-  'today_realtime': '今日实时',
-  'unfinished_progress': '未完工进度',
-  'manual': '手动筛选',
-  'manual_export': '手动筛选导出',
-  'phenomena_summary': '现象汇总',
-  'create_manual': '手工创建',
-  'list': '查看列表',
-  'view': '查看',
-  'me': '我的权限',
-  'create': '创建',
-  'update': '更新',
-  'delete': '删除',
-  'toggle': '启停',
-  'generate': '生成',
-  'start': '开始',
-  'complete': '完成',
-  'approve': '通过',
-  'reject': '拒绝',
-  'export': '导出',
-  'import': '导入',
-  'detail': '详情',
-  'compare': '对比',
-  'rollback': '回滚',
-  'publish': '发布',
-  'analysis': '分析',
-  'context': '上下文',
-  'proxy': '代理',
-  'first_article': '首件',
-  'end_production': '报工',
-};
+  final bool moduleEnabled;
+  final Set<String> pagePermissionCodes;
+  final Set<String> featurePermissionCodes;
 
-enum _ModuleSwitchDecision { saveAndSwitch, discardAndSwitch, cancel }
-
-class _PermissionGroup {
-  const _PermissionGroup({required this.groupCode, required this.items});
-
-  final String groupCode;
-  final List<PermissionCatalogItem> items;
+  _RoleDraft copyWith({
+    bool? moduleEnabled,
+    Set<String>? pagePermissionCodes,
+    Set<String>? featurePermissionCodes,
+  }) {
+    return _RoleDraft(
+      moduleEnabled: moduleEnabled ?? this.moduleEnabled,
+      pagePermissionCodes: pagePermissionCodes ?? this.pagePermissionCodes,
+      featurePermissionCodes:
+          featurePermissionCodes ?? this.featurePermissionCodes,
+    );
+  }
 }
 
 class FunctionPermissionConfigPage extends StatefulWidget {
@@ -153,22 +67,25 @@ class _FunctionPermissionConfigPageState
   bool _saving = false;
   bool _previewing = false;
   String _message = '';
-  DateTime? _lastSavedAt;
 
   List<RoleItem> _roles = const [];
   List<String> _moduleCodes = const [];
   String? _selectedModuleCode;
-  List<PermissionCatalogItem> _permissions = const [];
+  String? _selectedRoleCode;
 
+  final Map<String, PermissionHierarchyCatalogResult> _catalogByModule = {};
+  final Map<String, _RoleDraft> _originByRole = {};
+  final Map<String, _RoleDraft> _draftByRole = {};
   final Map<String, bool> _readonlyByRole = {};
-  final Map<String, Set<String>> _originGrantedByRole = {};
-  final Map<String, Set<String>> _draftGrantedByRole = {};
+  final Map<String, Set<String>> _effectivePagesByRole = {};
+  final Map<String, Set<String>> _effectiveFeaturesByRole = {};
 
-  Map<String, Set<String>>? _lastSavedBeforeSnapshot;
+  PermissionHierarchyPreviewResult? _activePreview;
+  bool _showPreview = false;
+  bool _activePreviewIsSaved = false;
+  final Map<String, PermissionHierarchyPreviewResult> _lastSavedByModule = {};
+  Map<String, _RoleDraft>? _lastSavedBeforeSnapshot;
   String? _lastSavedSnapshotModuleCode;
-
-  String _resourceTypeFilter = 'all';
-  RolePermissionMatrixUpdateResult? _previewResult;
 
   @override
   void initState() {
@@ -187,6 +104,12 @@ class _FunctionPermissionConfigPageState
     super.dispose();
   }
 
+  void _onSearchChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   bool _isUnauthorized(Object error) {
     return error is ApiException && error.statusCode == 401;
   }
@@ -198,319 +121,112 @@ class _FunctionPermissionConfigPageState
     return error.toString();
   }
 
-  String _formatTime(DateTime value) {
-    final local = value.toLocal();
-    final mm = local.month.toString().padLeft(2, '0');
-    final dd = local.day.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final min = local.minute.toString().padLeft(2, '0');
-    final sec = local.second.toString().padLeft(2, '0');
-    return '${local.year}-$mm-$dd $hh:$min:$sec';
-  }
-
-  void _onSearchChanged() {
-    if (!mounted) {
-      return;
+  String _moduleLabel(String moduleCode) {
+    final fromCatalog = _catalogByModule[moduleCode]?.moduleName.trim();
+    if (fromCatalog != null && fromCatalog.isNotEmpty) {
+      return fromCatalog;
     }
-    setState(() {});
+    return _moduleNameFallbackZh[moduleCode] ?? moduleCode;
   }
 
-  Map<String, Set<String>> _cloneGrantedMap(Map<String, Set<String>> source) {
-    return source.map((key, value) => MapEntry(key, {...value}));
+  PermissionHierarchyCatalogResult? get _catalog {
+    final moduleCode = _selectedModuleCode;
+    if (moduleCode == null) {
+      return null;
+    }
+    return _catalogByModule[moduleCode];
   }
 
-  bool _setEquals(Set<String> a, Set<String> b) {
-    if (a.length != b.length) {
+  RoleItem? get _selectedRole {
+    if (_roles.isEmpty) {
+      return null;
+    }
+    final current = _selectedRoleCode;
+    if (current == null) {
+      return _roles.first;
+    }
+    for (final role in _roles) {
+      if (role.code == current) {
+        return role;
+      }
+    }
+    return _roles.first;
+  }
+
+  bool _isReadonly(String roleCode) => _readonlyByRole[roleCode] ?? false;
+
+  Map<String, _RoleDraft> _cloneDraftMap(Map<String, _RoleDraft> source) {
+    return source.map(
+      (key, value) => MapEntry(
+        key,
+        _RoleDraft(
+          moduleEnabled: value.moduleEnabled,
+          pagePermissionCodes: {...value.pagePermissionCodes},
+          featurePermissionCodes: {...value.featurePermissionCodes},
+        ),
+      ),
+    );
+  }
+
+  bool _draftEquals(_RoleDraft a, _RoleDraft b) {
+    if (a.moduleEnabled != b.moduleEnabled) {
       return false;
     }
-    return a.containsAll(b);
+    if (a.pagePermissionCodes.length != b.pagePermissionCodes.length ||
+        !a.pagePermissionCodes.containsAll(b.pagePermissionCodes)) {
+      return false;
+    }
+    if (a.featurePermissionCodes.length != b.featurePermissionCodes.length ||
+        !a.featurePermissionCodes.containsAll(b.featurePermissionCodes)) {
+      return false;
+    }
+    return true;
   }
 
-  bool _hasDirtyChangesForRole(String roleCode) {
-    final origin = _originGrantedByRole[roleCode] ?? const <String>{};
-    final draft = _draftGrantedByRole[roleCode] ?? const <String>{};
-    return !_setEquals(origin, draft);
+  bool _hasDirtyRole(String roleCode) {
+    final origin = _originByRole[roleCode];
+    final draft = _draftByRole[roleCode];
+    if (origin == null || draft == null) {
+      return false;
+    }
+    return !_draftEquals(origin, draft);
   }
 
-  bool get _hasDirtyChanges {
+  bool get _hasDirty {
     for (final role in _roles) {
-      if (_hasDirtyChangesForRole(role.code)) {
+      if (_hasDirtyRole(role.code)) {
         return true;
       }
     }
     return false;
   }
 
-  int get _dirtyRoleCount {
-    var count = 0;
-    for (final role in _roles) {
-      if (_hasDirtyChangesForRole(role.code)) {
-        count += 1;
-      }
-    }
-    return count;
-  }
-
   bool get _canRollbackLastSave {
     return _lastSavedBeforeSnapshot != null &&
-        _selectedModuleCode != null &&
-        _selectedModuleCode == _lastSavedSnapshotModuleCode;
-  }
-
-  bool _isRoleReadonly(String roleCode) {
-    return _readonlyByRole[roleCode] ?? false;
-  }
-
-  String _moduleLabel(String moduleCode) {
-    final normalized = moduleCode.trim();
-    if (normalized.isEmpty) {
-      return moduleCode;
-    }
-    return _moduleNameZhByCode[normalized] ?? normalized;
-  }
-
-  bool _containsChinese(String value) {
-    return RegExp(r'[\u4e00-\u9fff]').hasMatch(value);
-  }
-
-  String _permissionTokenLabel(String token) {
-    final normalized = token.trim();
-    if (normalized.isEmpty) {
-      return token;
-    }
-    return _permissionTokenZhByCode[normalized] ?? normalized;
-  }
-
-  String _pageLabelByCode(String pageCode) {
-    final normalized = pageCode.trim();
-    if (normalized.isEmpty) {
-      return pageCode;
-    }
-    return _pageNameZhByCode[normalized] ?? normalized;
-  }
-
-  String _fallbackPermissionName(String permissionCode) {
-    if (permissionCode.startsWith('page.') &&
-        permissionCode.endsWith('.view')) {
-      final pageCode = permissionCode.substring(
-        'page.'.length,
-        permissionCode.length - '.view'.length,
-      );
-      return '页面访问：${_pageLabelByCode(pageCode)}';
-    }
-
-    final tokens = permissionCode
-        .split('.')
-        .where((token) => token.trim().isNotEmpty)
-        .toList();
-    if (tokens.isEmpty) {
-      return permissionCode;
-    }
-
-    final labels = <String>[];
-    for (var index = 0; index < tokens.length; index += 1) {
-      final token = tokens[index];
-      if (index == 0 && _moduleNameZhByCode.containsKey(token)) {
-        labels.add(_moduleNameZhByCode[token]!);
-        continue;
-      }
-      labels.add(_permissionTokenLabel(token));
-    }
-    return labels.join(' / ');
-  }
-
-  String _permissionDisplayName(PermissionCatalogItem permission) {
-    final name = permission.permissionName.trim();
-    if (name.isNotEmpty && _containsChinese(name)) {
-      return name;
-    }
-    return _fallbackPermissionName(permission.permissionCode);
-  }
-
-  String _permissionDisplayNameByCode(String permissionCode) {
-    for (final permission in _permissions) {
-      if (permission.permissionCode == permissionCode) {
-        return _permissionDisplayName(permission);
-      }
-    }
-    return _fallbackPermissionName(permissionCode);
-  }
-
-  String _groupCodeOfPermission(PermissionCatalogItem permission) {
-    final parts = permission.permissionCode.split('.');
-    if (parts.isEmpty) {
-      return permission.permissionCode;
-    }
-    if (parts.first == 'page') {
-      if (parts.length >= 2) {
-        return '${parts[0]}.${parts[1]}';
-      }
-      return parts.first;
-    }
-    if (parts.length >= 2) {
-      return '${parts[0]}.${parts[1]}';
-    }
-    return parts.first;
-  }
-
-  String _groupLabel(String groupCode) {
-    if (groupCode.startsWith('page.')) {
-      final pageCode = groupCode.substring('page.'.length);
-      return '页面分组：${_pageLabelByCode(pageCode)} ($groupCode)';
-    }
-    final parts = groupCode.split('.');
-    if (parts.isEmpty) {
-      return '业务分组：$groupCode';
-    }
-    final module = _moduleLabel(parts.first);
-    final resource = parts.length >= 2
-        ? _permissionTokenLabel(parts[1])
-        : _permissionTokenLabel(parts.first);
-    return '业务分组：$module / $resource ($groupCode)';
-  }
-
-  List<PermissionCatalogItem> _filteredPermissions() {
-    final keyword = _searchController.text.trim().toLowerCase();
-    return _permissions.where((permission) {
-      if (_resourceTypeFilter != 'all' &&
-          permission.resourceType != _resourceTypeFilter) {
-        return false;
-      }
-      if (keyword.isEmpty) {
-        return true;
-      }
-      final displayName = _permissionDisplayName(permission).toLowerCase();
-      return displayName.contains(keyword) ||
-          permission.permissionCode.toLowerCase().contains(keyword);
-    }).toList();
-  }
-
-  List<_PermissionGroup> _groupedPermissions() {
-    final grouped = <String, List<PermissionCatalogItem>>{};
-    for (final permission in _filteredPermissions()) {
-      final groupCode = _groupCodeOfPermission(permission);
-      grouped.putIfAbsent(groupCode, () => []).add(permission);
-    }
-    final groups = grouped.entries
-        .map(
-          (entry) => _PermissionGroup(
-            groupCode: entry.key,
-            items: entry.value.toList()
-              ..sort((a, b) => a.permissionCode.compareTo(b.permissionCode)),
-          ),
-        )
-        .toList();
-    groups.sort((a, b) => a.groupCode.compareTo(b.groupCode));
-    return groups;
-  }
-
-  Map<String, String?> _parentByCode() {
-    final validCodes = _permissions.map((item) => item.permissionCode).toSet();
-    final parentByCode = <String, String?>{};
-    for (final permission in _permissions) {
-      final parent = permission.parentPermissionCode;
-      parentByCode[permission.permissionCode] =
-          parent != null && validCodes.contains(parent) ? parent : null;
-    }
-    return parentByCode;
-  }
-
-  Map<String, List<String>> _childrenByParent() {
-    final children = <String, List<String>>{};
-    final parentByCode = _parentByCode();
-    for (final entry in parentByCode.entries) {
-      final parent = entry.value;
-      if (parent == null) {
-        continue;
-      }
-      children.putIfAbsent(parent, () => []).add(entry.key);
-    }
-    return children;
-  }
-
-  Set<String> _collectAncestors(String permissionCode) {
-    final parentByCode = _parentByCode();
-    final ancestors = <String>{};
-    var current = parentByCode[permissionCode];
-    while (current != null && !ancestors.contains(current)) {
-      ancestors.add(current);
-      current = parentByCode[current];
-    }
-    return ancestors;
-  }
-
-  Set<String> _collectDescendants(String permissionCode) {
-    final childrenMap = _childrenByParent();
-    final descendants = <String>{};
-    final queue = <String>[permissionCode];
-    var index = 0;
-    while (index < queue.length) {
-      final code = queue[index];
-      index += 1;
-      for (final child in childrenMap[code] ?? const <String>[]) {
-        if (descendants.add(child)) {
-          queue.add(child);
-        }
-      }
-    }
-    return descendants;
-  }
-
-  void _showLinkageHint({
-    required List<String> autoGranted,
-    required List<String> autoRevoked,
-  }) {
-    if (!mounted || (autoGranted.isEmpty && autoRevoked.isEmpty)) {
-      return;
-    }
-    final parts = <String>[];
-    if (autoGranted.isNotEmpty) {
-      parts.add('自动补齐父权限 ${autoGranted.join(', ')}');
-    }
-    if (autoRevoked.isNotEmpty) {
-      parts.add('自动移除子权限 ${autoRevoked.join(', ')}');
-    }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(parts.join('；'))));
+        _lastSavedSnapshotModuleCode != null &&
+        _lastSavedSnapshotModuleCode == _selectedModuleCode;
   }
 
   Future<void> _loadInitialData() async {
     setState(() {
       _loading = true;
       _message = '';
-      _previewResult = null;
     });
     try {
       final roleResult = await _userService.listRoles();
-      final roles = roleResult.items.toList()
-        ..sort((a, b) => a.id.compareTo(b.id));
-
-      final allPermissions = await _authzService.listPermissionCatalog();
-      final moduleCodes =
-          allPermissions
-              .map((item) => item.moduleCode.trim())
-              .where((item) => item.isNotEmpty)
-              .toSet()
-              .toList()
-            ..sort();
-      if (moduleCodes.isEmpty) {
-        throw StateError('权限目录中未找到可配置模块');
+      final roles = roleResult.items.toList()..sort((a, b) => a.id - b.id);
+      if (roles.isEmpty) {
+        throw StateError('未查询到角色');
       }
-
-      final initialModuleCode =
-          _selectedModuleCode != null &&
-              moduleCodes.contains(_selectedModuleCode)
-          ? _selectedModuleCode!
-          : (moduleCodes.contains('production')
-                ? 'production'
-                : moduleCodes.first);
-
-      await _loadMatrixForModule(
-        initialModuleCode,
-        roles: roles,
-        fallbackModuleCodes: moduleCodes,
+      final bootstrap = await _authzService.loadPermissionHierarchyCatalog(
+        moduleCode: _selectedModuleCode ?? 'production',
       );
+      _catalogByModule[bootstrap.moduleCode] = bootstrap;
+      final modules = bootstrap.moduleCodes.toList()..sort();
+      final initialModule = modules.contains('production')
+          ? 'production'
+          : modules.first;
+      await _loadModuleData(initialModule, roles: roles, moduleCodes: modules);
     } catch (error) {
       if (!mounted) {
         return;
@@ -520,7 +236,7 @@ class _FunctionPermissionConfigPageState
         return;
       }
       setState(() {
-        _message = '加载功能权限配置失败：${_errorMessage(error)}';
+        _message = '加载权限配置失败：${_errorMessage(error)}';
       });
     } finally {
       if (mounted) {
@@ -531,125 +247,123 @@ class _FunctionPermissionConfigPageState
     }
   }
 
-  Future<void> _loadMatrixForModule(
+  Future<void> _loadModuleData(
     String moduleCode, {
     List<RoleItem>? roles,
-    List<String>? fallbackModuleCodes,
+    List<String>? moduleCodes,
   }) async {
-    final matrix = await _authzService.loadRolePermissionMatrix(
+    final catalog = await _authzService.loadPermissionHierarchyCatalog(
       moduleCode: moduleCode,
     );
-    final effectiveRoles = roles ?? _roles;
-    final roleItemsByCode = <String, RolePermissionMatrixItem>{
-      for (final item in matrix.roleItems) item.roleCode: item,
-    };
+    _catalogByModule[catalog.moduleCode] = catalog;
 
-    final originByRole = <String, Set<String>>{};
-    final draftByRole = <String, Set<String>>{};
+    final effectiveRoles = roles ?? _roles;
+    final configs = await Future.wait(
+      effectiveRoles.map(
+        (role) => _authzService.loadPermissionHierarchyRoleConfig(
+          roleCode: role.code,
+          moduleCode: catalog.moduleCode,
+        ),
+      ),
+    );
+
+    final originByRole = <String, _RoleDraft>{};
+    final draftByRole = <String, _RoleDraft>{};
     final readonlyByRole = <String, bool>{};
-    for (final role in effectiveRoles) {
-      final roleItem = roleItemsByCode[role.code];
-      final granted = roleItem?.grantedPermissionCodes ?? const <String>[];
-      final readonly =
-          roleItem?.readonly ?? (role.code == _systemAdminRoleCode);
-      originByRole[role.code] = granted.toSet();
-      draftByRole[role.code] = granted.toSet();
-      readonlyByRole[role.code] = readonly;
+    final effectivePagesByRole = <String, Set<String>>{};
+    final effectiveFeaturesByRole = <String, Set<String>>{};
+    for (final config in configs) {
+      final draft = _RoleDraft(
+        moduleEnabled: config.moduleEnabled,
+        pagePermissionCodes: config.grantedPagePermissionCodes.toSet(),
+        featurePermissionCodes: config.grantedFeaturePermissionCodes.toSet(),
+      );
+      originByRole[config.roleCode] = draft;
+      draftByRole[config.roleCode] = _RoleDraft(
+        moduleEnabled: draft.moduleEnabled,
+        pagePermissionCodes: {...draft.pagePermissionCodes},
+        featurePermissionCodes: {...draft.featurePermissionCodes},
+      );
+      readonlyByRole[config.roleCode] = config.readonly;
+      effectivePagesByRole[config.roleCode] = config
+          .effectivePagePermissionCodes
+          .toSet();
+      effectiveFeaturesByRole[config.roleCode] = config
+          .effectiveFeaturePermissionCodes
+          .toSet();
     }
 
     if (!mounted) {
       return;
     }
-    final matrixModules = matrix.moduleCodes.toList()..sort();
-    final fallbackModules = fallbackModuleCodes != null
-        ? (fallbackModuleCodes.toList()..sort())
-        : <String>[moduleCode];
-
     setState(() {
       _roles = effectiveRoles;
-      _permissions = matrix.permissions.toList()
-        ..sort((a, b) => a.permissionCode.compareTo(b.permissionCode));
-      _moduleCodes = matrix.moduleCodes.isNotEmpty
-          ? matrixModules
-          : fallbackModules;
-      _selectedModuleCode = matrix.moduleCode;
+      _moduleCodes = (moduleCodes ?? catalog.moduleCodes)..sort();
+      _selectedModuleCode = catalog.moduleCode;
+      _selectedRoleCode =
+          _selectedRoleCode != null &&
+              effectiveRoles.any((item) => item.code == _selectedRoleCode)
+          ? _selectedRoleCode
+          : effectiveRoles.first.code;
+      _originByRole
+        ..clear()
+        ..addAll(originByRole);
+      _draftByRole
+        ..clear()
+        ..addAll(draftByRole);
       _readonlyByRole
         ..clear()
         ..addAll(readonlyByRole);
-      _originGrantedByRole
+      _effectivePagesByRole
         ..clear()
-        ..addAll(originByRole);
-      _draftGrantedByRole
+        ..addAll(effectivePagesByRole);
+      _effectiveFeaturesByRole
         ..clear()
-        ..addAll(draftByRole);
-      _previewResult = null;
+        ..addAll(effectiveFeaturesByRole);
+      _showPreview = false;
+      _activePreview = null;
+      _activePreviewIsSaved = false;
       _message = '';
     });
   }
 
-  Future<_ModuleSwitchDecision?> _showModuleSwitchDialog() {
-    return showDialog<_ModuleSwitchDecision>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('切换模块'),
-          content: const Text('当前有未保存改动，切换模块前请先处理。'),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(_ModuleSwitchDecision.cancel),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(
-                context,
-              ).pop(_ModuleSwitchDecision.discardAndSwitch),
-              child: const Text('放弃改动并切换'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(
-                context,
-              ).pop(_ModuleSwitchDecision.saveAndSwitch),
-              child: const Text('保存并切换'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _handleModuleChange(String? moduleCode) async {
+  Future<void> _switchModule(String? moduleCode) async {
     if (moduleCode == null ||
         moduleCode == _selectedModuleCode ||
         _loading ||
         _saving) {
       return;
     }
-
-    if (_hasDirtyChanges) {
-      final decision = await _showModuleSwitchDialog();
-      if (!mounted ||
-          decision == null ||
-          decision == _ModuleSwitchDecision.cancel) {
+    if (_hasDirty) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('切换模块'),
+            content: const Text('当前有未保存改动，是否放弃并切换？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('放弃并切换'),
+              ),
+            ],
+          );
+        },
+      );
+      if (discard != true) {
         return;
       }
-      if (decision == _ModuleSwitchDecision.saveAndSwitch) {
-        final saved = await _saveChanges();
-        if (!saved) {
-          return;
-        }
-      } else {
-        _resetUnsavedChanges(showMessage: false);
-      }
     }
-
     setState(() {
       _loading = true;
       _message = '';
-      _previewResult = null;
     });
     try {
-      await _loadMatrixForModule(moduleCode);
+      await _loadModuleData(moduleCode);
     } catch (error) {
       if (!mounted) {
         return;
@@ -670,29 +384,28 @@ class _FunctionPermissionConfigPageState
     }
   }
 
-  void _resetUnsavedChanges({bool showMessage = true}) {
-    setState(() {
-      _draftGrantedByRole
-        ..clear()
-        ..addAll(_cloneGrantedMap(_originGrantedByRole));
-      _previewResult = null;
-      if (showMessage) {
-        _message = '已回退未保存改动';
-      }
-    });
-  }
-
-  Map<String, List<String>> _buildDraftPayload() {
-    final payload = <String, List<String>>{};
+  List<PermissionHierarchyRoleDraftItem> _roleDraftItems() {
+    final items = <PermissionHierarchyRoleDraftItem>[];
     for (final role in _roles) {
-      final granted =
-          (_draftGrantedByRole[role.code] ?? const <String>{}).toList()..sort();
-      payload[role.code] = granted;
+      final draft = _draftByRole[role.code];
+      if (draft == null) {
+        continue;
+      }
+      items.add(
+        PermissionHierarchyRoleDraftItem(
+          roleCode: role.code,
+          moduleEnabled: draft.moduleEnabled,
+          pagePermissionCodes: draft.pagePermissionCodes.toList()..sort(),
+          featurePermissionCodes: draft.featurePermissionCodes.toList()..sort(),
+        ),
+      );
     }
-    return payload;
+    return items;
   }
 
-  Future<RolePermissionMatrixUpdateResult?> _requestPreview() async {
+  Future<PermissionHierarchyPreviewResult?> _preview({
+    bool activatePanel = true,
+  }) async {
     final moduleCode = _selectedModuleCode;
     if (moduleCode == null) {
       return null;
@@ -702,18 +415,20 @@ class _FunctionPermissionConfigPageState
       _message = '';
     });
     try {
-      final preview = await _authzService.updateRolePermissionMatrix(
+      final preview = await _authzService.previewPermissionHierarchy(
         moduleCode: moduleCode,
-        grantedByRoleCode: _buildDraftPayload(),
-        dryRun: true,
-        remark: '前端权限预览',
+        roleItems: _roleDraftItems(),
       );
       if (!mounted) {
         return null;
       }
-      setState(() {
-        _previewResult = preview;
-      });
+      if (activatePanel) {
+        setState(() {
+          _activePreview = preview;
+          _showPreview = true;
+          _activePreviewIsSaved = false;
+        });
+      }
       return preview;
     } catch (error) {
       if (!mounted) {
@@ -724,7 +439,7 @@ class _FunctionPermissionConfigPageState
         return null;
       }
       setState(() {
-        _message = '生成生效预览失败：${_errorMessage(error)}';
+        _message = '生效预览失败：${_errorMessage(error)}';
       });
       return null;
     } finally {
@@ -736,149 +451,116 @@ class _FunctionPermissionConfigPageState
     }
   }
 
-  Future<bool?> _showSaveConfirmDialog(
-    RolePermissionMatrixUpdateResult preview,
-  ) async {
-    final changedResults = preview.roleResults
-        .where(
-          (item) =>
-              item.addedPermissionCodes.isNotEmpty ||
-              item.removedPermissionCodes.isNotEmpty ||
-              item.autoGrantedPermissionCodes.isNotEmpty ||
-              item.autoRevokedPermissionCodes.isNotEmpty,
-        )
-        .toList();
-
-    return showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('确认保存权限变更'),
-          content: SizedBox(
-            width: 680,
-            child: changedResults.isEmpty
-                ? const Text('当前改动不会产生差异结果，仍要保存吗？')
-                : SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: changedResults.map((item) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${item.roleName} (${item.roleCode})',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '新增 ${item.addedPermissionCodes.length}，移除 ${item.removedPermissionCodes.length}',
-                              ),
-                              if (item.autoGrantedPermissionCodes.isNotEmpty)
-                                Text(
-                                  '自动补齐：${item.autoGrantedPermissionCodes.join(', ')}',
-                                ),
-                              if (item.autoRevokedPermissionCodes.isNotEmpty)
-                                Text(
-                                  '自动移除：${item.autoRevokedPermissionCodes.join(', ')}',
-                                ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('确认保存'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _applyRoleResults(List<RolePermissionMatrixRoleResult> roleResults) {
-    for (final roleResult in roleResults) {
-      _originGrantedByRole[roleResult.roleCode] = roleResult
-          .afterPermissionCodes
-          .toSet();
-      _draftGrantedByRole[roleResult.roleCode] = roleResult.afterPermissionCodes
-          .toSet();
-      _readonlyByRole[roleResult.roleCode] = roleResult.readonly;
-    }
-  }
-
-  Future<bool> _saveChanges() async {
+  Future<void> _save() async {
     final moduleCode = _selectedModuleCode;
-    if (_saving || !_hasDirtyChanges || moduleCode == null) {
-      return false;
+    final catalog = _catalog;
+    if (_saving || !_hasDirty || moduleCode == null || catalog == null) {
+      return;
     }
-
-    final snapshotBefore = _cloneGrantedMap(_originGrantedByRole);
+    final preview = await _preview(activatePanel: false);
+    if (preview == null) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认保存'),
+        content: const Text('将按当前草稿覆盖所选模块权限，是否继续？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认保存'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      setState(() {
+        _activePreview = preview;
+        _showPreview = true;
+        _activePreviewIsSaved = false;
+      });
+      return;
+    }
     setState(() {
       _saving = true;
       _message = '';
     });
+    final snapshot = _cloneDraftMap(_originByRole);
     try {
-      final preview = await _authzService.updateRolePermissionMatrix(
-        moduleCode: moduleCode,
-        grantedByRoleCode: _buildDraftPayload(),
-        dryRun: true,
-        remark: '前端权限保存预检',
-      );
-      if (!mounted) {
-        return false;
-      }
-      final confirmed = await _showSaveConfirmDialog(preview);
-      if (!mounted || confirmed != true) {
-        setState(() {
-          _previewResult = preview;
-          _message = '已取消保存';
-        });
-        return false;
+      final results = <PermissionHierarchyRoleUpdateResult>[];
+      for (final role in _roles) {
+        final draft = _draftByRole[role.code];
+        if (draft == null) {
+          continue;
+        }
+        final result = await _authzService.updatePermissionHierarchyRoleConfig(
+          roleCode: role.code,
+          moduleCode: moduleCode,
+          moduleEnabled: draft.moduleEnabled,
+          pagePermissionCodes: draft.pagePermissionCodes.toList()..sort(),
+          featurePermissionCodes: draft.featurePermissionCodes.toList()..sort(),
+          dryRun: false,
+          remark: '功能权限分层保存',
+        );
+        results.add(result);
       }
 
-      final result = await _authzService.updateRolePermissionMatrix(
-        moduleCode: moduleCode,
-        grantedByRoleCode: _buildDraftPayload(),
-        dryRun: false,
-        remark: '前端权限矩阵保存',
-      );
-
-      if (!mounted) {
-        return false;
+      for (final result in results) {
+        final after = result.afterPermissionCodes.toSet();
+        final pageCodes = catalog.pages
+            .map((item) => item.permissionCode)
+            .toSet();
+        final featureCodes = catalog.features
+            .map((item) => item.permissionCode)
+            .toSet();
+        final next = _RoleDraft(
+          moduleEnabled: after.contains(catalog.modulePermissionCode),
+          pagePermissionCodes: after.intersection(pageCodes),
+          featurePermissionCodes: after.intersection(featureCodes),
+        );
+        _originByRole[result.roleCode] = next;
+        _draftByRole[result.roleCode] = _RoleDraft(
+          moduleEnabled: next.moduleEnabled,
+          pagePermissionCodes: {...next.pagePermissionCodes},
+          featurePermissionCodes: {...next.featurePermissionCodes},
+        );
+        _effectivePagesByRole[result.roleCode] = result
+            .effectivePagePermissionCodes
+            .toSet();
+        _effectiveFeaturesByRole[result.roleCode] = result
+            .effectiveFeaturePermissionCodes
+            .toSet();
       }
+
+      final savedPreview = PermissionHierarchyPreviewResult(
+        moduleCode: moduleCode,
+        roleResults: results,
+      );
       setState(() {
-        _applyRoleResults(result.roleResults);
-        _lastSavedAt = DateTime.now();
-        _lastSavedBeforeSnapshot = snapshotBefore;
+        _lastSavedBeforeSnapshot = snapshot;
         _lastSavedSnapshotModuleCode = moduleCode;
-        _previewResult = result;
-        _message = '权限配置已保存';
+        _lastSavedByModule[moduleCode] = savedPreview;
+        _showPreview = false;
+        _activePreview = null;
+        _activePreviewIsSaved = false;
+        _message = '保存成功，可通过顶部“查看最近保存结果”查看详情。';
       });
-      return true;
     } catch (error) {
-      if (!mounted) {
-        return false;
-      }
       if (_isUnauthorized(error)) {
         widget.onLogout();
-        return false;
+        return;
       }
       setState(() {
         _message = '保存失败：${_errorMessage(error)}';
       });
-      return false;
     } finally {
       if (mounted) {
         setState(() {
@@ -889,70 +571,42 @@ class _FunctionPermissionConfigPageState
   }
 
   Future<void> _rollbackLastSave() async {
-    if (!_canRollbackLastSave || _saving) {
-      return;
-    }
-    final snapshot = _lastSavedBeforeSnapshot;
     final moduleCode = _selectedModuleCode;
-    if (snapshot == null || moduleCode == null) {
+    final snapshot = _lastSavedBeforeSnapshot;
+    if (!_canRollbackLastSave || moduleCode == null || snapshot == null) {
       return;
     }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('回退上次保存'),
-          content: const Text('将回退到本次会话中“上次保存前”的权限状态，是否继续？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('确认回退'),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed != true) {
-      return;
-    }
-
-    final payload = <String, List<String>>{};
-    for (final role in _roles) {
-      payload[role.code] = (snapshot[role.code] ?? const <String>{}).toList()
-        ..sort();
-    }
-
     setState(() {
       _saving = true;
       _message = '';
     });
     try {
-      final result = await _authzService.updateRolePermissionMatrix(
-        moduleCode: moduleCode,
-        grantedByRoleCode: payload,
-        dryRun: false,
-        remark: '前端权限回退上次保存',
-      );
+      for (final role in _roles) {
+        final target = snapshot[role.code];
+        if (target == null) {
+          continue;
+        }
+        await _authzService.updatePermissionHierarchyRoleConfig(
+          roleCode: role.code,
+          moduleCode: moduleCode,
+          moduleEnabled: target.moduleEnabled,
+          pagePermissionCodes: target.pagePermissionCodes.toList()..sort(),
+          featurePermissionCodes: target.featurePermissionCodes.toList()
+            ..sort(),
+          dryRun: false,
+          remark: '功能权限分层回退',
+        );
+      }
+      await _loadModuleData(moduleCode);
       if (!mounted) {
         return;
       }
       setState(() {
-        _applyRoleResults(result.roleResults);
-        _lastSavedAt = DateTime.now();
         _lastSavedBeforeSnapshot = null;
         _lastSavedSnapshotModuleCode = null;
-        _previewResult = result;
-        _message = '已回退到上次保存前状态';
+        _message = '已回退到上次保存前状态。';
       });
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
       if (_isUnauthorized(error)) {
         widget.onLogout();
         return;
@@ -969,128 +623,22 @@ class _FunctionPermissionConfigPageState
     }
   }
 
-  void _togglePermission({
-    required String roleCode,
-    required String permissionCode,
-    required bool enabled,
-  }) {
-    if (_saving || _isRoleReadonly(roleCode)) {
-      return;
-    }
-    final current = {...(_draftGrantedByRole[roleCode] ?? <String>{})};
-    final autoGranted = <String>[];
-    final autoRevoked = <String>[];
-    if (enabled) {
-      current.add(permissionCode);
-      final ancestors = _collectAncestors(permissionCode).toList()..sort();
-      for (final ancestor in ancestors) {
-        if (current.add(ancestor)) {
-          autoGranted.add(ancestor);
-        }
-      }
-    } else {
-      current.remove(permissionCode);
-      final descendants = _collectDescendants(permissionCode).toList()..sort();
-      for (final descendant in descendants) {
-        if (current.remove(descendant)) {
-          autoRevoked.add(descendant);
-        }
-      }
-    }
-
+  void _resetUnsaved() {
     setState(() {
-      _draftGrantedByRole[roleCode] = current;
-      _previewResult = null;
-    });
-    _showLinkageHint(autoGranted: autoGranted, autoRevoked: autoRevoked);
-  }
-
-  void _setAllForRole(String roleCode, bool granted) {
-    if (_saving || _isRoleReadonly(roleCode)) {
-      return;
-    }
-    setState(() {
-      _draftGrantedByRole[roleCode] = granted
-          ? _permissions.map((item) => item.permissionCode).toSet()
-          : <String>{};
-      _previewResult = null;
+      _draftByRole
+        ..clear()
+        ..addAll(_cloneDraftMap(_originByRole));
+      _showPreview = false;
+      _activePreview = null;
+      _activePreviewIsSaved = false;
     });
   }
 
-  void _setGroupForRole({
-    required String roleCode,
-    required _PermissionGroup group,
-    required bool granted,
-  }) {
-    if (_saving || _isRoleReadonly(roleCode)) {
-      return;
-    }
-    final current = {...(_draftGrantedByRole[roleCode] ?? <String>{})};
-    final autoGranted = <String>[];
-    final autoRevoked = <String>[];
-
-    if (granted) {
-      for (final item in group.items) {
-        current.add(item.permissionCode);
-        final ancestors = _collectAncestors(item.permissionCode).toList()
-          ..sort();
-        for (final ancestor in ancestors) {
-          if (current.add(ancestor)) {
-            autoGranted.add(ancestor);
-          }
-        }
-      }
-    } else {
-      for (final item in group.items) {
-        current.remove(item.permissionCode);
-        final descendants = _collectDescendants(item.permissionCode).toList()
-          ..sort();
-        for (final descendant in descendants) {
-          if (current.remove(descendant)) {
-            autoRevoked.add(descendant);
-          }
-        }
-      }
-    }
-
-    setState(() {
-      _draftGrantedByRole[roleCode] = current;
-      _previewResult = null;
-    });
-    _showLinkageHint(autoGranted: autoGranted, autoRevoked: autoRevoked);
-  }
-
-  String _buildProductionCapabilitySummary(Set<String> permissionCodes) {
-    final entries = <String, String>{
-      '创建订单': 'production.orders.create',
-      '编辑订单': 'production.orders.update',
-      '删除订单': 'production.orders.delete',
-      '结束订单': 'production.orders.complete',
-      '并行模式设置': 'production.orders.pipeline_mode.update',
-      '首件': 'production.execution.first_article',
-      '报工': 'production.execution.end_production',
-      '发起代班': 'production.assist_authorizations.create',
-      '手工送修建单': 'production.repair_orders.create_manual',
-      '数据导出': 'production.data.manual.export',
-      '报废导出': 'production.scrap_statistics.export',
-      '维修导出': 'production.repair_orders.export',
-    };
-    final flags = entries.entries.map((entry) {
-      final enabled = permissionCodes.contains(entry.value);
-      return '${entry.key}${enabled ? '✓' : '✗'}';
-    }).toList();
-    return flags.join(' / ');
-  }
-
-  Widget _buildPreviewPanel() {
-    final preview = _previewResult;
-    if (preview == null) {
+  Widget _buildPreviewCard() {
+    final preview = _activePreview;
+    if (!_showPreview || preview == null) {
       return const SizedBox.shrink();
     }
-    final moduleCode = _selectedModuleCode ?? preview.moduleCode;
-    final moduleLabel = _moduleLabel(moduleCode);
-    final roleNameByCode = {for (final role in _roles) role.code: role.name};
-
     return Card(
       margin: const EdgeInsets.only(top: 8),
       child: Padding(
@@ -1098,205 +646,269 @@ class _FunctionPermissionConfigPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              preview.dryRun ? '生效预览（未保存）' : '最近保存结果',
-              style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _activePreviewIsSaved ? '最近保存结果' : '生效预览（未保存）',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  tooltip: '关闭',
+                  onPressed: () => setState(() => _showPreview = false),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text('模块：$moduleLabel（$moduleCode）'),
-            const SizedBox(height: 10),
-            ...preview.roleResults.map((roleResult) {
-              final roleName =
-                  roleNameByCode[roleResult.roleCode] ?? roleResult.roleName;
-              final afterSet = roleResult.afterPermissionCodes.toSet();
-              final pageCount = roleResult.afterPermissionCodes
-                  .where((code) => code.startsWith('page.'))
-                  .length;
-              final actionCount =
-                  roleResult.afterPermissionCodes.length - pageCount;
-              final changedCount =
-                  roleResult.addedPermissionCodes.length +
-                  roleResult.removedPermissionCodes.length;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Theme.of(context).dividerColor),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$roleName (${roleResult.roleCode})',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '总权限 ${roleResult.afterPermissionCodes.length} | 页面 $pageCount | 动作 $actionCount | 变更 $changedCount',
-                    ),
-                    if (moduleCode == 'production')
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          _buildProductionCapabilitySummary(afterSet),
-                        ),
-                      ),
-                    if (roleResult.autoGrantedPermissionCodes.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '自动补齐：${roleResult.autoGrantedPermissionCodes.join(', ')}',
-                        ),
-                      ),
-                    if (roleResult.autoRevokedPermissionCodes.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '自动移除：${roleResult.autoRevokedPermissionCodes.join(', ')}',
-                        ),
-                      ),
-                    if (roleResult.ignoredInput)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 4),
-                        child: Text('系统管理员固定全权限，输入已忽略。'),
-                      ),
-                  ],
-                ),
-              );
-            }),
+            Text('模块：${_moduleLabel(preview.moduleCode)}'),
+            const SizedBox(height: 8),
+            ...preview.roleResults.map(
+              (item) => Text(
+                '${item.roleName}：变更 ${item.addedPermissionCodes.length + item.removedPermissionCodes.length}，自动补依赖 ${item.autoLinkedDependencies.length}',
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRolePermissionPane(RoleItem role) {
-    final granted = _draftGrantedByRole[role.code] ?? const <String>{};
-    final groups = _groupedPermissions();
-    final readonly = _isRoleReadonly(role.code);
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text('角色：${role.name} (${role.code})'),
-                  const SizedBox(width: 8),
-                  if (readonly)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(999),
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                      ),
-                      child: const Text(
-                        '系统管理员固定全权限（只读）',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  const Spacer(),
-                  Text('已授权 ${granted.length}/${_permissions.length}'),
-                  const SizedBox(width: 12),
-                  OutlinedButton(
-                    onPressed: readonly || _saving
-                        ? null
-                        : () => _setAllForRole(role.code, true),
-                    child: const Text('全选'),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: readonly || _saving
-                        ? null
-                        : () => _setAllForRole(role.code, false),
-                    child: const Text('清空'),
-                  ),
-                ],
-              ),
-              if (readonly)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    '提示：系统管理员（system_admin）始终拥有全部权限，该角色仅用于只读展示。',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-            ],
+  Widget _buildRoleSelectorCard(RoleItem selectedRole) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Text(
+              '角色',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
           ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: groups.isEmpty
-              ? const Center(child: Text('当前筛选条件下无可配置权限'))
-              : ListView(
-                  children: groups.map((group) {
-                    final groupGrantedCount = group.items
-                        .where((item) => granted.contains(item.permissionCode))
-                        .length;
-                    final allGranted = groupGrantedCount == group.items.length;
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      child: ExpansionTile(
-                        initiallyExpanded: group.groupCode.startsWith('page.'),
-                        title: Text(
-                          '${_groupLabel(group.groupCode)} '
-                          '($groupGrantedCount/${group.items.length})',
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.separated(
+              itemCount: _roles.length,
+              separatorBuilder: (context, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final role = _roles[index];
+                final selected = role.code == selectedRole.code;
+                final readonly = _isReadonly(role.code);
+                final dirty = _hasDirtyRole(role.code);
+                final draft = _draftByRole[role.code];
+                final count = draft == null
+                    ? 0
+                    : (draft.moduleEnabled ? 1 : 0) +
+                          draft.pagePermissionCodes.length +
+                          draft.featurePermissionCodes.length;
+                return ListTile(
+                  dense: true,
+                  selected: selected,
+                  onTap: () => setState(() => _selectedRoleCode = role.code),
+                  title: Text(role.name),
+                  subtitle: Text(role.code),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('$count 项'),
+                      if (dirty)
+                        Text(
+                          '未保存',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontSize: 12,
+                          ),
                         ),
-                        trailing: Wrap(
-                          spacing: 8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            TextButton(
-                              onPressed: readonly || _saving
-                                  ? null
-                                  : () => _setGroupForRole(
-                                      roleCode: role.code,
-                                      group: group,
-                                      granted: !allGranted,
-                                    ),
-                              child: Text(allGranted ? '清空组' : '全选组'),
-                            ),
-                            const Icon(Icons.expand_more),
-                          ],
-                        ),
-                        children: group.items.map((item) {
-                          final checked = granted.contains(item.permissionCode);
-                          final subtitle = item.parentPermissionCode == null
-                              ? item.permissionCode
-                              : '${item.permissionCode}\n父权限：${_permissionDisplayNameByCode(item.parentPermissionCode!)}';
-                          return SwitchListTile(
-                            dense: true,
-                            title: Text(_permissionDisplayName(item)),
-                            subtitle: Text(subtitle),
-                            value: checked,
-                            onChanged: readonly || _saving
-                                ? null
-                                : (enabled) => _togglePermission(
-                                    roleCode: role.code,
-                                    permissionCode: item.permissionCode,
-                                    enabled: enabled,
-                                  ),
-                          );
-                        }).toList(),
-                      ),
-                    );
-                  }).toList(),
-                ),
-        ),
-      ],
+                      if (readonly)
+                        const Text('只读', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModuleAndPagesCard({
+    required RoleItem role,
+    required _RoleDraft draft,
+    required bool readonly,
+    required List<PermissionHierarchyPageItem> pages,
+  }) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Text(
+            '页面链路',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('模块总开关'),
+            subtitle: Text(readonly ? '系统管理员固定全权限（只读）' : '关闭后保留下层配置，入口不可用'),
+            value: draft.moduleEnabled,
+            onChanged: readonly || _saving
+                ? null
+                : (value) => setState(
+                    () => _draftByRole[role.code] = draft.copyWith(
+                      moduleEnabled: value,
+                    ),
+                  ),
+          ),
+          const Divider(),
+          Text(
+            '页面开关（${pages.length}）',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          ...pages.map((item) {
+            final checked = draft.pagePermissionCodes.contains(
+              item.permissionCode,
+            );
+            final effective =
+                (_effectivePagesByRole[role.code] ?? const <String>{}).contains(
+                  item.permissionCode,
+                );
+            return SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(item.pageName),
+              subtitle: Text(
+                checked ? (effective ? '当前可见' : '已配置但不可见') : '未开启',
+              ),
+              value: checked,
+              onChanged: readonly || _saving
+                  ? null
+                  : (value) => setState(() {
+                      final next = {...draft.pagePermissionCodes};
+                      if (value) {
+                        next.add(item.permissionCode);
+                      } else {
+                        next.remove(item.permissionCode);
+                      }
+                      _draftByRole[role.code] = draft.copyWith(
+                        pagePermissionCodes: next,
+                      );
+                    }),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Map<String, List<PermissionHierarchyFeatureItem>> _groupFeaturesByPage(
+    List<PermissionHierarchyFeatureItem> features,
+  ) {
+    final grouped = <String, List<PermissionHierarchyFeatureItem>>{};
+    for (final item in features) {
+      final key = item.pagePermissionCode ?? '__no_page__';
+      grouped.putIfAbsent(key, () => []).add(item);
+    }
+    for (final values in grouped.values) {
+      values.sort((a, b) => a.permissionCode.compareTo(b.permissionCode));
+    }
+    return grouped;
+  }
+
+  Widget _buildFeaturesCard({
+    required RoleItem role,
+    required PermissionHierarchyCatalogResult catalog,
+    required _RoleDraft draft,
+    required bool readonly,
+    required List<PermissionHierarchyFeatureItem> features,
+  }) {
+    final pageNameByPermission = {
+      for (final page in catalog.pages) page.permissionCode: page.pageName,
+    };
+    final effectiveFeatures =
+        _effectiveFeaturesByRole[role.code] ?? const <String>{};
+    final grouped = _groupFeaturesByPage(features);
+
+    String featureStatus(PermissionHierarchyFeatureItem item, bool checked) {
+      final effective = effectiveFeatures.contains(item.permissionCode);
+      final pageEnabled =
+          item.pagePermissionCode == null ||
+          draft.pagePermissionCodes.contains(item.pagePermissionCode);
+      if (!checked) {
+        return '未开启';
+      }
+      if (!draft.moduleEnabled) {
+        return '已配置但不可用（模块未开启）';
+      }
+      if (!pageEnabled) {
+        return '已配置但不可用（页面未开启）';
+      }
+      return effective ? '可用' : '已配置待生效';
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Text(
+            '功能链开关（${features.length}）',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          ...grouped.entries.map((entry) {
+            final pagePermissionCode = entry.key;
+            final pageName =
+                pageNameByPermission[pagePermissionCode] ?? '未绑定页面';
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ExpansionTile(
+                initiallyExpanded: true,
+                title: Text('$pageName（${entry.value.length}）'),
+                children: entry.value.map((item) {
+                  final checked = draft.featurePermissionCodes.contains(
+                    item.permissionCode,
+                  );
+                  return SwitchListTile(
+                    dense: true,
+                    title: Text(item.featureName),
+                    subtitle: Text(
+                      '${featureStatus(item, checked)}\n'
+                      '依赖：${item.dependencyPermissionCodes.isEmpty ? '无' : item.dependencyPermissionCodes.join('、')}',
+                    ),
+                    value: checked,
+                    onChanged: readonly || _saving
+                        ? null
+                        : (value) => setState(() {
+                            final next = {...draft.featurePermissionCodes};
+                            if (value) {
+                              next.add(item.permissionCode);
+                            } else {
+                              next.remove(item.permissionCode);
+                            }
+                            _draftByRole[role.code] = draft.copyWith(
+                              featurePermissionCodes: next,
+                            );
+                          }),
+                  );
+                }).toList(),
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 
@@ -1305,181 +917,216 @@ class _FunctionPermissionConfigPageState
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_roles.isEmpty || _selectedModuleCode == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(_message.isEmpty ? '未加载到角色或模块数据' : _message),
-        ),
-      );
+    final catalog = _catalog;
+    final role = _selectedRole;
+    if (catalog == null || role == null) {
+      return Center(child: Text(_message.isEmpty ? '暂无数据' : _message));
     }
+    final draft = _draftByRole[role.code]!;
+    final readonly = _isReadonly(role.code);
+    final keyword = _searchController.text.trim().toLowerCase();
+    final pages =
+        catalog.pages
+            .where(
+              (item) =>
+                  keyword.isEmpty ||
+                  item.pageName.toLowerCase().contains(keyword) ||
+                  item.permissionCode.toLowerCase().contains(keyword),
+            )
+            .toList()
+          ..sort((a, b) => a.pageCode.compareTo(b.pageCode));
+    final features =
+        catalog.features
+            .where(
+              (item) =>
+                  keyword.isEmpty ||
+                  item.featureName.toLowerCase().contains(keyword) ||
+                  item.permissionCode.toLowerCase().contains(keyword),
+            )
+            .toList()
+          ..sort((a, b) => a.permissionCode.compareTo(b.permissionCode));
 
-    final statusText = _lastSavedAt == null
-        ? '尚未保存'
-        : '上次保存：${_formatTime(_lastSavedAt!)}';
-
-    return DefaultTabController(
-      key: ValueKey(
-        '$_selectedModuleCode|${_roles.map((item) => item.code).join('|')}',
-      ),
-      length: _roles.length,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  '功能权限配置',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(999),
-                    color: Theme.of(context).colorScheme.secondaryContainer,
-                  ),
-                  child: const Text('系统管理员固定全权限'),
-                ),
-                const Spacer(),
-                SizedBox(
-                  width: 220,
-                  child: DropdownButtonFormField<String>(
-                    value: _selectedModuleCode,
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      labelText: '模块',
-                    ),
-                    items: _moduleCodes
-                        .map(
-                          (code) => DropdownMenuItem<String>(
-                            value: code,
-                            child: Text('${_moduleLabel(code)}（$code）'),
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      SizedBox(
+                        width: 250,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selectedModuleCode,
+                          decoration: const InputDecoration(
+                            labelText: '模块',
+                            border: OutlineInputBorder(),
+                            isDense: true,
                           ),
-                        )
-                        .toList(),
-                    onChanged: _saving ? null : _handleModuleChange,
+                          items: _moduleCodes
+                              .map(
+                                (code) => DropdownMenuItem<String>(
+                                  value: code,
+                                  child: Text('${_moduleLabel(code)}（$code）'),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _saving ? null : _switchModule,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 320,
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                            hintText: '搜索页面/功能链',
+                            prefixIcon: Icon(Icons.search),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: '刷新',
-                  onPressed: _saving
-                      ? null
-                      : () => _handleModuleChange(_selectedModuleCode),
-                  icon: const Icon(Icons.refresh),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: _saving || _previewing ? null : _requestPreview,
-                  icon: const Icon(Icons.visibility_outlined),
-                  label: Text(_previewing ? '预览中...' : '生效预览'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: _saving || !_hasDirtyChanges
-                      ? null
-                      : () => _resetUnsavedChanges(showMessage: true),
-                  child: const Text('回退未保存'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: _saving || !_canRollbackLastSave
-                      ? null
-                      : _rollbackLastSave,
-                  child: const Text('回退上次保存'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: _saving || !_hasDirtyChanges ? null : _saveChanges,
-                  icon: const Icon(Icons.save),
-                  label: Text(_saving ? '保存中...' : '保存'),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _saving || _previewing ? null : _preview,
+                        icon: const Icon(Icons.visibility),
+                        label: Text(_previewing ? '预览中...' : '生效预览'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed:
+                            _saving ||
+                                _lastSavedByModule[_selectedModuleCode] == null
+                            ? null
+                            : () {
+                                final saved =
+                                    _lastSavedByModule[_selectedModuleCode];
+                                if (saved == null) return;
+                                setState(() {
+                                  _activePreview = saved;
+                                  _showPreview = true;
+                                  _activePreviewIsSaved = true;
+                                });
+                              },
+                        icon: const Icon(Icons.history),
+                        label: const Text('查看最近保存结果'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _saving || !_hasDirty ? null : _resetUnsaved,
+                        icon: const Icon(Icons.undo),
+                        label: const Text('回退未保存'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _saving || !_canRollbackLastSave
+                            ? null
+                            : _rollbackLastSave,
+                        icon: const Icon(Icons.restore),
+                        label: const Text('回退上次保存'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: _saving || !_hasDirty ? null : _save,
+                        icon: const Icon(Icons.save),
+                        label: Text(_saving ? '保存中...' : '保存'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 42,
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                        hintText: '搜索权限名称或编码',
-                        prefixIcon: Icon(Icons.search),
+          ),
+          _buildPreviewCard(),
+          if (_message.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(_message),
+              ),
+            ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 1100) {
+                  return Column(
+                    children: [
+                      SizedBox(
+                        height: 220,
+                        child: _buildRoleSelectorCard(role),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 320,
+                        child: _buildModuleAndPagesCard(
+                          role: role,
+                          draft: draft,
+                          readonly: readonly,
+                          pages: pages,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: _buildFeaturesCard(
+                          role: role,
+                          catalog: catalog,
+                          draft: draft,
+                          readonly: readonly,
+                          features: features,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    SizedBox(
+                      width: 360,
+                      child: Column(
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: _buildRoleSelectorCard(role),
+                          ),
+                          const SizedBox(height: 8),
+                          Expanded(
+                            flex: 7,
+                            child: _buildModuleAndPagesCard(
+                              role: role,
+                              draft: draft,
+                              readonly: readonly,
+                              pages: pages,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 180,
-                  child: DropdownButtonFormField<String>(
-                    value: _resourceTypeFilter,
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      labelText: '类型',
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildFeaturesCard(
+                        role: role,
+                        catalog: catalog,
+                        draft: draft,
+                        readonly: readonly,
+                        features: features,
+                      ),
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'all', child: Text('全部类型')),
-                      DropdownMenuItem(value: 'page', child: Text('页面权限')),
-                      DropdownMenuItem(value: 'action', child: Text('动作权限')),
-                    ],
-                    onChanged: _saving
-                        ? null
-                        : (value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setState(() {
-                              _resourceTypeFilter = value;
-                            });
-                          },
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 8),
-            Text('$statusText | 未保存角色：$_dirtyRoleCount'),
-            if (_message.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  _message,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-              ),
-            _buildPreviewPanel(),
-            const SizedBox(height: 12),
-            Material(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: TabBar(
-                isScrollable: true,
-                tabs: _roles.map((role) => Tab(text: role.name)).toList(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: TabBarView(
-                children: _roles.map(_buildRolePermissionPane).toList(),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

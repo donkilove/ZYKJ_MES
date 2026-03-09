@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.core.authz_hierarchy_catalog import (
+    FEATURE_DEFINITIONS,
+    MODULE_DEFINITIONS,
+    module_permission_code,
+)
 from app.core.rbac import ROLE_SYSTEM_ADMIN
 
 
@@ -15,6 +20,8 @@ AUTHZ_MODULE_PRODUCTION = "production"
 
 AUTHZ_RESOURCE_PAGE = "page"
 AUTHZ_RESOURCE_ACTION = "action"
+AUTHZ_RESOURCE_MODULE = "module"
+AUTHZ_RESOURCE_FEATURE = "feature"
 
 
 # Core/system permissions.
@@ -144,6 +151,37 @@ for page_code, page_name, module_code, parent_code in PAGE_DEFINITIONS:
             parent_permission_code=(
                 PAGE_PERMISSION_BY_PAGE_CODE[parent_code] if parent_code else None
             ),
+        )
+    )
+
+MODULE_PERMISSION_CATALOG: list[PermissionCatalogItem] = [
+    PermissionCatalogItem(
+        permission_code=module_permission_code(item.module_code),
+        permission_name=f"模块入口：{item.module_name}",
+        module_code=item.module_code,
+        resource_type=AUTHZ_RESOURCE_MODULE,
+        parent_permission_code=None,
+    )
+    for item in MODULE_DEFINITIONS
+]
+
+
+MODULE_PERMISSION_BY_MODULE_CODE: dict[str, str] = {
+    item.module_code: module_permission_code(item.module_code)
+    for item in MODULE_DEFINITIONS
+}
+
+
+FEATURE_PERMISSION_CATALOG: list[PermissionCatalogItem] = []
+for feature in FEATURE_DEFINITIONS:
+    parent_permission_code = PAGE_PERMISSION_BY_PAGE_CODE.get(feature.page_code)
+    FEATURE_PERMISSION_CATALOG.append(
+        PermissionCatalogItem(
+            permission_code=feature.permission_code,
+            permission_name=feature.permission_name,
+            module_code=feature.module_code,
+            resource_type=AUTHZ_RESOURCE_FEATURE,
+            parent_permission_code=parent_permission_code,
         )
     )
 
@@ -277,7 +315,12 @@ ACTION_PERMISSION_CATALOG = [
     for code, name, module_code, parent_page in ACTION_DEFINITIONS
 ]
 
-PERMISSION_CATALOG: list[PermissionCatalogItem] = PAGE_PERMISSION_CATALOG + ACTION_PERMISSION_CATALOG
+PERMISSION_CATALOG: list[PermissionCatalogItem] = (
+    MODULE_PERMISSION_CATALOG
+    + PAGE_PERMISSION_CATALOG
+    + FEATURE_PERMISSION_CATALOG
+    + ACTION_PERMISSION_CATALOG
+)
 PERMISSION_BY_CODE = {item.permission_code: item for item in PERMISSION_CATALOG}
 
 

@@ -169,6 +169,102 @@ class AuthzService {
     return RolePermissionMatrixUpdateResult.fromJson(data);
   }
 
+  Future<PermissionHierarchyCatalogResult> loadPermissionHierarchyCatalog({
+    required String moduleCode,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/hierarchy/catalog',
+    ).replace(queryParameters: {'module': moduleCode});
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return PermissionHierarchyCatalogResult.fromJson(data);
+  }
+
+  Future<PermissionHierarchyRoleConfigResult>
+  loadPermissionHierarchyRoleConfig({
+    required String roleCode,
+    required String moduleCode,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/hierarchy/role-config',
+    ).replace(queryParameters: {'role_code': roleCode, 'module': moduleCode});
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return PermissionHierarchyRoleConfigResult.fromJson(data);
+  }
+
+  Future<PermissionHierarchyRoleUpdateResult>
+  updatePermissionHierarchyRoleConfig({
+    required String roleCode,
+    required String moduleCode,
+    required bool moduleEnabled,
+    required List<String> pagePermissionCodes,
+    required List<String> featurePermissionCodes,
+    bool dryRun = false,
+    String? remark,
+  }) async {
+    final uri = Uri.parse('$_basePath/hierarchy/role-config/$roleCode');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'module_code': moduleCode,
+        'module_enabled': moduleEnabled,
+        'page_permission_codes': pagePermissionCodes,
+        'feature_permission_codes': featurePermissionCodes,
+        'dry_run': dryRun,
+        'remark': remark,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return PermissionHierarchyRoleUpdateResult.fromJson(data);
+  }
+
+  Future<PermissionHierarchyPreviewResult> previewPermissionHierarchy({
+    required String moduleCode,
+    required List<PermissionHierarchyRoleDraftItem> roleItems,
+  }) async {
+    final uri = Uri.parse('$_basePath/hierarchy/preview');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'module_code': moduleCode,
+        'role_items': roleItems.map((item) => item.toJson()).toList(),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return PermissionHierarchyPreviewResult.fromJson(data);
+  }
+
   Map<String, dynamic> _decodeBody(http.Response response) {
     if (response.body.isEmpty) {
       return {};

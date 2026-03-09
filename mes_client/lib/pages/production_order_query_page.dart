@@ -218,7 +218,9 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
   }
 
-  Future<MyOrderContextResult> _fetchOrderContextInCurrentView(int orderId) async {
+  Future<MyOrderContextResult> _fetchOrderContextInCurrentView(
+    int orderId,
+  ) async {
     try {
       return await _service.getMyOrderContext(
         orderId: orderId,
@@ -742,7 +744,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<int>(
-                    value: targetId,
+                    initialValue: targetId,
                     decoration: const InputDecoration(
                       labelText: '目标操作员',
                       border: OutlineInputBorder(),
@@ -760,7 +762,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
-                    value: helperId,
+                    initialValue: helperId,
                     decoration: const InputDecoration(
                       labelText: '代班人',
                       border: OutlineInputBorder(),
@@ -893,7 +895,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
               SizedBox(
                 width: 220,
                 child: DropdownButtonFormField<String>(
-                  value: _viewMode,
+                  initialValue: _viewMode,
                   decoration: const InputDecoration(
                     labelText: '工单视角',
                     border: OutlineInputBorder(),
@@ -926,7 +928,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 SizedBox(
                   width: 260,
                   child: DropdownButtonFormField<int>(
-                    value: _proxyOperatorUserId,
+                    initialValue: _proxyOperatorUserId,
                     decoration: const InputDecoration(
                       labelText: '选择操作员',
                       border: OutlineInputBorder(),

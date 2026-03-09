@@ -87,13 +87,10 @@ class _UserPageState extends State<UserPage> {
   bool _hasPermission(String code) => _permissionCodes.contains(code);
 
   bool get _canManageUsers =>
-      _hasPermission(UserPermissionCodes.usersCreate) ||
-      _hasPermission(UserPermissionCodes.usersUpdate) ||
-      _hasPermission(UserPermissionCodes.usersDelete);
+      _hasPermission(UserFeaturePermissionCodes.userManagementManage);
 
   bool get _canReviewAction =>
-      _hasPermission(UserPermissionCodes.registrationRequestsApprove) ||
-      _hasPermission(UserPermissionCodes.registrationRequestsReject);
+      _hasPermission(UserFeaturePermissionCodes.registrationApprovalReview);
 
   List<String> _sortedVisibleTabCodes() {
     final visibleSet = widget.visibleTabCodes.toSet()

@@ -10,6 +10,12 @@ from app.core.authz_catalog import (
 from app.models.user import User
 from app.schemas.authz import (
     MyPermissionsResult,
+    PermissionHierarchyCatalogResult,
+    PermissionHierarchyPreviewRequest,
+    PermissionHierarchyPreviewResult,
+    PermissionHierarchyRoleConfigResult,
+    PermissionHierarchyRoleConfigUpdateRequest,
+    PermissionHierarchyRoleConfigUpdateResult,
     PermissionCatalogItem,
     PermissionCatalogResult,
     RolePermissionMatrixItem,
@@ -24,11 +30,15 @@ from app.schemas.authz import (
 )
 from app.schemas.common import ApiResponse, success_response
 from app.services.authz_service import (
+    get_permission_hierarchy_catalog,
+    get_permission_hierarchy_role_config,
     get_role_permission_items,
     get_role_permission_matrix,
     get_user_permission_codes,
     list_permission_catalog_rows,
+    preview_permission_hierarchy,
     replace_role_permissions_for_module,
+    update_permission_hierarchy_role_config,
     update_role_permission_matrix,
 )
 
@@ -169,6 +179,95 @@ def put_role_permissions_matrix_api(
         ),
         message="updated",
     )
+
+
+@router.get(
+    "/hierarchy/catalog",
+    response_model=ApiResponse[PermissionHierarchyCatalogResult],
+)
+def get_permission_hierarchy_catalog_api(
+    module: str = Query(min_length=2, max_length=64),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_VIEW)),
+) -> ApiResponse[PermissionHierarchyCatalogResult]:
+    try:
+        payload = get_permission_hierarchy_catalog(db, module_code=module)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(PermissionHierarchyCatalogResult(**payload))
+
+
+@router.get(
+    "/hierarchy/role-config",
+    response_model=ApiResponse[PermissionHierarchyRoleConfigResult],
+)
+def get_permission_hierarchy_role_config_api(
+    role_code: str = Query(min_length=2, max_length=64),
+    module: str = Query(min_length=2, max_length=64),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_VIEW)),
+) -> ApiResponse[PermissionHierarchyRoleConfigResult]:
+    try:
+        payload = get_permission_hierarchy_role_config(
+            db,
+            role_code=role_code,
+            module_code=module,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(PermissionHierarchyRoleConfigResult(**payload))
+
+
+@router.put(
+    "/hierarchy/role-config/{role_code}",
+    response_model=ApiResponse[PermissionHierarchyRoleConfigUpdateResult],
+)
+def put_permission_hierarchy_role_config_api(
+    role_code: str,
+    payload: PermissionHierarchyRoleConfigUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+) -> ApiResponse[PermissionHierarchyRoleConfigUpdateResult]:
+    try:
+        result = update_permission_hierarchy_role_config(
+            db,
+            role_code=role_code,
+            module_code=payload.module_code,
+            module_enabled=payload.module_enabled,
+            page_permission_codes=payload.page_permission_codes,
+            feature_permission_codes=payload.feature_permission_codes,
+            dry_run=payload.dry_run,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(
+        PermissionHierarchyRoleConfigUpdateResult(
+            **result,
+            dry_run=payload.dry_run,
+        ),
+        message="updated" if not payload.dry_run else "previewed",
+    )
+
+
+@router.post(
+    "/hierarchy/preview",
+    response_model=ApiResponse[PermissionHierarchyPreviewResult],
+)
+def preview_permission_hierarchy_api(
+    payload: PermissionHierarchyPreviewRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+) -> ApiResponse[PermissionHierarchyPreviewResult]:
+    try:
+        result = preview_permission_hierarchy(
+            db,
+            module_code=payload.module_code,
+            role_items=[item.model_dump() for item in payload.role_items],
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+
+    return success_response(PermissionHierarchyPreviewResult(**result), message="previewed")
 
 
 @router.put(

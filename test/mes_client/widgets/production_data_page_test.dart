@@ -188,6 +188,7 @@ void main() {
           body: ProductionDataPage(
             session: AppSession(baseUrl: '', accessToken: ''),
             onLogout: () {},
+            canExport: true,
             service: _FakeProductionService(),
           ),
         ),
