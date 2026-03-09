@@ -911,6 +911,79 @@ class CapabilityPackPreviewResult {
   }
 }
 
+class CapabilityPackChangeLogItem {
+  const CapabilityPackChangeLogItem({
+    required this.changeLogId,
+    required this.moduleCode,
+    required this.moduleRevision,
+    required this.changeType,
+    required this.remark,
+    required this.operatorUserId,
+    required this.operatorUsername,
+    required this.rollbackOfChangeLogId,
+    required this.createdAt,
+    required this.roleResults,
+  });
+
+  final int changeLogId;
+  final String moduleCode;
+  final int moduleRevision;
+  final String changeType;
+  final String? remark;
+  final int? operatorUserId;
+  final String? operatorUsername;
+  final int? rollbackOfChangeLogId;
+  final DateTime createdAt;
+  final List<CapabilityPackRoleUpdateResult> roleResults;
+
+  factory CapabilityPackChangeLogItem.fromJson(Map<String, dynamic> json) {
+    return CapabilityPackChangeLogItem(
+      changeLogId: (json['change_log_id'] as int?) ?? 0,
+      moduleCode: json['module_code'] as String,
+      moduleRevision: (json['module_revision'] as int?) ?? 0,
+      changeType: json['change_type'] as String,
+      remark: json['remark'] as String?,
+      operatorUserId: json['operator_user_id'] as int?,
+      operatorUsername: json['operator_username'] as String?,
+      rollbackOfChangeLogId: json['rollback_of_change_log_id'] as int?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      roleResults: (json['role_results'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => CapabilityPackRoleUpdateResult.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class CapabilityPackChangeLogListResult {
+  const CapabilityPackChangeLogListResult({
+    required this.moduleCode,
+    required this.moduleRevision,
+    required this.items,
+  });
+
+  final String moduleCode;
+  final int moduleRevision;
+  final List<CapabilityPackChangeLogItem> items;
+
+  factory CapabilityPackChangeLogListResult.fromJson(Map<String, dynamic> json) {
+    return CapabilityPackChangeLogListResult(
+      moduleCode: json['module_code'] as String,
+      moduleRevision: (json['module_revision'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => CapabilityPackChangeLogItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
 class PermissionExplainCapabilityItem {
   const PermissionExplainCapabilityItem({
     required this.capabilityCode,
@@ -1023,8 +1096,6 @@ class ProductionPermissionCodes {
 class SystemPermissionCodes {
   static const String pageFunctionPermissionConfigView =
       'page.function_permission_config.view';
-  static const String pageVisibilityConfigView =
-      'page.page_visibility_config.view';
   static const String rolePermissionsView = 'authz.role_permissions.view';
   static const String rolePermissionsUpdate = 'authz.role_permissions.update';
 }

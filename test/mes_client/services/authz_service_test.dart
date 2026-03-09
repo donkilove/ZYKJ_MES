@@ -573,6 +573,103 @@ void main() {
             },
           );
         },
+        'GET /authz/capability-packs/history': (request) {
+          expect(request.uri.queryParameters['module'], 'production');
+          expect(request.uri.queryParameters['limit'], '20');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'module_code': 'production',
+                'module_revision': 4,
+                'items': [
+                  {
+                    'change_log_id': 11,
+                    'module_code': 'production',
+                    'module_revision': 4,
+                    'change_type': 'apply',
+                    'remark': 'batch apply',
+                    'operator_user_id': 1,
+                    'operator_username': 'authz_admin',
+                    'rollback_of_change_log_id': null,
+                    'created_at': '2026-03-09T10:00:00Z',
+                    'role_results': [
+                      {
+                        'role_code': 'production_admin',
+                        'role_name': '生产管理员',
+                        'readonly': false,
+                        'ignored_input': false,
+                        'module_code': 'production',
+                        'before_capability_codes': [],
+                        'after_capability_codes': [
+                          'feature.production.order_query.execute',
+                        ],
+                        'added_capability_codes': [
+                          'feature.production.order_query.execute',
+                        ],
+                        'removed_capability_codes': [],
+                        'auto_linked_dependencies': [],
+                        'effective_capability_codes': [
+                          'feature.production.order_query.execute',
+                        ],
+                        'effective_page_permission_codes': [
+                          'page.production_order_query.view',
+                        ],
+                        'updated_count': 1,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'POST /authz/capability-packs/rollback': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['module_code'], 'production');
+          expect(body['change_log_id'], 11);
+          expect(body['expected_revision'], 4);
+          expect(body['remark'], 'rollback to revision 4');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'module_code': 'production',
+                'module_revision': 5,
+                'role_results': [
+                  {
+                    'role_code': 'production_admin',
+                    'role_name': '生产管理员',
+                    'readonly': false,
+                    'ignored_input': false,
+                    'module_code': 'production',
+                    'before_capability_codes': [
+                      'feature.production.order_query.proxy',
+                    ],
+                    'after_capability_codes': [
+                      'feature.production.order_query.execute',
+                    ],
+                    'added_capability_codes': [
+                      'feature.production.order_query.execute',
+                    ],
+                    'removed_capability_codes': [
+                      'feature.production.order_query.proxy',
+                    ],
+                    'auto_linked_dependencies': [],
+                    'effective_capability_codes': [
+                      'feature.production.order_query.execute',
+                    ],
+                    'effective_page_permission_codes': [
+                      'page.production_order_query.view',
+                    ],
+                    'updated_count': 2,
+                    'dry_run': false,
+                  },
+                ],
+              },
+            },
+          );
+        },
         'GET /authz/capability-packs/effective': (request) {
           expect(request.uri.queryParameters['role_code'], 'production_admin');
           expect(request.uri.queryParameters['module'], 'production');
@@ -640,6 +737,15 @@ void main() {
         expectedRevision: 3,
         remark: 'batch apply',
       );
+      final history = await service.loadCapabilityPackHistory(
+        moduleCode: 'production',
+      );
+      final rolledBack = await service.rollbackCapabilityPacks(
+        moduleCode: 'production',
+        changeLogId: 11,
+        expectedRevision: 4,
+        remark: 'rollback to revision 4',
+      );
       final updated = await service.updateCapabilityPackRoleConfig(
         roleCode: 'production_admin',
         moduleCode: 'production',
@@ -663,6 +769,12 @@ void main() {
       expect(preview.moduleRevision, 3);
       expect(preview.roleResults, hasLength(1));
       expect(batchApplied.moduleRevision, 4);
+      expect(history.moduleRevision, 4);
+      expect(history.items.single.changeLogId, 11);
+      expect(history.items.single.roleResults.single.afterCapabilityCodes, [
+        'feature.production.order_query.execute',
+      ]);
+      expect(rolledBack.moduleRevision, 5);
       expect(updated.updatedCount, 1);
       expect(
         updated.afterCapabilityCodes,

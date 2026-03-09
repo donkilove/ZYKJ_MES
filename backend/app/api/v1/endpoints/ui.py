@@ -2,10 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, require_permission
-from app.core.authz_catalog import (
-    PERM_UI_PAGE_VISIBILITY_CONFIG_UPDATE,
-    PERM_UI_PAGE_VISIBILITY_CONFIG_VIEW,
-)
+from app.core.authz_catalog import PERM_AUTHZ_ROLE_PERMISSIONS_VIEW
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
@@ -19,10 +16,8 @@ from app.schemas.page_visibility import (
     PageVisibilityMeResult,
 )
 from app.services.page_visibility_service import (
-    ensure_visibility_defaults,
     get_page_visibility_config,
     list_page_catalog_items,
-    update_page_visibility_config,
 )
 from app.services.authz_snapshot_service import get_authz_snapshot
 
@@ -59,27 +54,21 @@ def get_my_page_visibility(
 @router.get("/page-visibility/config", response_model=ApiResponse[PageVisibilityConfigResult])
 def get_page_visibility_configuration(
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_UI_PAGE_VISIBILITY_CONFIG_VIEW)),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_VIEW)),
 ) -> ApiResponse[PageVisibilityConfigResult]:
-    ensure_visibility_defaults(db)
     items = [PageVisibilityConfigItem(**item) for item in get_page_visibility_config(db)]
-    return success_response(PageVisibilityConfigResult(items=items))
+    return success_response(PageVisibilityConfigResult(items=items), message="deprecated")
 
 
 @router.put("/page-visibility/config", response_model=ApiResponse[PageVisibilityConfigUpdateResult])
 def update_page_visibility_configuration(
     payload: PageVisibilityConfigUpdateRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_UI_PAGE_VISIBILITY_CONFIG_UPDATE)),
+    _: User = Depends(get_current_active_user),
 ) -> ApiResponse[PageVisibilityConfigUpdateResult]:
-    updates = [item.model_dump() for item in payload.items]
-    updated_count, invalid_items = update_page_visibility_config(db, updates)
-    if invalid_items:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="; ".join(invalid_items),
-        )
-    return success_response(
-        PageVisibilityConfigUpdateResult(updated_count=updated_count),
-        message="updated",
+    _ = payload
+    _ = db
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="页面可见性配置已下线，请改用功能权限配置",
     )

@@ -59,16 +59,6 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         ),
     ),
     FeatureDefinition(
-        permission_code="feature.system.page_visibility_legacy.manage",
-        permission_name="管理页面可见性（旧）",
-        module_code="system",
-        page_code="function_permission_config",
-        action_permission_codes=(
-            "system.page_visibility_config.view",
-            "system.page_visibility_config.update",
-        ),
-    ),
-    FeatureDefinition(
         permission_code="feature.user.user_management.view",
         permission_name="查看用户与角色信息",
         module_code="user",
@@ -440,4 +430,3 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
 
 
 FEATURE_BY_PERMISSION_CODE = {item.permission_code: item for item in FEATURE_DEFINITIONS}
-

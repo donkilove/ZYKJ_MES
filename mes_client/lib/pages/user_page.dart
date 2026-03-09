@@ -42,8 +42,7 @@ class _UserPageState extends State<UserPage> {
       _hasPermission(UserFeaturePermissionCodes.registrationApprovalReview);
 
   List<String> _sortedVisibleTabCodes() {
-    final visibleSet = widget.visibleTabCodes.toSet()
-      ..remove('page_visibility_config');
+    final visibleSet = widget.visibleTabCodes.toSet();
     final ordered = <String>[];
 
     for (final code in _defaultTabOrder) {

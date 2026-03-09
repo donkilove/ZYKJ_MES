@@ -21,6 +21,9 @@ from app.core.production_constants import (
 from app.core.authz_catalog import (
     MODULE_PERMISSION_BY_MODULE_CODE,
     PAGE_PERMISSION_BY_PAGE_CODE,
+    PERM_PROD_DATA_MANUAL,
+    PERM_PROD_DATA_MANUAL_EXPORT,
+    PERM_PROD_DATA_TODAY_REALTIME,
 )
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.role_permission_grant import RolePermissionGrant
@@ -289,7 +292,14 @@ def test_new_endpoints_permissions_and_validation(db, factory) -> None:
     prod_data_page_perm = PAGE_PERMISSION_BY_PAGE_CODE["production_data_query"]
     db.query(RolePermissionGrant).filter(
         RolePermissionGrant.role_code == quality_code,
-        RolePermissionGrant.permission_code.in_([prod_module_perm, prod_data_page_perm]),
+        RolePermissionGrant.permission_code.in_(
+            [
+                prod_module_perm,
+                prod_data_page_perm,
+                PERM_PROD_DATA_TODAY_REALTIME,
+                PERM_PROD_DATA_MANUAL,
+            ]
+        ),
     ).update({"granted": True}, synchronize_session=False)
     db.query(RolePermissionGrant).filter(
         RolePermissionGrant.role_code == ROLE_PRODUCTION_ADMIN,
@@ -297,7 +307,8 @@ def test_new_endpoints_permissions_and_validation(db, factory) -> None:
             [
                 prod_module_perm,
                 prod_data_page_perm,
-                "feature.production.data_export.use",
+                PERM_PROD_DATA_MANUAL,
+                PERM_PROD_DATA_MANUAL_EXPORT,
             ]
         ),
     ).update({"granted": True}, synchronize_session=False)
@@ -315,7 +326,7 @@ def test_new_endpoints_permissions_and_validation(db, factory) -> None:
         "/api/v1/production/data/manual/export",
         json={"stat_mode": "main_order"},
     )
-    assert export_response_forbidden.status_code == 200
+    assert export_response_forbidden.status_code == 403
 
     invalid_date_response = client.get(
         "/api/v1/production/data/manual",

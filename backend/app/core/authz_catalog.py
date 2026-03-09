@@ -30,8 +30,6 @@ PERM_AUTHZ_PERMISSION_CATALOG_VIEW = "authz.permissions.catalog.view"
 PERM_AUTHZ_MY_PERMISSIONS_VIEW = "authz.permissions.me.view"
 PERM_AUTHZ_ROLE_PERMISSIONS_VIEW = "authz.role_permissions.view"
 PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE = "authz.role_permissions.update"
-PERM_UI_PAGE_VISIBILITY_CONFIG_VIEW = "system.page_visibility_config.view"
-PERM_UI_PAGE_VISIBILITY_CONFIG_UPDATE = "system.page_visibility_config.update"
 
 
 # Production page permissions.
@@ -95,7 +93,6 @@ PAGE_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("user", "用户模块", AUTHZ_MODULE_USER, None),
     ("user_management", "用户管理", AUTHZ_MODULE_USER, "user"),
     ("registration_approval", "注册审批", AUTHZ_MODULE_USER, "user"),
-    ("page_visibility_config", "页面可见性配置（旧）", AUTHZ_MODULE_SYSTEM, "user"),
     ("function_permission_config", "功能权限配置", AUTHZ_MODULE_SYSTEM, "user"),
     ("product", "产品模块", AUTHZ_MODULE_PRODUCT, None),
     ("product_management", "产品管理", AUTHZ_MODULE_PRODUCT, "product"),
@@ -195,8 +192,6 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     (PERM_AUTHZ_MY_PERMISSIONS_VIEW, "查看我的权限", AUTHZ_MODULE_SYSTEM, None),
     (PERM_AUTHZ_ROLE_PERMISSIONS_VIEW, "查看角色权限配置", AUTHZ_MODULE_SYSTEM, "function_permission_config"),
     (PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE, "更新角色权限配置", AUTHZ_MODULE_SYSTEM, "function_permission_config"),
-    (PERM_UI_PAGE_VISIBILITY_CONFIG_VIEW, "查看页面可见性配置（旧）", AUTHZ_MODULE_SYSTEM, "page_visibility_config"),
-    (PERM_UI_PAGE_VISIBILITY_CONFIG_UPDATE, "更新页面可见性配置（旧）", AUTHZ_MODULE_SYSTEM, "page_visibility_config"),
     ("user.users.list", "查看用户列表", AUTHZ_MODULE_USER, "user_management"),
     ("user.users.create", "创建用户", AUTHZ_MODULE_USER, "user_management"),
     ("user.users.detail", "查看用户详情", AUTHZ_MODULE_USER, "user_management"),

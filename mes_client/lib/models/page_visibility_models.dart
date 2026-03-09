@@ -220,20 +220,6 @@ const fallbackPageCatalog = <PageCatalogItem>[
   ),
 
   PageCatalogItem(
-    code: 'page_visibility_config',
-
-    name: '页面可见性配置',
-
-    pageType: 'tab',
-
-    parentCode: 'user',
-
-    alwaysVisible: false,
-
-    sortOrder: 23,
-  ),
-
-  PageCatalogItem(
     code: 'function_permission_config',
 
     name: '功能权限配置',
@@ -244,7 +230,7 @@ const fallbackPageCatalog = <PageCatalogItem>[
 
     alwaysVisible: false,
 
-    sortOrder: 24,
+    sortOrder: 23,
   ),
 
   PageCatalogItem(

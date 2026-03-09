@@ -12,6 +12,8 @@ from app.schemas.authz import (
     AuthzSnapshotResult,
     CapabilityPackCatalogResult,
     CapabilityPackBatchApplyRequest,
+    CapabilityPackChangeLogListResult,
+    CapabilityPackRollbackRequest,
     CapabilityPackPreviewRequest,
     CapabilityPackPreviewResult,
     CapabilityPackRoleConfigResult,
@@ -44,6 +46,8 @@ from app.services.authz_service import (
     get_capability_pack_catalog,
     get_capability_pack_effective_explain,
     get_capability_pack_role_config,
+    list_capability_pack_change_logs,
+    rollback_capability_pack_change_log,
     get_permission_hierarchy_catalog,
     get_permission_hierarchy_role_config,
     get_role_permission_items,
@@ -355,6 +359,7 @@ def put_capability_pack_role_config_api(
             capability_codes=payload.capability_codes,
             dry_run=payload.dry_run,
             operator=current_user,
+            remark=payload.remark,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
@@ -430,6 +435,52 @@ def apply_capability_packs_batch_api(
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     return success_response(CapabilityPackPreviewResult(**result), message="updated")
+
+
+@router.get(
+    "/capability-packs/history",
+    response_model=ApiResponse[CapabilityPackChangeLogListResult],
+)
+def list_capability_pack_change_logs_api(
+    module: str = Query(min_length=2, max_length=64),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_VIEW)),
+) -> ApiResponse[CapabilityPackChangeLogListResult]:
+    try:
+        result = list_capability_pack_change_logs(
+            db,
+            module_code=module,
+            limit=limit,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(CapabilityPackChangeLogListResult(**result))
+
+
+@router.post(
+    "/capability-packs/rollback",
+    response_model=ApiResponse[CapabilityPackPreviewResult],
+)
+def rollback_capability_pack_api(
+    payload: CapabilityPackRollbackRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+) -> ApiResponse[CapabilityPackPreviewResult]:
+    try:
+        result = rollback_capability_pack_change_log(
+            db,
+            module_code=payload.module_code,
+            change_log_id=payload.change_log_id,
+            expected_revision=payload.expected_revision,
+            operator=current_user,
+            remark=payload.remark,
+        )
+    except AuthzRevisionConflictError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(CapabilityPackPreviewResult(**result), message="rolled_back")
 
 
 @router.get(

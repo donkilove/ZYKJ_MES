@@ -32,6 +32,7 @@ from app.core.rbac import (
     ROLE_QUALITY_ADMIN,
     ROLE_SYSTEM_ADMIN,
 )
+from app.models.authz_change_log import AuthzChangeLog, AuthzChangeLogItem
 from app.models.permission_catalog import PermissionCatalog
 from app.models.authz_module_revision import AuthzModuleRevision
 from app.models.role import Role
@@ -59,7 +60,6 @@ PAGE_NAME_FALLBACK_ZH_BY_CODE = {
     "user": "用户模块",
     "user_management": "用户管理",
     "registration_approval": "注册审批",
-    "page_visibility_config": "页面可见性配置（旧）",
     "function_permission_config": "功能权限配置",
     "product": "产品模块",
     "product_management": "产品管理",
@@ -90,7 +90,6 @@ PAGE_NAME_FALLBACK_ZH_BY_CODE = {
 CAPABILITY_NAME_FALLBACK_ZH_BY_CODE = {
     "feature.system.permission_catalog.view": "查看权限目录",
     "feature.system.role_permissions.manage": "管理功能权限配置",
-    "feature.system.page_visibility_legacy.manage": "管理页面可见性（旧）",
     "feature.user.user_management.view": "查看用户与角色信息",
     "feature.user.user_management.manage": "维护用户信息",
     "feature.user.registration_approval.review": "处理注册审批",
@@ -132,11 +131,6 @@ CAPABILITY_GROUP_META_BY_CODE = {
         "system.permission_config",
         "功能权限配置",
         "维护角色的功能权限与配置",
-    ),
-    "feature.system.page_visibility_legacy.manage": (
-        "system.legacy_visibility",
-        "兼容入口",
-        "兼容旧页面可见性配置（仅兼容）",
     ),
     "feature.user.user_management.view": ("user.accounts", "用户管理", "查看用户、角色和工序关联"),
     "feature.user.user_management.manage": ("user.accounts", "用户管理", "创建、编辑、删除用户"),
@@ -333,6 +327,102 @@ def _bump_authz_module_revision(
     row.updated_by_user_id = operator.id if operator is not None else None
     db.flush()
     return int(row.revision)
+
+
+def _serialize_capability_pack_role_result(item: dict[str, object]) -> dict[str, object]:
+    return {
+        "role_code": str(item["role_code"]),
+        "role_name": str(item["role_name"]),
+        "readonly": bool(item["readonly"]),
+        "ignored_input": bool(item["ignored_input"]),
+        "module_code": str(item["module_code"]),
+        "before_capability_codes": [str(code) for code in item["before_capability_codes"]],
+        "after_capability_codes": [str(code) for code in item["after_capability_codes"]],
+        "added_capability_codes": [str(code) for code in item["added_capability_codes"]],
+        "removed_capability_codes": [str(code) for code in item["removed_capability_codes"]],
+        "auto_linked_dependencies": [str(code) for code in item["auto_linked_dependencies"]],
+        "effective_capability_codes": [
+            str(code) for code in item["effective_capability_codes"]
+        ],
+        "effective_page_permission_codes": [
+            str(code) for code in item["effective_page_permission_codes"]
+        ],
+        "updated_count": int(item["updated_count"]),
+    }
+
+
+def _snapshot_capability_pack_module_state(
+    db: Session,
+    *,
+    module_code: str,
+) -> list[dict[str, object]]:
+    role_rows = db.execute(select(Role)).scalars().all()
+    ordered_roles = sorted(role_rows, key=_role_sort_key)
+    snapshot: list[dict[str, object]] = []
+    for role_row in ordered_roles:
+        config = get_capability_pack_role_config(
+            db,
+            role_code=role_row.code,
+            module_code=module_code,
+        )
+        snapshot.append(
+            {
+                "role_code": str(config["role_code"]),
+                "module_enabled": bool(config["module_enabled"]),
+                "capability_codes": [
+                    str(code) for code in config["granted_capability_codes"]
+                ],
+            }
+        )
+    return snapshot
+
+
+def _record_capability_pack_change_log(
+    db: Session,
+    *,
+    module_code: str,
+    revision: int,
+    operator: User | None,
+    remark: str | None,
+    change_type: str,
+    rollback_of_change_log_id: int | None,
+    role_results: list[dict[str, object]],
+) -> AuthzChangeLog:
+    snapshot = _snapshot_capability_pack_module_state(db, module_code=module_code)
+    log_row = AuthzChangeLog(
+        module_code=module_code,
+        revision=revision,
+        change_type=change_type,
+        remark=remark,
+        operator_user_id=operator.id if operator is not None else None,
+        operator_username=operator.username if operator is not None else None,
+        rollback_of_change_log_id=rollback_of_change_log_id,
+        snapshot_json=snapshot,
+    )
+    db.add(log_row)
+    db.flush()
+    for item in role_results:
+        serialized = _serialize_capability_pack_role_result(item)
+        db.add(
+            AuthzChangeLogItem(
+                change_log_id=log_row.id,
+                role_code=str(serialized["role_code"]),
+                role_name=str(serialized["role_name"]),
+                readonly=bool(serialized["readonly"]),
+                before_capability_codes=list(serialized["before_capability_codes"]),
+                after_capability_codes=list(serialized["after_capability_codes"]),
+                added_capability_codes=list(serialized["added_capability_codes"]),
+                removed_capability_codes=list(serialized["removed_capability_codes"]),
+                auto_linked_dependencies=list(serialized["auto_linked_dependencies"]),
+                effective_capability_codes=list(serialized["effective_capability_codes"]),
+                effective_page_permission_codes=list(
+                    serialized["effective_page_permission_codes"]
+                ),
+                updated_count=int(serialized["updated_count"]),
+            )
+        )
+    db.flush()
+    return log_row
 
 
 def list_permission_catalog_rows(
@@ -1841,6 +1931,9 @@ def update_capability_pack_role_config(
     capability_codes: list[str],
     dry_run: bool = False,
     operator: User | None = None,
+    change_type: str = "apply",
+    rollback_of_change_log_id: int | None = None,
+    remark: str | None = None,
 ) -> dict[str, object]:
     ensure_authz_defaults(db)
     result = _calculate_capability_pack_role_update(
@@ -1860,10 +1953,21 @@ def update_capability_pack_role_config(
             after_granted_codes=set(result["after_granted_codes"]),
         )
         if updated_count > 0:
-            _bump_authz_module_revision(
+            current_revision = _bump_authz_module_revision(
                 db,
                 module_code=str(result["module_code"]),
                 operator=operator,
+            )
+            result["updated_count"] = updated_count
+            _record_capability_pack_change_log(
+                db,
+                module_code=str(result["module_code"]),
+                revision=current_revision,
+                operator=operator,
+                remark=remark,
+                change_type=change_type,
+                rollback_of_change_log_id=rollback_of_change_log_id,
+                role_results=[result],
             )
             db.commit()
         else:
@@ -1901,8 +2005,9 @@ def apply_capability_pack_role_configs(
     expected_revision: int | None = None,
     operator: User | None,
     remark: str | None = None,
+    change_type: str = "apply",
+    rollback_of_change_log_id: int | None = None,
 ) -> dict[str, object]:
-    _ = remark
     ensure_authz_defaults(db)
     normalized_module = _normalize_module_code(module_code)
     current_revision = get_authz_module_revision(db, module_code=normalized_module)
@@ -1959,6 +2064,16 @@ def apply_capability_pack_role_configs(
             module_code=normalized_module,
             operator=operator,
         )
+        _record_capability_pack_change_log(
+            db,
+            module_code=normalized_module,
+            revision=current_revision,
+            operator=operator,
+            remark=remark,
+            change_type=change_type,
+            rollback_of_change_log_id=rollback_of_change_log_id,
+            role_results=results,
+        )
         db.commit()
     else:
         db.rollback()
@@ -1972,39 +2087,109 @@ def apply_capability_pack_role_configs(
     return {
         "module_code": normalized_module,
         "module_revision": current_revision,
-        "role_results": [
+        "role_results": [_serialize_capability_pack_role_result(item) for item in results],
+    }
+
+
+def list_capability_pack_change_logs(
+    db: Session,
+    *,
+    module_code: str,
+    limit: int = 20,
+) -> dict[str, object]:
+    ensure_authz_defaults(db)
+    normalized_module = _normalize_module_code(module_code)
+    safe_limit = max(1, min(limit, 100))
+    log_rows = db.execute(
+        select(AuthzChangeLog)
+        .where(AuthzChangeLog.module_code == normalized_module)
+        .order_by(AuthzChangeLog.revision.desc(), AuthzChangeLog.id.desc())
+        .limit(safe_limit)
+    ).scalars().all()
+    if not log_rows:
+        return {
+            "module_code": normalized_module,
+            "module_revision": get_authz_module_revision(db, module_code=normalized_module),
+            "items": [],
+        }
+
+    log_ids = [row.id for row in log_rows]
+    item_rows = db.execute(
+        select(AuthzChangeLogItem)
+        .where(AuthzChangeLogItem.change_log_id.in_(log_ids))
+        .order_by(AuthzChangeLogItem.change_log_id.desc(), AuthzChangeLogItem.role_code.asc())
+    ).scalars().all()
+    items_by_log_id: dict[int, list[AuthzChangeLogItem]] = defaultdict(list)
+    for item_row in item_rows:
+        items_by_log_id[item_row.change_log_id].append(item_row)
+
+    return {
+        "module_code": normalized_module,
+        "module_revision": get_authz_module_revision(db, module_code=normalized_module),
+        "items": [
             {
-                "role_code": str(item["role_code"]),
-                "role_name": str(item["role_name"]),
-                "readonly": bool(item["readonly"]),
-                "ignored_input": bool(item["ignored_input"]),
-                "module_code": str(item["module_code"]),
-                "before_capability_codes": [
-                    str(code) for code in item["before_capability_codes"]
+                "change_log_id": row.id,
+                "module_code": row.module_code,
+                "module_revision": int(row.revision),
+                "change_type": row.change_type,
+                "remark": row.remark,
+                "operator_user_id": row.operator_user_id,
+                "operator_username": row.operator_username,
+                "rollback_of_change_log_id": row.rollback_of_change_log_id,
+                "created_at": row.created_at,
+                "role_results": [
+                    {
+                        "role_code": item.role_code,
+                        "role_name": item.role_name,
+                        "readonly": bool(item.readonly),
+                        "ignored_input": False,
+                        "module_code": row.module_code,
+                        "before_capability_codes": list(item.before_capability_codes),
+                        "after_capability_codes": list(item.after_capability_codes),
+                        "added_capability_codes": list(item.added_capability_codes),
+                        "removed_capability_codes": list(item.removed_capability_codes),
+                        "auto_linked_dependencies": list(item.auto_linked_dependencies),
+                        "effective_capability_codes": list(item.effective_capability_codes),
+                        "effective_page_permission_codes": list(item.effective_page_permission_codes),
+                        "updated_count": int(item.updated_count),
+                    }
+                    for item in items_by_log_id.get(row.id, [])
                 ],
-                "after_capability_codes": [
-                    str(code) for code in item["after_capability_codes"]
-                ],
-                "added_capability_codes": [
-                    str(code) for code in item["added_capability_codes"]
-                ],
-                "removed_capability_codes": [
-                    str(code) for code in item["removed_capability_codes"]
-                ],
-                "auto_linked_dependencies": [
-                    str(code) for code in item["auto_linked_dependencies"]
-                ],
-                "effective_capability_codes": [
-                    str(code) for code in item["effective_capability_codes"]
-                ],
-                "effective_page_permission_codes": [
-                    str(code) for code in item["effective_page_permission_codes"]
-                ],
-                "updated_count": int(item["updated_count"]),
             }
-            for item in results
+            for row in log_rows
         ],
     }
+
+
+def rollback_capability_pack_change_log(
+    db: Session,
+    *,
+    module_code: str,
+    change_log_id: int,
+    expected_revision: int | None = None,
+    operator: User | None,
+    remark: str | None = None,
+) -> dict[str, object]:
+    normalized_module = _normalize_module_code(module_code)
+    target_log = db.execute(
+        select(AuthzChangeLog).where(
+            AuthzChangeLog.id == change_log_id,
+            AuthzChangeLog.module_code == normalized_module,
+        )
+    ).scalars().first()
+    if target_log is None:
+        raise ValueError(f"Change log not found: {change_log_id}")
+    snapshot = list(target_log.snapshot_json or [])
+    return apply_capability_pack_role_configs(
+        db,
+        module_code=normalized_module,
+        role_items=[dict(item) for item in snapshot],
+        expected_revision=expected_revision,
+        operator=operator,
+        remark=remark or f"回滚到 revision {target_log.revision}",
+        change_type="rollback",
+        rollback_of_change_log_id=target_log.id,
+    )
 
 
 def preview_capability_packs(

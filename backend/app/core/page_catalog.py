@@ -15,7 +15,6 @@ PAGE_HOME = "home"
 PAGE_USER = "user"
 PAGE_USER_MANAGEMENT = "user_management"
 PAGE_REGISTRATION_APPROVAL = "registration_approval"
-PAGE_VISIBILITY_CONFIG = "page_visibility_config"
 PAGE_FUNCTION_PERMISSION_CONFIG = "function_permission_config"
 PAGE_PRODUCT = "product"
 PAGE_PRODUCT_MANAGEMENT = "product_management"
@@ -77,20 +76,12 @@ PAGE_CATALOG = [
         "sort_order": 22,
     },
     {
-        "code": PAGE_VISIBILITY_CONFIG,
-        "name": "页面可见性配置",
-        "page_type": PAGE_TYPE_TAB,
-        "parent_code": PAGE_USER,
-        "always_visible": False,
-        "sort_order": 23,
-    },
-    {
         "code": PAGE_FUNCTION_PERMISSION_CONFIG,
         "name": "功能权限配置",
         "page_type": PAGE_TYPE_TAB,
         "parent_code": PAGE_USER,
         "always_visible": False,
-        "sort_order": 24,
+        "sort_order": 23,
     },
     {
         "code": PAGE_PRODUCT,
@@ -302,7 +293,6 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_USER,
         PAGE_USER_MANAGEMENT,
         PAGE_REGISTRATION_APPROVAL,
-        PAGE_VISIBILITY_CONFIG,
         PAGE_FUNCTION_PERMISSION_CONFIG,
         PAGE_PRODUCT,
         PAGE_PRODUCT_MANAGEMENT,

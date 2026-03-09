@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 
 class PermissionCatalogItem(BaseModel):
@@ -284,6 +285,32 @@ class CapabilityPackPreviewResult(BaseModel):
 class CapabilityPackBatchApplyRequest(BaseModel):
     module_code: str = Field(min_length=2, max_length=64)
     role_items: list[CapabilityPackPreviewRoleItem] = Field(default_factory=list)
+    expected_revision: int | None = Field(default=None, ge=0)
+    remark: str | None = Field(default=None, max_length=255)
+
+
+class CapabilityPackChangeLogItem(BaseModel):
+    change_log_id: int
+    module_code: str
+    module_revision: int = 0
+    change_type: str
+    remark: str | None = None
+    operator_user_id: int | None = None
+    operator_username: str | None = None
+    rollback_of_change_log_id: int | None = None
+    created_at: datetime
+    role_results: list[CapabilityPackRoleConfigUpdateResult] = Field(default_factory=list)
+
+
+class CapabilityPackChangeLogListResult(BaseModel):
+    module_code: str
+    module_revision: int = 0
+    items: list[CapabilityPackChangeLogItem] = Field(default_factory=list)
+
+
+class CapabilityPackRollbackRequest(BaseModel):
+    module_code: str = Field(min_length=2, max_length=64)
+    change_log_id: int = Field(ge=1)
     expected_revision: int | None = Field(default=None, ge=0)
     remark: str | None = Field(default=None, max_length=255)
 

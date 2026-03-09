@@ -10,7 +10,7 @@ import '../support/http_test_server.dart';
 
 void main() {
   group('PageVisibilityService', () {
-    test('covers catalog/me/config read and config update', () async {
+    test('covers catalog/me/config read and deprecated update', () async {
       final server = await TestHttpServer.start({
         'GET /ui/page-catalog': (_) => TestResponse.json(
           200,
@@ -61,13 +61,9 @@ void main() {
           },
         ),
         'PUT /ui/page-visibility/config': (request) {
-          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
-          expect((body['items'] as List).length, 1);
           return TestResponse.json(
-            200,
-            body: {
-              'data': {'updated_count': 1},
-            },
+            410,
+            body: {'detail': '页面可见性配置已下线，请改用功能权限配置'},
           );
         },
       });
@@ -80,7 +76,7 @@ void main() {
       final catalog = await service.listPageCatalog();
       final me = await service.getMyVisibility();
       final config = await service.getVisibilityConfig();
-      final updated = await service.updateVisibilityConfig(
+      final updateRequest = service.updateVisibilityConfig(
         items: const [
           PageVisibilityConfigUpdateItem(
             roleCode: 'system_admin',
@@ -93,7 +89,18 @@ void main() {
       expect(catalog.single.code, 'home');
       expect(me.sidebarCodes, ['home']);
       expect(config.single.roleCode, 'system_admin');
-      expect(updated, 1);
+      await expectLater(
+        updateRequest,
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 410)
+              .having(
+                (e) => e.message,
+                'message',
+                '页面可见性配置已下线，请改用功能权限配置',
+              ),
+        ),
+      );
     });
 
     test('throws ApiException when request fails', () async {

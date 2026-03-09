@@ -1,3 +1,4 @@
+from app.models.authz_change_log import AuthzChangeLog, AuthzChangeLogItem
 from app.models.daily_verification_code import DailyVerificationCode
 from app.models.authz_module_revision import AuthzModuleRevision
 from app.models.equipment import Equipment
@@ -9,7 +10,6 @@ from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
 from app.models.order_event_log import OrderEventLog
 from app.models.permission_catalog import PermissionCatalog
-from app.models.page_visibility import PageVisibility
 from app.models.product import Product
 from app.models.product_revision import ProductRevision
 from app.models.production_order import ProductionOrder
@@ -40,6 +40,8 @@ from app.models.user import User
 __all__ = [
     "User",
     "Role",
+    "AuthzChangeLog",
+    "AuthzChangeLogItem",
     "AuthzModuleRevision",
     "Process",
     "ProcessStage",
@@ -52,7 +54,6 @@ __all__ = [
     "RegistrationRequest",
     "PermissionCatalog",
     "RolePermissionGrant",
-    "PageVisibility",
     "Equipment",
     "MaintenanceItem",
     "MaintenancePlan",

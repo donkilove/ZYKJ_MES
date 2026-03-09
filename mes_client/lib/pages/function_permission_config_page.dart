@@ -74,6 +74,7 @@ class _FunctionPermissionConfigPageState
   final Map<String, bool> _readonlyByRole = {};
   final Map<String, Set<String>> _effectiveCapabilitiesByRole = {};
   final Map<String, PermissionExplainResult> _explainByRole = {};
+  final Map<String, CapabilityPackChangeLogListResult> _historyByModule = {};
 
   CapabilityPackPreviewResult? _activePreview;
   bool _showPreview = false;
@@ -526,6 +527,7 @@ class _FunctionPermissionConfigPageState
         roles: _roles,
         moduleCodes: _moduleCodes,
       );
+      _historyByModule.remove(moduleCode);
       await widget.onPermissionsChanged?.call();
       if (!mounted) {
         return;
@@ -593,6 +595,7 @@ class _FunctionPermissionConfigPageState
         roles: _roles,
         moduleCodes: _moduleCodes,
       );
+      _historyByModule.remove(moduleCode);
       await widget.onPermissionsChanged?.call();
       if (!mounted) {
         return;
@@ -609,6 +612,168 @@ class _FunctionPermissionConfigPageState
       }
       setState(() {
         _message = '回退失败：${_errorMessage(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  Future<CapabilityPackChangeLogListResult?> _loadHistory(
+    String moduleCode, {
+    bool force = false,
+  }) async {
+    if (!force) {
+      final cached = _historyByModule[moduleCode];
+      if (cached != null) {
+        return cached;
+      }
+    }
+    try {
+      final history = await _authzService.loadCapabilityPackHistory(
+        moduleCode: moduleCode,
+        limit: 20,
+      );
+      _historyByModule[moduleCode] = history;
+      return history;
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return null;
+      }
+      if (mounted) {
+        setState(() {
+          _message = '加载变更历史失败：${_errorMessage(error)}';
+        });
+      }
+      return null;
+    }
+  }
+
+  String _formatChangeLogSubtitle(CapabilityPackChangeLogItem item) {
+    final changedRoles = item.roleResults
+        .where((entry) => entry.updatedCount > 0)
+        .length;
+    final operator = item.operatorUsername?.trim().isNotEmpty == true
+        ? item.operatorUsername!
+        : '未知操作者';
+    final remark = item.remark?.trim();
+    final label = item.changeType == 'rollback' ? '回滚' : '保存';
+    final parts = <String>[
+      label,
+      operator,
+      '变更角色 $changedRoles 个',
+      item.createdAt.toLocal().toString().replaceFirst('.000', ''),
+    ];
+    if (remark != null && remark.isNotEmpty) {
+      parts.add(remark);
+    }
+    return parts.join(' | ');
+  }
+
+  Future<void> _showHistoryDialog() async {
+    final moduleCode = _selectedModuleCode;
+    if (moduleCode == null || _saving) {
+      return;
+    }
+    final history = await _loadHistory(moduleCode, force: true);
+    if (!mounted || history == null) {
+      return;
+    }
+    final selected = await showDialog<CapabilityPackChangeLogItem>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('变更历史 - ${_moduleLabel(moduleCode)}'),
+          content: SizedBox(
+            width: 720,
+            child: history.items.isEmpty
+                ? const Text('当前模块暂无历史记录。')
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: history.items.length,
+                    separatorBuilder: (context, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final item = history.items[index];
+                      return ListTile(
+                        title: Text('revision ${item.moduleRevision}'),
+                        subtitle: Text(_formatChangeLogSubtitle(item)),
+                        trailing: TextButton(
+                          onPressed: () => Navigator.of(context).pop(item),
+                          child: const Text('回滚到此版本'),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+    if (selected == null || !mounted) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认服务端回滚'),
+        content: Text('将模块回滚到 revision ${selected.moduleRevision}，是否继续？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认回滚'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _message = '';
+    });
+    try {
+      final currentRevision = _catalogByModule[moduleCode]?.moduleRevision ?? 0;
+      final rolledBack = await _authzService.rollbackCapabilityPacks(
+        moduleCode: moduleCode,
+        changeLogId: selected.changeLogId,
+        expectedRevision: currentRevision,
+        remark: '回滚到 revision ${selected.moduleRevision}',
+      );
+      await _loadModuleData(
+        moduleCode,
+        roles: _roles,
+        moduleCodes: _moduleCodes,
+      );
+      await _loadHistory(moduleCode, force: true);
+      await widget.onPermissionsChanged?.call();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _lastSavedByModule[moduleCode] = rolledBack;
+        _message = '已回滚到 revision ${selected.moduleRevision}。';
+      });
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '服务端回滚失败：${_errorMessage(error)}';
       });
     } finally {
       if (mounted) {
@@ -1031,10 +1196,16 @@ class _FunctionPermissionConfigPageState
                     spacing: 8,
                     runSpacing: 8,
                     children: [
+                      Chip(label: Text('当前 revision ${catalog.moduleRevision}')),
                       OutlinedButton.icon(
                         onPressed: _saving || _previewing ? null : _preview,
                         icon: const Icon(Icons.visibility),
                         label: Text(_previewing ? '预览中...' : '生效预览'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _saving ? null : _showHistoryDialog,
+                        icon: const Icon(Icons.history_toggle_off),
+                        label: const Text('查看变更历史'),
                       ),
                       OutlinedButton.icon(
                         onPressed:
