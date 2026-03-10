@@ -8,7 +8,7 @@ import '../models/authz_models.dart';
 
 import '../models/current_user.dart';
 
-import '../models/page_visibility_models.dart';
+import '../models/page_catalog_models.dart';
 
 import '../services/api_exception.dart';
 
@@ -16,7 +16,7 @@ import '../services/authz_service.dart';
 
 import '../services/auth_service.dart';
 
-import '../services/page_visibility_service.dart';
+import '../services/page_catalog_service.dart';
 
 import 'craft_page.dart';
 
@@ -86,7 +86,7 @@ class _MainShellPageState extends State<MainShellPage>
   final AuthService _authService = AuthService();
   late final AuthzService _authzService;
 
-  late final PageVisibilityService _pageVisibilityService;
+  late final PageCatalogService _pageCatalogService;
 
   Timer? _visibilityTimer;
 
@@ -115,7 +115,7 @@ class _MainShellPageState extends State<MainShellPage>
     WidgetsBinding.instance.addObserver(this);
 
     _authzService = AuthzService(widget.session);
-    _pageVisibilityService = PageVisibilityService(widget.session);
+    _pageCatalogService = PageCatalogService(widget.session);
 
     _loadCurrentUserAndVisibility();
 
@@ -327,7 +327,7 @@ class _MainShellPageState extends State<MainShellPage>
 
       if (loadCatalog || catalog.isEmpty) {
         try {
-          catalog = await _pageVisibilityService.listPageCatalog();
+          catalog = await _pageCatalogService.listPageCatalog();
         } catch (_) {
           catalog = fallbackPageCatalog;
 

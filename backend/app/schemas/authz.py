@@ -298,6 +298,14 @@ class CapabilityPackChangeLogItem(BaseModel):
     operator_user_id: int | None = None
     operator_username: str | None = None
     rollback_of_change_log_id: int | None = None
+    rollback_of_revision: int | None = None
+    changed_role_count: int = 0
+    added_capability_count: int = 0
+    removed_capability_count: int = 0
+    auto_linked_dependency_count: int = 0
+    is_current_revision: bool = False
+    is_noop: bool = False
+    can_rollback: bool = True
     created_at: datetime
     role_results: list[CapabilityPackRoleConfigUpdateResult] = Field(default_factory=list)
 

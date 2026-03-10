@@ -449,6 +449,30 @@ class AuthzService {
     return CapabilityPackPreviewResult.fromJson(data);
   }
 
+  Future<CapabilityPackPreviewResult> previewRollbackCapabilityPacks({
+    required String moduleCode,
+    required int changeLogId,
+  }) async {
+    final uri = Uri.parse('$_basePath/capability-packs/rollback-preview');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'module_code': moduleCode,
+        'change_log_id': changeLogId,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return CapabilityPackPreviewResult.fromJson(data);
+  }
+
   Future<PermissionExplainResult> loadCapabilityPackEffective({
     required String roleCode,
     required String moduleCode,

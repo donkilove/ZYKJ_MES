@@ -47,6 +47,7 @@ from app.services.authz_service import (
     get_capability_pack_effective_explain,
     get_capability_pack_role_config,
     list_capability_pack_change_logs,
+    preview_capability_pack_change_log_rollback,
     rollback_capability_pack_change_log,
     get_permission_hierarchy_catalog,
     get_permission_hierarchy_role_config,
@@ -65,6 +66,8 @@ from app.services.authz_snapshot_service import get_authz_snapshot
 
 
 router = APIRouter()
+
+LEGACY_AUTHZ_WRITE_GONE_DETAIL = "旧权限写入入口已下线，请改用能力包配置"
 
 
 @router.get(
@@ -187,6 +190,11 @@ def put_role_permissions_matrix_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[RolePermissionMatrixUpdateResult]:
+    if not payload.dry_run:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=LEGACY_AUTHZ_WRITE_GONE_DETAIL,
+        )
     try:
         result = update_role_permission_matrix(
             db,
@@ -260,6 +268,11 @@ def put_permission_hierarchy_role_config_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[PermissionHierarchyRoleConfigUpdateResult]:
+    if not payload.dry_run:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=LEGACY_AUTHZ_WRITE_GONE_DETAIL,
+        )
     try:
         result = update_permission_hierarchy_role_config(
             db,
@@ -459,6 +472,26 @@ def list_capability_pack_change_logs_api(
 
 
 @router.post(
+    "/capability-packs/rollback-preview",
+    response_model=ApiResponse[CapabilityPackPreviewResult],
+)
+def preview_capability_pack_rollback_api(
+    payload: CapabilityPackRollbackRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
+) -> ApiResponse[CapabilityPackPreviewResult]:
+    try:
+        result = preview_capability_pack_change_log_rollback(
+            db,
+            module_code=payload.module_code,
+            change_log_id=payload.change_log_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(CapabilityPackPreviewResult(**result), message="previewed")
+
+
+@router.post(
     "/capability-packs/rollback",
     response_model=ApiResponse[CapabilityPackPreviewResult],
 )
@@ -514,24 +547,11 @@ def put_role_permissions_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[RolePermissionUpdateResult]:
-    try:
-        updated_count, before_codes, after_codes = replace_role_permissions_for_module(
-            db,
-            role_code=role_code,
-            module_code=payload.module_code,
-            granted_permission_codes=payload.granted_permission_codes,
-            operator=current_user,
-            remark=payload.remark,
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
-    return success_response(
-        RolePermissionUpdateResult(
-            role_code=role_code,
-            module_code=payload.module_code,
-            updated_count=updated_count,
-            before_permission_codes=before_codes,
-            after_permission_codes=after_codes,
-        ),
-        message="updated",
+    _ = role_code
+    _ = payload
+    _ = db
+    _ = current_user
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail=LEGACY_AUTHZ_WRITE_GONE_DETAIL,
     )

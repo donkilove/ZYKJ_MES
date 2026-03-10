@@ -15,13 +15,14 @@ from app.core.authz_catalog import (
     PERM_PAGE_PRODUCTION_VIEW,
 )
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
+from app.models.role_permission_grant import RolePermissionGrant
 from app.schemas.authz import (
     CapabilityPackBatchApplyRequest,
     RolePermissionMatrixRoleUpdateItem,
     RolePermissionMatrixUpdateRequest,
     RolePermissionUpdateRequest,
 )
-from app.services.authz_service import has_permission
+from app.services.authz_service import ensure_authz_defaults, has_permission
 
 
 def test_authz_catalog_and_my_permissions(db, factory) -> None:
@@ -47,39 +48,26 @@ def test_authz_catalog_and_my_permissions(db, factory) -> None:
 def test_authz_role_permissions_update(db, factory) -> None:
     factory.ensure_default_roles()
     sys_admin = factory.user(username="authz_update_admin", role_codes=[ROLE_SYSTEM_ADMIN])
-    prod_admin = factory.user(username="authz_update_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
+    factory.user(username="authz_update_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
     db.commit()
 
-    update_resp = authz.put_role_permissions_api(
-        ROLE_PRODUCTION_ADMIN,
-        RolePermissionUpdateRequest(
-            module_code="production",
-            granted_permission_codes=[
-                PERM_PROD_ORDERS_LIST,
-                PERM_PROD_ORDERS_CREATE,
-            ],
-            remark="test update",
-        ),
-        db=db,
-        current_user=sys_admin,
-    )
-    assert update_resp.data.role_code == ROLE_PRODUCTION_ADMIN
-    assert PERM_PROD_ORDERS_LIST in update_resp.data.after_permission_codes
-    assert PERM_PROD_ORDERS_CREATE in update_resp.data.after_permission_codes
+    with pytest.raises(HTTPException) as exc_info:
+        authz.put_role_permissions_api(
+            ROLE_PRODUCTION_ADMIN,
+            RolePermissionUpdateRequest(
+                module_code="production",
+                granted_permission_codes=[
+                    PERM_PROD_ORDERS_LIST,
+                    PERM_PROD_ORDERS_CREATE,
+                ],
+                remark="test update",
+            ),
+            db=db,
+            current_user=sys_admin,
+        )
 
-    role_resp = authz.get_role_permissions_api(
-        role_code=ROLE_PRODUCTION_ADMIN,
-        module="production",
-        db=db,
-        _=sys_admin,
-    )
-    granted_map = {item.permission_code: item.granted for item in role_resp.data.items}
-    assert granted_map.get(PERM_PROD_ORDERS_LIST) is True
-    assert granted_map.get(PERM_PROD_ORDERS_CREATE) is True
-
-    me_prod = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
-    assert PERM_PROD_ORDERS_LIST in me_prod.data.permission_codes
-    assert PERM_PROD_ORDERS_CREATE in me_prod.data.permission_codes
+    assert exc_info.value.status_code == 410
+    assert "能力包配置" in str(exc_info.value.detail)
 
 
 def test_authz_role_permissions_matrix_get_and_dry_run(db, factory) -> None:
@@ -130,48 +118,33 @@ def test_authz_role_permissions_matrix_get_and_dry_run(db, factory) -> None:
 def test_authz_role_permissions_matrix_update_applies_and_ignores_system_admin_input(db, factory) -> None:
     factory.ensure_default_roles()
     sys_admin = factory.user(username="authz_matrix_apply_admin", role_codes=[ROLE_SYSTEM_ADMIN])
-    prod_admin = factory.user(username="authz_matrix_apply_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
-    operator = factory.user(username="authz_matrix_apply_operator", role_codes=[ROLE_OPERATOR])
+    factory.user(username="authz_matrix_apply_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
+    factory.user(username="authz_matrix_apply_operator", role_codes=[ROLE_OPERATOR])
     db.commit()
 
-    update_resp = authz.put_role_permissions_matrix_api(
-        RolePermissionMatrixUpdateRequest(
-            module_code="production",
-            dry_run=False,
-            role_items=[
-                RolePermissionMatrixRoleUpdateItem(
-                    role_code=ROLE_PRODUCTION_ADMIN,
-                    granted_permission_codes=[PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW],
-                ),
-                RolePermissionMatrixRoleUpdateItem(
-                    role_code=ROLE_SYSTEM_ADMIN,
-                    granted_permission_codes=[],
-                ),
-            ],
-            remark="apply",
-        ),
-        db=db,
-        current_user=sys_admin,
-    )
-    prod_result = next(
-        item for item in update_resp.data.role_results if item.role_code == ROLE_PRODUCTION_ADMIN
-    )
-    assert PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW in prod_result.after_permission_codes
-    assert PERM_PAGE_PRODUCTION_VIEW in prod_result.after_permission_codes
-    assert prod_result.updated_count >= 1
+    with pytest.raises(HTTPException) as exc_info:
+        authz.put_role_permissions_matrix_api(
+            RolePermissionMatrixUpdateRequest(
+                module_code="production",
+                dry_run=False,
+                role_items=[
+                    RolePermissionMatrixRoleUpdateItem(
+                        role_code=ROLE_PRODUCTION_ADMIN,
+                        granted_permission_codes=[PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW],
+                    ),
+                    RolePermissionMatrixRoleUpdateItem(
+                        role_code=ROLE_SYSTEM_ADMIN,
+                        granted_permission_codes=[],
+                    ),
+                ],
+                remark="apply",
+            ),
+            db=db,
+            current_user=sys_admin,
+        )
 
-    sys_result = next(item for item in update_resp.data.role_results if item.role_code == ROLE_SYSTEM_ADMIN)
-    assert sys_result.readonly is True
-    assert sys_result.ignored_input is True
-    assert PERM_PROD_ORDERS_LIST in sys_result.after_permission_codes
-
-    me_prod = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
-    assert PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW in me_prod.data.permission_codes
-    assert PERM_PAGE_PRODUCTION_VIEW in me_prod.data.permission_codes
-    assert MODULE_PERMISSION_BY_MODULE_CODE["production"] in me_prod.data.permission_codes
-
-    me_operator = authz.get_my_permissions_api(module="production", db=db, current_user=operator)
-    assert PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW not in me_operator.data.permission_codes
+    assert exc_info.value.status_code == 410
+    assert "能力包配置" in str(exc_info.value.detail)
 
 
 def test_authz_hierarchy_endpoints(db, factory) -> None:
@@ -218,23 +191,25 @@ def test_authz_hierarchy_endpoints(db, factory) -> None:
     assert preview_resp.data.role_results[0].role_code == ROLE_PRODUCTION_ADMIN
     assert MODULE_PERMISSION_BY_MODULE_CODE["production"] in preview_resp.data.role_results[0].after_permission_codes
 
-    update_resp = authz.put_permission_hierarchy_role_config_api(
-        role_code=ROLE_PRODUCTION_ADMIN,
-        payload=authz.PermissionHierarchyRoleConfigUpdateRequest(
-            module_code="production",
-            module_enabled=True,
-            page_permission_codes=[PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW],
-            feature_permission_codes=["feature.production.order_query.execute"],
-        ),
-        db=db,
-        current_user=sys_admin,
-    )
-    assert update_resp.data.role_code == ROLE_PRODUCTION_ADMIN
-    assert MODULE_PERMISSION_BY_MODULE_CODE["production"] in update_resp.data.after_permission_codes
+    with pytest.raises(HTTPException) as exc_info:
+        authz.put_permission_hierarchy_role_config_api(
+            role_code=ROLE_PRODUCTION_ADMIN,
+            payload=authz.PermissionHierarchyRoleConfigUpdateRequest(
+                module_code="production",
+                module_enabled=True,
+                page_permission_codes=[PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW],
+                feature_permission_codes=["feature.production.order_query.execute"],
+            ),
+            db=db,
+            current_user=sys_admin,
+        )
+
+    assert exc_info.value.status_code == 410
+    assert "能力包配置" in str(exc_info.value.detail)
 
     me_prod = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
-    assert MODULE_PERMISSION_BY_MODULE_CODE["production"] in me_prod.data.permission_codes
-    assert PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW in me_prod.data.permission_codes
+    assert MODULE_PERMISSION_BY_MODULE_CODE["production"] not in me_prod.data.permission_codes
+    assert PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW not in me_prod.data.permission_codes
 
 
 def test_authz_capability_pack_endpoints(db, factory) -> None:
@@ -310,25 +285,26 @@ def test_authz_capability_pack_endpoints(db, factory) -> None:
 
 def test_page_permission_no_longer_grants_action_access(db, factory) -> None:
     factory.ensure_default_roles()
-    sys_admin = factory.user(username="authz_page_only_admin", role_codes=[ROLE_SYSTEM_ADMIN])
     prod_admin = factory.user(username="authz_page_only_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
+    ensure_authz_defaults(db)
     db.commit()
 
-    authz.put_role_permissions_matrix_api(
-        RolePermissionMatrixUpdateRequest(
-            module_code="production",
-            dry_run=False,
-            role_items=[
-                RolePermissionMatrixRoleUpdateItem(
-                    role_code=ROLE_PRODUCTION_ADMIN,
-                    granted_permission_codes=[PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW],
-                )
-            ],
-            remark="page only",
-        ),
-        db=db,
-        current_user=sys_admin,
-    )
+    for permission_code in [
+        MODULE_PERMISSION_BY_MODULE_CODE["production"],
+        PERM_PAGE_PRODUCTION_VIEW,
+        PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW,
+    ]:
+        grant = (
+            db.query(RolePermissionGrant)
+            .filter(
+                RolePermissionGrant.role_code == ROLE_PRODUCTION_ADMIN,
+                RolePermissionGrant.permission_code == permission_code,
+            )
+            .first()
+        )
+        assert grant is not None
+        grant.granted = True
+    db.commit()
 
     me_prod = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
     assert PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW in me_prod.data.permission_codes
@@ -375,6 +351,30 @@ def test_authz_snapshot_and_batch_apply_expose_linked_actions(db, factory) -> No
     assert "production" in snapshot_resp.data.visible_sidebar_codes
     assert PERM_PROD_MY_ORDERS_LIST in production_module.effective_action_permission_codes
     assert has_permission(db, user=prod_admin, permission_code=PERM_PROD_MY_ORDERS_LIST) is True
+
+
+def test_capability_pack_auto_enables_module_when_capabilities_selected(db, factory) -> None:
+    factory.ensure_default_roles()
+    sys_admin = factory.user(username="authz_auto_enable_admin", role_codes=[ROLE_SYSTEM_ADMIN])
+    prod_admin = factory.user(username="authz_auto_enable_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
+    db.commit()
+
+    update_resp = authz.put_capability_pack_role_config_api(
+        role_code=ROLE_PRODUCTION_ADMIN,
+        payload=authz.CapabilityPackRoleConfigUpdateRequest(
+            module_code="production",
+            module_enabled=False,
+            capability_codes=["feature.production.order_query.execute"],
+            dry_run=False,
+        ),
+        db=db,
+        current_user=sys_admin,
+    )
+    assert "feature.production.order_query.execute" in update_resp.data.after_capability_codes
+
+    me_prod = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
+    assert MODULE_PERMISSION_BY_MODULE_CODE["production"] in me_prod.data.permission_codes
+    assert PERM_PROD_MY_ORDERS_LIST in me_prod.data.permission_codes
 
 
 def test_capability_pack_batch_apply_rejects_stale_revision(db, factory) -> None:
@@ -488,14 +488,51 @@ def test_capability_pack_history_and_rollback_endpoints(db, factory) -> None:
     previous_log = history_resp.data.items[1]
     assert latest_log.change_type == "apply"
     assert latest_log.remark == "second revision"
+    assert latest_log.changed_role_count >= 1
+    assert latest_log.added_capability_count >= 1
+    assert latest_log.is_current_revision is True
+    assert latest_log.can_rollback is False
     assert latest_log.role_results[0].after_capability_codes == [
         "feature.production.order_query.proxy"
     ]
     assert previous_log.change_type == "apply"
     assert previous_log.remark == "first revision"
+    assert previous_log.can_rollback is True
     assert previous_log.role_results[0].after_capability_codes == [
         "feature.production.order_query.execute"
     ]
+
+    rollback_preview = authz.preview_capability_pack_rollback_api(
+        authz.CapabilityPackRollbackRequest(
+            module_code="production",
+            change_log_id=previous_log.change_log_id,
+        ),
+        db=db,
+        _=sys_admin,
+    )
+    preview_prod_role = next(
+        item
+        for item in rollback_preview.data.role_results
+        if item.role_code == ROLE_PRODUCTION_ADMIN
+    )
+    assert preview_prod_role.after_capability_codes == [
+        "feature.production.order_query.execute"
+    ]
+
+    with pytest.raises(HTTPException) as exc_info:
+        authz.rollback_capability_pack_api(
+            authz.CapabilityPackRollbackRequest(
+                module_code="production",
+                change_log_id=latest_log.change_log_id,
+                expected_revision=second_apply_resp.data.module_revision,
+                remark="noop rollback",
+            ),
+            db=db,
+            current_user=sys_admin,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "无需回滚" in str(exc_info.value.detail)
 
     rollback_resp = authz.rollback_capability_pack_api(
         authz.CapabilityPackRollbackRequest(
@@ -527,3 +564,4 @@ def test_capability_pack_history_and_rollback_endpoints(db, factory) -> None:
     )
     assert history_after_rollback.data.items[0].change_type == "rollback"
     assert history_after_rollback.data.items[0].rollback_of_change_log_id == previous_log.change_log_id
+    assert history_after_rollback.data.items[0].rollback_of_revision == previous_log.module_revision

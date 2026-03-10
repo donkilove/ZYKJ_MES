@@ -34,6 +34,16 @@ class _RoleDraft {
   }
 }
 
+class _ConfirmActionResult {
+  const _ConfirmActionResult({
+    required this.confirmed,
+    required this.remark,
+  });
+
+  final bool confirmed;
+  final String? remark;
+}
+
 class FunctionPermissionConfigPage extends StatefulWidget {
   const FunctionPermissionConfigPage({
     super.key,
@@ -117,6 +127,16 @@ class _FunctionPermissionConfigPageState
     return error.toString();
   }
 
+  String _actionErrorMessage(String action, Object error) {
+    if (error is ApiException) {
+      if (error.statusCode == 409) {
+        return '$action失败：当前模块 revision 已变化，请刷新后重试。';
+      }
+      return '$action失败：${error.message}';
+    }
+    return '$action失败：${error.toString()}';
+  }
+
   String _moduleLabel(String moduleCode) {
     final fromCatalog = _catalogByModule[moduleCode]?.moduleName.trim();
     final fallback = _moduleNameFallbackZh[moduleCode];
@@ -135,6 +155,21 @@ class _FunctionPermissionConfigPageState
       return null;
     }
     return _catalogByModule[moduleCode];
+  }
+
+  Map<String, String> _capabilityNameByCode(String? moduleCode) {
+    final catalog = moduleCode == null ? null : _catalogByModule[moduleCode];
+    if (catalog == null) {
+      return const {};
+    }
+    return {
+      for (final item in catalog.capabilityPacks)
+        item.capabilityCode: item.capabilityName,
+    };
+  }
+
+  String _capabilityLabel(String code, String? moduleCode) {
+    return _capabilityNameByCode(moduleCode)[code] ?? code;
   }
 
   RoleItem? get _selectedRole {
@@ -465,24 +500,14 @@ class _FunctionPermissionConfigPageState
       return;
     }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认保存'),
-        content: const Text('将按当前草稿覆盖所选模块权限，是否继续？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('确认保存'),
-          ),
-        ],
-      ),
+    final confirmResult = await _showPreviewConfirmDialog(
+      title: '确认保存',
+      description: '将按当前草稿覆盖所选模块权限。请确认本次能力变更，并可补充审计备注。',
+      confirmLabel: '确认保存',
+      preview: preview,
+      initialRemark: '能力包权限配置保存',
     );
-    if (confirmed != true) {
+    if (confirmResult?.confirmed != true) {
       setState(() {
         _activePreview = preview;
         _showPreview = true;
@@ -519,7 +544,7 @@ class _FunctionPermissionConfigPageState
         moduleCode: moduleCode,
         roleItems: dirtyRoleItems,
         expectedRevision: moduleRevision,
-        remark: '能力包权限配置保存',
+        remark: confirmResult?.remark,
       );
 
       await _loadModuleData(
@@ -547,7 +572,7 @@ class _FunctionPermissionConfigPageState
         return;
       }
       setState(() {
-        _message = '保存失败：${_errorMessage(error)}';
+        _message = _actionErrorMessage('保存', error);
       });
     } finally {
       if (mounted) {
@@ -611,7 +636,7 @@ class _FunctionPermissionConfigPageState
         return;
       }
       setState(() {
-        _message = '回退失败：${_errorMessage(error)}';
+        _message = _actionErrorMessage('恢复上次保存前草稿', error);
       });
     } finally {
       if (mounted) {
@@ -654,9 +679,6 @@ class _FunctionPermissionConfigPageState
   }
 
   String _formatChangeLogSubtitle(CapabilityPackChangeLogItem item) {
-    final changedRoles = item.roleResults
-        .where((entry) => entry.updatedCount > 0)
-        .length;
     final operator = item.operatorUsername?.trim().isNotEmpty == true
         ? item.operatorUsername!
         : '未知操作者';
@@ -665,13 +687,176 @@ class _FunctionPermissionConfigPageState
     final parts = <String>[
       label,
       operator,
-      '变更角色 $changedRoles 个',
+      '变更角色 ${item.changedRoleCount} 个',
+      '+${item.addedCapabilityCount}',
+      '-${item.removedCapabilityCount}',
       item.createdAt.toLocal().toString().replaceFirst('.000', ''),
     ];
     if (remark != null && remark.isNotEmpty) {
       parts.add(remark);
     }
     return parts.join(' | ');
+  }
+
+  Widget _buildCapabilityCodeChips(
+    List<String> codes, {
+    required String moduleCode,
+    required String emptyLabel,
+    Color? backgroundColor,
+  }) {
+    if (codes.isEmpty) {
+      return Text(emptyLabel, style: Theme.of(context).textTheme.bodySmall);
+    }
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: codes
+          .map(
+            (code) => Chip(
+              label: Text(_capabilityLabel(code, moduleCode)),
+              visualDensity: VisualDensity.compact,
+              backgroundColor: backgroundColor,
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildRoleResultPanel(
+    CapabilityPackRoleUpdateResult item, {
+    required String moduleCode,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(top: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${item.roleName} · 变更 ${item.updatedCount}',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Text('新增能力'),
+            const SizedBox(height: 4),
+            _buildCapabilityCodeChips(
+              item.addedCapabilityCodes,
+              moduleCode: moduleCode,
+              emptyLabel: '无新增能力',
+              backgroundColor: const Color(0xFFE8F5E9),
+            ),
+            const SizedBox(height: 8),
+            Text('移除能力'),
+            const SizedBox(height: 4),
+            _buildCapabilityCodeChips(
+              item.removedCapabilityCodes,
+              moduleCode: moduleCode,
+              emptyLabel: '无移除能力',
+              backgroundColor: const Color(0xFFFFEBEE),
+            ),
+            const SizedBox(height: 8),
+            Text('自动补依赖'),
+            const SizedBox(height: 4),
+            _buildCapabilityCodeChips(
+              item.autoLinkedDependencies,
+              moduleCode: moduleCode,
+              emptyLabel: '无自动补依赖',
+              backgroundColor: const Color(0xFFFFF8E1),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewDetails(CapabilityPackPreviewResult preview) {
+    final changedItems = preview.roleResults
+        .where(
+          (item) =>
+              item.addedCapabilityCodes.isNotEmpty ||
+              item.removedCapabilityCodes.isNotEmpty ||
+              item.autoLinkedDependencies.isNotEmpty ||
+              item.updatedCount > 0,
+        )
+        .toList();
+    if (changedItems.isEmpty) {
+      return const Text('本次不会产生任何能力变更。');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: changedItems
+          .map(
+            (item) => _buildRoleResultPanel(
+              item,
+              moduleCode: preview.moduleCode,
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Future<_ConfirmActionResult?> _showPreviewConfirmDialog({
+    required String title,
+    required String description,
+    required String confirmLabel,
+    required CapabilityPackPreviewResult preview,
+    String? initialRemark,
+  }) async {
+    final controller = TextEditingController(text: initialRemark ?? '');
+    try {
+      return await showDialog<_ConfirmActionResult>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 760,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(description),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    decoration: const InputDecoration(
+                      labelText: '审计备注（可选）',
+                      border: OutlineInputBorder(),
+                      hintText: '例如：回收旧配置、补齐生产模块能力包',
+                    ),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildPreviewDetails(preview),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(
+                const _ConfirmActionResult(confirmed: false, remark: null),
+              ),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(
+                _ConfirmActionResult(
+                  confirmed: true,
+                  remark: controller.text.trim().isEmpty
+                      ? null
+                      : controller.text.trim(),
+                ),
+              ),
+              child: Text(confirmLabel),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   Future<void> _showHistoryDialog() async {
@@ -689,7 +874,7 @@ class _FunctionPermissionConfigPageState
         return AlertDialog(
           title: Text('变更历史 - ${_moduleLabel(moduleCode)}'),
           content: SizedBox(
-            width: 720,
+            width: 820,
             child: history.items.isEmpty
                 ? const Text('当前模块暂无历史记录。')
                 : ListView.separated(
@@ -698,12 +883,97 @@ class _FunctionPermissionConfigPageState
                     separatorBuilder: (context, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final item = history.items[index];
-                      return ListTile(
-                        title: Text('revision ${item.moduleRevision}'),
-                        subtitle: Text(_formatChangeLogSubtitle(item)),
-                        trailing: TextButton(
-                          onPressed: () => Navigator.of(context).pop(item),
-                          child: const Text('回滚到此版本'),
+                      final rollbackLabel = item.isCurrentRevision
+                          ? '当前版本'
+                          : item.isNoop
+                          ? '无需回滚'
+                          : '预览回滚';
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'revision ${item.moduleRevision}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall,
+                                    ),
+                                  ),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      Chip(
+                                        label: Text(
+                                          item.changeType == 'rollback'
+                                              ? '回滚'
+                                              : '保存',
+                                        ),
+                                      ),
+                                      if (item.isCurrentRevision)
+                                        const Chip(label: Text('当前 revision')),
+                                      if (item.rollbackOfRevision != null)
+                                        Chip(
+                                          label: Text(
+                                            '来源 revision ${item.rollbackOfRevision}',
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(_formatChangeLogSubtitle(item)),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  Chip(
+                                    label: Text('变更角色 ${item.changedRoleCount}'),
+                                  ),
+                                  Chip(
+                                    label: Text('新增 ${item.addedCapabilityCount}'),
+                                  ),
+                                  Chip(
+                                    label: Text('移除 ${item.removedCapabilityCount}'),
+                                  ),
+                                  Chip(
+                                    label: Text(
+                                      '依赖 ${item.autoLinkedDependencyCount}',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (item.roleResults.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                ...item.roleResults
+                                    .where((entry) => entry.updatedCount > 0)
+                                    .take(3)
+                                    .map(
+                                      (entry) => Text(
+                                        '${entry.roleName}: +${entry.addedCapabilityCodes.length} / -${entry.removedCapabilityCodes.length} / 依赖${entry.autoLinkedDependencies.length}',
+                                      ),
+                                    ),
+                              ],
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: item.canRollback
+                                      ? () => Navigator.of(context).pop(item)
+                                      : null,
+                                  child: Text(rollbackLabel),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },
@@ -721,24 +991,50 @@ class _FunctionPermissionConfigPageState
     if (selected == null || !mounted) {
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认服务端回滚'),
-        content: Text('将模块回滚到 revision ${selected.moduleRevision}，是否继续？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('确认回滚'),
-          ),
-        ],
-      ),
+    setState(() {
+      _saving = true;
+      _message = '';
+    });
+    late final CapabilityPackPreviewResult rollbackPreview;
+    try {
+      rollbackPreview = await _authzService.previewRollbackCapabilityPacks(
+        moduleCode: moduleCode,
+        changeLogId: selected.changeLogId,
+      );
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        setState(() {
+          _message = _actionErrorMessage('加载回滚预览', error);
+          _saving = false;
+        });
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _saving = false;
+      });
+    }
+    final confirmResult = await _showPreviewConfirmDialog(
+      title: '确认服务端回滚',
+      description: '将模块回滚到 revision ${selected.moduleRevision}。确认后会生成新的审计记录。',
+      confirmLabel: '确认回滚',
+      preview: rollbackPreview,
+      initialRemark: '回滚到 revision ${selected.moduleRevision}',
     );
-    if (confirmed != true || !mounted) {
+    if (confirmResult?.confirmed != true || !mounted) {
+      setState(() {
+        _activePreview = rollbackPreview;
+        _showPreview = true;
+        _activePreviewIsSaved = false;
+      });
       return;
     }
     setState(() {
@@ -751,7 +1047,7 @@ class _FunctionPermissionConfigPageState
         moduleCode: moduleCode,
         changeLogId: selected.changeLogId,
         expectedRevision: currentRevision,
-        remark: '回滚到 revision ${selected.moduleRevision}',
+        remark: confirmResult?.remark,
       );
       await _loadModuleData(
         moduleCode,
@@ -773,7 +1069,7 @@ class _FunctionPermissionConfigPageState
         return;
       }
       setState(() {
-        _message = '服务端回滚失败：${_errorMessage(error)}';
+        _message = _actionErrorMessage('服务端回滚', error);
       });
     } finally {
       if (mounted) {
@@ -851,11 +1147,7 @@ class _FunctionPermissionConfigPageState
             ),
             Text('模块：${_moduleLabel(preview.moduleCode)}'),
             const SizedBox(height: 8),
-            ...preview.roleResults.map(
-              (item) => Text(
-                '${item.roleName}：能力变更 ${item.addedCapabilityCodes.length + item.removedCapabilityCodes.length}，自动补依赖 ${item.autoLinkedDependencies.length}',
-              ),
-            ),
+            _buildPreviewDetails(preview),
           ],
         ),
       ),
@@ -998,6 +1290,9 @@ class _FunctionPermissionConfigPageState
                     : (value) => setState(() {
                         _draftByRole[role.code] = draft.copyWith(
                           moduleEnabled: value,
+                          capabilityCodes: value
+                              ? draft.capabilityCodes
+                              : <String>{},
                         );
                       }),
               ),
@@ -1047,6 +1342,7 @@ class _FunctionPermissionConfigPageState
                               next.remove(capability.capabilityCode);
                             }
                             _draftByRole[role.code] = draft.copyWith(
+                              moduleEnabled: value ? true : draft.moduleEnabled,
                               capabilityCodes: next,
                             );
                           }),
@@ -1230,14 +1526,14 @@ class _FunctionPermissionConfigPageState
                       OutlinedButton.icon(
                         onPressed: _saving || !_hasDirty ? null : _resetUnsaved,
                         icon: const Icon(Icons.undo),
-                        label: const Text('回退未保存'),
+                        label: const Text('放弃未保存变更'),
                       ),
                       OutlinedButton.icon(
                         onPressed: _saving || !_canRollbackLastSave
                             ? null
                             : _rollbackLastSave,
                         icon: const Icon(Icons.restore),
-                        label: const Text('回退上次保存'),
+                        label: const Text('恢复上次保存前草稿'),
                       ),
                       OutlinedButton.icon(
                         onPressed: _saving || readonly || !hasTemplate

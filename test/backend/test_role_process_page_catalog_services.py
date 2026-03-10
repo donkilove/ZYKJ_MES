@@ -4,11 +4,10 @@ import json
 
 import pytest
 
-from app.core.rbac import ROLE_OPERATOR, ROLE_SYSTEM_ADMIN
 from app.models.process import Process
 from app.schemas.process import ProcessCreate, ProcessUpdate
 from app.schemas.role import RoleCreate, RoleUpdate
-from app.services import page_visibility_service, process_service, production_event_log_service, role_service
+from app.services import page_catalog_service, process_service, production_event_log_service, role_service
 
 
 def test_role_service_create_list_update(db) -> None:
@@ -72,32 +71,10 @@ def test_process_service_default_stage_and_validation_errors(db, factory) -> Non
         )
 
 
-def test_page_visibility_defaults_and_update(db) -> None:
-    items = page_visibility_service.list_page_catalog_items()
+def test_page_catalog_items_excludes_legacy_visibility_page() -> None:
+    items = page_catalog_service.list_page_catalog_items()
     assert items
     assert all(item["code"] != "page_visibility_config" for item in items)
-
-    updated_count, invalid_items = page_visibility_service.update_page_visibility_config(
-        db,
-        [
-            {"role_code": ROLE_SYSTEM_ADMIN, "page_code": "product", "is_visible": True},
-            {"role_code": "invalid_role", "page_code": "product", "is_visible": False},
-        ],
-    )
-    assert updated_count == 0
-    assert invalid_items == ["页面可见性配置已下线，请改用功能权限配置"]
-
-    sidebar, tabs = page_visibility_service.get_user_visible_pages(db, [ROLE_OPERATOR])
-    assert "home" in sidebar
-    assert isinstance(tabs, dict)
-
-
-def test_page_visibility_config_output(db) -> None:
-    config_items = page_visibility_service.get_page_visibility_config(db)
-    assert config_items
-    assert {"role_code", "page_code", "is_visible"}.issubset(config_items[0].keys())
-    assert all(item["editable"] is False for item in config_items)
-    assert all(item["page_code"] != "page_visibility_config" for item in config_items)
 
 
 def test_production_event_log_add_and_list(db, factory) -> None:

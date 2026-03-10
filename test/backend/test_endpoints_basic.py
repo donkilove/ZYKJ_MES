@@ -173,12 +173,6 @@ def test_roles_processes_users_ui_endpoints(db, factory) -> None:
     catalog = ui.get_page_catalog(current_user=admin)
     assert len(catalog.data.items) > 0
 
-    visibility = ui.get_my_page_visibility(db=db, current_user=admin)
-    assert "home" in visibility.data.sidebar_codes
-
-    config = ui.get_page_visibility_configuration(db=db, _=admin)
-    assert len(config.data.items) > 0
-
 
 def test_products_and_craft_endpoints(db, factory) -> None:
     factory.ensure_default_roles()

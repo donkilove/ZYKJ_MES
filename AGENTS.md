@@ -1,24 +1,73 @@
-# Agent Execution Rules
+# AGENTS.md
 
-## Priority
-- If there is any conflict between this file and other docs, this file takes precedence for agent execution behavior.
+## 优先级
+- 如果本文件与其他文档冲突，以本文件作为代理执行规则的最高优先级。
+- 如果用户的明确指令与本文件冲突，默认遵循用户指令；但若该指令会导致破坏性修改、敏感信息泄露或明显安全风险，应先说明风险与影响。
 
-## Encoding And Line Endings
-- All newly created or modified text files MUST be UTF-8 without BOM.
-- All repository text files MUST use LF line endings.
+## 作用范围
+- 本文件适用于整个仓库；若子目录中存在更具体的 `AGENTS.md`，则以子目录规则为准。
 
-## Mandatory Encoding Gates
-- Encoding checks MUST NOT be skipped before reporting task completion.
-- If any encoding check fails, the task is considered incomplete.
-- After code changes, run and report these commands:
+## 沟通规范
+- 默认使用中文进行沟通、问题说明、提交信息和项目文档编写。
+- 标识符、API 字段、协议名称、命令、路径和第三方库名称保持原文，不强制翻译。
+- 少问多做；只有在需求存在关键歧义、操作不可逆或缺少无法推断的必要信息时，才主动提问。
+- 回复以结果为导向；完成任务后，应清楚说明改动内容、原因、影响范围、验证结果和剩余风险。
+
+## 工作方式
+- 修改前先阅读相关代码、配置和上下文。
+- 优先采用最小且有效的改动解决实际问题。
+- 优先复用现有结构、约定和实现模式，再考虑新增抽象。
+- 未经用户明确要求，不进行无关重构、风格性改写或大范围清理。
+- 不覆盖、回退或格式化与当前任务无关的用户修改。
+
+## 安全与隐私
+- 禁止输出、打印、提交或保存密钥、令牌、凭证、内部地址及其他敏感信息。
+- 需要外部资料时，优先参考官方文档和可信公开来源。
+- 不得降低现有安全基线。
+- 不因习惯性“加固”而引入与当前任务无关的重型安全机制，除非用户明确要求或变更本身确有需要。
+
+## 编码与换行
+- 所有新建或修改的文本文件必须使用 `UTF-8` 无 `BOM` 编码。
+- 仓库中的文本文件统一使用 `LF` 行尾。
+- 在 Windows 上通过脚本或命令写文件时，必须显式确保使用 `UTF-8` 无 `BOM`。
+
+## 变更要求
+- 在用户要求的范围内交付可工作的完整改动，避免无说明的占位实现。
+- 除非用户明确要求，否则不要引入 `TODO`、`NotImplemented`、空桩函数或伪造逻辑作为最终交付。
+- 修改公共接口、数据模型、配置项、脚本入口或构建行为时，应检查受影响的调用方，并在需要时同步更新相关说明。
+- 默认保持向后兼容；若必须引入破坏性变更，应明确说明影响范围、迁移方式和回滚考虑。
+
+## 验证要求
+- 在报告任务完成前，乱码编码检查不得跳过。
+- 如果任一编码检查失败，则任务视为未完成。
+- 发生代码改动后，必须执行并报告以下命令：
   - `python backend/scripts/check_chinese_mojibake.py`
   - `python backend/scripts/check_frontend_chinese_mojibake.py`
   - `python -m pytest test/backend/test_chinese_mojibake_check.py test/backend/test_frontend_chinese_mojibake_check.py -q`
+- 除以上强制检查外，应根据改动范围补充执行相关测试、构建、静态检查或运行验证。
+- 如果某项验证无法执行，必须明确说明原因、剩余风险以及后续建议验证项。
 
-## Commit Message Convention
-- Git commit messages MUST use Chinese by default.
-- If the user explicitly requires another language for a specific commit, follow the user request for that commit.
+## 可追溯性
+- 保持工作过程可审计，但避免不必要的流程负担。
+- 小改动无需额外留档，只需在最终回复中清楚说明。
+- 对于跨模块重构、依赖变更、接口变更、数据结构调整或破坏性改动，应补充简要说明其原因、影响和迁移/使用变化。
+- 不要求每个任务都维护 ADR、证据日志或正式记录；仅在决策具有长期影响、高风险或难以回退时再增加相应文档。
 
-## Windows Write Requirement
-- On Windows, when writing files via scripts or shell, explicitly use UTF-8 without BOM.
-- Example for PowerShell: `UTF8Encoding($false)`
+## 自动化与流程
+- 不得无故禁用现有 CI、工作流或仓库质量门禁。
+- 不强制要求使用特定规划工具、MCP 工具或固定分析仪式。
+- 计划深度与任务复杂度匹配：简单任务保持轻量，复杂任务可拆解为清晰步骤。
+- 重点是交付正确结果，而不是制造流程产物。
+
+## Git 约定
+- Git 提交信息默认使用中文。
+- 如果用户对某次提交明确要求使用其他语言，则按该要求执行。
+- 未经用户明确要求，不创建提交、分支、标签或发布。
+- 提交信息应清楚表达改动意图，避免只写 `修改`、`更新`、`fix` 这类空泛描述。
+
+## 工程原则
+- 先理解，再修改。
+- 先验证，再下结论。
+- 先解决真实问题，再考虑优化。
+- 对假设、不确定性和风险保持明确说明。
+- 优先保证可维护性、清晰性和局部一致性，避免炫技式实现。

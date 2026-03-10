@@ -921,6 +921,14 @@ class CapabilityPackChangeLogItem {
     required this.operatorUserId,
     required this.operatorUsername,
     required this.rollbackOfChangeLogId,
+    required this.rollbackOfRevision,
+    required this.changedRoleCount,
+    required this.addedCapabilityCount,
+    required this.removedCapabilityCount,
+    required this.autoLinkedDependencyCount,
+    required this.isCurrentRevision,
+    required this.isNoop,
+    required this.canRollback,
     required this.createdAt,
     required this.roleResults,
   });
@@ -933,6 +941,14 @@ class CapabilityPackChangeLogItem {
   final int? operatorUserId;
   final String? operatorUsername;
   final int? rollbackOfChangeLogId;
+  final int? rollbackOfRevision;
+  final int changedRoleCount;
+  final int addedCapabilityCount;
+  final int removedCapabilityCount;
+  final int autoLinkedDependencyCount;
+  final bool isCurrentRevision;
+  final bool isNoop;
+  final bool canRollback;
   final DateTime createdAt;
   final List<CapabilityPackRoleUpdateResult> roleResults;
 
@@ -946,6 +962,15 @@ class CapabilityPackChangeLogItem {
       operatorUserId: json['operator_user_id'] as int?,
       operatorUsername: json['operator_username'] as String?,
       rollbackOfChangeLogId: json['rollback_of_change_log_id'] as int?,
+      rollbackOfRevision: json['rollback_of_revision'] as int?,
+      changedRoleCount: (json['changed_role_count'] as int?) ?? 0,
+      addedCapabilityCount: (json['added_capability_count'] as int?) ?? 0,
+      removedCapabilityCount: (json['removed_capability_count'] as int?) ?? 0,
+      autoLinkedDependencyCount:
+          (json['auto_linked_dependency_count'] as int?) ?? 0,
+      isCurrentRevision: (json['is_current_revision'] as bool?) ?? false,
+      isNoop: (json['is_noop'] as bool?) ?? false,
+      canRollback: (json['can_rollback'] as bool?) ?? true,
       createdAt: DateTime.parse(json['created_at'] as String),
       roleResults: (json['role_results'] as List<dynamic>? ?? const [])
           .map(

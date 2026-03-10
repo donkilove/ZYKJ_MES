@@ -377,6 +377,95 @@ def _snapshot_capability_pack_module_state(
     return snapshot
 
 
+def _normalize_capability_pack_snapshot(
+    snapshot: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    normalized: list[dict[str, object]] = []
+    for item in snapshot:
+        role_code = str(item.get("role_code", "")).strip()
+        if not role_code:
+            continue
+        raw_capability_codes = item.get("capability_codes")
+        capability_codes = (
+            sorted(
+                {
+                    str(code).strip()
+                    for code in raw_capability_codes
+                    if str(code).strip()
+                }
+            )
+            if isinstance(raw_capability_codes, list)
+            else []
+        )
+        normalized.append(
+            {
+                "role_code": role_code,
+                "module_enabled": bool(item.get("module_enabled", False))
+                or bool(capability_codes),
+                "capability_codes": capability_codes,
+            }
+        )
+    normalized.sort(
+        key=lambda item: (
+            ROLE_SORT_ORDER.get(str(item["role_code"]), 9999),
+            str(item["role_code"]),
+        )
+    )
+    return normalized
+
+
+def _capability_pack_snapshot_matches_current(
+    db: Session,
+    *,
+    module_code: str,
+    snapshot: list[dict[str, object]],
+) -> bool:
+    current_snapshot = _snapshot_capability_pack_module_state(db, module_code=module_code)
+    return _normalize_capability_pack_snapshot(current_snapshot) == _normalize_capability_pack_snapshot(
+        snapshot
+    )
+
+
+def _get_capability_pack_change_log(
+    db: Session,
+    *,
+    module_code: str,
+    change_log_id: int,
+) -> AuthzChangeLog:
+    normalized_module = _normalize_module_code(module_code)
+    row = db.execute(
+        select(AuthzChangeLog).where(
+            AuthzChangeLog.id == change_log_id,
+            AuthzChangeLog.module_code == normalized_module,
+        )
+    ).scalars().first()
+    if row is None:
+        raise ValueError(f"Change log not found: {change_log_id}")
+    return row
+
+
+def _serialize_capability_pack_change_log_role_item(
+    *,
+    module_code: str,
+    item: AuthzChangeLogItem,
+) -> dict[str, object]:
+    return {
+        "role_code": item.role_code,
+        "role_name": item.role_name,
+        "readonly": bool(item.readonly),
+        "ignored_input": False,
+        "module_code": module_code,
+        "before_capability_codes": list(item.before_capability_codes),
+        "after_capability_codes": list(item.after_capability_codes),
+        "added_capability_codes": list(item.added_capability_codes),
+        "removed_capability_codes": list(item.removed_capability_codes),
+        "auto_linked_dependencies": list(item.auto_linked_dependencies),
+        "effective_capability_codes": list(item.effective_capability_codes),
+        "effective_page_permission_codes": list(item.effective_page_permission_codes),
+        "updated_count": int(item.updated_count),
+    }
+
+
 def _record_capability_pack_change_log(
     db: Session,
     *,
@@ -1789,7 +1878,7 @@ def _capability_request_to_granted_codes(
         requested_codes=capability_codes
     )
     requested_codes = set(normalized_capabilities)
-    if module_enabled:
+    if module_enabled or normalized_capabilities:
         requested_codes.add(
             MODULE_PERMISSION_BY_MODULE_CODE.get(
                 module_code,
@@ -2123,9 +2212,25 @@ def list_capability_pack_change_logs(
     for item_row in item_rows:
         items_by_log_id[item_row.change_log_id].append(item_row)
 
+    current_revision = get_authz_module_revision(db, module_code=normalized_module)
+    current_snapshot = _snapshot_capability_pack_module_state(db, module_code=normalized_module)
+    rollback_target_ids = {
+        int(row.rollback_of_change_log_id)
+        for row in log_rows
+        if row.rollback_of_change_log_id is not None
+    }
+    rollback_target_revision_by_id: dict[int, int] = {}
+    if rollback_target_ids:
+        rollback_target_rows = db.execute(
+            select(AuthzChangeLog).where(AuthzChangeLog.id.in_(sorted(rollback_target_ids)))
+        ).scalars().all()
+        rollback_target_revision_by_id = {
+            int(row.id): int(row.revision) for row in rollback_target_rows
+        }
+
     return {
         "module_code": normalized_module,
-        "module_revision": get_authz_module_revision(db, module_code=normalized_module),
+        "module_revision": current_revision,
         "items": [
             {
                 "change_log_id": row.id,
@@ -2136,29 +2241,64 @@ def list_capability_pack_change_logs(
                 "operator_user_id": row.operator_user_id,
                 "operator_username": row.operator_username,
                 "rollback_of_change_log_id": row.rollback_of_change_log_id,
+                "rollback_of_revision": rollback_target_revision_by_id.get(
+                    int(row.rollback_of_change_log_id)
+                )
+                if row.rollback_of_change_log_id is not None
+                else None,
+                "changed_role_count": sum(
+                    1
+                    for item in items_by_log_id.get(row.id, [])
+                    if int(item.updated_count) > 0
+                ),
+                "added_capability_count": sum(
+                    len(item.added_capability_codes)
+                    for item in items_by_log_id.get(row.id, [])
+                ),
+                "removed_capability_count": sum(
+                    len(item.removed_capability_codes)
+                    for item in items_by_log_id.get(row.id, [])
+                ),
+                "auto_linked_dependency_count": sum(
+                    len(item.auto_linked_dependencies)
+                    for item in items_by_log_id.get(row.id, [])
+                ),
+                "is_current_revision": int(row.revision) == current_revision,
+                "is_noop": _normalize_capability_pack_snapshot(list(row.snapshot_json or []))
+                == _normalize_capability_pack_snapshot(current_snapshot),
+                "can_rollback": _normalize_capability_pack_snapshot(list(row.snapshot_json or []))
+                != _normalize_capability_pack_snapshot(current_snapshot),
                 "created_at": row.created_at,
                 "role_results": [
-                    {
-                        "role_code": item.role_code,
-                        "role_name": item.role_name,
-                        "readonly": bool(item.readonly),
-                        "ignored_input": False,
-                        "module_code": row.module_code,
-                        "before_capability_codes": list(item.before_capability_codes),
-                        "after_capability_codes": list(item.after_capability_codes),
-                        "added_capability_codes": list(item.added_capability_codes),
-                        "removed_capability_codes": list(item.removed_capability_codes),
-                        "auto_linked_dependencies": list(item.auto_linked_dependencies),
-                        "effective_capability_codes": list(item.effective_capability_codes),
-                        "effective_page_permission_codes": list(item.effective_page_permission_codes),
-                        "updated_count": int(item.updated_count),
-                    }
+                    _serialize_capability_pack_change_log_role_item(
+                        module_code=row.module_code,
+                        item=item,
+                    )
                     for item in items_by_log_id.get(row.id, [])
                 ],
             }
             for row in log_rows
         ],
     }
+
+
+def preview_capability_pack_change_log_rollback(
+    db: Session,
+    *,
+    module_code: str,
+    change_log_id: int,
+) -> dict[str, object]:
+    target_log = _get_capability_pack_change_log(
+        db,
+        module_code=module_code,
+        change_log_id=change_log_id,
+    )
+    snapshot = _normalize_capability_pack_snapshot(list(target_log.snapshot_json or []))
+    return preview_capability_packs(
+        db,
+        module_code=target_log.module_code,
+        role_items=[dict(item) for item in snapshot],
+    )
 
 
 def rollback_capability_pack_change_log(
@@ -2170,19 +2310,21 @@ def rollback_capability_pack_change_log(
     operator: User | None,
     remark: str | None = None,
 ) -> dict[str, object]:
-    normalized_module = _normalize_module_code(module_code)
-    target_log = db.execute(
-        select(AuthzChangeLog).where(
-            AuthzChangeLog.id == change_log_id,
-            AuthzChangeLog.module_code == normalized_module,
-        )
-    ).scalars().first()
-    if target_log is None:
-        raise ValueError(f"Change log not found: {change_log_id}")
-    snapshot = list(target_log.snapshot_json or [])
+    target_log = _get_capability_pack_change_log(
+        db,
+        module_code=module_code,
+        change_log_id=change_log_id,
+    )
+    snapshot = _normalize_capability_pack_snapshot(list(target_log.snapshot_json or []))
+    if _capability_pack_snapshot_matches_current(
+        db,
+        module_code=target_log.module_code,
+        snapshot=snapshot,
+    ):
+        raise ValueError(f"目标 revision {target_log.revision} 与当前配置一致，无需回滚")
     return apply_capability_pack_role_configs(
         db,
-        module_code=normalized_module,
+        module_code=target_log.module_code,
         role_items=[dict(item) for item in snapshot],
         expected_revision=expected_revision,
         operator=operator,

@@ -126,17 +126,18 @@ def upgrade() -> None:
         unique=False,
     )
 
-    op.execute(
+    bind = op.get_bind()
+    bind.execute(
         sa.text(
             "DELETE FROM sys_role_permission_grant WHERE permission_code IN :codes"
         ).bindparams(sa.bindparam("codes", expanding=True)),
-        {"codes": LEGACY_PERMISSION_CODES},
+        {"codes": list(LEGACY_PERMISSION_CODES)},
     )
-    op.execute(
+    bind.execute(
         sa.text(
             "DELETE FROM sys_permission_catalog WHERE permission_code IN :codes"
         ).bindparams(sa.bindparam("codes", expanding=True)),
-        {"codes": LEGACY_PERMISSION_CODES},
+        {"codes": list(LEGACY_PERMISSION_CODES)},
     )
 
     op.drop_index(op.f("ix_sys_page_visibility_role_code"), table_name="sys_page_visibility")

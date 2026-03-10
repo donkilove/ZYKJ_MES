@@ -10,7 +10,7 @@ import '../support/http_test_server.dart';
 
 void main() {
   group('AuthzService', () {
-    test('loads matrix and updates matrix with dry_run and apply', () async {
+    test('loads matrix and rejects deprecated apply endpoint', () async {
       final server = await TestHttpServer.start({
         'GET /authz/role-permissions/matrix': (request) {
           expect(request.uri.queryParameters['module'], 'production');
@@ -83,29 +83,8 @@ void main() {
             );
           }
           return TestResponse.json(
-            200,
-            body: {
-              'data': {
-                'module_code': 'production',
-                'dry_run': false,
-                'role_results': [
-                  {
-                    'role_code': 'production_admin',
-                    'role_name': '生产管理员',
-                    'readonly': false,
-                    'is_system_admin': false,
-                    'ignored_input': false,
-                    'before_permission_codes': [],
-                    'after_permission_codes': ['page.production.view'],
-                    'added_permission_codes': ['page.production.view'],
-                    'removed_permission_codes': [],
-                    'auto_granted_permission_codes': [],
-                    'auto_revoked_permission_codes': [],
-                    'updated_count': 1,
-                  },
-                ],
-              },
-            },
+            410,
+            body: {'detail': '旧权限写入入口已下线，请改用能力包配置'},
           );
         },
       });
@@ -125,7 +104,7 @@ void main() {
         dryRun: true,
         remark: 'preview',
       );
-      final saved = await service.updateRolePermissionMatrix(
+      final saveRequest = service.updateRolePermissionMatrix(
         moduleCode: 'production',
         grantedByRoleCode: {
           'production_admin': ['page.production.view'],
@@ -139,10 +118,17 @@ void main() {
       expect(matrix.roleItems.length, 2);
       expect(preview.dryRun, isTrue);
       expect(preview.roleResults.first.updatedCount, 1);
-      expect(saved.dryRun, isFalse);
-      expect(
-        saved.roleResults.first.afterPermissionCodes,
-        contains('page.production.view'),
+      await expectLater(
+        saveRequest,
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 410)
+              .having(
+                (e) => e.message,
+                'message',
+                '旧权限写入入口已下线，请改用能力包配置',
+              ),
+        ),
       );
     });
 
@@ -167,7 +153,7 @@ void main() {
       );
     });
 
-    test('loads and updates permission hierarchy endpoints', () async {
+    test('loads hierarchy endpoints and rejects deprecated apply', () async {
       final server = await TestHttpServer.start({
         'GET /authz/hierarchy/catalog': (request) {
           expect(request.uri.queryParameters['module'], 'production');
@@ -242,35 +228,8 @@ void main() {
             contains('feature.production.order_management.manage'),
           );
           return TestResponse.json(
-            200,
-            body: {
-              'data': {
-                'role_code': 'production_admin',
-                'role_name': '生产管理员',
-                'readonly': false,
-                'ignored_input': false,
-                'module_code': 'production',
-                'before_permission_codes': ['module.production.access'],
-                'after_permission_codes': [
-                  'module.production.access',
-                  'page.production_order_management.view',
-                  'feature.production.order_management.manage',
-                ],
-                'added_permission_codes': [
-                  'page.production_order_management.view',
-                ],
-                'removed_permission_codes': [],
-                'auto_linked_dependencies': [],
-                'effective_page_permission_codes': [
-                  'page.production_order_management.view',
-                ],
-                'effective_feature_permission_codes': [
-                  'feature.production.order_management.manage',
-                ],
-                'updated_count': 1,
-                'dry_run': false,
-              },
-            },
+            410,
+            body: {'detail': '旧权限写入入口已下线，请改用能力包配置'},
           );
         },
         'POST /authz/hierarchy/preview': (request) {
@@ -335,7 +294,7 @@ void main() {
           ),
         ],
       );
-      final updated = await service.updatePermissionHierarchyRoleConfig(
+      final updateRequest = service.updatePermissionHierarchyRoleConfig(
         roleCode: 'production_admin',
         moduleCode: 'production',
         moduleEnabled: true,
@@ -346,10 +305,17 @@ void main() {
       expect(catalog.modulePermissionCode, 'module.production.access');
       expect(roleConfig.moduleEnabled, isTrue);
       expect(preview.roleResults, hasLength(1));
-      expect(updated.updatedCount, 1);
-      expect(
-        updated.afterPermissionCodes,
-        contains('feature.production.order_management.manage'),
+      await expectLater(
+        updateRequest,
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 410)
+              .having(
+                (e) => e.message,
+                'message',
+                '旧权限写入入口已下线，请改用能力包配置',
+              ),
+        ),
       );
     });
 
@@ -592,6 +558,14 @@ void main() {
                     'operator_user_id': 1,
                     'operator_username': 'authz_admin',
                     'rollback_of_change_log_id': null,
+                    'rollback_of_revision': null,
+                    'changed_role_count': 1,
+                    'added_capability_count': 1,
+                    'removed_capability_count': 0,
+                    'auto_linked_dependency_count': 0,
+                    'is_current_revision': true,
+                    'is_noop': true,
+                    'can_rollback': false,
                     'created_at': '2026-03-09T10:00:00Z',
                     'role_results': [
                       {
@@ -618,6 +592,50 @@ void main() {
                         'updated_count': 1,
                       },
                     ],
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'POST /authz/capability-packs/rollback-preview': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['module_code'], 'production');
+          expect(body['change_log_id'], 11);
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'module_code': 'production',
+                'module_revision': 4,
+                'role_results': [
+                  {
+                    'role_code': 'production_admin',
+                    'role_name': '生产管理员',
+                    'readonly': false,
+                    'ignored_input': false,
+                    'module_code': 'production',
+                    'before_capability_codes': [
+                      'feature.production.order_query.proxy',
+                    ],
+                    'after_capability_codes': [
+                      'feature.production.order_query.execute',
+                    ],
+                    'added_capability_codes': [
+                      'feature.production.order_query.execute',
+                    ],
+                    'removed_capability_codes': [
+                      'feature.production.order_query.proxy',
+                    ],
+                    'auto_linked_dependencies': [],
+                    'effective_capability_codes': [
+                      'feature.production.order_query.execute',
+                    ],
+                    'effective_page_permission_codes': [
+                      'page.production_order_query.view',
+                    ],
+                    'updated_count': 2,
+                    'dry_run': true,
                   },
                 ],
               },
@@ -740,6 +758,10 @@ void main() {
       final history = await service.loadCapabilityPackHistory(
         moduleCode: 'production',
       );
+      final rollbackPreview = await service.previewRollbackCapabilityPacks(
+        moduleCode: 'production',
+        changeLogId: 11,
+      );
       final rolledBack = await service.rollbackCapabilityPacks(
         moduleCode: 'production',
         changeLogId: 11,
@@ -771,8 +793,14 @@ void main() {
       expect(batchApplied.moduleRevision, 4);
       expect(history.moduleRevision, 4);
       expect(history.items.single.changeLogId, 11);
+      expect(history.items.single.changedRoleCount, 1);
+      expect(history.items.single.isCurrentRevision, isTrue);
+      expect(history.items.single.canRollback, isFalse);
       expect(history.items.single.roleResults.single.afterCapabilityCodes, [
         'feature.production.order_query.execute',
+      ]);
+      expect(rollbackPreview.roleResults.single.removedCapabilityCodes, [
+        'feature.production.order_query.proxy',
       ]);
       expect(rolledBack.moduleRevision, 5);
       expect(updated.updatedCount, 1);
