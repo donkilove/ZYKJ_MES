@@ -20,4 +20,5 @@ mes_client/build/
 # IDE
 .idea/
 .vscode/
-上一版系统
+.codex/
+.github/
