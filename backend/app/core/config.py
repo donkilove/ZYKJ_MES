@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     bootstrap_admin_username: str = "admin"
     bootstrap_admin_password: str = "Admin@123456"
     online_status_ttl_seconds: int = 90
+    session_max_seconds: int = 3600
+    login_log_retention_days: int = 30
     maintenance_auto_generate_enabled: bool = True
     maintenance_auto_generate_time: str = "00:05"
     maintenance_auto_generate_timezone: str = "Asia/Shanghai"

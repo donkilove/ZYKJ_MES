@@ -1,18 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import base64
+import csv
+import io
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permission
+from app.api.deps import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.user import UserCreate, UserItem, UserListResult, UserUpdate
-from app.services.online_status_service import get_user_online_snapshot
+from app.schemas.user import UserCreate, UserExportResult, UserItem, UserListResult, UserUpdate
+from app.services.audit_service import write_audit_log
+from app.services.session_service import list_online_user_ids
 from app.services.user_service import (
     create_user,
     delete_user,
     get_user_by_id,
-    get_user_by_username,
     list_users,
+    reset_user_password,
+    set_user_active,
     update_user,
 )
 
@@ -20,55 +26,154 @@ from app.services.user_service import (
 router = APIRouter()
 
 
-def to_user_item(user: User) -> UserItem:
-    is_online, last_seen_at = get_user_online_snapshot(user.id)
-    # 获取工段名称（从工序的 stage 关系中提取）
+def to_user_item(user: User, *, online_user_ids: set[int] | None = None) -> UserItem:
+    is_online = user.id in (online_user_ids or set())
+    stage_name = user.stage.name if user.stage else None
     stage_names = sorted(set(process.stage.name for process in user.processes if process.stage))
+    if stage_name and stage_name not in stage_names:
+        stage_names.insert(0, stage_name)
     return UserItem(
         id=user.id,
         username=user.username,
         full_name=user.full_name,
+        remark=user.remark,
         is_online=is_online,
-        last_seen_at=last_seen_at,
+        is_active=user.is_active,
+        is_deleted=user.is_deleted,
+        must_change_password=user.must_change_password,
+        last_seen_at=user.last_login_at,
+        stage_id=user.stage_id,
+        stage_name=stage_name,
         role_codes=sorted(role.code for role in user.roles),
         role_names=sorted(role.name for role in user.roles),
         process_codes=sorted(process.code for process in user.processes),
         process_names=sorted(process.name for process in user.processes),
         stage_names=stage_names,
+        last_login_at=user.last_login_at,
+        last_login_ip=user.last_login_ip,
+        password_changed_at=user.password_changed_at,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
 
 
+def _build_csv_export(users: list[User], online_user_ids: set[int]) -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "id",
+            "username",
+            "role_names",
+            "stage_name",
+            "is_online",
+            "is_active",
+            "must_change_password",
+            "created_at",
+            "last_login_at",
+        ]
+    )
+    for user in users:
+        writer.writerow(
+            [
+                user.id,
+                user.username,
+                " / ".join(sorted(role.name for role in user.roles)),
+                user.stage.name if user.stage else "/",
+                "online" if user.id in online_user_ids else "offline",
+                "enabled" if user.is_active else "disabled",
+                "yes" if user.must_change_password else "no",
+                user.created_at.isoformat(),
+                user.last_login_at.isoformat() if user.last_login_at else "",
+            ]
+        )
+    return base64.b64encode(buffer.getvalue().encode("utf-8")).decode("ascii")
+
+
 @router.get("", response_model=ApiResponse[UserListResult])
 def get_users(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=200),
     keyword: str | None = Query(default=None),
+    role_code: str | None = Query(default=None),
+    stage_id: int | None = Query(default=None, ge=1),
+    is_active: bool | None = Query(default=None),
+    include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("user.users.list")),
 ) -> ApiResponse[UserListResult]:
-    total, users = list_users(db, page, page_size, keyword)
-    result = UserListResult(total=total, items=[to_user_item(user) for user in users])
+    total, users = list_users(
+        db,
+        page=page,
+        page_size=page_size,
+        keyword=keyword,
+        role_code=role_code,
+        stage_id=stage_id,
+        is_active=is_active,
+        include_deleted=include_deleted,
+    )
+    online_user_ids = list_online_user_ids(db)
+    result = UserListResult(total=total, items=[to_user_item(user, online_user_ids=online_user_ids) for user in users])
     return success_response(result)
+
+
+@router.get("/export", response_model=ApiResponse[UserExportResult])
+def export_users(
+    keyword: str | None = Query(default=None),
+    role_code: str | None = Query(default=None),
+    stage_id: int | None = Query(default=None, ge=1),
+    is_active: bool | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("user.users.export")),
+) -> ApiResponse[UserExportResult]:
+    _, users = list_users(
+        db,
+        page=1,
+        page_size=5000,
+        keyword=keyword,
+        role_code=role_code,
+        stage_id=stage_id,
+        is_active=is_active,
+        include_deleted=False,
+    )
+    online_user_ids = list_online_user_ids(db)
+    content_base64 = _build_csv_export(users, online_user_ids)
+    return success_response(
+        UserExportResult(
+            filename="users_export.csv",
+            content_type="text/csv",
+            content_base64=content_base64,
+        )
+    )
 
 
 @router.post("", response_model=ApiResponse[UserItem], status_code=status.HTTP_201_CREATED)
 def create_user_api(
     payload: UserCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("user.users.create")),
+    current_user: User = Depends(require_permission("user.users.create")),
 ) -> ApiResponse[UserItem]:
-    existing = get_user_by_username(db, payload.username)
-    if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists")
-
     user, error_message = create_user(db, payload)
     if error_message:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
     if not user:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create user")
-    return success_response(to_user_item(user), message="created")
+
+    write_audit_log(
+        db,
+        action_code="user.create",
+        action_name="新建用户",
+        target_type="user",
+        target_id=str(user.id),
+        target_name=user.username,
+        operator=current_user,
+        after_data={"username": user.username, "role_codes": [role.code for role in user.roles]},
+        ip_address=request.client.host if request.client else None,
+        terminal_info=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return success_response(to_user_item(user, online_user_ids=list_online_user_ids(db)), message="created")
 
 
 @router.get("/{user_id}", response_model=ApiResponse[UserItem])
@@ -77,43 +182,183 @@ def get_user_detail(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("user.users.detail")),
 ) -> ApiResponse[UserItem]:
-    user = get_user_by_id(db, user_id)
+    user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return success_response(to_user_item(user))
+    return success_response(to_user_item(user, online_user_ids=list_online_user_ids(db)))
 
 
 @router.put("/{user_id}", response_model=ApiResponse[UserItem])
 def update_user_api(
     user_id: int,
     payload: UserUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("user.users.update")),
+    current_user: User = Depends(require_permission("user.users.update")),
 ) -> ApiResponse[UserItem]:
-    user = get_user_by_id(db, user_id)
+    user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    updated, error_message = update_user(db, user, payload)
+    before_data = {
+        "username": user.username,
+        "full_name": user.full_name,
+        "is_active": user.is_active,
+        "role_codes": sorted(role.code for role in user.roles),
+        "stage_id": user.stage_id,
+    }
+    updated, error_message = update_user(
+        db,
+        user=user,
+        payload=payload,
+        operator=current_user,
+    )
     if error_message:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
     if not updated:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update user")
-    return success_response(to_user_item(updated))
+
+    write_audit_log(
+        db,
+        action_code="user.update",
+        action_name="编辑用户",
+        target_type="user",
+        target_id=str(updated.id),
+        target_name=updated.username,
+        operator=current_user,
+        before_data=before_data,
+        after_data={
+            "username": updated.username,
+            "full_name": updated.full_name,
+            "is_active": updated.is_active,
+            "role_codes": sorted(role.code for role in updated.roles),
+            "stage_id": updated.stage_id,
+        },
+        ip_address=request.client.host if request.client else None,
+        terminal_info=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
+
+
+@router.post("/{user_id}/enable", response_model=ApiResponse[UserItem])
+def enable_user_api(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("user.users.enable")),
+) -> ApiResponse[UserItem]:
+    user = get_user_by_id(db, user_id, include_deleted=True)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    updated, error_message = set_user_active(db, user=user, active=True)
+    if error_message:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to enable user")
+    write_audit_log(
+        db,
+        action_code="user.enable",
+        action_name="启用用户",
+        target_type="user",
+        target_id=str(updated.id),
+        target_name=updated.username,
+        operator=current_user,
+        ip_address=request.client.host if request.client else None,
+        terminal_info=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
+
+
+@router.post("/{user_id}/disable", response_model=ApiResponse[UserItem])
+def disable_user_api(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("user.users.disable")),
+) -> ApiResponse[UserItem]:
+    user = get_user_by_id(db, user_id, include_deleted=True)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    updated, error_message = set_user_active(db, user=user, active=False)
+    if error_message:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to disable user")
+    write_audit_log(
+        db,
+        action_code="user.disable",
+        action_name="停用用户",
+        target_type="user",
+        target_id=str(updated.id),
+        target_name=updated.username,
+        operator=current_user,
+        ip_address=request.client.host if request.client else None,
+        terminal_info=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
+
+
+@router.post("/{user_id}/reset-password", response_model=ApiResponse[UserItem])
+def reset_password_api(
+    user_id: int,
+    request: Request,
+    password: str = Query(min_length=6, max_length=128),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("user.users.reset_password")),
+) -> ApiResponse[UserItem]:
+    user = get_user_by_id(db, user_id, include_deleted=True)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    updated = reset_user_password(db, user=user, new_password=password)
+    write_audit_log(
+        db,
+        action_code="user.reset_password",
+        action_name="重置密码",
+        target_type="user",
+        target_id=str(updated.id),
+        target_name=updated.username,
+        operator=current_user,
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
+    )
+    db.commit()
+    return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
 
 
 @router.delete("/{user_id}", response_model=ApiResponse[dict[str, bool]])
 def delete_user_api(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("user.users.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     if user_id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete current login user")
 
-    user = get_user_by_id(db, user_id)
+    user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    delete_user(db, user)
+    deleted, error_message = delete_user(db, user=user)
+    if error_message:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete user")
+
+    write_audit_log(
+        db,
+        action_code="user.delete",
+        action_name="逻辑删除用户",
+        target_type="user",
+        target_id=str(user.id),
+        target_name=user.username,
+        operator=current_user,
+        after_data={"is_deleted": True, "is_active": False},
+        ip_address=request.client.host if request.client else None,
+        terminal_info=request.headers.get("user-agent"),
+    )
+    db.commit()
     return success_response({"deleted": True}, message="deleted")

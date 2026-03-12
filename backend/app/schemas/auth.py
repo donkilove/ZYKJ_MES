@@ -12,6 +12,7 @@ class LoginResult(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+    must_change_password: bool = False
 
 
 class RegisterRequest(BaseModel):
@@ -48,6 +49,10 @@ class AccountListResult(BaseModel):
 class RegistrationRequestItem(BaseModel):
     id: int
     account: str
+    status: str
+    rejected_reason: str | None = None
+    reviewed_by_user_id: int | None = None
+    reviewed_at: datetime | None = None
     created_at: datetime
 
 
@@ -58,15 +63,23 @@ class RegistrationRequestListResult(BaseModel):
 
 class ApproveRegistrationRequest(BaseModel):
     account: str = Field(min_length=2, max_length=64)
+    password: str | None = Field(default=None, min_length=6, max_length=128)
     role_codes: list[str] = Field(default_factory=list)
     process_codes: list[str] = Field(default_factory=list)
+    stage_id: int | None = Field(default=None, gt=0)
 
 
 class RegistrationActionResult(BaseModel):
     request_id: int
     account: str
+    status: str
+    rejected_reason: str | None = None
     final_account: str | None = None
     approved: bool
     user_id: int | None = None
     role_codes: list[str] = Field(default_factory=list)
     process_codes: list[str] = Field(default_factory=list)
+
+
+class RejectRegistrationRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)

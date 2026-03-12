@@ -22,79 +22,212 @@ class UserService {
     required int page,
     required int pageSize,
     String? keyword,
+    String? roleCode,
+    int? stageId,
+    bool? isActive,
+    bool includeDeleted = false,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
     }
-    final uri = Uri.parse(
-      '${session.baseUrl}/users',
-    ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
-
-    final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
+    if (roleCode != null && roleCode.trim().isNotEmpty) {
+      query['role_code'] = roleCode.trim();
     }
+    if (stageId != null) {
+      query['stage_id'] = '$stageId';
+    }
+    if (isActive != null) {
+      query['is_active'] = '$isActive';
+    }
+    query['include_deleted'] = '$includeDeleted';
 
-    final data = json['data'] as Map<String, dynamic>;
-    final items = (data['items'] as List<dynamic>)
+    final uri =
+        Uri.parse('${session.baseUrl}/users').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+
+    final data = _dataObject(json);
+    final items = (data['items'] as List<dynamic>? ?? const [])
         .map((entry) => UserItem.fromJson(entry as Map<String, dynamic>))
         .toList();
-    return UserListResult(total: data['total'] as int, items: items);
+    return UserListResult(total: (data['total'] as int?) ?? 0, items: items);
   }
 
-  Future<RoleListResult> listRoles() async {
-    final uri = Uri.parse(
-      '${session.baseUrl}/roles',
-    ).replace(queryParameters: const {'page': '1', 'page_size': '50'});
-    final response = await http.get(uri, headers: _authHeaders);
-    final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
+  Future<UserExportResult> exportUsers({
+    String? keyword,
+    String? roleCode,
+    int? stageId,
+    bool? isActive,
+  }) async {
+    final query = <String, String>{};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (roleCode != null && roleCode.trim().isNotEmpty) {
+      query['role_code'] = roleCode.trim();
+    }
+    if (stageId != null) {
+      query['stage_id'] = '$stageId';
+    }
+    if (isActive != null) {
+      query['is_active'] = '$isActive';
     }
 
-    final data = json['data'] as Map<String, dynamic>;
-    final items = (data['items'] as List<dynamic>)
+    final uri = Uri.parse(
+      '${session.baseUrl}/users/export',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return UserExportResult.fromJson(_dataObject(json));
+  }
+
+  Future<RoleListResult> listRoles({
+    int page = 1,
+    int pageSize = 200,
+    String? keyword,
+  }) async {
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    final uri =
+        Uri.parse('${session.baseUrl}/roles').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+
+    final data = _dataObject(json);
+    final items = (data['items'] as List<dynamic>? ?? const [])
         .map((entry) => RoleItem.fromJson(entry as Map<String, dynamic>))
         .toList();
-    return RoleListResult(total: data['total'] as int, items: items);
+    return RoleListResult(total: (data['total'] as int?) ?? 0, items: items);
+  }
+
+  Future<RoleItem> createRole({
+    required String code,
+    required String name,
+    String? description,
+  }) async {
+    final uri = Uri.parse('${session.baseUrl}/roles');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'code': code.trim(),
+        'name': name.trim(),
+        if (description != null) 'description': description.trim(),
+      }),
+    );
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 201);
+    return RoleItem.fromJson(_dataObject(json));
+  }
+
+  Future<RoleItem> updateRole({
+    required int roleId,
+    String? code,
+    String? name,
+    String? description,
+    bool? isEnabled,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (code != null) {
+      payload['code'] = code.trim();
+    }
+    if (name != null) {
+      payload['name'] = name.trim();
+    }
+    if (description != null) {
+      payload['description'] = description.trim();
+    }
+    if (isEnabled != null) {
+      payload['is_enabled'] = isEnabled;
+    }
+
+    final uri = Uri.parse('${session.baseUrl}/roles/$roleId');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode(payload),
+    );
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return RoleItem.fromJson(_dataObject(json));
+  }
+
+  Future<RoleItem> enableRole({required int roleId}) async {
+    final uri = Uri.parse('${session.baseUrl}/roles/$roleId/enable');
+    final response = await http.post(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return RoleItem.fromJson(_dataObject(json));
+  }
+
+  Future<RoleItem> disableRole({required int roleId}) async {
+    final uri = Uri.parse('${session.baseUrl}/roles/$roleId/disable');
+    final response = await http.post(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return RoleItem.fromJson(_dataObject(json));
+  }
+
+  Future<void> deleteRole({required int roleId}) async {
+    final uri = Uri.parse('${session.baseUrl}/roles/$roleId');
+    final response = await http.delete(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
   }
 
   Future<ProcessListResult> listProcesses() async {
-    final uri = Uri.parse(
-      '${session.baseUrl}/processes',
-    ).replace(queryParameters: const {'page': '1', 'page_size': '200'});
-    final response = await http.get(uri, headers: _authHeaders);
-    final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
+    const pageSize = 200;
+    var page = 1;
+    var total = 0;
+    final items = <ProcessItem>[];
+
+    while (true) {
+      final uri = Uri.parse(
+        '${session.baseUrl}/processes',
+      ).replace(
+        queryParameters: {'page': '$page', 'page_size': '$pageSize'},
       );
+      final response = await http.get(uri, headers: _authHeaders);
+      final json = _decodeBody(response);
+      _throwIfNotSuccess(response, json, expectedCode: 200);
+
+      final data = _dataObject(json);
+      total = (data['total'] as int?) ?? total;
+      final pageItems = (data['items'] as List<dynamic>? ?? const [])
+          .map((entry) => ProcessItem.fromJson(entry as Map<String, dynamic>))
+          .toList();
+      items.addAll(pageItems);
+
+      if (pageItems.isEmpty) {
+        break;
+      }
+      if (total > 0 && items.length >= total) {
+        break;
+      }
+      page += 1;
     }
 
-    final data = json['data'] as Map<String, dynamic>;
-    final items = (data['items'] as List<dynamic>)
-        .map((entry) => ProcessItem.fromJson(entry as Map<String, dynamic>))
-        .toList();
-    return ProcessListResult(total: data['total'] as int, items: items);
+    return ProcessListResult(total: total, items: items);
   }
 
   Future<RegistrationRequestListResult> listRegistrationRequests({
     required int page,
     required int pageSize,
     String? keyword,
+    String? status,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
+    }
+    if (status != null && status.trim().isNotEmpty) {
+      query['status'] = status.trim();
     }
 
     final uri = Uri.parse(
@@ -102,22 +235,17 @@ class UserService {
     ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
-    }
+    _throwIfNotSuccess(response, json, expectedCode: 200);
 
-    final data = json['data'] as Map<String, dynamic>;
-    final items = (data['items'] as List<dynamic>)
+    final data = _dataObject(json);
+    final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
               RegistrationRequestItem.fromJson(entry as Map<String, dynamic>),
         )
         .toList();
     return RegistrationRequestListResult(
-      total: data['total'] as int,
+      total: (data['total'] as int?) ?? 0,
       items: items,
     );
   }
@@ -127,6 +255,8 @@ class UserService {
     required String account,
     required List<String> roleCodes,
     required List<String> processCodes,
+    String? password,
+    int? stageId,
   }) async {
     final uri = Uri.parse(
       '${session.baseUrl}/auth/register-requests/$requestId/approve',
@@ -135,32 +265,31 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({
-        'account': account,
+        'account': account.trim(),
         'role_codes': roleCodes,
         'process_codes': processCodes,
+        if (password != null && password.isNotEmpty) 'password': password,
+        if (stageId != null) 'stage_id': stageId,
       }),
     );
     final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
-    }
+    _throwIfNotSuccess(response, json, expectedCode: 200);
   }
 
-  Future<void> rejectRegistrationRequest({required int requestId}) async {
+  Future<void> rejectRegistrationRequest({
+    required int requestId,
+    String? reason,
+  }) async {
     final uri = Uri.parse(
       '${session.baseUrl}/auth/register-requests/$requestId/reject',
     );
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'reason': reason}),
+    );
     final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
-    }
+    _throwIfNotSuccess(response, json, expectedCode: 200);
   }
 
   Future<void> createUser({
@@ -168,27 +297,28 @@ class UserService {
     required String password,
     required List<String> roleCodes,
     required List<String> processCodes,
+    String? remark,
+    int? stageId,
+    bool isActive = true,
   }) async {
     final uri = Uri.parse('${session.baseUrl}/users');
     final response = await http.post(
       uri,
       headers: _authHeaders,
       body: jsonEncode({
-        'username': account,
+        'username': account.trim(),
         'password': password,
-        'full_name': account,
+        'full_name': account.trim(),
+        'remark': remark?.trim(),
         'role_codes': roleCodes,
         'process_codes': processCodes,
+        'stage_id': stageId,
+        'is_active': isActive,
       }),
     );
 
     final json = _decodeBody(response);
-    if (response.statusCode != 201) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
-    }
+    _throwIfNotSuccess(response, json, expectedCode: 201);
   }
 
   Future<void> updateUser({
@@ -197,6 +327,9 @@ class UserService {
     String? password,
     List<String>? roleCodes,
     List<String>? processCodes,
+    String? remark,
+    int? stageId,
+    bool? isActive,
   }) async {
     final uri = Uri.parse('${session.baseUrl}/users/$userId');
     final payload = <String, dynamic>{};
@@ -213,6 +346,15 @@ class UserService {
     if (processCodes != null) {
       payload['process_codes'] = processCodes;
     }
+    if (remark != null) {
+      payload['remark'] = remark.trim();
+    }
+    if (stageId != null) {
+      payload['stage_id'] = stageId;
+    }
+    if (isActive != null) {
+      payload['is_active'] = isActive;
+    }
 
     final response = await http.put(
       uri,
@@ -220,24 +362,203 @@ class UserService {
       body: jsonEncode(payload),
     );
     final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
-    }
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+  }
+
+  Future<void> enableUser({required int userId}) async {
+    final uri = Uri.parse('${session.baseUrl}/users/$userId/enable');
+    final response = await http.post(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+  }
+
+  Future<void> disableUser({required int userId}) async {
+    final uri = Uri.parse('${session.baseUrl}/users/$userId/disable');
+    final response = await http.post(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+  }
+
+  Future<void> resetUserPassword({
+    required int userId,
+    required String password,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/users/$userId/reset-password',
+    ).replace(queryParameters: {'password': password});
+    final response = await http.post(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
   }
 
   Future<void> deleteUser({required int userId}) async {
     final uri = Uri.parse('${session.baseUrl}/users/$userId');
     final response = await http.delete(uri, headers: _authHeaders);
     final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+  }
+
+  Future<AuditLogListResult> listAuditLogs({
+    required int page,
+    required int pageSize,
+    String? operatorUsername,
+    String? actionCode,
+    String? targetType,
+    DateTime? startTime,
+    DateTime? endTime,
+  }) async {
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      query['operator_username'] = operatorUsername.trim();
     }
+    if (actionCode != null && actionCode.trim().isNotEmpty) {
+      query['action_code'] = actionCode.trim();
+    }
+    if (targetType != null && targetType.trim().isNotEmpty) {
+      query['target_type'] = targetType.trim();
+    }
+    if (startTime != null) {
+      query['start_time'] = startTime.toIso8601String();
+    }
+    if (endTime != null) {
+      query['end_time'] = endTime.toIso8601String();
+    }
+
+    final uri =
+        Uri.parse('${session.baseUrl}/audits').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+
+    final data = _dataObject(json);
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map((entry) => AuditLogItem.fromJson(entry as Map<String, dynamic>))
+        .toList();
+    return AuditLogListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<ProfileResult> getMyProfile() async {
+    final uri = Uri.parse('${session.baseUrl}/me/profile');
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return ProfileResult.fromJson(_dataObject(json));
+  }
+
+  Future<CurrentSessionResult> getMySession() async {
+    final uri = Uri.parse('${session.baseUrl}/me/session');
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return CurrentSessionResult.fromJson(_dataObject(json));
+  }
+
+  Future<void> changeMyPassword({
+    required String oldPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    final uri = Uri.parse('${session.baseUrl}/me/password');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'old_password': oldPassword,
+        'new_password': newPassword,
+        'confirm_password': confirmPassword,
+      }),
+    );
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+  }
+
+  Future<LoginLogListResult> listLoginLogs({
+    required int page,
+    required int pageSize,
+    String? username,
+    bool? success,
+  }) async {
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (username != null && username.trim().isNotEmpty) {
+      query['username'] = username.trim();
+    }
+    if (success != null) {
+      query['success'] = '$success';
+    }
+
+    final uri = Uri.parse(
+      '${session.baseUrl}/sessions/login-logs',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+
+    final data = _dataObject(json);
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map((entry) => LoginLogItem.fromJson(entry as Map<String, dynamic>))
+        .toList();
+    return LoginLogListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<OnlineSessionListResult> listOnlineSessions({
+    required int page,
+    required int pageSize,
+    String? keyword,
+  }) async {
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+
+    final uri = Uri.parse(
+      '${session.baseUrl}/sessions/online',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+
+    final data = _dataObject(json);
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map((entry) => OnlineSessionItem.fromJson(entry as Map<String, dynamic>))
+        .toList();
+    return OnlineSessionListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<ForceOfflineResult> forceOffline({
+    required String sessionTokenId,
+  }) async {
+    final uri = Uri.parse('${session.baseUrl}/sessions/force-offline');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'session_token_id': sessionTokenId}),
+    );
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return ForceOfflineResult.fromJson(_dataObject(json));
+  }
+
+  Future<ForceOfflineResult> batchForceOffline({
+    required List<String> sessionTokenIds,
+  }) async {
+    final uri = Uri.parse('${session.baseUrl}/sessions/force-offline/batch');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'session_token_ids': sessionTokenIds}),
+    );
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return ForceOfflineResult.fromJson(_dataObject(json));
   }
 
   Map<String, dynamic> _decodeBody(http.Response response) {
@@ -245,6 +566,28 @@ class UserService {
       return {};
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Map<String, dynamic> _dataObject(Map<String, dynamic> body) {
+    final data = body['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return <String, dynamic>{};
+  }
+
+  void _throwIfNotSuccess(
+    http.Response response,
+    Map<String, dynamic> body, {
+    required int expectedCode,
+  }) {
+    if (response.statusCode == expectedCode) {
+      return;
+    }
+    throw ApiException(
+      _extractErrorMessage(body, response.statusCode),
+      response.statusCode,
+    );
   }
 
   String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {
@@ -256,6 +599,6 @@ class UserService {
     if (message is String && message.isNotEmpty) {
       return message;
     }
-    return '请求失败，状态码 $statusCode';
+    return '请求失败，状态码：$statusCode';
   }
 }

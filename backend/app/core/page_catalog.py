@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core.rbac import (
+    ROLE_MAINTENANCE_STAFF,
     ROLE_OPERATOR,
     ROLE_PRODUCTION_ADMIN,
     ROLE_QUALITY_ADMIN,
@@ -15,6 +16,10 @@ PAGE_HOME = "home"
 PAGE_USER = "user"
 PAGE_USER_MANAGEMENT = "user_management"
 PAGE_REGISTRATION_APPROVAL = "registration_approval"
+PAGE_ROLE_MANAGEMENT = "role_management"
+PAGE_AUDIT_LOG = "audit_log"
+PAGE_ACCOUNT_SETTINGS = "account_settings"
+PAGE_LOGIN_SESSION = "login_session"
 PAGE_FUNCTION_PERMISSION_CONFIG = "function_permission_config"
 PAGE_PRODUCT = "product"
 PAGE_PRODUCT_MANAGEMENT = "product_management"
@@ -76,12 +81,44 @@ PAGE_CATALOG = [
         "sort_order": 22,
     },
     {
+        "code": PAGE_ROLE_MANAGEMENT,
+        "name": "角色管理",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_USER,
+        "always_visible": False,
+        "sort_order": 23,
+    },
+    {
+        "code": PAGE_AUDIT_LOG,
+        "name": "操作审计日志",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_USER,
+        "always_visible": False,
+        "sort_order": 24,
+    },
+    {
+        "code": PAGE_ACCOUNT_SETTINGS,
+        "name": "个人中心/账号设置",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_USER,
+        "always_visible": False,
+        "sort_order": 25,
+    },
+    {
+        "code": PAGE_LOGIN_SESSION,
+        "name": "登录日志/在线会话",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_USER,
+        "always_visible": False,
+        "sort_order": 26,
+    },
+    {
         "code": PAGE_FUNCTION_PERMISSION_CONFIG,
         "name": "功能权限配置",
         "page_type": PAGE_TYPE_TAB,
         "parent_code": PAGE_USER,
         "always_visible": False,
-        "sort_order": 23,
+        "sort_order": 27,
     },
     {
         "code": PAGE_PRODUCT,
@@ -293,6 +330,10 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_USER,
         PAGE_USER_MANAGEMENT,
         PAGE_REGISTRATION_APPROVAL,
+        PAGE_ROLE_MANAGEMENT,
+        PAGE_AUDIT_LOG,
+        PAGE_ACCOUNT_SETTINGS,
+        PAGE_LOGIN_SESSION,
         PAGE_FUNCTION_PERMISSION_CONFIG,
         PAGE_PRODUCT,
         PAGE_PRODUCT_MANAGEMENT,
@@ -321,6 +362,8 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
     },
     ROLE_PRODUCTION_ADMIN: {
         PAGE_HOME,
+        PAGE_USER,
+        PAGE_ACCOUNT_SETTINGS,
         PAGE_PRODUCT,
         PAGE_PRODUCT_MANAGEMENT,
         PAGE_PRODUCT_PARAMETER_MANAGEMENT,
@@ -348,6 +391,8 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
     },
     ROLE_QUALITY_ADMIN: {
         PAGE_HOME,
+        PAGE_USER,
+        PAGE_ACCOUNT_SETTINGS,
         PAGE_EQUIPMENT,
         PAGE_MAINTENANCE_EXECUTION,
         PAGE_MAINTENANCE_RECORD,
@@ -362,11 +407,21 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
     },
     ROLE_OPERATOR: {
         PAGE_HOME,
+        PAGE_USER,
+        PAGE_ACCOUNT_SETTINGS,
         PAGE_EQUIPMENT,
         PAGE_MAINTENANCE_EXECUTION,
         PAGE_MAINTENANCE_RECORD,
         PAGE_PRODUCTION,
         PAGE_PRODUCTION_ORDER_QUERY,
+    },
+    ROLE_MAINTENANCE_STAFF: {
+        PAGE_HOME,
+        PAGE_USER,
+        PAGE_ACCOUNT_SETTINGS,
+        PAGE_EQUIPMENT,
+        PAGE_MAINTENANCE_EXECUTION,
+        PAGE_MAINTENANCE_RECORD,
     },
 }
 

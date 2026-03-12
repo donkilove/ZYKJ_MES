@@ -2,12 +2,14 @@ ROLE_SYSTEM_ADMIN = "system_admin"
 ROLE_PRODUCTION_ADMIN = "production_admin"
 ROLE_QUALITY_ADMIN = "quality_admin"
 ROLE_OPERATOR = "operator"
+ROLE_MAINTENANCE_STAFF = "maintenance_staff"
 
 ROLE_DEFINITIONS = [
-    {"code": ROLE_SYSTEM_ADMIN, "name": "系统管理员角色"},
-    {"code": ROLE_PRODUCTION_ADMIN, "name": "生产管理员角色"},
-    {"code": ROLE_QUALITY_ADMIN, "name": "品质管理员角色"},
-    {"code": ROLE_OPERATOR, "name": "操作员角色"},
+    {"code": ROLE_SYSTEM_ADMIN, "name": "系统管理员"},
+    {"code": ROLE_PRODUCTION_ADMIN, "name": "生产管理员"},
+    {"code": ROLE_QUALITY_ADMIN, "name": "品质管理员"},
+    {"code": ROLE_OPERATOR, "name": "操作员"},
+    {"code": ROLE_MAINTENANCE_STAFF, "name": "维修员"},
 ]
 
 VALID_ROLE_CODES = {item["code"] for item in ROLE_DEFINITIONS}

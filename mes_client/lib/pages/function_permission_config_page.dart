@@ -17,6 +17,9 @@ const Map<String, String> _moduleNameFallbackZh = {
   'production': '生产管理',
 };
 
+const String _systemAdminRoleCode = 'system_admin';
+const String _systemModuleCode = 'system';
+
 class _RoleDraft {
   const _RoleDraft({
     required this.moduleEnabled,
@@ -70,7 +73,6 @@ class _FunctionPermissionConfigPageState
   bool _loading = false;
   bool _saving = false;
   bool _previewing = false;
-  bool _showAdvanced = false;
   String _message = '';
 
   List<RoleItem> _roles = const [];
@@ -130,7 +132,7 @@ class _FunctionPermissionConfigPageState
   String _actionErrorMessage(String action, Object error) {
     if (error is ApiException) {
       if (error.statusCode == 409) {
-        return '$action失败：当前模块 revision 已变化，请刷新后重试。';
+        return '$action失败：当前模块版本已变化，请刷新后重试。';
       }
       return '$action失败：${error.message}';
     }
@@ -190,6 +192,14 @@ class _FunctionPermissionConfigPageState
 
   bool _isReadonly(String roleCode) => _readonlyByRole[roleCode] ?? false;
 
+  List<RoleItem> _filterConfigurableRoles(List<RoleItem> roles) {
+    return roles.where((role) => role.code != _systemAdminRoleCode).toList();
+  }
+
+  List<String> _filterConfigurableModules(List<String> moduleCodes) {
+    return moduleCodes.where((code) => code != _systemModuleCode).toList();
+  }
+
   Map<String, _RoleDraft> _cloneDraftMap(Map<String, _RoleDraft> source) {
     return source.map(
       (key, value) => MapEntry(
@@ -244,15 +254,30 @@ class _FunctionPermissionConfigPageState
     });
     try {
       final roleResult = await _userService.listRoles();
-      final roles = roleResult.items.toList()..sort((a, b) => a.id - b.id);
+      final roles = _filterConfigurableRoles(roleResult.items.toList())
+        ..sort((a, b) => a.id - b.id);
       if (roles.isEmpty) {
-        throw StateError('未查询到角色');
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _roles = const [];
+          _moduleCodes = const [];
+          _selectedRoleCode = null;
+          _selectedModuleCode = null;
+          _message = '暂无可配置角色';
+        });
+        return;
       }
       final bootstrap = await _authzService.loadCapabilityPackCatalog(
         moduleCode: _selectedModuleCode ?? 'production',
       );
       _catalogByModule[bootstrap.moduleCode] = bootstrap;
-      final modules = bootstrap.moduleCodes.toList()..sort();
+      final modules = _filterConfigurableModules(bootstrap.moduleCodes.toList())
+        ..sort();
+      if (modules.isEmpty) {
+        throw StateError('未查询到可配置模块');
+      }
       final initialModule = modules.contains('production')
           ? 'production'
           : modules.first;
@@ -282,12 +307,70 @@ class _FunctionPermissionConfigPageState
     List<RoleItem>? roles,
     List<String>? moduleCodes,
   }) async {
+    final effectiveRoles = _filterConfigurableRoles(roles ?? _roles);
+    if (effectiveRoles.isEmpty) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _roles = const [];
+        _moduleCodes = const [];
+        _selectedRoleCode = null;
+        _selectedModuleCode = null;
+        _originByRole.clear();
+        _draftByRole.clear();
+        _readonlyByRole.clear();
+        _effectiveCapabilitiesByRole.clear();
+        _explainByRole.clear();
+        _showPreview = false;
+        _activePreview = null;
+        _activePreviewIsSaved = false;
+        _message = '暂无可配置角色';
+      });
+      return;
+    }
+
     final catalog = await _authzService.loadCapabilityPackCatalog(
       moduleCode: moduleCode,
     );
     _catalogByModule[catalog.moduleCode] = catalog;
+    final effectiveModuleCodes = _filterConfigurableModules(
+      (moduleCodes ?? catalog.moduleCodes).toList(),
+    )..sort();
+    if (effectiveModuleCodes.isEmpty) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _roles = effectiveRoles;
+        _moduleCodes = const [];
+        _selectedModuleCode = null;
+        _selectedRoleCode = effectiveRoles.first.code;
+        _originByRole.clear();
+        _draftByRole.clear();
+        _readonlyByRole.clear();
+        _effectiveCapabilitiesByRole.clear();
+        _explainByRole.clear();
+        _showPreview = false;
+        _activePreview = null;
+        _activePreviewIsSaved = false;
+        _message = '暂无可配置模块';
+      });
+      return;
+    }
 
-    final effectiveRoles = roles ?? _roles;
+    final selectedModuleCode = effectiveModuleCodes.contains(catalog.moduleCode)
+        ? catalog.moduleCode
+        : effectiveModuleCodes.first;
+    if (selectedModuleCode != catalog.moduleCode) {
+      await _loadModuleData(
+        selectedModuleCode,
+        roles: effectiveRoles,
+        moduleCodes: effectiveModuleCodes,
+      );
+      return;
+    }
+
     final configs = await Future.wait(
       effectiveRoles.map(
         (role) => _authzService.loadCapabilityPackRoleConfig(
@@ -333,7 +416,7 @@ class _FunctionPermissionConfigPageState
     }
     setState(() {
       _roles = effectiveRoles;
-      _moduleCodes = (moduleCodes ?? catalog.moduleCodes)..sort();
+      _moduleCodes = effectiveModuleCodes;
       _selectedModuleCode = catalog.moduleCode;
       _selectedRoleCode =
           _selectedRoleCode != null &&
@@ -358,7 +441,6 @@ class _FunctionPermissionConfigPageState
       _showPreview = false;
       _activePreview = null;
       _activePreviewIsSaved = false;
-      _showAdvanced = false;
       _message = '';
     });
   }
@@ -899,7 +981,7 @@ class _FunctionPermissionConfigPageState
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      'revision ${item.moduleRevision}',
+                                      '版本 ${item.moduleRevision}',
                                       style: Theme.of(context)
                                           .textTheme
                                           .titleSmall,
@@ -917,11 +999,11 @@ class _FunctionPermissionConfigPageState
                                         ),
                                       ),
                                       if (item.isCurrentRevision)
-                                        const Chip(label: Text('当前 revision')),
+                                        const Chip(label: Text('当前版本')),
                                       if (item.rollbackOfRevision != null)
                                         Chip(
                                           label: Text(
-                                            '来源 revision ${item.rollbackOfRevision}',
+                                            '来源版本 ${item.rollbackOfRevision}',
                                           ),
                                         ),
                                     ],
@@ -1024,10 +1106,10 @@ class _FunctionPermissionConfigPageState
     }
     final confirmResult = await _showPreviewConfirmDialog(
       title: '确认服务端回滚',
-      description: '将模块回滚到 revision ${selected.moduleRevision}。确认后会生成新的审计记录。',
+      description: '将模块回滚到版本 ${selected.moduleRevision}。确认后会生成新的审计记录。',
       confirmLabel: '确认回滚',
       preview: rollbackPreview,
-      initialRemark: '回滚到 revision ${selected.moduleRevision}',
+      initialRemark: '回滚到版本 ${selected.moduleRevision}',
     );
     if (confirmResult?.confirmed != true || !mounted) {
       setState(() {
@@ -1061,7 +1143,7 @@ class _FunctionPermissionConfigPageState
       }
       setState(() {
         _lastSavedByModule[moduleCode] = rolledBack;
-        _message = '已回滚到 revision ${selected.moduleRevision}。';
+        _message = '已回滚到版本 ${selected.moduleRevision}。';
       });
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -1305,7 +1387,7 @@ class _FunctionPermissionConfigPageState
           if (readonly)
             const Padding(
               padding: EdgeInsets.only(bottom: 8),
-              child: Text('系统管理员固定全权限（只读展示）', style: TextStyle(fontSize: 12)),
+              child: Text('当前角色为只读，权限项不可编辑', style: TextStyle(fontSize: 12)),
             ),
           ...groupNames.map((groupName) {
             final items = grouped[groupName] ?? const <CapabilityPackItem>[];
@@ -1356,59 +1438,21 @@ class _FunctionPermissionConfigPageState
     );
   }
 
-  Widget _buildAdvancedPanel({
-    required RoleItem role,
-    required _RoleDraft draft,
-    required CapabilityPackCatalogResult catalog,
-  }) {
-    final explain = _explainByRole[role.code];
-    return Card(
-      margin: EdgeInsets.zero,
-      child: ExpansionTile(
-        initiallyExpanded: _showAdvanced,
-        onExpansionChanged: (value) => setState(() => _showAdvanced = value),
-        title: const Text('高级模式（排障）'),
-        subtitle: const Text('默认隐藏，仅用于排查显示和可操作性问题'),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('角色：${role.name}（${role.code}）'),
-                Text('模块：${_moduleLabel(catalog.moduleCode)}'),
-                Text('模块开关：${draft.moduleEnabled ? '开启' : '关闭'}'),
-                const SizedBox(height: 8),
-                Text('草稿能力码（${draft.capabilityCodes.length}）：'),
-                SelectableText(
-                  (draft.capabilityCodes.toList()..sort()).join('\n'),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '当前生效能力码（${explain?.effectiveCapabilityCodes.length ?? 0}）：',
-                ),
-                SelectableText(
-                  (explain?.effectiveCapabilityCodes ?? const <String>[]).join(
-                    '\n',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
     final catalog = _catalog;
-    final role = _selectedRole;
-    if (catalog == null || role == null) {
+    if (catalog == null) {
       return Center(child: Text(_message.isEmpty ? '暂无数据' : _message));
+    }
+    if (_roles.isEmpty) {
+      return const Center(child: Text('暂无可配置角色'));
+    }
+    final role = _selectedRole;
+    if (role == null) {
+      return const Center(child: Text('暂无可配置角色'));
     }
     final draft = _draftByRole[role.code];
     if (draft == null) {
@@ -1433,11 +1477,6 @@ class _FunctionPermissionConfigPageState
           }
           return a.capabilityName.compareTo(b.capabilityName);
         });
-
-    final roleTemplate = catalog.roleTemplates
-        .where((item) => item.roleCode == role.code)
-        .toList();
-    final hasTemplate = roleTemplate.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -1480,7 +1519,7 @@ class _FunctionPermissionConfigPageState
                           decoration: const InputDecoration(
                             isDense: true,
                             border: OutlineInputBorder(),
-                            hintText: '搜索能力包名称 / 分组 / code',
+                            hintText: '搜索能力包名称 / 分组 / 编码',
                             prefixIcon: Icon(Icons.search),
                           ),
                         ),
@@ -1492,60 +1531,7 @@ class _FunctionPermissionConfigPageState
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      Chip(label: Text('当前 revision ${catalog.moduleRevision}')),
-                      OutlinedButton.icon(
-                        onPressed: _saving || _previewing ? null : _preview,
-                        icon: const Icon(Icons.visibility),
-                        label: Text(_previewing ? '预览中...' : '生效预览'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _saving ? null : _showHistoryDialog,
-                        icon: const Icon(Icons.history_toggle_off),
-                        label: const Text('查看变更历史'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed:
-                            _saving ||
-                                _lastSavedByModule[_selectedModuleCode] == null
-                            ? null
-                            : () {
-                                final saved =
-                                    _lastSavedByModule[_selectedModuleCode];
-                                if (saved == null) {
-                                  return;
-                                }
-                                setState(() {
-                                  _activePreview = saved;
-                                  _showPreview = true;
-                                  _activePreviewIsSaved = true;
-                                });
-                              },
-                        icon: const Icon(Icons.history),
-                        label: const Text('查看最近保存结果'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _saving || !_hasDirty ? null : _resetUnsaved,
-                        icon: const Icon(Icons.undo),
-                        label: const Text('放弃未保存变更'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _saving || !_canRollbackLastSave
-                            ? null
-                            : _rollbackLastSave,
-                        icon: const Icon(Icons.restore),
-                        label: const Text('恢复上次保存前草稿'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _saving || readonly || !hasTemplate
-                            ? null
-                            : () => _applyRoleTemplate(
-                                role: role,
-                                draft: draft,
-                                catalog: catalog,
-                              ),
-                        icon: const Icon(Icons.auto_fix_high),
-                        label: const Text('套用岗位模板'),
-                      ),
+                      Chip(label: Text('当前版本 ${catalog.moduleRevision}')),
                       FilledButton.icon(
                         onPressed: _saving || !_hasDirty ? null : _save,
                         icon: const Icon(Icons.save),
@@ -1557,7 +1543,6 @@ class _FunctionPermissionConfigPageState
               ),
             ),
           ),
-          _buildPreviewCard(),
           if (_message.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -1587,15 +1572,6 @@ class _FunctionPermissionConfigPageState
                           capabilityPacks: capabilityPacks,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 220,
-                        child: _buildAdvancedPanel(
-                          role: role,
-                          draft: draft,
-                          catalog: catalog,
-                        ),
-                      ),
                     ],
                   );
                 }
@@ -1604,27 +1580,12 @@ class _FunctionPermissionConfigPageState
                     SizedBox(width: 340, child: _buildRoleSelectorCard(role)),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: _buildCapabilityCard(
-                              role: role,
-                              draft: draft,
-                              readonly: readonly,
-                              catalog: catalog,
-                              capabilityPacks: capabilityPacks,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            height: 220,
-                            child: _buildAdvancedPanel(
-                              role: role,
-                              draft: draft,
-                              catalog: catalog,
-                            ),
-                          ),
-                        ],
+                      child: _buildCapabilityCard(
+                        role: role,
+                        draft: draft,
+                        readonly: readonly,
+                        catalog: catalog,
+                        capabilityPacks: capabilityPacks,
                       ),
                     ),
                   ],

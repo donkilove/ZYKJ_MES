@@ -1,0 +1,365 @@
+import 'package:flutter/material.dart';
+
+import '../models/app_session.dart';
+import '../models/user_models.dart';
+import '../services/api_exception.dart';
+import '../services/user_service.dart';
+
+class RoleManagementPage extends StatefulWidget {
+  const RoleManagementPage({
+    super.key,
+    required this.session,
+    required this.onLogout,
+    required this.canManage,
+  });
+
+  final AppSession session;
+  final VoidCallback onLogout;
+  final bool canManage;
+
+  @override
+  State<RoleManagementPage> createState() => _RoleManagementPageState();
+}
+
+class _RoleManagementPageState extends State<RoleManagementPage> {
+  late final UserService _userService;
+  final TextEditingController _keywordController = TextEditingController();
+
+  bool _loading = false;
+  String _message = '';
+  int _total = 0;
+  List<RoleItem> _items = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _userService = UserService(widget.session);
+    _loadRoles();
+  }
+
+  @override
+  void dispose() {
+    _keywordController.dispose();
+    super.dispose();
+  }
+
+  bool _isUnauthorized(Object error) =>
+      error is ApiException && error.statusCode == 401;
+
+  String _errorMessage(Object error) {
+    if (error is ApiException) {
+      return error.message;
+    }
+    return error.toString();
+  }
+
+  Future<void> _loadRoles() async {
+    setState(() {
+      _loading = true;
+      _message = '';
+    });
+    try {
+      final result = await _userService.listRoles(
+        page: 1,
+        pageSize: 200,
+        keyword: _keywordController.text.trim(),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _items = result.items;
+        _total = result.total;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '加载角色列表失败：${_errorMessage(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showRoleDialog({RoleItem? role}) async {
+    if (!widget.canManage) {
+      return;
+    }
+    final formKey = GlobalKey<FormState>();
+    final codeController = TextEditingController(text: role?.code ?? '');
+    final nameController = TextEditingController(text: role?.name ?? '');
+    final descController = TextEditingController(text: role?.description ?? '');
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(role == null ? '新增角色' : '编辑角色'),
+          content: SizedBox(
+            width: 420,
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: codeController,
+                    readOnly: role?.isBuiltin ?? false,
+                    decoration: const InputDecoration(labelText: '角色编码'),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return '角色编码不能为空';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: nameController,
+                    readOnly: role?.isBuiltin ?? false,
+                    decoration: const InputDecoration(labelText: '角色名称'),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return '角色名称不能为空';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: descController,
+                    decoration: const InputDecoration(labelText: '角色说明'),
+                    minLines: 1,
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) {
+                  return;
+                }
+                try {
+                  if (role == null) {
+                    await _userService.createRole(
+                      code: codeController.text.trim(),
+                      name: nameController.text.trim(),
+                      description: descController.text.trim(),
+                    );
+                  } else {
+                    await _userService.updateRole(
+                      roleId: role.id,
+                      code: codeController.text.trim(),
+                      name: nameController.text.trim(),
+                      description: descController.text.trim(),
+                    );
+                  }
+                  if (context.mounted) {
+                    Navigator.of(context).pop(true);
+                  }
+                } catch (error) {
+                  if (!context.mounted) {
+                    return;
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(_errorMessage(error))),
+                  );
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
+    );
+
+    codeController.dispose();
+    nameController.dispose();
+    descController.dispose();
+
+    if (saved == true && mounted) {
+      await _loadRoles();
+    }
+  }
+
+  Future<void> _toggleRole(RoleItem role) async {
+    if (!widget.canManage || role.isBuiltin) {
+      return;
+    }
+    try {
+      if (role.isEnabled) {
+        await _userService.disableRole(roleId: role.id);
+      } else {
+        await _userService.enableRole(roleId: role.id);
+      }
+      if (!mounted) {
+        return;
+      }
+      await _loadRoles();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+    }
+  }
+
+  Future<void> _deleteRole(RoleItem role) async {
+    if (!widget.canManage || role.isBuiltin) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('删除角色'),
+          content: Text('确认删除角色“${role.name}”吗？删除后不可恢复。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    try {
+      await _userService.deleteRole(roleId: role.id);
+      if (!mounted) {
+        return;
+      }
+      await _loadRoles();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _keywordController,
+                  decoration: const InputDecoration(
+                    labelText: '关键词',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadRoles(),
+                ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton(onPressed: _loadRoles, child: const Text('查询')),
+              const SizedBox(width: 10),
+              FilledButton(
+                onPressed: widget.canManage ? () => _showRoleDialog() : null,
+                child: const Text('新增角色'),
+              ),
+            ],
+          ),
+        ),
+        if (_message.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _message,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text('总数：$_total'),
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: _items.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final role = _items[index];
+                    return Card(
+                      child: ListTile(
+                        title: Text('${role.name} (${role.code})'),
+                        subtitle: Text(
+                          '类型=${role.roleType.isEmpty ? '-' : role.roleType} | '
+                          '内置=${role.isBuiltin ? '是' : '否'} | 启用=${role.isEnabled ? '是' : '否'} | '
+                          '绑定用户=${role.userCount}\n'
+                          '${role.description ?? ''}',
+                        ),
+                        trailing: Wrap(
+                          spacing: 8,
+                          children: [
+                            OutlinedButton(
+                              onPressed: widget.canManage
+                                  ? () => _showRoleDialog(role: role)
+                                  : null,
+                              child: const Text('编辑'),
+                            ),
+                            OutlinedButton(
+                              onPressed: widget.canManage && !role.isBuiltin
+                                  ? () => _toggleRole(role)
+                                  : null,
+                              child: Text(role.isEnabled ? '停用' : '启用'),
+                            ),
+                            OutlinedButton(
+                              onPressed: widget.canManage && !role.isBuiltin
+                                  ? () => _deleteRole(role)
+                                  : null,
+                              child: const Text('删除'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}

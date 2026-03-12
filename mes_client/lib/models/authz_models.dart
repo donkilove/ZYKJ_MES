@@ -1130,15 +1130,28 @@ class UserPermissionCodes {
   static const String pageUserManagementView = 'page.user_management.view';
   static const String pageRegistrationApprovalView =
       'page.registration_approval.view';
+  static const String pageRoleManagementView = 'page.role_management.view';
+  static const String pageAuditLogView = 'page.audit_log.view';
+  static const String pageAccountSettingsView = 'page.account_settings.view';
+  static const String pageLoginSessionView = 'page.login_session.view';
 
   static const String usersList = 'user.users.list';
   static const String usersCreate = 'user.users.create';
   static const String usersDetail = 'user.users.detail';
   static const String usersUpdate = 'user.users.update';
   static const String usersDelete = 'user.users.delete';
+  static const String usersEnable = 'user.users.enable';
+  static const String usersDisable = 'user.users.disable';
+  static const String usersResetPassword = 'user.users.reset_password';
+  static const String usersExport = 'user.users.export';
 
   static const String rolesList = 'user.roles.list';
   static const String rolesDetail = 'user.roles.detail';
+  static const String rolesCreate = 'user.roles.create';
+  static const String rolesUpdate = 'user.roles.update';
+  static const String rolesEnable = 'user.roles.enable';
+  static const String rolesDisable = 'user.roles.disable';
+  static const String rolesDelete = 'user.roles.delete';
   static const String processesList = 'user.processes.list';
 
   static const String registrationRequestsList =
@@ -1147,6 +1160,16 @@ class UserPermissionCodes {
       'user.registration_requests.approve';
   static const String registrationRequestsReject =
       'user.registration_requests.reject';
+
+  static const String auditLogsList = 'user.audit_logs.list';
+  static const String profileView = 'user.profile.view';
+  static const String profilePasswordUpdate = 'user.profile.password.update';
+  static const String sessionsOverview = 'user.sessions.overview';
+  static const String sessionsLoginLogsList = 'user.sessions.login_logs.list';
+  static const String sessionsOnlineList = 'user.sessions.online.list';
+  static const String sessionsForceOffline = 'user.sessions.force_offline';
+  static const String sessionsForceOfflineBatch =
+      'user.sessions.force_offline.batch';
 }
 
 class ProductPermissionCodes {
@@ -1268,6 +1291,17 @@ class UserFeaturePermissionCodes {
       'feature.user.user_management.manage';
   static const String registrationApprovalReview =
       'feature.user.registration_approval.review';
+  static const String roleManagementView = 'feature.user.role_management.view';
+  static const String roleManagementManage =
+      'feature.user.role_management.manage';
+  static const String auditLogView = 'feature.user.audit_log.view';
+  static const String accountSettingsView =
+      'feature.user.account_settings.view';
+  static const String accountSettingsManage =
+      'feature.user.account_settings.manage';
+  static const String loginSessionView = 'feature.user.login_session.view';
+  static const String loginSessionManage =
+      'feature.user.login_session.manage';
 }
 
 class ProductFeaturePermissionCodes {

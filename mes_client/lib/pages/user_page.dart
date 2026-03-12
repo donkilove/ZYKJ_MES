@@ -2,13 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/authz_models.dart';
+import 'account_settings_page.dart';
+import 'audit_log_page.dart';
 import 'function_permission_config_page.dart';
+import 'login_session_page.dart';
 import 'registration_approval_page.dart';
+import 'role_management_page.dart';
 import 'user_management_page.dart';
 
 const List<String> _defaultTabOrder = [
   'user_management',
   'registration_approval',
+  'role_management',
+  'audit_log',
+  'account_settings',
+  'login_session',
   'function_permission_config',
 ];
 
@@ -40,6 +48,18 @@ class _UserPageState extends State<UserPage> {
 
   bool get _canReviewAction =>
       _hasPermission(UserFeaturePermissionCodes.registrationApprovalReview);
+
+  bool get _canManageRoles =>
+      _hasPermission(UserFeaturePermissionCodes.roleManagementManage);
+
+  bool get _canChangeMyPassword =>
+      _hasPermission(UserFeaturePermissionCodes.accountSettingsManage);
+
+  bool get _canViewMySession =>
+      _hasPermission(UserFeaturePermissionCodes.accountSettingsView);
+
+  bool get _canManageSessions =>
+      _hasPermission(UserFeaturePermissionCodes.loginSessionManage);
 
   List<String> _sortedVisibleTabCodes() {
     final visibleSet = widget.visibleTabCodes.toSet();
@@ -86,6 +106,58 @@ class _UserPageState extends State<UserPage> {
             ),
           );
           break;
+        case 'role_management':
+          tabs.add(
+            _UserTabItem(
+              code: code,
+              title: '角色管理',
+              child: RoleManagementPage(
+                session: widget.session,
+                onLogout: widget.onLogout,
+                canManage: _canManageRoles,
+              ),
+            ),
+          );
+          break;
+        case 'audit_log':
+          tabs.add(
+            _UserTabItem(
+              code: code,
+              title: '审计日志',
+              child: AuditLogPage(
+                session: widget.session,
+                onLogout: widget.onLogout,
+              ),
+            ),
+          );
+          break;
+        case 'account_settings':
+          tabs.add(
+            _UserTabItem(
+              code: code,
+              title: '个人中心',
+              child: AccountSettingsPage(
+                session: widget.session,
+                onLogout: widget.onLogout,
+                canChangePassword: _canChangeMyPassword,
+                canViewSession: _canViewMySession,
+              ),
+            ),
+          );
+          break;
+        case 'login_session':
+          tabs.add(
+            _UserTabItem(
+              code: code,
+              title: '登录会话',
+              child: LoginSessionPage(
+                session: widget.session,
+                onLogout: widget.onLogout,
+                canManage: _canManageSessions,
+              ),
+            ),
+          );
+          break;
         case 'function_permission_config':
           tabs.add(
             _UserTabItem(
@@ -112,7 +184,7 @@ class _UserPageState extends State<UserPage> {
   Widget build(BuildContext context) {
     final tabs = _buildTabs();
     if (tabs.isEmpty) {
-      return const Center(child: Text('当前账号没有可访问的用户模块页面。'));
+      return const Center(child: Text('当前账号没有可访问的用户模块页面'));
     }
 
     return Column(
@@ -126,7 +198,19 @@ class _UserPageState extends State<UserPage> {
                 Material(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: TabBar(
-                    tabs: tabs.map((item) => Tab(text: item.title)).toList(),
+                    isScrollable: false,
+                    tabs: tabs
+                        .map(
+                          (item) => Tab(
+                            child: Text(
+                              item.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
                 Expanded(

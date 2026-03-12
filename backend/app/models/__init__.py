@@ -1,4 +1,5 @@
 from app.models.authz_change_log import AuthzChangeLog, AuthzChangeLogItem
+from app.models.audit_log import AuditLog
 from app.models.daily_verification_code import DailyVerificationCode
 from app.models.authz_module_revision import AuthzModuleRevision
 from app.models.equipment import Equipment
@@ -24,6 +25,7 @@ from app.models.repair_order import RepairOrder
 from app.models.repair_return_route import RepairReturnRoute
 from app.models.product_parameter import ProductParameter
 from app.models.product_parameter_history import ProductParameterHistory
+from app.models.login_log import LoginLog
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.models.product_process_template import ProductProcessTemplate
@@ -36,12 +38,14 @@ from app.models.registration_request import RegistrationRequest
 from app.models.role import Role
 from app.models.role_permission_grant import RolePermissionGrant
 from app.models.user import User
+from app.models.user_session import UserSession
 
 __all__ = [
     "User",
     "Role",
     "AuthzChangeLog",
     "AuthzChangeLogItem",
+    "AuditLog",
     "AuthzModuleRevision",
     "Process",
     "ProcessStage",
@@ -77,4 +81,6 @@ __all__ = [
     "OrderEventLog",
     "ProductParameter",
     "ProductParameterHistory",
+    "LoginLog",
+    "UserSession",
 ]

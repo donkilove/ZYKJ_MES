@@ -11,6 +11,7 @@ from app.models.user import User
 from app.schemas.auth import TokenPayload
 from app.services.online_status_service import touch_user
 from app.services.authz_service import has_permission, validate_permission_code
+from app.services.session_service import touch_session_by_token_id
 from app.services.user_service import get_user_by_id
 
 
@@ -29,6 +30,7 @@ def get_current_user(
     try:
         payload = decode_access_token(token)
         token_data = TokenPayload(sub=payload.get("sub", ""))
+        session_token_id = str(payload.get("sid") or "").strip() or None
     except Exception:
         raise credentials_error
 
@@ -43,6 +45,13 @@ def get_current_user(
     user = get_user_by_id(db, user_id)
     if not user:
         raise credentials_error
+    if user.is_deleted or not user.is_active:
+        raise credentials_error
+    if session_token_id:
+        session_row = touch_session_by_token_id(db, session_token_id)
+        if session_row is None or session_row.status != "active":
+            raise credentials_error
+        db.commit()
     touch_user(user.id)
     return user
 

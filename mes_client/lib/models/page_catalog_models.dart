@@ -100,6 +100,62 @@ const fallbackPageCatalog = <PageCatalogItem>[
   ),
 
   PageCatalogItem(
+    code: 'role_management',
+
+    name: '角色管理',
+
+    pageType: 'tab',
+
+    parentCode: 'user',
+
+    alwaysVisible: false,
+
+    sortOrder: 23,
+  ),
+
+  PageCatalogItem(
+    code: 'audit_log',
+
+    name: '审计日志',
+
+    pageType: 'tab',
+
+    parentCode: 'user',
+
+    alwaysVisible: false,
+
+    sortOrder: 24,
+  ),
+
+  PageCatalogItem(
+    code: 'account_settings',
+
+    name: '个人中心',
+
+    pageType: 'tab',
+
+    parentCode: 'user',
+
+    alwaysVisible: false,
+
+    sortOrder: 25,
+  ),
+
+  PageCatalogItem(
+    code: 'login_session',
+
+    name: '登录会话',
+
+    pageType: 'tab',
+
+    parentCode: 'user',
+
+    alwaysVisible: false,
+
+    sortOrder: 26,
+  ),
+
+  PageCatalogItem(
     code: 'function_permission_config',
 
     name: '功能权限配置',
@@ -110,7 +166,7 @@ const fallbackPageCatalog = <PageCatalogItem>[
 
     alwaysVisible: false,
 
-    sortOrder: 23,
+    sortOrder: 27,
   ),
 
   PageCatalogItem(

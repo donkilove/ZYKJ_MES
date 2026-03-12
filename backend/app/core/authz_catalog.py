@@ -93,6 +93,10 @@ PAGE_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("user", "用户模块", AUTHZ_MODULE_USER, None),
     ("user_management", "用户管理", AUTHZ_MODULE_USER, "user"),
     ("registration_approval", "注册审批", AUTHZ_MODULE_USER, "user"),
+    ("role_management", "角色管理", AUTHZ_MODULE_USER, "user"),
+    ("audit_log", "操作审计日志", AUTHZ_MODULE_USER, "user"),
+    ("account_settings", "个人中心/账号设置", AUTHZ_MODULE_USER, "user"),
+    ("login_session", "登录日志/在线会话", AUTHZ_MODULE_USER, "user"),
     ("function_permission_config", "功能权限配置", AUTHZ_MODULE_SYSTEM, "user"),
     ("product", "产品模块", AUTHZ_MODULE_PRODUCT, None),
     ("product_management", "产品管理", AUTHZ_MODULE_PRODUCT, "product"),
@@ -197,12 +201,29 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("user.users.detail", "查看用户详情", AUTHZ_MODULE_USER, "user_management"),
     ("user.users.update", "编辑用户", AUTHZ_MODULE_USER, "user_management"),
     ("user.users.delete", "删除用户", AUTHZ_MODULE_USER, "user_management"),
+    ("user.users.enable", "启用用户", AUTHZ_MODULE_USER, "user_management"),
+    ("user.users.disable", "停用用户", AUTHZ_MODULE_USER, "user_management"),
+    ("user.users.reset_password", "重置用户密码", AUTHZ_MODULE_USER, "user_management"),
+    ("user.users.export", "导出用户列表", AUTHZ_MODULE_USER, "user_management"),
     ("user.roles.list", "查看角色列表", AUTHZ_MODULE_USER, "user_management"),
     ("user.roles.detail", "查看角色详情", AUTHZ_MODULE_USER, "user_management"),
+    ("user.roles.create", "新建角色", AUTHZ_MODULE_USER, "role_management"),
+    ("user.roles.update", "编辑角色", AUTHZ_MODULE_USER, "role_management"),
+    ("user.roles.enable", "启用角色", AUTHZ_MODULE_USER, "role_management"),
+    ("user.roles.disable", "停用角色", AUTHZ_MODULE_USER, "role_management"),
+    ("user.roles.delete", "删除角色", AUTHZ_MODULE_USER, "role_management"),
     ("user.processes.list", "查看工序列表（用户配置）", AUTHZ_MODULE_USER, "user_management"),
     ("user.registration_requests.list", "查看注册申请", AUTHZ_MODULE_USER, "registration_approval"),
     ("user.registration_requests.approve", "通过注册申请", AUTHZ_MODULE_USER, "registration_approval"),
     ("user.registration_requests.reject", "拒绝注册申请", AUTHZ_MODULE_USER, "registration_approval"),
+    ("user.audit_logs.list", "查看操作审计日志", AUTHZ_MODULE_USER, "audit_log"),
+    ("user.profile.view", "查看个人中心", AUTHZ_MODULE_USER, "account_settings"),
+    ("user.profile.password.update", "修改本人密码", AUTHZ_MODULE_USER, "account_settings"),
+    ("user.sessions.overview", "查看当前会话概览", AUTHZ_MODULE_USER, "account_settings"),
+    ("user.sessions.login_logs.list", "查看登录日志", AUTHZ_MODULE_USER, "login_session"),
+    ("user.sessions.online.list", "查看在线会话", AUTHZ_MODULE_USER, "login_session"),
+    ("user.sessions.force_offline", "强制下线", AUTHZ_MODULE_USER, "login_session"),
+    ("user.sessions.force_offline.batch", "批量强制下线", AUTHZ_MODULE_USER, "login_session"),
     ("product.products.list", "查看产品列表", AUTHZ_MODULE_PRODUCT, "product_management"),
     ("product.products.create", "创建产品", AUTHZ_MODULE_PRODUCT, "product_management"),
     ("product.products.delete", "删除产品", AUTHZ_MODULE_PRODUCT, "product_management"),
@@ -327,5 +348,17 @@ def list_permission_catalog(module_code: str | None = None) -> list[PermissionCa
 
 
 def default_permission_granted(role_code: str, permission_code: str) -> bool:
-    _ = permission_code
-    return role_code == ROLE_SYSTEM_ADMIN
+    if role_code == ROLE_SYSTEM_ADMIN:
+        return True
+
+    common_user_permissions = {
+        module_permission_code(AUTHZ_MODULE_USER),
+        PAGE_PERMISSION_BY_PAGE_CODE["user"],
+        PAGE_PERMISSION_BY_PAGE_CODE["account_settings"],
+        "feature.user.account_settings.view",
+        "feature.user.account_settings.manage",
+        "user.profile.view",
+        "user.profile.password.update",
+        "user.sessions.overview",
+    }
+    return permission_code in common_user_permissions
