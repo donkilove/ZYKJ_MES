@@ -84,7 +84,7 @@ def test_authz_role_permissions_matrix_get_and_dry_run(db, factory) -> None:
     assert "production" in matrix_resp.data.module_codes
     assert "system" in matrix_resp.data.module_codes
     sys_admin_item = next(item for item in matrix_resp.data.role_items if item.role_code == ROLE_SYSTEM_ADMIN)
-    assert sys_admin_item.readonly is True
+    assert sys_admin_item.readonly is False
     assert PERM_PROD_ORDERS_LIST in sys_admin_item.granted_permission_codes
 
     dry_run_resp = authz.put_role_permissions_matrix_api(

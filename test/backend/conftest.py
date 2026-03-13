@@ -158,7 +158,7 @@ class DataFactory:
         row = Product(
             name=name or self._next("product_"),
             parameter_template_initialized=False,
-            lifecycle_status="effective",
+            lifecycle_status="active",
             current_version=1,
             effective_version=1,
             effective_at=None,

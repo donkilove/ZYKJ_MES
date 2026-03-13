@@ -22,10 +22,14 @@ class ProductService {
     required int page,
     required int pageSize,
     String? keyword,
+    String? category,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
+    }
+    if (category != null && category.trim().isNotEmpty) {
+      query['category'] = category.trim();
     }
     final uri = Uri.parse(
       '${session.baseUrl}/products',
@@ -46,12 +50,15 @@ class ProductService {
     return ProductListResult(total: (data['total'] as int?) ?? 0, items: items);
   }
 
-  Future<void> createProduct({required String name}) async {
+  Future<void> createProduct({
+    required String name,
+    String category = '',
+  }) async {
     final uri = Uri.parse('${session.baseUrl}/products');
     final response = await http.post(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({'name': name}),
+      body: jsonEncode({'name': name, 'category': category.trim()}),
     );
     final json = _decodeBody(response);
     if (response.statusCode != 201) {

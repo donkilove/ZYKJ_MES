@@ -42,7 +42,7 @@ def test_create_user_validations(db, factory) -> None:
         ),
     )
     assert user is None
-    assert "at least one process" in (error or "")
+    assert "Operator role must be assigned a stage" in (error or "")
 
     user, error = user_service.create_user(
         db,
@@ -71,6 +71,7 @@ def test_create_and_update_user_success(db, factory) -> None:
             password="Passw0rd!",
             role_codes=[ROLE_OPERATOR],
             process_codes=[process.code],
+            stage_id=stage.id,
         ),
     )
     assert error is None
@@ -80,12 +81,11 @@ def test_create_and_update_user_success(db, factory) -> None:
 
     updated, error = user_service.update_user(
         db,
-        user,
-        UserUpdate(username="operator2", password="NewPass1!", full_name="operator two"),
+        user=user,
+        payload=UserUpdate(password="NewPass1!", full_name="operator two"),
     )
     assert error is None
     assert updated is not None
-    assert updated.username == "operator2"
     assert verify_password("NewPass1!", updated.password_hash)
 
 
@@ -108,30 +108,35 @@ def test_registration_submit_approve_reject_flow(db, factory) -> None:
     stage = factory.stage(code="22")
     process = factory.process(stage=stage, code="22-01")
 
-    req, error = user_service.submit_registration_request(db, "new_user", "Passw0rd!")
+    req, error = user_service.submit_registration_request(db, account="new_user", password="Passw0rd!")
     assert error is None
     assert req is not None
 
-    req2, error = user_service.submit_registration_request(db, "new_user", "Passw0rd!")
+    req2, error = user_service.submit_registration_request(db, account="new_user", password="Passw0rd!")
     assert req2 is None
     assert "pending" in (error or "")
 
     user, error = user_service.approve_registration_request(
         db,
-        req,
+        request=req,
         account="new_user",
+        password=None,
         role_codes=[ROLE_OPERATOR],
         process_codes=[process.code],
+        stage_id=stage.id,
+        reviewer=None,
     )
     assert error is None
     assert user is not None
     assert user.username == "new_user"
 
-    req3, error = user_service.submit_registration_request(db, "to_reject", "Passw0rd!")
+    req3, error = user_service.submit_registration_request(db, account="to_reject", password="Passw0rd!")
     assert req3 is not None
     assert error is None
-    user_service.reject_registration_request(db, req3)
-    assert user_service.get_registration_request_by_id(db, req3.id) is None
+    user_service.reject_registration_request(db, request=req3, reason=None, reviewer=None)
+    rejected_req = user_service.get_registration_request_by_id(db, req3.id)
+    assert rejected_req is not None
+    assert rejected_req.status == "rejected"
 
 
 def test_ensure_admin_account_and_normalize_single_role(db, factory) -> None:
@@ -178,6 +183,7 @@ def test_update_user_conflict_and_invalid_processes(db, factory) -> None:
             password="Passw0rd!",
             role_codes=[ROLE_OPERATOR],
             process_codes=[process.code],
+            stage_id=stage.id,
         ),
     )
     user2, _ = user_service.create_user(
@@ -185,21 +191,21 @@ def test_update_user_conflict_and_invalid_processes(db, factory) -> None:
         UserCreate(
             username="u101",
             full_name="u101",
-            password="Passw0rd!",
+            password="Passw1rd!",
             role_codes=[ROLE_QUALITY_ADMIN],
             process_codes=[],
         ),
     )
     assert user1 and user2
 
-    updated, error = user_service.update_user(db, user2, UserUpdate(username="u100"))
+    updated, error = user_service.update_user(db, user=user2, payload=UserUpdate(username="u100"))
     assert updated is None
-    assert "already exists" in (error or "")
+    assert "Only system administrator can modify username" in (error or "")
 
     updated, error = user_service.update_user(
         db,
-        user1,
-        UserUpdate(role_codes=[ROLE_SYSTEM_ADMIN], process_codes=[process.code]),
+        user=user1,
+        payload=UserUpdate(role_codes=[ROLE_SYSTEM_ADMIN], process_codes=[process.code]),
     )
     assert updated is None
     assert "Only operator role" in (error or "")

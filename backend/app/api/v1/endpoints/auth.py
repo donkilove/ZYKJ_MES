@@ -293,8 +293,8 @@ def approve_registration(
             "role_codes": sorted(role.code for role in user.roles),
             "stage_id": user.stage_id,
         },
-        ip_address=request.client.host if request.client else None,
-        terminal_info=request.headers.get("user-agent"),
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
     return success_response(
@@ -341,8 +341,8 @@ def reject_registration(
         target_name=account,
         operator=current_user,
         after_data={"status": updated.status, "rejected_reason": updated.rejected_reason},
-        ip_address=request.client.host if request.client else None,
-        terminal_info=request.headers.get("user-agent"),
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
     return success_response(

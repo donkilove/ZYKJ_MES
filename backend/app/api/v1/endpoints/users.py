@@ -208,8 +208,8 @@ def create_user_api(
         target_name=user.username,
         operator=current_user,
         after_data={"username": user.username, "role_codes": [role.code for role in user.roles]},
-        ip_address=request.client.host if request.client else None,
-        terminal_info=request.headers.get("user-agent"),
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
     return success_response(to_user_item(user, online_user_ids=list_online_user_ids(db)), message="created")
@@ -273,8 +273,8 @@ def update_user_api(
             "role_codes": sorted(role.code for role in updated.roles),
             "stage_id": updated.stage_id,
         },
-        ip_address=request.client.host if request.client else None,
-        terminal_info=request.headers.get("user-agent"),
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
     return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
@@ -303,8 +303,8 @@ def enable_user_api(
         target_id=str(updated.id),
         target_name=updated.username,
         operator=current_user,
-        ip_address=request.client.host if request.client else None,
-        terminal_info=request.headers.get("user-agent"),
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
     return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
@@ -333,8 +333,8 @@ def disable_user_api(
         target_id=str(updated.id),
         target_name=updated.username,
         operator=current_user,
-        ip_address=request.client.host if request.client else None,
-        terminal_info=request.headers.get("user-agent"),
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
     return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
@@ -400,8 +400,8 @@ def delete_user_api(
         target_name=user.username,
         operator=current_user,
         after_data={"is_deleted": True, "is_active": False},
-        ip_address=request.client.host if request.client else None,
-        terminal_info=request.headers.get("user-agent"),
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
     return success_response({"deleted": True}, message="deleted")

@@ -9,10 +9,13 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.product_lifecycle import (
+    PRODUCT_LIFECYCLE_ACTIVE,
     PRODUCT_LIFECYCLE_DRAFT,
     PRODUCT_LIFECYCLE_EFFECTIVE,
     PRODUCT_LIFECYCLE_INACTIVE,
+    PRODUCT_LIFECYCLE_OBSOLETE,
     PRODUCT_LIFECYCLE_OPTIONS,
+    PRODUCT_REVISION_LIFECYCLE_OPTIONS,
     PRODUCT_LIFECYCLE_TRANSITIONS,
 )
 from app.core.product_parameter_template import (
@@ -84,10 +87,17 @@ def _normalize_product_name(name: str) -> str:
     return normalized
 
 
-def _normalize_lifecycle_status(value: str | None) -> str:
-    normalized = (value or PRODUCT_LIFECYCLE_DRAFT).strip().lower()
+def _normalize_product_lifecycle_status(value: str | None) -> str:
+    normalized = (value or PRODUCT_LIFECYCLE_ACTIVE).strip().lower()
     if normalized not in PRODUCT_LIFECYCLE_OPTIONS:
         raise ValueError("Invalid lifecycle status")
+    return normalized
+
+
+def _normalize_revision_lifecycle_status(value: str | None) -> str:
+    normalized = (value or PRODUCT_LIFECYCLE_DRAFT).strip().lower()
+    if normalized not in PRODUCT_REVISION_LIFECYCLE_OPTIONS:
+        raise ValueError("Invalid revision lifecycle status")
     return normalized
 
 
@@ -269,11 +279,14 @@ def list_products(
     page: int,
     page_size: int,
     keyword: str | None,
+    category: str | None,
 ) -> tuple[int, list[Product], dict[int, ProductParameterHistory]]:
     stmt = select(Product).order_by(Product.id.asc())
     if keyword:
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(Product.name.ilike(like_pattern))
+    if category is not None and category != "":
+        stmt = stmt.where(Product.category == category)
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
     total = db.execute(total_stmt).scalar_one()
@@ -380,6 +393,7 @@ def _create_product_revision_snapshot(
     db: Session,
     *,
     product: Product,
+    lifecycle_status: str,
     action: str,
     note: str | None,
     operator: User,
@@ -390,7 +404,7 @@ def _create_product_revision_snapshot(
     row = ProductRevision(
         product_id=product.id,
         version=product.current_version,
-        lifecycle_status=product.lifecycle_status,
+        lifecycle_status=_normalize_revision_lifecycle_status(lifecycle_status),
         action=action,
         note=(note or "").strip() or None,
         source_revision_id=source_revision_id,
@@ -402,15 +416,51 @@ def _create_product_revision_snapshot(
     return row
 
 
-def create_product(db: Session, name: str, *, operator: User) -> Product:
+def _replace_effective_revision(
+    db: Session,
+    *,
+    product: Product,
+    effective_version: int,
+) -> None:
+    for row in db.execute(
+        select(ProductRevision).where(ProductRevision.product_id == product.id)
+    ).scalars():
+        if row.version == effective_version:
+            row.lifecycle_status = PRODUCT_LIFECYCLE_EFFECTIVE
+        elif row.lifecycle_status in {
+            PRODUCT_LIFECYCLE_EFFECTIVE,
+            PRODUCT_LIFECYCLE_INACTIVE,
+        }:
+            row.lifecycle_status = PRODUCT_LIFECYCLE_OBSOLETE
+
+
+def _mark_revision_inactive(
+    db: Session,
+    *,
+    product: Product,
+    revision_version: int,
+) -> None:
+    row = get_product_version(db, product_id=product.id, version=revision_version)
+    if row is not None:
+        row.lifecycle_status = PRODUCT_LIFECYCLE_INACTIVE
+
+
+def create_product(
+    db: Session,
+    name: str,
+    *,
+    category: str = "",
+    operator: User,
+) -> Product:
     normalized_name = _normalize_product_name(name)
     product = Product(
         name=normalized_name,
+        category=category,
         parameter_template_initialized=True,
-        lifecycle_status=PRODUCT_LIFECYCLE_DRAFT,
+        lifecycle_status=PRODUCT_LIFECYCLE_ACTIVE,
         current_version=1,
-        effective_version=0,
-        effective_at=None,
+        effective_version=1,
+        effective_at=datetime.now(UTC),
         inactive_reason=None,
     )
     db.add(product)
@@ -437,6 +487,7 @@ def create_product(db: Session, name: str, *, operator: User) -> Product:
     _create_product_revision_snapshot(
         db,
         product=product,
+        lifecycle_status=PRODUCT_LIFECYCLE_EFFECTIVE,
         action="create",
         note="Product created",
         operator=operator,
@@ -594,7 +645,7 @@ def analyze_product_impact(
 
     normalized_target_status = None
     if target_status is not None:
-        normalized_target_status = _normalize_lifecycle_status(target_status)
+        normalized_target_status = _normalize_product_lifecycle_status(target_status)
 
     open_orders = _list_open_orders_for_product(db, product_id=product.id)
     pending_orders = sum(1 for row in open_orders if row.status == ORDER_STATUS_PENDING)
@@ -604,10 +655,10 @@ def analyze_product_impact(
     reason_text: str | None = None
     if normalized_operation == "update_parameters":
         requires_confirmation = (
-            product.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE and len(open_orders) > 0
+            product.lifecycle_status == PRODUCT_LIFECYCLE_ACTIVE and len(open_orders) > 0
         )
         if requires_confirmation:
-            reason_text = "Effective product has unfinished orders"
+            reason_text = "Active product has unfinished orders"
     elif normalized_operation == "lifecycle":
         if normalized_target_status is None:
             raise ValueError("target_status is required for lifecycle impact analysis")
@@ -661,7 +712,7 @@ def update_product_parameters(
         operation="update_parameters",
     )
     if impact.requires_confirmation and not confirmed:
-        raise ValueError("Impact confirmation required before updating effective product")
+        raise ValueError("Impact confirmation required before updating active product")
 
     normalized_items = _normalize_parameter_items(items)
     normalized_by_name = {
@@ -715,17 +766,26 @@ def update_product_parameters(
     product.name = candidate_product_name
     product.updated_at = datetime.now(UTC)
     product.current_version = max(product.current_version, 0) + 1
-    if product.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE:
+    revision_status = PRODUCT_LIFECYCLE_DRAFT
+    if product.lifecycle_status == PRODUCT_LIFECYCLE_ACTIVE:
         product.effective_version = product.current_version
         product.effective_at = datetime.now(UTC)
+        revision_status = PRODUCT_LIFECYCLE_EFFECTIVE
     db.flush()
-    _create_product_revision_snapshot(
+    revision = _create_product_revision_snapshot(
         db,
         product=product,
+        lifecycle_status=revision_status,
         action="update_parameters",
         note=normalized_remark,
         operator=operator,
     )
+    if revision.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE:
+        _replace_effective_revision(
+            db,
+            product=product,
+            effective_version=revision.version,
+        )
 
     db.commit()
     return changed_keys
@@ -744,8 +804,8 @@ def change_product_lifecycle(
     del note  # reserved for future audit expansion.
     del operator  # lifecycle transition currently does not create a separate revision row.
 
-    normalized_target_status = _normalize_lifecycle_status(target_status)
-    current_status = _normalize_lifecycle_status(product.lifecycle_status)
+    normalized_target_status = _normalize_product_lifecycle_status(target_status)
+    current_status = _normalize_product_lifecycle_status(product.lifecycle_status)
 
     if normalized_target_status == current_status:
         raise ValueError("Product is already in target status")
@@ -770,14 +830,22 @@ def change_product_lifecycle(
         raise ValueError("inactive_reason is required when target_status is inactive")
 
     product.lifecycle_status = normalized_target_status
-    if normalized_target_status == PRODUCT_LIFECYCLE_EFFECTIVE:
+    if normalized_target_status == PRODUCT_LIFECYCLE_ACTIVE:
         product.effective_version = max(product.current_version, 1)
         product.effective_at = datetime.now(UTC)
         product.inactive_reason = None
-    elif normalized_target_status == PRODUCT_LIFECYCLE_INACTIVE:
-        product.inactive_reason = normalized_reason
+        _replace_effective_revision(
+            db,
+            product=product,
+            effective_version=product.effective_version,
+        )
     else:
-        product.inactive_reason = None
+        product.inactive_reason = normalized_reason
+        _mark_revision_inactive(
+            db,
+            product=product,
+            revision_version=max(product.effective_version, 1),
+        )
 
     product.updated_at = datetime.now(UTC)
     db.commit()
@@ -959,9 +1027,11 @@ def rollback_product_to_version(
     product.name = candidate_name
     product.updated_at = datetime.now(UTC)
     product.current_version = max(product.current_version, 0) + 1
-    if product.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE:
+    revision_status = PRODUCT_LIFECYCLE_DRAFT
+    if product.lifecycle_status == PRODUCT_LIFECYCLE_ACTIVE:
         product.effective_version = product.current_version
         product.effective_at = datetime.now(UTC)
+        revision_status = PRODUCT_LIFECYCLE_EFFECTIVE
 
     rollback_note = (note or "").strip() or f"Rollback to v{target_version}"
     db.add(
@@ -974,14 +1044,21 @@ def rollback_product_to_version(
         )
     )
     db.flush()
-    _create_product_revision_snapshot(
+    revision = _create_product_revision_snapshot(
         db,
         product=product,
+        lifecycle_status=revision_status,
         action="rollback",
         note=rollback_note,
         operator=operator,
         source_revision_id=target_revision.id,
     )
+    if revision.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE:
+        _replace_effective_revision(
+            db,
+            product=product,
+            effective_version=revision.version,
+        )
 
     db.commit()
     return changed_keys

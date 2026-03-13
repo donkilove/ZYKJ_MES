@@ -18,7 +18,7 @@ from app.core.security import get_password_hash
 from app.models.process import Process
 from app.models.role import Role
 from app.models.user import User
-from app.schemas.auth import ApproveRegistrationRequest, RegisterRequest
+from app.schemas.auth import ApproveRegistrationRequest, RegisterRequest, RejectRegistrationRequest
 from app.schemas.craft import (
     CraftProcessCreate,
     ProcessStageCreate,
@@ -66,11 +66,11 @@ def test_auth_endpoints_login_register_and_me(db, factory) -> None:
     user = _auth_user(factory, "auth_admin", ROLE_SYSTEM_ADMIN, "Passw0rd!")
     db.commit()
 
-    login_result = auth.login(SimpleNamespace(username="auth_admin", password="Passw0rd!"), db)
+    login_result = auth.login(SimpleNamespace(username="auth_admin", password="Passw0rd!"), request=None, db=db)
     assert login_result.data.access_token
 
     with pytest.raises(HTTPException):
-        auth.login(SimpleNamespace(username="auth_admin", password="bad"), db)
+        auth.login(SimpleNamespace(username="auth_admin", password="bad"), request=None, db=db)
 
     register_resp = auth.register(RegisterRequest(account="new_account", password="Passw0rd!"), db)
     assert register_resp.data.status == "pending_approval"
@@ -91,24 +91,25 @@ def test_auth_endpoints_admin_actions(db, factory) -> None:
     request_id = req.data.account
     assert request_id == "pending_x"
 
-    list_resp = auth.get_registration_requests(page=1, page_size=20, keyword=None, db=db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
+    list_resp = auth.get_registration_requests(page=1, page_size=20, keyword=None, status_filter=None, db=db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
     assert list_resp.data.total >= 1
 
-    db_req = auth.get_registration_requests(page=1, page_size=20, keyword="pending_x", db=db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
+    db_req = auth.get_registration_requests(page=1, page_size=20, keyword="pending_x", status_filter=None, db=db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
     target = db_req.data.items[0]
 
     approved = auth.approve_registration(
         target.id,
-        ApproveRegistrationRequest(account="pending_x", role_codes=[ROLE_OPERATOR], process_codes=[process.code]),
-        db,
-        _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]),
+        ApproveRegistrationRequest(account="pending_x", role_codes=[ROLE_OPERATOR], process_codes=[process.code], stage_id=stage.id),
+        request=None,
+        db=db,
+        current_user=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]),
     )
     assert approved.data.approved is True
 
     req2 = auth.register(RegisterRequest(account="pending_y", password="Passw0rd!"), db)
-    db_req2 = auth.get_registration_requests(page=1, page_size=20, keyword="pending_y", db=db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
+    db_req2 = auth.get_registration_requests(page=1, page_size=20, keyword="pending_y", status_filter=None, db=db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
     target2 = db_req2.data.items[0]
-    rejected = auth.reject_registration(target2.id, db, _=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
+    rejected = auth.reject_registration(target2.id, RejectRegistrationRequest(), request=None, db=db, current_user=factory.user(role_codes=[ROLE_SYSTEM_ADMIN]))
     assert rejected.data.approved is False
 
 
@@ -147,16 +148,17 @@ def test_roles_processes_users_ui_endpoints(db, factory) -> None:
         UserCreate(
             username="ep_user",
             full_name="EP User",
-            password="Passw0rd!",
+            password="EpUser@999",
             role_codes=[ROLE_QUALITY_ADMIN],
             process_codes=[],
         ),
-        db,
-        _=admin,
+        request=None,
+        db=db,
+        current_user=admin,
     )
     assert user_created.data.username == "ep_user"
 
-    user_list = users.get_users(page=1, page_size=20, keyword=None, db=db, _=admin)
+    user_list = users.get_users(page=1, page_size=20, keyword=None, role_code=None, stage_id=None, is_active=None, include_deleted=False, db=db, _=admin)
     assert user_list.data.total >= 1
 
     user_detail = users.get_user_detail(user_created.data.id, db=db, _=admin)
@@ -165,8 +167,9 @@ def test_roles_processes_users_ui_endpoints(db, factory) -> None:
     user_updated = users.update_user_api(
         user_created.data.id,
         UserUpdate(full_name="EP User Updated"),
-        db,
-        _=admin,
+        request=None,
+        db=db,
+        current_user=admin,
     )
     assert user_updated.data.full_name == "EP User Updated"
 
@@ -180,24 +183,9 @@ def test_products_and_craft_endpoints(db, factory) -> None:
 
     product_resp = products.create_product_api(ProductCreate(name="接口产品A"), db, current_user=admin)
     product_id = product_resp.data.id
-    assert product_resp.data.lifecycle_status == "draft"
+    assert product_resp.data.lifecycle_status == "active"
 
-    lifecycle_resp = products.update_product_lifecycle(
-        product_id,
-        products.ProductLifecycleUpdateRequest(target_status="pending_review"),
-        db=db,
-        current_user=admin,
-    )
-    assert lifecycle_resp.data.lifecycle_status == "pending_review"
-
-    lifecycle_effective_resp = products.update_product_lifecycle(
-        product_id,
-        products.ProductLifecycleUpdateRequest(target_status="effective"),
-        db=db,
-        current_user=admin,
-    )
-    assert lifecycle_effective_resp.data.lifecycle_status == "effective"
-    assert lifecycle_effective_resp.data.effective_version >= 1
+    assert product_resp.data.effective_version >= 1
 
     kanban_empty = craft.get_craft_kanban_process_metrics_api(
         product_id=product_id,
@@ -208,7 +196,7 @@ def test_products_and_craft_endpoints(db, factory) -> None:
     assert kanban_empty.data.product_id == product_id
     assert kanban_empty.data.items == []
 
-    products_list = products.get_products(page=1, page_size=20, keyword=None, db=db, _=admin)
+    products_list = products.get_products(page=1, page_size=20, keyword=None, category=None, db=db, _=admin)
     assert products_list.data.total >= 1
 
     param_resp = products.get_product_parameters(product_id, db, _=admin)
@@ -348,19 +336,6 @@ def test_production_quality_and_equipment_endpoints(db, factory) -> None:
     db.commit()
 
     product_resp = products.create_product_api(ProductCreate(name="生产接口产品"), db, current_user=admin)
-    products.update_product_lifecycle(
-        product_resp.data.id,
-        products.ProductLifecycleUpdateRequest(target_status="pending_review"),
-        db=db,
-        current_user=admin,
-    )
-    products.update_product_lifecycle(
-        product_resp.data.id,
-        products.ProductLifecycleUpdateRequest(target_status="effective"),
-        db=db,
-        current_user=admin,
-    )
-
     order_resp = production.create_order_api(
         OrderCreate(
             order_code="EP-ORD-1",

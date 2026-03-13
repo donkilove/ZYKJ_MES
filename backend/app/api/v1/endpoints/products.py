@@ -68,6 +68,7 @@ def to_product_item(
     return ProductItem(
         id=product.id,
         name=product.name,
+        category=product.category or "",
         lifecycle_status=product.lifecycle_status,
         current_version=product.current_version,
         effective_version=product.effective_version,
@@ -84,10 +85,11 @@ def get_products(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     keyword: str | None = Query(default=None),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("product.products.list")),
 ) -> ApiResponse[ProductListResult]:
-    total, products, latest_map = list_products(db, page, page_size, keyword)
+    total, products, latest_map = list_products(db, page, page_size, keyword, category)
     return success_response(
         ProductListResult(
             total=total,
@@ -108,7 +110,12 @@ def create_product_api(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Product name already exists")
 
     try:
-        product = create_product(db, normalized_name, operator=current_user)
+        product = create_product(
+            db,
+            normalized_name,
+            category=payload.category,
+            operator=current_user,
+        )
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 

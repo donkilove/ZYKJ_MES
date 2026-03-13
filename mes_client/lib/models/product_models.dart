@@ -2,6 +2,7 @@ class ProductItem {
   ProductItem({
     required this.id,
     required this.name,
+    required this.category,
     required this.lifecycleStatus,
     required this.currentVersion,
     required this.effectiveVersion,
@@ -14,6 +15,7 @@ class ProductItem {
 
   final int id;
   final String name;
+  final String category;
   final String lifecycleStatus;
   final int currentVersion;
   final int effectiveVersion;
@@ -27,7 +29,8 @@ class ProductItem {
     return ProductItem(
       id: json['id'] as int,
       name: json['name'] as String,
-      lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
+      category: (json['category'] as String?) ?? '',
+      lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'active',
       currentVersion: (json['current_version'] as int?) ?? 1,
       effectiveVersion: (json['effective_version'] as int?) ?? 0,
       effectiveAt: (json['effective_at'] as String?) == null
@@ -281,6 +284,8 @@ class ProductVersionItem {
   final int? createdByUserId;
   final String? createdByUsername;
   final DateTime createdAt;
+
+  String get displayVersion => 'V1.$version';
 
   factory ProductVersionItem.fromJson(Map<String, dynamic> json) {
     return ProductVersionItem(

@@ -8,11 +8,9 @@ import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
+const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
+
 enum _ProductTableAction {
-  submitReview,
-  activateDirect,
-  backToDraft,
-  publishEffective,
   deactivate,
   reactivate,
   version,
@@ -63,6 +61,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
 
   bool _loading = false;
   String _message = '';
+  String _selectedCategoryFilter = '';
   int _total = 0;
   List<ProductItem> _products = const [];
 
@@ -111,17 +110,25 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
 
   String _lifecycleLabel(String value) {
     switch (value) {
+      case 'active':
+        return '启用';
       case 'draft':
         return '草稿';
       case 'pending_review':
         return '待审核';
       case 'effective':
-        return '已生效';
+        return '启用';
       case 'inactive':
-        return '已停用';
+        return '停用';
+      case 'obsolete':
+        return '已废弃';
       default:
         return value;
     }
+  }
+
+  String _formatDisplayVersion(int version) {
+    return 'V1.$version';
   }
 
   Future<bool> _confirmImpact(
@@ -343,14 +350,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setLocalState) {
-            final versionValues = versions.items
-                .map((item) => item.version)
-                .toList();
-            fromVersion ??= versionValues.isNotEmpty
-                ? versionValues.first
+            final versionItems = versions.items;
+            fromVersion ??= versionItems.isNotEmpty
+                ? versionItems.first.version
                 : null;
-            toVersion ??= versionValues.length >= 2
-                ? versionValues[1]
+            toVersion ??= versionItems.length >= 2
+                ? versionItems[1].version
                 : fromVersion;
             return AlertDialog(
               title: Text('版本管理 - ${product.name}'),
@@ -368,11 +373,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                           DropdownButton<int>(
                             value: fromVersion,
                             hint: const Text('起始版本'),
-                            items: versionValues
+                            items: versionItems
                                 .map(
-                                  (value) => DropdownMenuItem<int>(
-                                    value: value,
-                                    child: Text('v$value'),
+                                  (item) => DropdownMenuItem<int>(
+                                    value: item.version,
+                                    child: Text(item.displayVersion),
                                   ),
                                 )
                                 .toList(),
@@ -385,11 +390,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                           DropdownButton<int>(
                             value: toVersion,
                             hint: const Text('目标版本'),
-                            items: versionValues
+                            items: versionItems
                                 .map(
-                                  (value) => DropdownMenuItem<int>(
-                                    value: value,
-                                    child: Text('v$value'),
+                                  (item) => DropdownMenuItem<int>(
+                                    value: item.version,
+                                    child: Text(item.displayVersion),
                                   ),
                                 )
                                 .toList(),
@@ -460,7 +465,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                           title: Text(
-                            'v${item.version} / ${item.action} / ${_lifecycleLabel(item.lifecycleStatus)}',
+                            '${item.displayVersion} / ${item.action} / ${_lifecycleLabel(item.lifecycleStatus)}',
                           ),
                           subtitle: Text(
                             '${_formatTime(item.createdAt)} ${item.createdByUsername ?? '-'} ${item.note ?? ''}',
@@ -493,7 +498,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                         productId: product.id,
                                         targetVersion: item.version,
                                         confirmed: confirmed,
-                                        note: '回滚到v${item.version}',
+                                        note: '回滚到${item.displayVersion}',
                                       );
                                       if (context.mounted) {
                                         Navigator.of(context).pop();
@@ -504,7 +509,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                         ).showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                              '已回滚到 v${item.version}',
+                                              '已回滚到 ${item.displayVersion}',
                                             ),
                                           ),
                                         );
@@ -560,6 +565,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         page: 1,
         pageSize: 100,
         keyword: _keywordController.text.trim(),
+        category: _selectedCategoryFilter,
       );
       if (!mounted) {
         return;
@@ -596,60 +602,100 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
 
     final nameController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    var selectedCategory = _productCategoryOptions.first;
 
     final created = await showLockedFormDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('添加产品'),
-          content: Form(
-            key: formKey,
-            child: TextFormField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: '产品名称',
-                border: OutlineInputBorder(),
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            return AlertDialog(
+              title: const Text('添加产品'),
+              content: Form(
+                key: formKey,
+                child: SizedBox(
+                  width: 420,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: '产品名称',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入产品名称';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedCategory,
+                        decoration: const InputDecoration(
+                          labelText: '产品分类',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _productCategoryOptions
+                            .map(
+                              (category) => DropdownMenuItem<String>(
+                                value: category,
+                                child: Text(category),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setLocalState(() {
+                            selectedCategory = value;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return '请输入产品名称';
-                }
-                return null;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) {
-                  return;
-                }
-                try {
-                  await _productService.createProduct(
-                    name: nameController.text.trim(),
-                  );
-                  if (context.mounted) {
-                    Navigator.of(context).pop(true);
-                  }
-                } catch (error) {
-                  if (_isUnauthorized(error)) {
-                    widget.onLogout();
-                    return;
-                  }
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('添加产品失败：${_errorMessage(error)}')),
-                    );
-                  }
-                }
-              },
-              child: const Text('保存'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) {
+                      return;
+                    }
+                    try {
+                      await _productService.createProduct(
+                        name: nameController.text.trim(),
+                        category: selectedCategory,
+                      );
+                      if (context.mounted) {
+                        Navigator.of(context).pop(true);
+                      }
+                    } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('添加产品失败：${_errorMessage(error)}'),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -753,34 +799,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     final items = <PopupMenuEntry<_ProductTableAction>>[];
     if (widget.canUpdateLifecycle) {
       switch (product.lifecycleStatus) {
-        case 'draft':
-          items.add(
-            const PopupMenuItem(
-              value: _ProductTableAction.submitReview,
-              child: Text('提交审核'),
-            ),
-          );
-          items.add(
-            const PopupMenuItem(
-              value: _ProductTableAction.activateDirect,
-              child: Text('直接生效'),
-            ),
-          );
-          break;
-        case 'pending_review':
-          items.add(
-            const PopupMenuItem(
-              value: _ProductTableAction.backToDraft,
-              child: Text('退回草稿'),
-            ),
-          );
-          items.add(
-            const PopupMenuItem(
-              value: _ProductTableAction.publishEffective,
-              child: Text('发布生效'),
-            ),
-          );
-          break;
+        case 'active':
         case 'effective':
           items.add(
             const PopupMenuItem(
@@ -793,7 +812,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
           items.add(
             const PopupMenuItem(
               value: _ProductTableAction.reactivate,
-              child: Text('重新生效'),
+              child: Text('启用'),
             ),
           );
           break;
@@ -847,16 +866,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     ProductItem product,
   ) async {
     switch (action) {
-      case _ProductTableAction.submitReview:
-        await _changeLifecycle(product, 'pending_review');
-        return;
-      case _ProductTableAction.activateDirect:
-      case _ProductTableAction.publishEffective:
       case _ProductTableAction.reactivate:
-        await _changeLifecycle(product, 'effective');
-        return;
-      case _ProductTableAction.backToDraft:
-        await _changeLifecycle(product, 'draft');
+        await _changeLifecycle(product, 'active');
         return;
       case _ProductTableAction.deactivate:
         await _changeLifecycle(product, 'inactive');
@@ -915,6 +926,34 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                 ),
               ),
               const SizedBox(width: 12),
+              SizedBox(
+                width: 180,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedCategoryFilter,
+                  decoration: const InputDecoration(
+                    labelText: '分类筛选',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    DropdownMenuItem<String>(value: '', child: Text('全部')),
+                    ..._productCategoryOptions.map(
+                      (category) => DropdownMenuItem<String>(
+                        value: category,
+                        child: Text(category),
+                      ),
+                    ),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _selectedCategoryFilter = value ?? '';
+                          });
+                          _loadProducts();
+                        },
+                ),
+              ),
+              const SizedBox(width: 12),
               FilledButton.icon(
                 onPressed: _loading ? null : _loadProducts,
                 icon: const Icon(Icons.search),
@@ -955,6 +994,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                         child: DataTable(
                           columns: [
                             UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                            UnifiedListTableHeaderStyle.column(context, '产品分类'),
                             UnifiedListTableHeaderStyle.column(context, '状态'),
                             UnifiedListTableHeaderStyle.column(context, '当前版本'),
                             UnifiedListTableHeaderStyle.column(context, '生效版本'),
@@ -973,16 +1013,25 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                             return DataRow(
                               cells: [
                                 DataCell(Text(product.name)),
+                                DataCell(Text(product.category)),
                                 DataCell(
                                   Text(
                                     _lifecycleLabel(product.lifecycleStatus),
                                   ),
                                 ),
-                                DataCell(Text('v${product.currentVersion}')),
+                                DataCell(
+                                  Text(
+                                    _formatDisplayVersion(
+                                      product.currentVersion,
+                                    ),
+                                  ),
+                                ),
                                 DataCell(
                                   Text(
                                     product.effectiveVersion > 0
-                                        ? 'v${product.effectiveVersion}'
+                                        ? _formatDisplayVersion(
+                                            product.effectiveVersion,
+                                          )
                                         : '-',
                                   ),
                                 ),

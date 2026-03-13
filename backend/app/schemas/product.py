@@ -5,16 +5,15 @@ from pydantic import BaseModel, Field
 from pydantic import field_validator
 
 from app.core.product_lifecycle import (
-    PRODUCT_LIFECYCLE_DRAFT,
-    PRODUCT_LIFECYCLE_EFFECTIVE,
+    PRODUCT_LIFECYCLE_ACTIVE,
     PRODUCT_LIFECYCLE_INACTIVE,
     PRODUCT_LIFECYCLE_OPTIONS,
-    PRODUCT_LIFECYCLE_PENDING_REVIEW,
 )
 
 
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
+    category: str = Field(default="", max_length=32)
 
 
 class ProductDeleteRequest(BaseModel):
@@ -24,7 +23,8 @@ class ProductDeleteRequest(BaseModel):
 class ProductItem(BaseModel):
     id: int
     name: str
-    lifecycle_status: str = PRODUCT_LIFECYCLE_DRAFT
+    category: str = ""
+    lifecycle_status: str = PRODUCT_LIFECYCLE_ACTIVE
     current_version: int = 1
     effective_version: int = 0
     effective_at: datetime | None = None
@@ -179,7 +179,5 @@ class ProductImpactAnalysisQuery(BaseModel):
 
 
 # Keep constants exported for client-side / docs reuse.
-PRODUCT_LIFECYCLE_STATUS_DRAFT = PRODUCT_LIFECYCLE_DRAFT
-PRODUCT_LIFECYCLE_STATUS_PENDING_REVIEW = PRODUCT_LIFECYCLE_PENDING_REVIEW
-PRODUCT_LIFECYCLE_STATUS_EFFECTIVE = PRODUCT_LIFECYCLE_EFFECTIVE
+PRODUCT_LIFECYCLE_STATUS_ACTIVE = PRODUCT_LIFECYCLE_ACTIVE
 PRODUCT_LIFECYCLE_STATUS_INACTIVE = PRODUCT_LIFECYCLE_INACTIVE

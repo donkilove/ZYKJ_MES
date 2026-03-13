@@ -11,6 +11,12 @@ class Product(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
     parameter_template_initialized: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -20,8 +26,8 @@ class Product(Base, TimestampMixin):
     lifecycle_status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
-        default="draft",
-        server_default=text("'draft'"),
+        default="active",
+        server_default=text("'active'"),
         index=True,
     )
     current_version: Mapped[int] = mapped_column(

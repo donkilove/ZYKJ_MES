@@ -396,29 +396,8 @@ def test_product_update_parameters_rejects_invalid_input(db, factory) -> None:
 def test_product_lifecycle_and_version_compare_and_rollback(db, factory) -> None:
     operator = factory.user(username="product_lifecycle_admin", role_codes=[ROLE_SYSTEM_ADMIN])
     product = product_service.create_product(db, "产品生命周期A", operator=operator)
-    assert product.lifecycle_status == "draft"
+    assert product.lifecycle_status == "active"
     assert product.current_version == 1
-    assert product.effective_version == 0
-
-    product = product_service.change_product_lifecycle(
-        db,
-        product=product,
-        target_status="pending_review",
-        confirmed=False,
-        note="提交审核",
-        inactive_reason=None,
-        operator=operator,
-    )
-    product = product_service.change_product_lifecycle(
-        db,
-        product=product,
-        target_status="effective",
-        confirmed=False,
-        note="发布生效",
-        inactive_reason=None,
-        operator=operator,
-    )
-    assert product.lifecycle_status == "effective"
     assert product.effective_version == 1
 
     changed_keys = product_service.update_product_parameters(
@@ -449,6 +428,9 @@ def test_product_lifecycle_and_version_compare_and_rollback(db, factory) -> None
 
     versions = product_service.list_product_versions(db, product_id=product.id)
     assert [item.version for item in versions[:3]] == [3, 2, 1]
+    assert versions[0].lifecycle_status == "effective"
+    assert versions[1].lifecycle_status == "obsolete"
+    assert versions[2].lifecycle_status == "obsolete"
 
     compare_result = product_service.compare_product_versions(
         db,
@@ -474,24 +456,6 @@ def test_product_lifecycle_and_version_compare_and_rollback(db, factory) -> None
 def test_product_impact_confirmation_required_for_inactive_and_update(db, factory) -> None:
     operator = factory.user(username="product_impact_admin", role_codes=[ROLE_SYSTEM_ADMIN])
     product = product_service.create_product(db, "产品影响A", operator=operator)
-    product = product_service.change_product_lifecycle(
-        db,
-        product=product,
-        target_status="pending_review",
-        confirmed=False,
-        note=None,
-        inactive_reason=None,
-        operator=operator,
-    )
-    product = product_service.change_product_lifecycle(
-        db,
-        product=product,
-        target_status="effective",
-        confirmed=False,
-        note=None,
-        inactive_reason=None,
-        operator=operator,
-    )
     factory.order(product=product, order_code="IMPACT-ORD-1", status="pending")
     db.commit()
 
@@ -532,13 +496,13 @@ def test_product_impact_confirmation_required_for_inactive_and_update(db, factor
     product = product_service.change_product_lifecycle(
         db,
         product=product,
-        target_status="effective",
+        target_status="active",
         confirmed=False,
         note=None,
         inactive_reason=None,
         operator=operator,
     )
-    assert product.lifecycle_status == "effective"
+    assert product.lifecycle_status == "active"
 
     try:
         product_service.update_product_parameters(
@@ -548,7 +512,7 @@ def test_product_impact_confirmation_required_for_inactive_and_update(db, factor
                 (PRODUCT_NAME_PARAMETER_KEY, "基础参数", "Text", "产品影响A-改"),
                 ("参数Y", "分类Y", "Text", "v1"),
             ],
-            remark="生效状态改参",
+            remark="启用状态改参",
             operator=operator,
             confirmed=False,
         )
@@ -563,7 +527,7 @@ def test_product_impact_confirmation_required_for_inactive_and_update(db, factor
             (PRODUCT_NAME_PARAMETER_KEY, "基础参数", "Text", "产品影响A-改"),
             ("参数Y", "分类Y", "Text", "v1"),
         ],
-        remark="生效状态改参",
+        remark="启用状态改参",
         operator=operator,
         confirmed=True,
     )

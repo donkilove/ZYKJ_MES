@@ -19,7 +19,7 @@ from app.core.production_constants import (
     SUB_ORDER_STATUS_IN_PROGRESS,
     SUB_ORDER_STATUS_PENDING,
 )
-from app.core.product_lifecycle import PRODUCT_LIFECYCLE_EFFECTIVE
+from app.core.product_lifecycle import PRODUCT_LIFECYCLE_ACTIVE
 from app.core.authz_catalog import (
     PERM_PROD_MY_ORDERS_PROXY,
     PERM_PROD_MY_ORDERS_VIEW_ALL,
@@ -1025,8 +1025,8 @@ def create_order(
     product = db.execute(select(Product).where(Product.id == product_id)).scalars().first()
     if not product:
         raise ValueError("Product not found")
-    if product.lifecycle_status != PRODUCT_LIFECYCLE_EFFECTIVE:
-        raise ValueError("Product is not effective")
+    if product.lifecycle_status != PRODUCT_LIFECYCLE_ACTIVE:
+        raise ValueError("Product is not active")
 
     route_steps, selected_template = _resolve_route_steps(
         db,
@@ -1122,8 +1122,8 @@ def update_order(
     product = db.execute(select(Product).where(Product.id == product_id)).scalars().first()
     if not product:
         raise ValueError("Product not found")
-    if product.lifecycle_status != PRODUCT_LIFECYCLE_EFFECTIVE:
-        raise ValueError("Product is not effective")
+    if product.lifecycle_status != PRODUCT_LIFECYCLE_ACTIVE:
+        raise ValueError("Product is not active")
 
     route_steps, selected_template = _resolve_route_steps(
         db,
