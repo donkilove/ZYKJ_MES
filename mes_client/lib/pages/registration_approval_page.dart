@@ -428,13 +428,13 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     }
   }
 
-  Future<void> _rejectRequest(RegistrationRequestItem item) async {
+  Future<void> _rejectRequest(RegistrationRequestItem item, {String? reason}) async {
     if (!widget.canReviewAction) {
       _showNoPermission();
       return;
     }
     try {
-      await _userService.rejectRegistrationRequest(requestId: item.id);
+      await _userService.rejectRegistrationRequest(requestId: item.id, reason: reason);
       if (!mounted) {
         return;
       }
@@ -461,28 +461,50 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       _showNoPermission();
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('驳回注册申请'),
-          content: Text('确认驳回账号“${item.account}”的注册申请吗？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
+    final reasonController = TextEditingController();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('驳回注册申请'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('确认驳回账号”${item.account}”的注册申请吗？'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reasonController,
+                  decoration: const InputDecoration(
+                    labelText: '驳回原因（可选）',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  maxLines: 2,
+                ),
+              ],
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('驳回'),
-            ),
-          ],
-        );
-      },
-    );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('驳回'),
+              ),
+            ],
+          );
+        },
+      );
 
-    if (confirmed == true) {
-      await _rejectRequest(item);
+      if (confirmed == true) {
+        final reason = reasonController.text.trim();
+        await _rejectRequest(item, reason: reason.isEmpty ? null : reason);
+      }
+    } finally {
+      reasonController.dispose();
     }
   }
 
