@@ -11,7 +11,7 @@ BUILTIN_ROLE_CODES = {str(item["code"]) for item in ROLE_DEFINITIONS}
 
 
 def query_roles(keyword: str | None):
-    stmt = select(Role).options(selectinload(Role.users)).order_by(Role.id.asc())
+    stmt = select(Role).options(selectinload(Role.users)).where(Role.is_deleted.is_(False)).order_by(Role.id.asc())
     if keyword:
         like_pattern = f"%{keyword}%"
         stmt = stmt.where(
@@ -21,12 +21,12 @@ def query_roles(keyword: str | None):
 
 
 def get_role_by_id(db: Session, role_id: int) -> Role | None:
-    stmt = select(Role).options(selectinload(Role.users)).where(Role.id == role_id)
+    stmt = select(Role).options(selectinload(Role.users)).where(Role.id == role_id, Role.is_deleted.is_(False))
     return db.execute(stmt).scalars().first()
 
 
 def get_role_by_code(db: Session, code: str) -> Role | None:
-    stmt = select(Role).options(selectinload(Role.users)).where(Role.code == code)
+    stmt = select(Role).options(selectinload(Role.users)).where(Role.code == code, Role.is_deleted.is_(False))
     return db.execute(stmt).scalars().first()
 
 
@@ -34,7 +34,17 @@ def get_role_by_code_case_insensitive(db: Session, code: str) -> Role | None:
     normalized = code.strip().lower()
     if not normalized:
         return None
-    stmt = select(Role).options(selectinload(Role.users)).where(func.lower(Role.code) == normalized)
+    stmt = select(Role).options(selectinload(Role.users)).where(func.lower(Role.code) == normalized, Role.is_deleted.is_(False))
+    return db.execute(stmt).scalars().first()
+
+
+def get_role_by_name_case_insensitive(db: Session, name: str, exclude_id: int | None = None) -> Role | None:
+    normalized = name.strip().lower()
+    if not normalized:
+        return None
+    stmt = select(Role).where(func.lower(Role.name) == normalized, Role.is_deleted.is_(False))
+    if exclude_id is not None:
+        stmt = stmt.where(Role.id != exclude_id)
     return db.execute(stmt).scalars().first()
 
 
@@ -43,7 +53,7 @@ def get_roles_by_codes(db: Session, codes: list[str]) -> tuple[list[Role], list[
     if not unique_codes:
         return [], []
 
-    stmt = select(Role).where(Role.code.in_(unique_codes))
+    stmt = select(Role).where(Role.code.in_(unique_codes), Role.is_deleted.is_(False))
     roles = db.execute(stmt).scalars().all()
     existing_codes = {role.code for role in roles}
     missing_codes = [code for code in unique_codes if code not in existing_codes]
@@ -65,6 +75,10 @@ def create_role(db: Session, payload: RoleCreate) -> tuple[Role | None, list[str
     existing = get_role_by_code_case_insensitive(db, payload.code)
     if existing:
         return None, [f"Role code already exists: {payload.code}"]
+
+    existing_name = get_role_by_name_case_insensitive(db, payload.name)
+    if existing_name:
+        return None, [f"角色名称已存在：{payload.name}"]
 
     role_type = "builtin" if payload.code in BUILTIN_ROLE_CODES else "custom"
     role = Role(
@@ -102,6 +116,12 @@ def update_role(db: Session, role: Role, payload: RoleUpdate) -> tuple[Role | No
         next_name = payload.name.strip()
         if role_is_builtin and next_name != role.name:
             errors.append("Built-in role name cannot be changed")
+        elif next_name.lower() != role.name.lower():
+            existing_name = get_role_by_name_case_insensitive(db, next_name, exclude_id=role.id)
+            if existing_name:
+                errors.append(f"角色名称已存在：{next_name}")
+            else:
+                role.name = next_name
         else:
             role.name = next_name
     if payload.description is not None:
@@ -142,6 +162,6 @@ def delete_role(db: Session, role: Role) -> tuple[bool, str | None]:
     if active_users_count > 0:
         return False, "Role has bound users and cannot be deleted"
 
-    db.delete(role)
+    role.is_deleted = True
     db.commit()
     return True, None

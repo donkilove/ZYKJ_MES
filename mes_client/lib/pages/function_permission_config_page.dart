@@ -17,9 +17,6 @@ const Map<String, String> _moduleNameFallbackZh = {
   'production': '生产管理',
 };
 
-const String _systemAdminRoleCode = 'system_admin';
-const String _systemModuleCode = 'system';
-
 class _RoleDraft {
   const _RoleDraft({
     required this.moduleEnabled,
@@ -136,14 +133,6 @@ class _FunctionPermissionConfigPageState
 
   bool _isReadonly(String roleCode) => _readonlyByRole[roleCode] ?? false;
 
-  List<RoleItem> _filterConfigurableRoles(List<RoleItem> roles) {
-    return roles.where((role) => role.code != _systemAdminRoleCode).toList();
-  }
-
-  List<String> _filterConfigurableModules(List<String> moduleCodes) {
-    return moduleCodes.where((code) => code != _systemModuleCode).toList();
-  }
-
   bool _draftEquals(_RoleDraft a, _RoleDraft b) {
     if (a.moduleEnabled != b.moduleEnabled) {
       return false;
@@ -179,7 +168,7 @@ class _FunctionPermissionConfigPageState
     });
     try {
       final roleResult = await _userService.listRoles();
-      final roles = _filterConfigurableRoles(roleResult.items.toList())
+      final roles = roleResult.items.toList()
         ..sort((a, b) => a.id - b.id);
       if (roles.isEmpty) {
         if (!mounted) {
@@ -199,8 +188,7 @@ class _FunctionPermissionConfigPageState
         moduleCode: _selectedModuleCode ?? 'production',
       );
       _catalogByModule[bootstrap.moduleCode] = bootstrap;
-      final modules = _filterConfigurableModules(bootstrap.moduleCodes.toList())
-        ..sort();
+      final modules = bootstrap.moduleCodes.toList()..sort();
       if (modules.isEmpty) {
         throw StateError('未查询到可配置模块');
       }
@@ -234,7 +222,7 @@ class _FunctionPermissionConfigPageState
     List<RoleItem>? roles,
     List<String>? moduleCodes,
   }) async {
-    final effectiveRoles = _filterConfigurableRoles(roles ?? _roles);
+    final effectiveRoles = roles ?? _roles;
     if (effectiveRoles.isEmpty) {
       if (!mounted) {
         return;
@@ -256,9 +244,7 @@ class _FunctionPermissionConfigPageState
       moduleCode: moduleCode,
     );
     _catalogByModule[catalog.moduleCode] = catalog;
-    final effectiveModuleCodes = _filterConfigurableModules(
-      (moduleCodes ?? catalog.moduleCodes).toList(),
-    )..sort();
+    final effectiveModuleCodes = (moduleCodes ?? catalog.moduleCodes).toList()..sort();
     if (effectiveModuleCodes.isEmpty) {
       if (!mounted) {
         return;

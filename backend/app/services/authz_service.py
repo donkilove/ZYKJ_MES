@@ -11,8 +11,6 @@ from app.core.authz_catalog import (
     AUTHZ_RESOURCE_MODULE,
     AUTHZ_RESOURCE_PAGE,
     MODULE_PERMISSION_BY_MODULE_CODE,
-    PERM_AUTHZ_MY_PERMISSIONS_VIEW,
-    PERM_AUTHZ_PERMISSION_CATALOG_VIEW,
     PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
     PERM_AUTHZ_ROLE_PERMISSIONS_VIEW,
     PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
@@ -57,47 +55,6 @@ _SYSTEM_MODULE_PERMISSION_CODE = MODULE_PERMISSION_BY_MODULE_CODE.get(
     module_permission_code("system"),
 )
 
-_AUTHZ_PRIVILEGED_PERMISSION_CODES = frozenset(
-    _codes(
-        _SYSTEM_MODULE_PERMISSION_CODE,
-        PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
-        "feature.system.role_permissions.manage",
-        PERM_AUTHZ_ROLE_PERMISSIONS_VIEW,
-        PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
-    )
-)
-
-_SYSTEM_ADMIN_REQUIRED_PERMISSION_CODES = frozenset(
-    _codes(
-        _SYSTEM_MODULE_PERMISSION_CODE,
-        PAGE_PERMISSION_BY_PAGE_CODE.get("user"),
-        PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
-        "feature.system.permission_catalog.view",
-        "feature.system.role_permissions.manage",
-        PERM_AUTHZ_PERMISSION_CATALOG_VIEW,
-        PERM_AUTHZ_MY_PERMISSIONS_VIEW,
-        PERM_AUTHZ_ROLE_PERMISSIONS_VIEW,
-        PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
-    )
-)
-
-_AUTHZ_PRIVILEGED_HIERARCHY_CODES = frozenset(
-    _codes(
-        _SYSTEM_MODULE_PERMISSION_CODE,
-        PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
-        "feature.system.role_permissions.manage",
-    )
-)
-
-_SYSTEM_ADMIN_REQUIRED_HIERARCHY_CODES = frozenset(
-    _codes(
-        _SYSTEM_MODULE_PERMISSION_CODE,
-        PAGE_PERMISSION_BY_PAGE_CODE.get("user"),
-        PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
-        "feature.system.permission_catalog.view",
-        "feature.system.role_permissions.manage",
-    )
-)
 
 
 def _guard_role_permission_codes(
@@ -110,27 +67,6 @@ def _guard_role_permission_codes(
     effective_codes = set(permission_codes)
     if allowed_codes is not None:
         effective_codes.intersection_update(allowed_codes)
-
-    privileged_codes = (
-        _AUTHZ_PRIVILEGED_HIERARCHY_CODES
-        if hierarchy_only
-        else _AUTHZ_PRIVILEGED_PERMISSION_CODES
-    )
-    if allowed_codes is not None:
-        privileged_codes = privileged_codes.intersection(allowed_codes)
-
-    if role_code == ROLE_SYSTEM_ADMIN:
-        required_codes = (
-            _SYSTEM_ADMIN_REQUIRED_HIERARCHY_CODES
-            if hierarchy_only
-            else _SYSTEM_ADMIN_REQUIRED_PERMISSION_CODES
-        )
-        if allowed_codes is not None:
-            required_codes = required_codes.intersection(allowed_codes)
-        effective_codes.update(required_codes)
-    else:
-        effective_codes.difference_update(privileged_codes)
-
     return effective_codes
 
 
@@ -447,7 +383,7 @@ def _snapshot_capability_pack_module_state(
     *,
     module_code: str,
 ) -> list[dict[str, object]]:
-    role_rows = db.execute(select(Role)).scalars().all()
+    role_rows = db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
     ordered_roles = sorted(role_rows, key=_role_sort_key)
     snapshot: list[dict[str, object]] = []
     for role_row in ordered_roles:
@@ -785,7 +721,7 @@ def _list_catalog_rows_by_module(db: Session, *, module_code: str) -> list[Permi
 
 
 def _user_role_codes(user: User) -> list[str]:
-    return sorted({role.code for role in user.roles})
+    return sorted({role.code for role in user.roles if role.is_enabled})
 
 
 def get_user_permission_codes(
@@ -911,7 +847,7 @@ def get_role_permission_matrix(
     module_codes = list_permission_modules(db)
     valid_codes = [row.permission_code for row in catalog_rows]
 
-    role_rows = db.execute(select(Role)).scalars().all()
+    role_rows = db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
     role_rows.sort(key=_role_sort_key)
     role_codes = [row.code for row in role_rows]
 
@@ -1013,7 +949,7 @@ def update_role_permission_matrix(
         for row in catalog_rows
     }
 
-    role_rows = db.execute(select(Role)).scalars().all()
+    role_rows = db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
     role_map = {row.code: row for row in role_rows}
     role_input_map: dict[str, set[str]] = {}
     for item in role_items:
@@ -1364,7 +1300,7 @@ def _role_template_capability_codes(
 
 def _role_template_description(role_code: str) -> str:
     if role_code == ROLE_SYSTEM_ADMIN:
-        return "系统管理员固定全权限，仅展示模板结果。"
+        return "推荐授予当前模块全部能力。"
     if role_code == ROLE_PRODUCTION_ADMIN:
         return "推荐授予当前模块全部能力。"
     if role_code == ROLE_QUALITY_ADMIN:
@@ -1801,7 +1737,7 @@ def preview_permission_hierarchy(
             "role_results": [],
         }
 
-    role_rows = db.execute(select(Role)).scalars().all()
+    role_rows = db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
     role_name_by_code = {row.code: row.name for row in role_rows}
     role_results: list[dict[str, object]] = []
     visited_role_codes: set[str] = set()
@@ -1897,23 +1833,6 @@ def get_capability_pack_role_config(
         module_code=module_code,
     )
     module_capability_codes = _capability_permission_codes_for_module(config["module_code"])
-    if str(config["role_code"]) == ROLE_SYSTEM_ADMIN:
-        all_capability_codes = sorted(module_capability_codes)
-        hierarchy_codes = _hierarchy_permission_codes_for_module(str(config["module_code"]))
-        return {
-            "role_code": config["role_code"],
-            "role_name": config["role_name"],
-            "readonly": True,
-            "module_code": config["module_code"],
-            "module_enabled": True,
-            "granted_capability_codes": all_capability_codes,
-            "effective_capability_codes": all_capability_codes,
-            "effective_page_permission_codes": sorted(
-                set(hierarchy_codes["page_permission_codes"])
-            ),
-            "auto_linked_dependencies": [],
-        }
-
     granted_capability_codes = sorted(
         set(config["granted_feature_permission_codes"]).intersection(module_capability_codes)
     )
@@ -2083,8 +2002,6 @@ def update_capability_pack_role_config(
     rollback_of_change_log_id: int | None = None,
     remark: str | None = None,
 ) -> dict[str, object]:
-    if role_code == ROLE_SYSTEM_ADMIN:
-        raise ValueError("system_admin 为系统默认全能力角色，不支持配置修改")
     ensure_authz_defaults(db)
     result = _calculate_capability_pack_role_update(
         db,
@@ -2174,10 +2091,8 @@ def apply_capability_pack_role_configs(
 
     for item in role_items:
         role_code = str(item.get("role_code", "")).strip()
-        if role_code == ROLE_SYSTEM_ADMIN:
-            raise ValueError("system_admin 为系统默认全能力角色，不支持配置修改")
 
-    role_rows = db.execute(select(Role)).scalars().all()
+    role_rows = db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
     role_name_by_code = {row.code: row.name for row in role_rows}
     visited_role_codes: set[str] = set()
     results: list[dict[str, object]] = []

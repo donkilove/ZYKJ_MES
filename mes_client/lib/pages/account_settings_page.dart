@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/app_session.dart';
 import '../models/user_models.dart';
 import '../services/api_exception.dart';
+import '../services/auth_service.dart';
 import '../services/user_service.dart';
 
 class AccountSettingsPage extends StatefulWidget {
@@ -25,9 +26,11 @@ class AccountSettingsPage extends StatefulWidget {
 
 class _AccountSettingsPageState extends State<AccountSettingsPage> {
   late final UserService _userService;
+  final AuthService _authService = AuthService();
 
   bool _loading = false;
   bool _changing = false;
+  bool _loggingOut = false;
   String _message = '';
   ProfileResult? _profile;
   CurrentSessionResult? _session;
@@ -159,6 +162,23 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     }
   }
 
+  Future<void> _logout() async {
+    setState(() => _loggingOut = true);
+    try {
+      await _authService.logout(
+        baseUrl: widget.session.baseUrl,
+        accessToken: widget.session.accessToken,
+      );
+    } catch (_) {
+      // 忽略退出登录错误，直接跳转
+    } finally {
+      if (mounted) {
+        setState(() => _loggingOut = false);
+        widget.onLogout();
+      }
+    }
+  }
+
   Widget _buildProfileCard() {
     final profile = _profile;
     if (profile == null) {
@@ -173,7 +193,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
             Text('用户名：${profile.username}'),
             Text('显示名称：${profile.fullName ?? '-'}'),
             Text('角色：${profile.roleNames.join('、')}'),
-            Text('工段：${profile.stageName ?? '-'}'),
+            Text('工段：${profile.stageName ?? '/'}'),
             Text('账号状态：${profile.isActive ? '启用' : '停用'}'),
             Text('创建时间：${_formatDateTime(profile.createdAt)}'),
             Text('最近登录：${_formatDateTime(profile.lastLoginAt)}'),
@@ -214,6 +234,14 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               ),
               Text('过期时间：${_formatDateTime(currentSession.expiresAt)}'),
               Text('剩余秒数：${currentSession.remainingSeconds}'),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton(
+                  onPressed: _loggingOut ? null : _logout,
+                  child: Text(_loggingOut ? '退出中...' : '退出当前登录'),
+                ),
+              ),
             ],
           ],
         ),
@@ -262,6 +290,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                 validator: (value) {
                   if (value == null || value.length < 6) {
                     return '新密码长度不能少于 6 位';
+                  }
+                  if (value == _oldPasswordController.text) {
+                    return '新密码不能与原密码相同';
                   }
                   return null;
                 },

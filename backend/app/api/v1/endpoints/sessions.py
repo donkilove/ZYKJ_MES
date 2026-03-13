@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permission
+from app.core.rbac import ROLE_SYSTEM_ADMIN
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
@@ -17,7 +18,7 @@ from app.schemas.session import (
     OnlineSessionListResult,
 )
 from app.services.audit_service import write_audit_log
-from app.services.session_service import force_offline_sessions, list_login_logs, list_online_sessions
+from app.services.session_service import delete_expired_login_logs, force_offline_sessions, list_login_logs, list_online_sessions
 
 
 router = APIRouter()
@@ -34,6 +35,7 @@ def get_login_logs(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("user.sessions.login_logs.list")),
 ) -> ApiResponse[LoginLogListResult]:
+    delete_expired_login_logs(db)
     total, items = list_login_logs(
         db,
         page=page,
@@ -106,6 +108,9 @@ def force_offline(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("user.sessions.force_offline")),
 ) -> ApiResponse[ForceOfflineResult]:
+    role_codes = {role.code for role in current_user.roles}
+    if ROLE_SYSTEM_ADMIN not in role_codes:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅系统管理员可执行强制下线")
     affected = force_offline_sessions(db, session_token_ids=[payload.session_token_id])
     if affected < 1:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Online session not found")
@@ -130,6 +135,9 @@ def batch_force_offline(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("user.sessions.force_offline.batch")),
 ) -> ApiResponse[ForceOfflineResult]:
+    role_codes = {role.code for role in current_user.roles}
+    if ROLE_SYSTEM_ADMIN not in role_codes:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅系统管理员可执行批量强制下线")
     affected = force_offline_sessions(db, session_token_ids=payload.session_token_ids)
     write_audit_log(
         db,

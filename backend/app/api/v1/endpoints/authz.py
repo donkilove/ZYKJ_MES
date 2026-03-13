@@ -37,6 +37,7 @@ from app.schemas.authz import (
     RolePermissionUpdateResult,
 )
 from app.schemas.common import ApiResponse, success_response
+from app.services.audit_service import write_audit_log
 from app.services.authz_service import (
     AuthzRevisionConflictError,
     apply_capability_pack_role_configs,
@@ -400,6 +401,16 @@ def apply_capability_packs_batch_api(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    write_audit_log(
+        db,
+        action_code="authz.capability_pack.batch_apply",
+        action_name="保存功能权限配置",
+        target_type="authz_module",
+        target_id=payload.module_code,
+        operator=current_user,
+        after_data={"module_code": payload.module_code, "role_count": len(payload.role_items)},
+    )
+    db.commit()
     return success_response(CapabilityPackPreviewResult(**result), message="updated")
 
 

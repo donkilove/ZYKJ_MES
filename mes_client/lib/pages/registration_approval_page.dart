@@ -87,6 +87,32 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     return '${local.year}-$mm-$dd $hh:$min';
   }
 
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'pending':
+        return '待审批';
+      case 'approved':
+        return '已通过';
+      case 'rejected':
+        return '已驳回';
+      default:
+        return status;
+    }
+  }
+
+  Color _statusColor(String status, ThemeData theme) {
+    switch (status) {
+      case 'pending':
+        return Colors.orange;
+      case 'approved':
+        return Colors.green;
+      case 'rejected':
+        return theme.colorScheme.error;
+      default:
+        return theme.colorScheme.onSurfaceVariant;
+    }
+  }
+
   String? _defaultRoleCode() {
     if (_roles.isEmpty) {
       return null;
@@ -116,7 +142,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
 
     try {
       final result = await Future.wait<dynamic>([
-        _userService.listRegistrationRequests(page: 1, pageSize: 100),
+        _userService.listRegistrationRequests(page: 1, pageSize: 100, status: 'pending'),
         _userService.listRoles(),
         _userService.listProcesses(),
         _craftService.listStages(pageSize: 500, enabled: true),
@@ -168,6 +194,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       final result = await _userService.listRegistrationRequests(
         page: 1,
         pageSize: 100,
+        status: 'pending',
       );
       if (!mounted) {
         return;
@@ -203,6 +230,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     required String account,
     required String roleCode,
     required List<String> processCodes,
+    String? password,
   }) async {
     try {
       await _userService.approveRegistrationRequest(
@@ -210,6 +238,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         account: account,
         roleCodes: [roleCode],
         processCodes: processCodes,
+        password: password,
       );
       if (!mounted) {
         return false;
@@ -248,6 +277,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
 
     final formKey = GlobalKey<FormState>();
     final accountController = TextEditingController(text: item.account);
+    final passwordController = TextEditingController();
     String? selectedRoleCode = _defaultRoleCode();
     int? selectedStageId;
     Set<String> selectedProcessCodes = <String>{};
@@ -283,6 +313,22 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                             }
                             if (value.trim().length < 2) {
                               return '账号至少 2 个字符';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: passwordController,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                            labelText: '初始密码',
+                            border: OutlineInputBorder(),
+                            helperText: '留空则使用系统默认密码',
+                          ),
+                          validator: (value) {
+                            if (value != null && value.isNotEmpty && value.length < 6) {
+                              return '密码至少 6 个字符';
                             }
                             return null;
                           },
@@ -405,6 +451,9 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                       account: accountController.text.trim(),
                       roleCode: selectedRoleCode!,
                       processCodes: orderedProcessCodes,
+                      password: passwordController.text.trim().isEmpty
+                          ? null
+                          : passwordController.text.trim(),
                     );
                     if (success && context.mounted) {
                       Navigator.of(context).pop(true);
@@ -556,114 +605,56 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                       child: Scrollbar(
                         controller: _requestListScrollController,
                         thumbVisibility: true,
-                        child: ListView.separated(
+                        child: SingleChildScrollView(
                           controller: _requestListScrollController,
-                          itemCount: _items.length,
-                          separatorBuilder: (context, index) =>
-                              const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final item = _items[index];
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 12,
-                                horizontal: 16,
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item.account,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '提交时间：${_formatTime(item.createdAt)}',
-                                          style: TextStyle(
-                                            color: theme
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                          child: DataTable(
+                            columnSpacing: 16,
+                            headingRowColor: WidgetStateProperty.all(
+                              theme.colorScheme.surfaceContainerHighest,
+                            ),
+                            columns: const [
+                              DataColumn(label: Text('用户名')),
+                              DataColumn(label: Text('申请时间')),
+                              DataColumn(label: Text('申请状态')),
+                              DataColumn(label: Text('操作')),
+                            ],
+                            rows: _items.map((item) {
+                              return DataRow(cells: [
+                                DataCell(Text(item.account)),
+                                DataCell(Text(_formatTime(item.createdAt))),
+                                DataCell(Text(
+                                  _statusLabel(item.status),
+                                  style: TextStyle(
+                                    color: _statusColor(item.status, theme),
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      InkWell(
-                                        onTap: widget.canReviewAction
+                                )),
+                                DataCell(Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (item.status == 'pending') ...[
+                                      TextButton(
+                                        onPressed: widget.canReviewAction
                                             ? () => _openApproveDialog(item)
                                             : null,
-                                        borderRadius: BorderRadius.circular(20),
-                                        child: Container(
-                                          alignment: Alignment.center,
-                                          margin: const EdgeInsets.symmetric(
-                                            horizontal: 4,
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: theme.colorScheme.primary,
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '通过',
-                                            style: TextStyle(
-                                              color:
-                                                  theme.colorScheme.onPrimary,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
+                                        child: const Text('通过'),
                                       ),
-                                      InkWell(
-                                        onTap: widget.canReviewAction
+                                      TextButton(
+                                        onPressed: widget.canReviewAction
                                             ? () => _confirmReject(item)
                                             : null,
-                                        borderRadius: BorderRadius.circular(20),
-                                        child: Container(
-                                          alignment: Alignment.center,
-                                          margin: const EdgeInsets.symmetric(
-                                            horizontal: 4,
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: theme.colorScheme.error,
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '驳回',
-                                            style: TextStyle(
-                                              color: theme.colorScheme.onError,
-                                              fontSize: 12,
-                                            ),
-                                          ),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: theme.colorScheme.error,
                                         ),
+                                        child: const Text('驳回'),
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
+                                    ] else
+                                      const Text('-', style: TextStyle(color: Colors.grey)),
+                                  ],
+                                )),
+                              ]);
+                            }).toList(),
+                          ),
                         ),
                       ),
                     ),

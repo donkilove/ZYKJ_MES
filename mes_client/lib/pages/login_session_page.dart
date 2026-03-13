@@ -28,6 +28,8 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   final TextEditingController _sessionKeywordController =
       TextEditingController();
   bool? _logSuccessFilter;
+  DateTime? _logStartTime;
+  DateTime? _logEndTime;
 
   bool _loadingLogs = false;
   bool _loadingSessions = false;
@@ -81,6 +83,8 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         pageSize: 200,
         username: _logUsernameController.text.trim(),
         success: _logSuccessFilter,
+        startTime: _logStartTime,
+        endTime: _logEndTime,
       );
       if (!mounted) {
         return;
@@ -205,13 +209,23 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   }
 
   Widget _buildLoginLogsTab() {
+    final startLabel = _logStartTime != null
+        ? '${_logStartTime!.year}-${_logStartTime!.month.toString().padLeft(2, '0')}-${_logStartTime!.day.toString().padLeft(2, '0')}'
+        : '开始日期';
+    final endLabel = _logEndTime != null
+        ? '${_logEndTime!.year}-${_logEndTime!.month.toString().padLeft(2, '0')}-${_logEndTime!.day.toString().padLeft(2, '0')}'
+        : '结束日期';
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
+              SizedBox(
+                width: 160,
                 child: TextField(
                   controller: _logUsernameController,
                   decoration: const InputDecoration(
@@ -222,7 +236,6 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                   onSubmitted: (_) => _loadLoginLogs(),
                 ),
               ),
-              const SizedBox(width: 8),
               DropdownButton<bool?>(
                 value: _logSuccessFilter,
                 items: const [
@@ -231,13 +244,51 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                   DropdownMenuItem<bool?>(value: false, child: Text('失败')),
                 ],
                 onChanged: (value) {
-                  setState(() {
-                    _logSuccessFilter = value;
-                  });
+                  setState(() => _logSuccessFilter = value);
                   _loadLoginLogs();
                 },
               ),
-              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(startLabel),
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _logStartTime ?? DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now().add(const Duration(days: 1)),
+                  );
+                  if (picked != null) {
+                    setState(() => _logStartTime = picked);
+                  }
+                },
+              ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(endLabel),
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _logEndTime ?? DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now().add(const Duration(days: 1)),
+                  );
+                  if (picked != null) {
+                    setState(() => _logEndTime = DateTime(picked.year, picked.month, picked.day, 23, 59, 59));
+                  }
+                },
+              ),
+              if (_logStartTime != null || _logEndTime != null)
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _logStartTime = null;
+                      _logEndTime = null;
+                    });
+                    _loadLoginLogs();
+                  },
+                  child: const Text('清除时间'),
+                ),
               OutlinedButton(
                 onPressed: _loadLoginLogs,
                 child: const Text('查询'),
@@ -265,7 +316,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                       ),
                       subtitle: Text(
                         '登录时间=${_formatDateTime(item.loginTime)}\n'
-                        'IP=${item.ipAddress ?? '-'}\n'
+                        'IP=${item.ipAddress ?? '-'} | 终端=${item.terminalInfo ?? '-'}\n'
                         '失败原因=${item.failureReason ?? '-'}',
                       ),
                       isThreeLine: true,
@@ -339,10 +390,10 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                           : null,
                       title: Text('${item.username}（${item.roleNames.join('、')}）'),
                       subtitle: Text(
+                        '工段=${item.stageName ?? '-'} | 状态=${item.status}\n'
                         '登录时间=${_formatDateTime(item.loginTime)}\n'
                         '最后活跃=${_formatDateTime(item.lastActiveAt)}\n'
-                        '过期时间=${_formatDateTime(item.expiresAt)}\n'
-                        'IP=${item.ipAddress ?? '-'}',
+                        'IP=${item.ipAddress ?? '-'} | 终端=${item.terminalInfo ?? '-'}',
                       ),
                       isThreeLine: true,
                       secondary: IconButton(

@@ -24,6 +24,7 @@ class UserService {
     String? keyword,
     String? roleCode,
     int? stageId,
+    bool? isOnline,
     bool? isActive,
     bool includeDeleted = false,
   }) async {
@@ -36,6 +37,9 @@ class UserService {
     }
     if (stageId != null) {
       query['stage_id'] = '$stageId';
+    }
+    if (isOnline != null) {
+      query['is_online'] = '$isOnline';
     }
     if (isActive != null) {
       query['is_active'] = '$isActive';
@@ -487,6 +491,8 @@ class UserService {
     required int pageSize,
     String? username,
     bool? success,
+    DateTime? startTime,
+    DateTime? endTime,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (username != null && username.trim().isNotEmpty) {
@@ -494,6 +500,12 @@ class UserService {
     }
     if (success != null) {
       query['success'] = '$success';
+    }
+    if (startTime != null) {
+      query['start_time'] = startTime.toUtc().toIso8601String();
+    }
+    if (endTime != null) {
+      query['end_time'] = endTime.toUtc().toIso8601String();
     }
 
     final uri = Uri.parse(

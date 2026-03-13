@@ -66,6 +66,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
   List<ProcessItem> _processes = const [];
   List<CraftStageItem> _stages = const [];
   int _total = 0;
+  List<String> _myRoleCodes = const [];
+
+  bool _isCurrentUserSystemAdmin() =>
+      _myRoleCodes.contains(_roleSystemAdmin);
 
   @override
   void initState() {
@@ -177,26 +181,26 @@ class _UserManagementPageState extends State<UserManagementPage> {
           roleCode: _filterRoleCode,
           stageId: _filterStageId,
           isActive: _filterIsActive,
+          isOnline: _filterIsOnline,
         ),
+        _userService.getMyProfile(),
       ]);
       final roles = result[0] as RoleListResult;
       final processes = result[1] as ProcessListResult;
       final stages = result[2] as CraftStageListResult;
       final users = result[3] as UserListResult;
+      final myProfile = result[4] as ProfileResult;
 
       if (!mounted) {
         return;
       }
-      final userItems = users.items;
-      final filtered = _filterIsOnline == null
-          ? userItems
-          : userItems.where((u) => u.isOnline == _filterIsOnline).toList();
       setState(() {
         _roles = roles.items;
         _processes = processes.items;
         _stages = stages.items;
-        _users = filtered;
-        _total = _filterIsOnline == null ? users.total : filtered.length;
+        _users = users.items;
+        _total = users.total;
+        _myRoleCodes = myProfile.roleCodes;
       });
     } catch (error) {
       if (!mounted) {
@@ -236,17 +240,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
         roleCode: _filterRoleCode,
         stageId: _filterStageId,
         isActive: _filterIsActive,
+        isOnline: _filterIsOnline,
       );
       if (!mounted) {
         return;
       }
-      // 前端过滤在线状态（后端不支持在线状态筛选参数）
-      final filtered = _filterIsOnline == null
-          ? result.items
-          : result.items.where((u) => u.isOnline == _filterIsOnline).toList();
       setState(() {
-        _users = filtered;
-        _total = _filterIsOnline == null ? result.total : filtered.length;
+        _users = result.items;
+        _total = result.total;
       });
     } catch (error) {
       if (!mounted) {
@@ -279,6 +280,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
     final accountController = TextEditingController();
     final passwordController = TextEditingController();
+    final remarkController = TextEditingController();
+    bool isActive = true;
     final formKey = GlobalKey<FormState>();
     String? selectedRoleCode;
     int? selectedStageId;
@@ -333,6 +336,32 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             }
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: remarkController,
+                          decoration: const InputDecoration(
+                            labelText: '备注（可选）',
+                          ),
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Text('账号状态：'),
+                            const SizedBox(width: 8),
+                            ChoiceChip(
+                              label: const Text('启用'),
+                              selected: isActive,
+                              onSelected: (_) => setDialogState(() => isActive = true),
+                            ),
+                            const SizedBox(width: 8),
+                            ChoiceChip(
+                              label: const Text('停用'),
+                              selected: !isActive,
+                              onSelected: (_) => setDialogState(() => isActive = false),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 16),
                         const Text(
@@ -455,6 +484,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         password: passwordController.text,
                         roleCodes: [selectedRoleCode!],
                         processCodes: orderedProcessCodes,
+                        remark: remarkController.text.trim().isEmpty ? null : remarkController.text.trim(),
+                        isActive: isActive,
                       );
                       if (context.mounted) {
                         Navigator.of(context).pop(true);
@@ -484,6 +515,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
     accountController.dispose();
     passwordController.dispose();
+    remarkController.dispose();
 
     if (created == true) {
       await _loadUsers();
@@ -497,8 +529,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
     final accountController = TextEditingController(text: user.username);
     final passwordController = TextEditingController();
+    final remarkController = TextEditingController(text: user.remark ?? '');
     final formKey = GlobalKey<FormState>();
     final hasLegacyMultiRoles = user.roleCodes.length > 1;
+    final canEditAccount = _isCurrentUserSystemAdmin();
     String? selectedRoleCode = _pickPreferredRoleCode(user.roleCodes);
     int? selectedStageId = _isOperator(selectedRoleCode)
         ? _getStageIdFromProcessCodes(user.processCodes.toSet())
@@ -535,8 +569,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           ),
                         TextFormField(
                           controller: accountController,
-                          decoration: const InputDecoration(
+                          readOnly: !canEditAccount,
+                          decoration: InputDecoration(
                             labelText: '账号（用户名与姓名统一）',
+                            helperText: canEditAccount ? null : '仅系统管理员可修改账号',
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
@@ -565,6 +601,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             }
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: remarkController,
+                          decoration: const InputDecoration(
+                            labelText: '备注（可选）',
+                          ),
+                          maxLines: 2,
                         ),
                         const SizedBox(height: 16),
                         const Text(
@@ -684,12 +728,17 @@ class _UserManagementPageState extends State<UserManagementPage> {
                     try {
                       await _userService.updateUser(
                         userId: user.id,
-                        account: accountController.text.trim(),
+                        account: canEditAccount
+                            ? accountController.text.trim()
+                            : null,
                         password: passwordController.text.trim().isEmpty
                             ? null
                             : passwordController.text.trim(),
                         roleCodes: [selectedRoleCode!],
                         processCodes: orderedProcessCodes,
+                        remark: remarkController.text.trim().isEmpty
+                            ? null
+                            : remarkController.text.trim(),
                       );
                       if (context.mounted) {
                         Navigator.of(context).pop(true);
@@ -719,6 +768,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
     accountController.dispose();
     passwordController.dispose();
+    remarkController.dispose();
 
     if (updated == true) {
       await _loadUsers();
@@ -1172,167 +1222,67 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       child: Scrollbar(
                         controller: _userListScrollController,
                         thumbVisibility: true,
-                        child: ListView.separated(
+                        child: SingleChildScrollView(
                           controller: _userListScrollController,
-                          itemCount: _users.length,
-                          separatorBuilder: (context, index) =>
-                              const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final user = _users[index];
-                            final statusLabel = user.isOnline ? '在线' : '离线';
-                            final statusColor = user.isOnline
-                                ? Colors.green
-                                : theme.colorScheme.outline;
-                            final activeLabel = user.isActive ? '启用' : '停用';
-                            final activeColor = user.isActive
-                                ? Colors.blue
-                                : Colors.red;
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 12,
-                                horizontal: 16,
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          user.username,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '角色：${user.roleNames.isEmpty ? '-' : user.roleNames.join('、')}'
-                                          '\n工段：${user.stageNames.isEmpty ? '-' : user.stageNames.join('、')}',
-                                          style: TextStyle(
-                                            color: theme
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    alignment: Alignment.center,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: statusColor.withValues(
-                                        alpha: 0.14,
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: statusColor.withValues(
-                                          alpha: 0.45,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      statusLabel,
-                                      style: TextStyle(
-                                        color: statusColor,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    alignment: Alignment.center,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: activeColor.withValues(
-                                        alpha: 0.14,
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: activeColor.withValues(
-                                          alpha: 0.45,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      activeLabel,
-                                      style: TextStyle(
-                                        color: activeColor,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    alignment: Alignment.center,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: theme.colorScheme.primary,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: PopupMenuButton<_UserAction>(
-                                      color: theme.colorScheme.primaryContainer,
-                                      onSelected: (action) {
-                                        _handleUserAction(action, user);
-                                      },
-                                      itemBuilder: (context) => [
-                                        const PopupMenuItem(
-                                          value: _UserAction.edit,
-                                          child: Text('编辑'),
-                                        ),
-                                        if (user.isActive)
-                                          const PopupMenuItem(
-                                            value: _UserAction.disable,
-                                            child: Text('停用'),
-                                          )
-                                        else
-                                          const PopupMenuItem(
-                                            value: _UserAction.enable,
-                                            child: Text('启用'),
-                                          ),
-                                        const PopupMenuItem(
-                                          value: _UserAction.resetPassword,
-                                          child: Text('重置密码'),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: _UserAction.delete,
-                                          child: Text('删除'),
-                                        ),
-                                      ],
-                                      child: Text(
-                                        '操作',
-                                        style: TextStyle(
-                                          color: theme.colorScheme.onPrimary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                          child: DataTable(
+                            columnSpacing: 16,
+                            headingRowColor: WidgetStateProperty.all(
+                              theme.colorScheme.surfaceContainerHighest,
+                            ),
+                            columns: const [
+                              DataColumn(label: Text('账号')),
+                              DataColumn(label: Text('角色')),
+                              DataColumn(label: Text('工段')),
+                              DataColumn(label: Text('在线')),
+                              DataColumn(label: Text('状态')),
+                              DataColumn(label: Text('创建时间')),
+                              DataColumn(label: Text('操作')),
+                            ],
+                            rows: _users.map((user) {
+                              final statusLabel = user.isOnline ? '在线' : '离线';
+                              final statusColor = user.isOnline
+                                  ? Colors.green
+                                  : theme.colorScheme.outline;
+                              final activeLabel = user.isActive ? '启用' : '停用';
+                              final activeColor = user.isActive
+                                  ? Colors.blue
+                                  : Colors.red;
+                              final createdAtStr = user.createdAt != null
+                                  ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
+                                  : '-';
+                            return DataRow(cells: [
+                              DataCell(Text(user.username)),
+                              DataCell(Text(
+                                user.roleNames.isEmpty ? '-' : user.roleNames.join('、'),
+                              )),
+                              DataCell(Text(
+                                user.stageNames.isEmpty ? '-' : user.stageNames.join('、'),
+                              )),
+                              DataCell(Text(
+                                statusLabel,
+                                style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+                              )),
+                              DataCell(Text(
+                                activeLabel,
+                                style: TextStyle(color: activeColor, fontWeight: FontWeight.w600),
+                              )),
+                              DataCell(Text(createdAtStr)),
+                              DataCell(PopupMenuButton<_UserAction>(
+                                onSelected: (action) => _handleUserAction(action, user),
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(value: _UserAction.edit, child: Text('编辑')),
+                                  if (user.isActive)
+                                    const PopupMenuItem(value: _UserAction.disable, child: Text('停用'))
+                                  else
+                                    const PopupMenuItem(value: _UserAction.enable, child: Text('启用')),
+                                  const PopupMenuItem(value: _UserAction.resetPassword, child: Text('重置密码')),
+                                  const PopupMenuItem(value: _UserAction.delete, child: Text('删除')),
                                 ],
-                              ),
-                            );
-                          },
+                                child: const Text('操作'),
+                              )),
+                            ]);
+                            }).toList(),
+                          ),
                         ),
                       ),
                     ),

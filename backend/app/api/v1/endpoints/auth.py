@@ -165,7 +165,15 @@ def logout(
 
     if sid:
         mark_session_logout(db, session_token_id=sid, forced_offline=False)
-        db.commit()
+    write_audit_log(
+        db,
+        action_code="auth.logout",
+        action_name="主动退出登录",
+        target_type="session",
+        target_id=sid,
+        operator=current_user,
+    )
+    db.commit()
     clear_user(current_user.id)
     return success_response({"logged_out": True}, message="logged_out")
 
@@ -226,6 +234,18 @@ def list_accounts(
 ) -> ApiResponse[AccountListResult]:
     accounts = list_all_usernames(db)
     return success_response(AccountListResult(accounts=accounts))
+
+
+@router.get("/register-requests/{request_id}", response_model=ApiResponse[RegistrationRequestItem])
+def get_registration_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("user.registration_requests.list")),
+) -> ApiResponse[RegistrationRequestItem]:
+    request_row = get_registration_request_by_id(db, request_id)
+    if not request_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration request not found")
+    return success_response(_to_registration_item(request_row))
 
 
 @router.get("/register-requests", response_model=ApiResponse[RegistrationRequestListResult])

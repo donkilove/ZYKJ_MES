@@ -125,6 +125,7 @@ def get_users(
     role_code: str | None = Query(default=None),
     stage_id: int | None = Query(default=None, ge=1),
     is_active: bool | None = Query(default=None),
+    is_online: bool | None = Query(default=None),
     include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("user.users.list")),
@@ -140,6 +141,9 @@ def get_users(
         include_deleted=include_deleted,
     )
     online_user_ids = list_online_user_ids(db)
+    if is_online is not None:
+        users = [u for u in users if (u.id in online_user_ids) == is_online]
+        total = len(users)
     result = UserListResult(total=total, items=[to_user_item(user, online_user_ids=online_user_ids) for user in users])
     return success_response(result)
 

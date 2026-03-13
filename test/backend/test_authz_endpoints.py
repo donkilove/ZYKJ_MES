@@ -409,6 +409,7 @@ def test_capability_pack_batch_apply_rejects_stale_revision(db, factory) -> None
 
 
 def test_capability_pack_batch_apply_rejects_system_admin(db, factory) -> None:
+    """system_admin 已改为可配置角色，此测试验证配置可正常保存。"""
     factory.ensure_default_roles()
     sys_admin = factory.user(
         username="authz_batch_apply_system_admin",
@@ -422,23 +423,22 @@ def test_capability_pack_batch_apply_rejects_system_admin(db, factory) -> None:
         _=sys_admin,
     )
 
-    with pytest.raises(HTTPException) as exc_info:
-        authz.apply_capability_packs_batch_api(
-            CapabilityPackBatchApplyRequest(
-                module_code="production",
-                expected_revision=catalog_resp.data.module_revision,
-                role_items=[
-                    {
-                        "role_code": ROLE_SYSTEM_ADMIN,
-                        "module_enabled": True,
-                        "capability_codes": ["feature.production.order_query.execute"],
-                    }
-                ],
-                remark="invalid system admin update",
-            ),
-            db=db,
-            current_user=sys_admin,
-        )
+    # system_admin 现在可以正常配置权限，不应抛出异常
+    resp = authz.apply_capability_packs_batch_api(
+        CapabilityPackBatchApplyRequest(
+            module_code="production",
+            expected_revision=catalog_resp.data.module_revision,
+            role_items=[
+                {
+                    "role_code": ROLE_SYSTEM_ADMIN,
+                    "module_enabled": True,
+                    "capability_codes": ["feature.production.order_query.execute"],
+                }
+            ],
+            remark="system_admin configurable update",
+        ),
+        db=db,
+        current_user=sys_admin,
+    )
 
-    assert exc_info.value.status_code == 400
-    assert "system_admin" in str(exc_info.value.detail)
+    assert resp.code == 0

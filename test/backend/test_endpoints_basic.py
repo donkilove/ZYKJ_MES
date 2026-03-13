@@ -158,7 +158,7 @@ def test_roles_processes_users_ui_endpoints(db, factory) -> None:
     )
     assert user_created.data.username == "ep_user"
 
-    user_list = users.get_users(page=1, page_size=20, keyword=None, role_code=None, stage_id=None, is_active=None, include_deleted=False, db=db, _=admin)
+    user_list = users.get_users(page=1, page_size=20, keyword=None, role_code=None, stage_id=None, is_online=None, is_active=None, include_deleted=False, db=db, _=admin)
     assert user_list.data.total >= 1
 
     user_detail = users.get_user_detail(user_created.data.id, db=db, _=admin)

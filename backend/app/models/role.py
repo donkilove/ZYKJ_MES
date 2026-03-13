@@ -33,5 +33,12 @@ class Role(Base, TimestampMixin):
         server_default=text("true"),
         index=True,
     )
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+        index=True,
+    )
 
     users = relationship("User", secondary=user_roles, back_populates="roles")
