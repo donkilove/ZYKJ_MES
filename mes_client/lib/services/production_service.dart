@@ -25,6 +25,8 @@ class ProductionService {
     required int pageSize,
     String? keyword,
     String? status,
+    String? productName,
+    bool? pipelineEnabled,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -32,6 +34,12 @@ class ProductionService {
     }
     if (status != null && status.trim().isNotEmpty) {
       query['status'] = status.trim();
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      query['product_name'] = productName.trim();
+    }
+    if (pipelineEnabled != null) {
+      query['pipeline_enabled'] = pipelineEnabled ? 'true' : 'false';
     }
     final uri = Uri.parse('$_basePath/orders').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
@@ -54,6 +62,41 @@ class ProductionService {
       total: (data['total'] as int?) ?? 0,
       items: items,
     );
+  }
+
+  Future<Map<String, dynamic>> exportOrders({
+    String? keyword,
+    String? status,
+    String? productName,
+    bool? pipelineEnabled,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      payload['keyword'] = keyword.trim();
+    }
+    if (status != null && status.trim().isNotEmpty) {
+      payload['status'] = status.trim();
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      payload['product_name'] = productName.trim();
+    }
+    if (pipelineEnabled != null) {
+      payload['pipeline_enabled'] = pipelineEnabled;
+    }
+    final uri = Uri.parse('$_basePath/orders/export');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode(payload),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return body['data'] as Map<String, dynamic>;
   }
 
   Future<ProductionOrderItem> createOrder({
@@ -622,6 +665,38 @@ class ProductionService {
     }
     final data = body['data'] as Map<String, dynamic>;
     return ProductionExportResult.fromJson(data);
+  }
+
+  Future<ScrapStatisticsItem> getScrapStatisticsDetail({
+    required int scrapId,
+  }) async {
+    final uri = Uri.parse('$_basePath/scrap-statistics/$scrapId');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return ScrapStatisticsItem.fromJson(data);
+  }
+
+  Future<RepairOrderDetailItem> getRepairOrderDetail({
+    required int repairOrderId,
+  }) async {
+    final uri = Uri.parse('$_basePath/repair-orders/$repairOrderId/detail');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return RepairOrderDetailItem.fromJson(data);
   }
 
   Future<RepairOrderListResult> getRepairOrders({

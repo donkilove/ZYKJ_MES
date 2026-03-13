@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import csv
+import io
 from collections.abc import Iterable
 from datetime import UTC, date, datetime
 from uuid import uuid4
@@ -790,6 +793,12 @@ def list_orders(
     page_size: int,
     keyword: str | None,
     status: str | None,
+    product_name: str | None = None,
+    pipeline_enabled: bool | None = None,
+    start_date_from: date | None = None,
+    start_date_to: date | None = None,
+    due_date_from: date | None = None,
+    due_date_to: date | None = None,
 ) -> tuple[int, list[ProductionOrder]]:
     stmt = select(ProductionOrder).join(Product, Product.id == ProductionOrder.product_id)
     if keyword:
@@ -802,8 +811,20 @@ def list_orders(
         )
     if status:
         stmt = stmt.where(ProductionOrder.status == status.strip())
+    if product_name:
+        stmt = stmt.where(Product.name.ilike(f"%{product_name.strip()}%"))
+    if pipeline_enabled is not None:
+        stmt = stmt.where(ProductionOrder.pipeline_enabled == pipeline_enabled)
+    if start_date_from:
+        stmt = stmt.where(ProductionOrder.start_date >= start_date_from)
+    if start_date_to:
+        stmt = stmt.where(ProductionOrder.start_date <= start_date_to)
+    if due_date_from:
+        stmt = stmt.where(ProductionOrder.due_date >= due_date_from)
+    if due_date_to:
+        stmt = stmt.where(ProductionOrder.due_date <= due_date_to)
 
-    stmt = stmt.order_by(ProductionOrder.id.desc())
+    stmt = stmt.order_by(ProductionOrder.updated_at.desc(), ProductionOrder.id.desc())
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     offset = (page - 1) * page_size
     rows = (
@@ -1197,9 +1218,19 @@ def delete_order(
     db: Session,
     *,
     order: ProductionOrder,
+    operator: User | None = None,
 ) -> None:
     if order.status != ORDER_STATUS_PENDING:
         raise ValueError("Only pending orders can be deleted")
+    add_order_event_log(
+        db,
+        order_id=order.id,
+        event_type="order_deleted",
+        event_title="订单已删除",
+        event_detail=f"订单 {order.order_code} 被删除",
+        operator_user_id=operator.id if operator else None,
+        payload={"order_code": order.order_code, "status": order.status},
+    )
     db.delete(order)
     db.commit()
 
@@ -1625,3 +1656,93 @@ def get_my_order_context(
     if not items:
         return None
     return items[0]
+
+
+def export_orders_csv(
+    db: Session,
+    *,
+    keyword: str | None = None,
+    status: str | None = None,
+    product_name: str | None = None,
+    pipeline_enabled: bool | None = None,
+    start_date_from: date | None = None,
+    start_date_to: date | None = None,
+    due_date_from: date | None = None,
+    due_date_to: date | None = None,
+) -> dict[str, object]:
+    _, rows = list_orders(
+        db,
+        page=1,
+        page_size=10000,
+        keyword=keyword,
+        status=status,
+        product_name=product_name,
+        pipeline_enabled=pipeline_enabled,
+        start_date_from=start_date_from,
+        start_date_to=start_date_to,
+        due_date_from=due_date_from,
+        due_date_to=due_date_to,
+    )
+    headers = [
+        "订单号", "产品名称", "产品版本", "数量", "当前状态",
+        "工艺模板", "模板版本", "并行模式", "开始日期", "交期", "创建人", "更新时间",
+    ]
+    csv_rows = []
+    for row in rows:
+        csv_rows.append([
+            row.order_code,
+            row.product.name if row.product else "",
+            row.product_version or "",
+            row.quantity,
+            row.status,
+            row.process_template_name or "",
+            row.process_template_version or "",
+            "开启" if row.pipeline_enabled else "关闭",
+            str(row.start_date) if row.start_date else "",
+            str(row.due_date) if row.due_date else "",
+            row.created_by.username if row.created_by else "",
+            row.updated_at.strftime("%Y-%m-%d %H:%M:%S") if row.updated_at else "",
+        ])
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    for r in csv_rows:
+        writer.writerow(r)
+    content_b64 = base64.b64encode(output.getvalue().encode("utf-8-sig")).decode("ascii")
+    file_name = f"orders_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.csv"
+    return {
+        "file_name": file_name,
+        "mime_type": "text/csv",
+        "content_base64": content_b64,
+        "exported_count": len(csv_rows),
+    }
+
+
+def list_pipeline_instances(
+    db: Session,
+    *,
+    order_id: int | None = None,
+    order_process_id: int | None = None,
+    sub_order_id: int | None = None,
+    is_active: bool | None = None,
+    page: int = 1,
+    page_size: int = 100,
+) -> tuple[int, list[OrderSubOrderPipelineInstance]]:
+    stmt = select(OrderSubOrderPipelineInstance)
+    if order_id is not None:
+        stmt = stmt.where(OrderSubOrderPipelineInstance.order_id == order_id)
+    if order_process_id is not None:
+        stmt = stmt.where(OrderSubOrderPipelineInstance.order_process_id == order_process_id)
+    if sub_order_id is not None:
+        stmt = stmt.where(OrderSubOrderPipelineInstance.sub_order_id == sub_order_id)
+    if is_active is not None:
+        stmt = stmt.where(OrderSubOrderPipelineInstance.is_active == is_active)
+    stmt = stmt.order_by(
+        OrderSubOrderPipelineInstance.order_id.asc(),
+        OrderSubOrderPipelineInstance.pipeline_seq.asc(),
+        OrderSubOrderPipelineInstance.id.asc(),
+    )
+    rows = db.execute(stmt).scalars().all()
+    total = len(rows)
+    offset = (page - 1) * page_size
+    return total, rows[offset: offset + page_size]

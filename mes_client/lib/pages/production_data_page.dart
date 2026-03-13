@@ -67,6 +67,8 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   ProductionTodayRealtimeResult? _todayResult;
   ProductionUnfinishedProgressResult? _unfinishedResult;
   ProductionManualQueryResult? _manualResult;
+  List<ProductionProcessStatItem> _processStats = const [];
+  List<ProductionOperatorStatItem> _operatorStats = const [];
 
   String _todayStatMode = _statModeMain;
 
@@ -202,6 +204,8 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
           pageSize: 200,
           roleCode: 'operator',
         ),
+        _service.getProcessStats(),
+        _service.getOperatorStats(),
       ]);
       if (!mounted) {
         return;
@@ -215,6 +219,8 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
         _processOptions = results[5] as List<ProductionProcessOption>;
         final operatorResult = results[6] as AssistUserOptionListResult;
         _operatorOptions = operatorResult.items;
+        _processStats = results[7] as List<ProductionProcessStatItem>;
+        _operatorStats = results[8] as List<ProductionOperatorStatItem>;
       });
     } catch (error) {
       if (!mounted) {
@@ -1269,6 +1275,72 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     );
   }
 
+  Widget _buildProcessStatsTab() {
+    if (_processStats.isEmpty) {
+      return const Center(child: Text('暂无工序统计数据。'));
+    }
+    return Card(
+      child: AdaptiveTableContainer(
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('工序编码')),
+            DataColumn(label: Text('工序名称')),
+            DataColumn(label: Text('总订单数')),
+            DataColumn(label: Text('待生产')),
+            DataColumn(label: Text('生产中')),
+            DataColumn(label: Text('部分完成')),
+            DataColumn(label: Text('已完成')),
+            DataColumn(label: Text('可见总量')),
+            DataColumn(label: Text('完成总量')),
+          ],
+          rows: _processStats.map((item) {
+            return DataRow(cells: [
+              DataCell(Text(item.processCode)),
+              DataCell(Text(item.processName)),
+              DataCell(Text('${item.totalOrders}')),
+              DataCell(Text('${item.pendingOrders}')),
+              DataCell(Text('${item.inProgressOrders}')),
+              DataCell(Text('${item.partialOrders}')),
+              DataCell(Text('${item.completedOrders}')),
+              DataCell(Text('${item.totalVisibleQuantity}')),
+              DataCell(Text('${item.totalCompletedQuantity}')),
+            ]);
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOperatorStatsTab() {
+    if (_operatorStats.isEmpty) {
+      return const Center(child: Text('暂无人员统计数据。'));
+    }
+    return Card(
+      child: AdaptiveTableContainer(
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('操作员')),
+            DataColumn(label: Text('工序编码')),
+            DataColumn(label: Text('工序名称')),
+            DataColumn(label: Text('报工次数')),
+            DataColumn(label: Text('报工数量')),
+            DataColumn(label: Text('最近报工时间')),
+          ],
+          rows: _operatorStats.map((item) {
+            return DataRow(cells: [
+              DataCell(Text(item.operatorUsername)),
+              DataCell(Text(item.processCode)),
+              DataCell(Text(item.processName)),
+              DataCell(Text('${item.productionRecords}')),
+              DataCell(Text('${item.productionQuantity}')),
+              DataCell(Text(_formatDateTime(item.lastProductionAt))),
+            ]);
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1350,7 +1422,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
             ),
           Expanded(
             child: DefaultTabController(
-              length: 3,
+              length: 5,
               child: Column(
                 children: [
                   const TabBar(
@@ -1358,6 +1430,8 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                       Tab(text: '今日实时产量'),
                       Tab(text: '未完工进度'),
                       Tab(text: '手动筛选'),
+                      Tab(text: '工序统计'),
+                      Tab(text: '人员统计'),
                     ],
                   ),
                   Expanded(
@@ -1366,6 +1440,8 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                         _buildTodayTab(theme),
                         _buildUnfinishedTab(),
                         _buildManualTab(theme),
+                        _buildProcessStatsTab(),
+                        _buildOperatorStatsTab(),
                       ],
                     ),
                   ),

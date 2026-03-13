@@ -233,6 +233,73 @@ class _ProductionScrapStatisticsPageState
     }
   }
 
+  Future<void> _showDetail(ScrapStatisticsItem item) async {
+    ScrapStatisticsItem? detail;
+    String? errorMsg;
+    try {
+      detail = await _service.getScrapStatisticsDetail(scrapId: item.id);
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      errorMsg = _errorMessage(error);
+    }
+    if (!mounted) return;
+    final d = detail ?? item;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('报废详情 - ${d.orderCode ?? '-'}'),
+        content: SizedBox(
+          width: 420,
+          child: errorMsg != null
+              ? Text(errorMsg, style: TextStyle(color: Theme.of(ctx).colorScheme.error))
+              : SingleChildScrollView(
+                  child: Table(
+                    columnWidths: const {
+                      0: IntrinsicColumnWidth(),
+                      1: FlexColumnWidth(),
+                    },
+                    children: [
+                      _detailRow('订单号', d.orderCode ?? '-'),
+                      _detailRow('产品', d.productName ?? '-'),
+                      _detailRow('工序', d.processName ?? '-'),
+                      _detailRow('工序编码', d.processCode ?? '-'),
+                      _detailRow('报废原因', d.scrapReason),
+                      _detailRow('报废数量', '${d.scrapQuantity}'),
+                      _detailRow('进度', scrapProgressLabel(d.progress)),
+                      _detailRow('最近报废时间', _formatDateTime(d.lastScrapTime)),
+                      _detailRow('申请时间', _formatDateTime(d.appliedAt)),
+                      _detailRow('创建时间', _formatDateTime(d.createdAt)),
+                    ],
+                  ),
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TableRow _detailRow(String label, String value) {
+    return TableRow(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        child: Text(value),
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -354,6 +421,7 @@ class _ProductionScrapStatisticsPageState
                               context,
                               '最近报废时间',
                             ),
+                            UnifiedListTableHeaderStyle.column(context, '操作'),
                           ],
                           rows: _items
                               .map(
@@ -369,6 +437,12 @@ class _ProductionScrapStatisticsPageState
                                     ),
                                     DataCell(
                                       Text(_formatDateTime(item.lastScrapTime)),
+                                    ),
+                                    DataCell(
+                                      TextButton(
+                                        onPressed: () => _showDetail(item),
+                                        child: const Text('详情'),
+                                      ),
                                     ),
                                   ],
                                 ),

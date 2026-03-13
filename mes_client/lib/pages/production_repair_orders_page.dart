@@ -11,7 +11,7 @@ import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
-enum _RepairOrderAction { summary, complete }
+enum _RepairOrderAction { detail, summary, complete }
 
 class _RepairCauseDraft {
   _RepairCauseDraft({required this.phenomenon, required this.quantity})
@@ -82,6 +82,8 @@ class _ProductionRepairOrdersPageState
   bool _acting = false;
   String _message = '';
   String _status = 'all';
+  DateTime? _startDate;
+  DateTime? _endDate;
   int _total = 0;
   List<RepairOrderItem> _items = const [];
 
@@ -103,6 +105,153 @@ class _ProductionRepairOrdersPageState
 
   String _errorMessage(Object error) =>
       error is ApiException ? error.message : error.toString();
+
+  String _formatDate(DateTime value) {
+    final local = value.toLocal();
+    final mm = local.month.toString().padLeft(2, '0');
+    final dd = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$mm-$dd';
+  }
+
+  Future<void> _pickDate({required bool isStart}) async {
+    final initial = isStart
+        ? (_startDate ?? DateTime.now())
+        : (_endDate ?? DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (isStart) {
+        _startDate = picked;
+      } else {
+        _endDate = picked;
+      }
+    });
+  }
+
+  Future<void> _showRepairDetail(RepairOrderItem item) async {
+    RepairOrderDetailItem? detail;
+    String? errorMsg;
+    try {
+      detail = await _service.getRepairOrderDetail(repairOrderId: item.id);
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      errorMsg = _errorMessage(error);
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('维修详情 - ${item.repairOrderCode}'),
+        content: SizedBox(
+          width: 560,
+          child: errorMsg != null
+              ? Text(
+                  errorMsg,
+                  style: TextStyle(
+                    color: Theme.of(ctx).colorScheme.error,
+                  ),
+                )
+              : detail == null
+              ? const Text('无数据')
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Table(
+                        columnWidths: const {
+                          0: IntrinsicColumnWidth(),
+                          1: FlexColumnWidth(),
+                        },
+                        children: [
+                          _dRow('维修单号', detail.repairOrderCode),
+                          _dRow('来源订单', detail.sourceOrderCode ?? '-'),
+                          _dRow('产品', detail.productName ?? '-'),
+                          _dRow('工序', detail.sourceProcessName),
+                          _dRow('送修人', detail.senderUsername ?? '-'),
+                          _dRow('维修人', detail.repairOperatorUsername ?? '-'),
+                          _dRow('生产数量', '${detail.productionQuantity}'),
+                          _dRow('送修数量', '${detail.repairQuantity}'),
+                          _dRow('已修数量', '${detail.repairedQuantity}'),
+                          _dRow('报废数量', '${detail.scrapQuantity}'),
+                          _dRow('报废已补', detail.scrapReplenished ? '是' : '否'),
+                          _dRow('状态', repairOrderStatusLabel(detail.status)),
+                          _dRow('送修时间', _formatDateTime(detail.repairTime)),
+                          _dRow('完成时间', _formatDateTime(detail.completedAt)),
+                        ],
+                      ),
+                      if (detail.defectRows.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          '缺陷现象',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        ...detail.defectRows.map(
+                          (d) => Text('• ${d.phenomenon}（${d.quantity}件）'),
+                        ),
+                      ],
+                      if (detail.causeRows.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          '维修原因',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        ...detail.causeRows.map(
+                          (c) => Text(
+                            '• ${c.phenomenon} → ${c.reason}（${c.quantity}件${c.isScrap ? "，报废" : ""}）',
+                          ),
+                        ),
+                      ],
+                      if (detail.returnRoutes.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          '回流分配',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        ...detail.returnRoutes.map(
+                          (r) => Text(
+                            '• ${r.targetProcessName}（${r.returnQuantity}件）',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TableRow _dRow(String label, String value) {
+    return TableRow(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+        child: Text(value),
+      ),
+    ]);
+  }
 
   String _formatDateTime(DateTime? value) {
     if (value == null) {
@@ -128,6 +277,8 @@ class _ProductionRepairOrdersPageState
         pageSize: 200,
         keyword: _keywordController.text.trim(),
         status: _status,
+        startDate: _startDate,
+        endDate: _endDate,
       );
       if (!mounted) {
         return;
@@ -605,13 +756,23 @@ class _ProductionRepairOrdersPageState
                     DropdownMenuItem(value: 'completed', child: Text('已完成')),
                   ],
                   onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
+                    if (value == null) return;
                     setState(() {
                       _status = value;
                     });
                   },
+                ),
+              ),
+              OutlinedButton(
+                onPressed: _loading ? null : () => _pickDate(isStart: true),
+                child: Text(
+                  _startDate == null ? '开始日期' : _formatDate(_startDate!),
+                ),
+              ),
+              OutlinedButton(
+                onPressed: _loading ? null : () => _pickDate(isStart: false),
+                child: Text(
+                  _endDate == null ? '结束日期' : _formatDate(_endDate!),
                 ),
               ),
               FilledButton.icon(
@@ -681,6 +842,9 @@ class _ProductionRepairOrdersPageState
                                         theme: theme,
                                         onSelected: (action) {
                                           switch (action) {
+                                            case _RepairOrderAction.detail:
+                                              _showRepairDetail(item);
+                                              break;
                                             case _RepairOrderAction.summary:
                                               _showPhenomenaSummary(item);
                                               break;
@@ -690,6 +854,10 @@ class _ProductionRepairOrdersPageState
                                           }
                                         },
                                         itemBuilder: (_) => [
+                                          const PopupMenuItem(
+                                            value: _RepairOrderAction.detail,
+                                            child: Text('查看详情'),
+                                          ),
                                           const PopupMenuItem(
                                             value: _RepairOrderAction.summary,
                                             child: Text('现象汇总'),

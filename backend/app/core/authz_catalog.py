@@ -77,6 +77,10 @@ PERM_PROD_ASSIST_AUTHORIZATIONS_LIST = "production.assist_authorizations.list"
 PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE = "production.assist_authorizations.create"
 PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW = "production.assist_authorizations.review"
 PERM_PROD_ASSIST_USER_OPTIONS_LIST = "production.assist_user_options.list"
+PERM_PROD_ORDERS_EXPORT = "production.orders.export"
+PERM_PROD_PIPELINE_INSTANCES_LIST = "production.pipeline_instances.list"
+PERM_PROD_SCRAP_STATISTICS_DETAIL = "production.scrap_statistics.detail"
+PERM_PROD_REPAIR_ORDERS_DETAIL = "production.repair_orders.detail"
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,9 +122,13 @@ PAGE_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("quality", "质量模块", AUTHZ_MODULE_QUALITY, None),
     ("first_article_management", "每日首件", AUTHZ_MODULE_QUALITY, "quality"),
     ("quality_data_query", "质量数据", AUTHZ_MODULE_QUALITY, "quality"),
+    ("quality_scrap_statistics", "报废统计（品质）", AUTHZ_MODULE_QUALITY, "quality"),
+    ("quality_repair_orders", "维修订单（品质）", AUTHZ_MODULE_QUALITY, "quality"),
+    ("quality_trend", "质量趋势", AUTHZ_MODULE_QUALITY, "quality"),
     ("craft", "工艺模块", AUTHZ_MODULE_CRAFT, None),
     ("process_management", "工序管理", AUTHZ_MODULE_CRAFT, "craft"),
     ("production_process_config", "生产工序配置", AUTHZ_MODULE_CRAFT, "craft"),
+    ("craft_reference_analysis", "工艺引用分析", AUTHZ_MODULE_CRAFT, "craft"),
     ("craft_kanban", "工艺看板", AUTHZ_MODULE_CRAFT, "craft"),
 ]
 
@@ -256,6 +264,7 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("equipment.executions.list", "查看保养执行", AUTHZ_MODULE_EQUIPMENT, "maintenance_execution"),
     ("equipment.executions.start", "开始保养执行", AUTHZ_MODULE_EQUIPMENT, "maintenance_execution"),
     ("equipment.executions.complete", "完成保养执行", AUTHZ_MODULE_EQUIPMENT, "maintenance_execution"),
+    ("equipment.executions.cancel", "取消保养工单", AUTHZ_MODULE_EQUIPMENT, "maintenance_execution"),
     ("equipment.records.list", "查看保养记录", AUTHZ_MODULE_EQUIPMENT, "maintenance_record"),
     ("craft.stages.list", "查看工段", AUTHZ_MODULE_CRAFT, "process_management"),
     ("craft.stages.create", "新增工段", AUTHZ_MODULE_CRAFT, "process_management"),
@@ -282,9 +291,15 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("craft.templates.update", "更新模板", AUTHZ_MODULE_CRAFT, "production_process_config"),
     ("craft.templates.delete", "删除模板", AUTHZ_MODULE_CRAFT, "production_process_config"),
     ("quality.first_articles.list", "查看每日首件", AUTHZ_MODULE_QUALITY, "first_article_management"),
+    ("quality.first_articles.detail", "查看首件详情", AUTHZ_MODULE_QUALITY, "first_article_management"),
+    ("quality.first_articles.export", "导出首件记录", AUTHZ_MODULE_QUALITY, "first_article_management"),
+    ("quality.first_articles.disposition", "首件处置", AUTHZ_MODULE_QUALITY, "first_article_management"),
     ("quality.stats.overview", "查看质量总览统计", AUTHZ_MODULE_QUALITY, "quality_data_query"),
     ("quality.stats.processes", "查看质量工序统计", AUTHZ_MODULE_QUALITY, "quality_data_query"),
     ("quality.stats.operators", "查看质量人员统计", AUTHZ_MODULE_QUALITY, "quality_data_query"),
+    ("quality.stats.products", "查看质量产品统计", AUTHZ_MODULE_QUALITY, "quality_data_query"),
+    ("quality.stats.export", "导出质量统计", AUTHZ_MODULE_QUALITY, "quality_data_query"),
+    ("quality.trend", "查看质量趋势", AUTHZ_MODULE_QUALITY, "quality_trend"),
     (PERM_PROD_ORDERS_LIST, "查看生产订单列表", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
     (PERM_PROD_ORDERS_CREATE, "创建生产订单", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
     (PERM_PROD_ORDERS_DETAIL, "查看生产订单详情", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
@@ -319,6 +334,10 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     (PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE, "发起代班", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
     (PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW, "审批代班（兼容）", AUTHZ_MODULE_PRODUCTION, "production_assist_approval"),
     (PERM_PROD_ASSIST_USER_OPTIONS_LIST, "查看代班用户选项", AUTHZ_MODULE_PRODUCTION, "production_order_query"),
+    (PERM_PROD_ORDERS_EXPORT, "导出生产订单", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_PIPELINE_INSTANCES_LIST, "查看并行实例", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
+    (PERM_PROD_SCRAP_STATISTICS_DETAIL, "查看报废详情", AUTHZ_MODULE_PRODUCTION, "production_scrap_statistics"),
+    (PERM_PROD_REPAIR_ORDERS_DETAIL, "查看维修订单详情", AUTHZ_MODULE_PRODUCTION, "production_repair_orders"),
 ]
 
 ACTION_PERMISSION_CATALOG = [

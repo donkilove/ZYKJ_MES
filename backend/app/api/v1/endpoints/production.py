@@ -24,15 +24,19 @@ from app.core.authz_catalog import (
     PERM_PROD_ORDERS_CREATE,
     PERM_PROD_ORDERS_DELETE,
     PERM_PROD_ORDERS_DETAIL,
+    PERM_PROD_ORDERS_EXPORT,
     PERM_PROD_ORDERS_LIST,
     PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE,
     PERM_PROD_ORDERS_PIPELINE_MODE_VIEW,
     PERM_PROD_ORDERS_UPDATE,
+    PERM_PROD_PIPELINE_INSTANCES_LIST,
     PERM_PROD_REPAIR_ORDERS_COMPLETE,
     PERM_PROD_REPAIR_ORDERS_CREATE_MANUAL,
+    PERM_PROD_REPAIR_ORDERS_DETAIL,
     PERM_PROD_REPAIR_ORDERS_EXPORT,
     PERM_PROD_REPAIR_ORDERS_LIST,
     PERM_PROD_REPAIR_ORDERS_PHENOMENA_SUMMARY,
+    PERM_PROD_SCRAP_STATISTICS_DETAIL,
     PERM_PROD_SCRAP_STATISTICS_EXPORT,
     PERM_PROD_SCRAP_STATISTICS_LIST,
     PERM_PROD_STATS_OPERATORS,
@@ -79,7 +83,10 @@ from app.schemas.production import (
     OrderListResult,
     OrderPipelineModeItem,
     OrderPipelineModeUpdateRequest,
+    OrdersExportRequest,
     OrderUpdate,
+    PipelineInstanceItem,
+    PipelineInstanceListResult,
     ProductionOperatorStatItem,
     ProductionOperatorStatsResult,
     ProductionDataManualExportRequest,
@@ -90,11 +97,13 @@ from app.schemas.production import (
     ProductionDataUnfinishedProgressResult,
     RepairOrderCompleteRequest,
     RepairOrderCreateRequest,
+    RepairOrderDetailItem,
     RepairOrderItem,
     RepairOrderListResult,
     RepairOrderPhenomenaSummaryResult,
     RepairOrderPhenomenonSummaryItem,
     RepairOrdersExportRequest,
+    ScrapStatisticsDetailItem,
     ScrapStatisticsExportRequest,
     ScrapStatisticsItem,
     ScrapStatisticsListResult,
@@ -112,12 +121,14 @@ from app.services.production_order_service import (
     can_user_access_order_pipeline_mode,
     complete_order_manually,
     create_order,
+    export_orders_csv,
     get_my_order_context,
     get_order_pipeline_mode,
     delete_order,
     get_order_by_id,
     list_my_orders,
     list_orders,
+    list_pipeline_instances,
     update_order_pipeline_mode,
     update_order,
 )
@@ -376,6 +387,12 @@ def get_orders(
     page_size: int = Query(default=20, ge=1, le=200),
     keyword: str | None = Query(default=None),
     status_text: str | None = Query(default=None, alias="status"),
+    product_name: str | None = Query(default=None),
+    pipeline_enabled: bool | None = Query(default=None),
+    start_date_from: date | None = Query(default=None),
+    start_date_to: date | None = Query(default=None),
+    due_date_from: date | None = Query(default=None),
+    due_date_to: date | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(PERM_PROD_ORDERS_LIST)),
 ) -> ApiResponse[OrderListResult]:
@@ -390,6 +407,12 @@ def get_orders(
         page_size=page_size,
         keyword=keyword,
         status=status_text,
+        product_name=product_name,
+        pipeline_enabled=pipeline_enabled,
+        start_date_from=start_date_from,
+        start_date_to=start_date_to,
+        due_date_from=due_date_from,
+        due_date_to=due_date_to,
     )
     return success_response(OrderListResult(total=total, items=[_to_order_item(row) for row in rows]))
 
@@ -554,13 +577,13 @@ def update_order_api(
 def delete_order_api(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_PROD_ORDERS_DELETE)),
+    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_DELETE)),
 ) -> ApiResponse[dict[str, bool]]:
     order = get_order_by_id(db, order_id, with_relations=False)
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     try:
-        delete_order(db, order=order)
+        delete_order(db, order=order, operator=current_user)
     except Exception as error:
         _raise_service_error(error)
     return success_response({"deleted": True}, message="deleted")
@@ -1215,3 +1238,185 @@ def get_assist_user_options_api(
             items=[_to_assist_user_option_item(user) for user in paged_rows],
         )
     )
+
+
+def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
+    return PipelineInstanceItem(
+        id=row.id,
+        sub_order_id=row.sub_order_id,
+        order_id=row.order_id,
+        order_process_id=row.order_process_id,
+        process_code=row.process_code,
+        pipeline_seq=row.pipeline_seq,
+        pipeline_sub_order_no=row.pipeline_sub_order_no,
+        is_active=row.is_active,
+        invalid_reason=row.invalid_reason,
+        invalidated_at=row.invalidated_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _to_repair_order_detail_item(row: object) -> RepairOrderDetailItem:
+    from app.schemas.production import RepairCauseDetailItem, RepairDefectPhenomenonItem, RepairReturnRouteItem
+    return RepairOrderDetailItem(
+        id=row.id,
+        repair_order_code=row.repair_order_code,
+        source_order_id=row.source_order_id,
+        source_order_code=row.source_order_code,
+        product_id=row.product_id,
+        product_name=row.product_name,
+        source_order_process_id=row.source_order_process_id,
+        source_process_code=row.source_process_code,
+        source_process_name=row.source_process_name,
+        sender_user_id=row.sender_user_id,
+        sender_username=row.sender_username,
+        production_quantity=row.production_quantity,
+        repair_quantity=row.repair_quantity,
+        repaired_quantity=row.repaired_quantity,
+        scrap_quantity=row.scrap_quantity,
+        scrap_replenished=row.scrap_replenished,
+        repair_time=row.repair_time,
+        status=row.status,
+        completed_at=row.completed_at,
+        repair_operator_user_id=row.repair_operator_user_id,
+        repair_operator_username=row.repair_operator_username,
+        defect_rows=[
+            RepairDefectPhenomenonItem(id=d.id, phenomenon=d.phenomenon, quantity=d.quantity)
+            for d in (row.defect_rows or [])
+        ],
+        cause_rows=[
+            RepairCauseDetailItem(
+                id=c.id,
+                phenomenon=c.phenomenon,
+                reason=c.reason,
+                quantity=c.quantity,
+                is_scrap=c.is_scrap,
+            )
+            for c in (row.cause_rows or [])
+        ],
+        return_routes=[
+            RepairReturnRouteItem(
+                id=r.id,
+                target_process_id=r.target_process_id,
+                target_process_code=r.target_process_code,
+                target_process_name=r.target_process_name,
+                return_quantity=r.return_quantity,
+            )
+            for r in (row.return_routes or [])
+        ],
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+@router.post(
+    "/orders/export",
+    response_model=ApiResponse[ProductionExportResult],
+)
+def export_orders_api(
+    payload: OrdersExportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_EXPORT)),
+) -> ApiResponse[ProductionExportResult]:
+    try:
+        result = export_orders_csv(
+            db,
+            keyword=payload.keyword,
+            status=payload.status,
+            product_name=payload.product_name,
+            pipeline_enabled=payload.pipeline_enabled,
+            start_date_from=payload.start_date_from,
+            start_date_to=payload.start_date_to,
+            due_date_from=payload.due_date_from,
+            due_date_to=payload.due_date_to,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(ProductionExportResult(**result))
+
+
+@router.get(
+    "/pipeline-instances",
+    response_model=ApiResponse[PipelineInstanceListResult],
+)
+def get_pipeline_instances_api(
+    order_id: int | None = Query(default=None),
+    order_process_id: int | None = Query(default=None),
+    sub_order_id: int | None = Query(default=None),
+    is_active: bool | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_PROD_PIPELINE_INSTANCES_LIST)),
+) -> ApiResponse[PipelineInstanceListResult]:
+    try:
+        total, rows = list_pipeline_instances(
+            db,
+            order_id=order_id,
+            order_process_id=order_process_id,
+            sub_order_id=sub_order_id,
+            is_active=is_active,
+            page=page,
+            page_size=page_size,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(
+        PipelineInstanceListResult(
+            total=total,
+            items=[_to_pipeline_instance_item(row) for row in rows],
+        )
+    )
+
+
+@router.get(
+    "/scrap-statistics/{scrap_id}",
+    response_model=ApiResponse[ScrapStatisticsDetailItem],
+)
+def get_scrap_statistics_detail_api(
+    scrap_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_PROD_SCRAP_STATISTICS_DETAIL)),
+) -> ApiResponse[ScrapStatisticsDetailItem]:
+    from sqlalchemy import select as sa_select
+    from app.models.production_scrap_statistics import ProductionScrapStatistics
+    row = db.execute(
+        sa_select(ProductionScrapStatistics).where(ProductionScrapStatistics.id == scrap_id)
+    ).scalars().first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scrap statistics not found")
+    return success_response(
+        ScrapStatisticsDetailItem(
+            id=row.id,
+            order_id=row.order_id,
+            order_code=row.order_code,
+            product_id=row.product_id,
+            product_name=row.product_name,
+            process_id=row.process_id,
+            process_code=row.process_code,
+            process_name=row.process_name,
+            scrap_reason=row.scrap_reason,
+            scrap_quantity=row.scrap_quantity,
+            last_scrap_time=row.last_scrap_time,
+            progress=row.progress,
+            applied_at=row.applied_at,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+    )
+
+
+@router.get(
+    "/repair-orders/{repair_order_id}/detail",
+    response_model=ApiResponse[RepairOrderDetailItem],
+)
+def get_repair_order_detail_api(
+    repair_order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_PROD_REPAIR_ORDERS_DETAIL)),
+) -> ApiResponse[RepairOrderDetailItem]:
+    row = get_repair_order_by_id(db, repair_order_id=repair_order_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found")
+    return success_response(_to_repair_order_detail_item(row))

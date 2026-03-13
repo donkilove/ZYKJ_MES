@@ -29,7 +29,7 @@ class _ProductionAssistApprovalPageState
 
   bool _loading = false;
   String _message = '';
-  String? _statusFilter;
+  String? _statusFilter = 'pending';
   int _total = 0;
   List<AssistAuthorizationItem> _items = const [];
 
@@ -59,6 +59,72 @@ class _ProductionAssistApprovalPageState
     final min = local.minute.toString().padLeft(2, '0');
     final sec = local.second.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd $hh:$min:$sec';
+  }
+
+  Future<void> _reviewRow(AssistAuthorizationItem item, bool approve) async {
+    final remarkController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(approve ? '审批通过' : '审批拒绝'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '代班申请：${item.orderCode} / ${item.processName}\n'
+                '代班人：${item.helperUsername}',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: remarkController,
+                decoration: const InputDecoration(
+                  labelText: '审批备注（可选）',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(approve ? '通过' : '拒绝'),
+          ),
+        ],
+      ),
+    );
+    remarkController.dispose();
+    if (confirmed != true || !mounted) return;
+    try {
+      await _service.reviewAssistAuthorization(
+        authorizationId: item.id,
+        approve: approve,
+        reviewRemark: remarkController.text.trim().isEmpty
+            ? null
+            : remarkController.text.trim(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(approve ? '已审批通过。' : '已拒绝。')),
+      );
+      await _loadRows();
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+    }
   }
 
   Future<void> _loadRows() async {
@@ -129,8 +195,16 @@ class _ProductionAssistApprovalPageState
                   items: const [
                     DropdownMenuItem<String?>(value: null, child: Text('全部')),
                     DropdownMenuItem<String?>(
+                      value: 'pending',
+                      child: Text('待审批'),
+                    ),
+                    DropdownMenuItem<String?>(
                       value: 'approved',
                       child: Text('已生效'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'rejected',
+                      child: Text('已拒绝'),
                     ),
                     DropdownMenuItem<String?>(
                       value: 'consumed',
@@ -197,8 +271,10 @@ class _ProductionAssistApprovalPageState
                           DataColumn(label: Text('代班人')),
                           DataColumn(label: Text('状态')),
                           DataColumn(label: Text('创建时间')),
+                          DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
+                          final isPending = item.status == 'pending';
                           return DataRow(
                             cells: [
                               DataCell(Text(item.orderCode)),
@@ -212,6 +288,31 @@ class _ProductionAssistApprovalPageState
                                 ),
                               ),
                               DataCell(Text(_formatDateTime(item.createdAt))),
+                              DataCell(
+                                isPending && widget.canReview
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                _reviewRow(item, true),
+                                            child: const Text('通过'),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          TextButton(
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: Theme.of(
+                                                context,
+                                              ).colorScheme.error,
+                                            ),
+                                            onPressed: () =>
+                                                _reviewRow(item, false),
+                                            child: const Text('拒绝'),
+                                          ),
+                                        ],
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
                             ],
                           );
                         }).toList(),

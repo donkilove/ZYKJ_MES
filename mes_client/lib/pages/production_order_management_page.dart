@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -46,6 +48,8 @@ class _ProductionOrderManagementPageState
   String _message = '';
   int _total = 0;
   String? _statusFilter;
+  bool? _pipelineEnabledFilter;
+  final TextEditingController _productNameController = TextEditingController();
   List<ProductionOrderItem> _items = const [];
   List<ProductionProductOption> _products = const [];
   List<ProductionProcessOption> _processes = const [];
@@ -63,6 +67,7 @@ class _ProductionOrderManagementPageState
   @override
   void dispose() {
     _keywordController.dispose();
+    _productNameController.dispose();
     super.dispose();
   }
 
@@ -128,6 +133,37 @@ class _ProductionOrderManagementPageState
     }
   }
 
+  Future<void> _exportOrders() async {
+    try {
+      final result = await _service.exportOrders(
+        keyword: _keywordController.text.trim().isEmpty
+            ? null
+            : _keywordController.text.trim(),
+        status: _statusFilter,
+        productName: _productNameController.text.trim().isEmpty
+            ? null
+            : _productNameController.text.trim(),
+        pipelineEnabled: _pipelineEnabledFilter,
+      );
+      if (!mounted) return;
+      final filename = result['filename'] as String? ?? 'orders.csv';
+      final base64Data = result['data'] as String? ?? '';
+      final bytes = base64Decode(base64Data);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出成功：$filename（${bytes.length} 字节）')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出失败：${_errorMessage(error)}')));
+    }
+  }
+
   Future<void> _loadOrders() async {
     setState(() {
       _loading = true;
@@ -139,6 +175,10 @@ class _ProductionOrderManagementPageState
         pageSize: 200,
         keyword: _keywordController.text.trim(),
         status: _statusFilter,
+        productName: _productNameController.text.trim().isEmpty
+            ? null
+            : _productNameController.text.trim(),
+        pipelineEnabled: _pipelineEnabledFilter,
       );
       if (!mounted) {
         return;
@@ -571,7 +611,19 @@ class _ProductionOrderManagementPageState
               ),
               const SizedBox(width: 12),
               SizedBox(
-                width: 170,
+                width: 160,
+                child: TextField(
+                  controller: _productNameController,
+                  decoration: const InputDecoration(
+                    labelText: '产品名称',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _loadOrders(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 150,
                 child: DropdownButtonFormField<String?>(
                   initialValue: _statusFilter,
                   decoration: const InputDecoration(
@@ -602,12 +654,40 @@ class _ProductionOrderManagementPageState
                 ),
               ),
               const SizedBox(width: 12),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<bool?>(
+                  initialValue: _pipelineEnabledFilter,
+                  decoration: const InputDecoration(
+                    labelText: '并行模式',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem<bool?>(value: null, child: Text('全部')),
+                    DropdownMenuItem<bool?>(value: true, child: Text('已开启')),
+                    DropdownMenuItem<bool?>(value: false, child: Text('未开启')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _pipelineEnabledFilter = value;
+                    });
+                    _loadOrders();
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
               FilledButton.icon(
                 onPressed: _loading ? null : _loadOrders,
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _exportOrders,
+                icon: const Icon(Icons.download),
+                label: const Text('导出'),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: _loading || !widget.canCreateOrder
                     ? null
@@ -644,12 +724,18 @@ class _ProductionOrderManagementPageState
                           DataColumn(label: Text('数量')),
                           DataColumn(label: Text('状态')),
                           DataColumn(label: Text('当前工序')),
+                          DataColumn(label: Text('模板名称/版本')),
+                          DataColumn(label: Text('并行模式')),
+                          DataColumn(label: Text('创建人')),
                           DataColumn(label: Text('开始日期')),
                           DataColumn(label: Text('交期')),
                           DataColumn(label: Text('更新时间')),
-                          DataColumn(label: Text('详情')),
+                          DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
+                          final templateLabel = item.processTemplateName != null
+                              ? '${item.processTemplateName} v${item.processTemplateVersion ?? '-'}'
+                              : '-';
                           return DataRow(
                             cells: [
                               DataCell(Text(item.orderCode)),
@@ -659,13 +745,60 @@ class _ProductionOrderManagementPageState
                                 Text(productionOrderStatusLabel(item.status)),
                               ),
                               DataCell(Text(item.currentProcessName ?? '-')),
+                              DataCell(Text(templateLabel)),
+                              DataCell(Text(item.pipelineEnabled ? '已开启' : '未开启')),
+                              DataCell(Text(item.createdByUsername ?? '-')),
                               DataCell(Text(_formatDate(item.startDate))),
                               DataCell(Text(_formatDate(item.dueDate))),
                               DataCell(Text(_formatDateTime(item.updatedAt))),
                               DataCell(
-                                OutlinedButton(
-                                  onPressed: () => _openOrderDetailPage(item),
-                                  child: const Text('详情'),
+                                PopupMenuButton<String>(
+                                  tooltip: '操作',
+                                  icon: const Icon(Icons.more_vert),
+                                  onSelected: (action) async {
+                                    switch (action) {
+                                      case 'detail':
+                                        await _openOrderDetailPage(item);
+                                      case 'edit':
+                                        await _showOrderDialog(existing: item);
+                                      case 'delete':
+                                        await _deleteOrder(item);
+                                      case 'complete':
+                                        await _completeOrder(item);
+                                      case 'pipeline':
+                                        await _showPipelineModeDialog(item);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'detail',
+                                      child: Text('查看详情'),
+                                    ),
+                                    if (widget.canEditOrder &&
+                                        item.status == 'pending')
+                                      const PopupMenuItem(
+                                        value: 'edit',
+                                        child: Text('编辑订单'),
+                                      ),
+                                    if (widget.canCompleteOrder &&
+                                        item.status == 'in_progress')
+                                      const PopupMenuItem(
+                                        value: 'complete',
+                                        child: Text('手工完工'),
+                                      ),
+                                    if (widget.canUpdatePipelineMode &&
+                                        item.status != 'completed')
+                                      const PopupMenuItem(
+                                        value: 'pipeline',
+                                        child: Text('并行模式设置'),
+                                      ),
+                                    if (widget.canDeleteOrder &&
+                                        item.status == 'pending')
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('删除订单'),
+                                      ),
+                                  ],
                                 ),
                               ),
                             ],

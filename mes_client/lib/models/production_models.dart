@@ -1526,3 +1526,176 @@ class ProductionOrderProcessStepInput {
     };
   }
 }
+
+class RepairDefectPhenomenonDetailItem {
+  RepairDefectPhenomenonDetailItem({
+    required this.id,
+    required this.phenomenon,
+    required this.quantity,
+  });
+
+  final int id;
+  final String phenomenon;
+  final int quantity;
+
+  factory RepairDefectPhenomenonDetailItem.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return RepairDefectPhenomenonDetailItem(
+      id: (json['id'] as int?) ?? 0,
+      phenomenon: (json['phenomenon'] as String?) ?? '',
+      quantity: (json['quantity'] as int?) ?? 0,
+    );
+  }
+}
+
+class RepairCauseDetailItem {
+  RepairCauseDetailItem({
+    required this.id,
+    required this.phenomenon,
+    required this.reason,
+    required this.quantity,
+    required this.isScrap,
+  });
+
+  final int id;
+  final String phenomenon;
+  final String reason;
+  final int quantity;
+  final bool isScrap;
+
+  factory RepairCauseDetailItem.fromJson(Map<String, dynamic> json) {
+    return RepairCauseDetailItem(
+      id: (json['id'] as int?) ?? 0,
+      phenomenon: (json['phenomenon'] as String?) ?? '',
+      reason: (json['reason'] as String?) ?? '',
+      quantity: (json['quantity'] as int?) ?? 0,
+      isScrap: (json['is_scrap'] as bool?) ?? false,
+    );
+  }
+}
+
+class RepairReturnRouteDetailItem {
+  RepairReturnRouteDetailItem({
+    required this.id,
+    required this.targetProcessId,
+    required this.targetProcessCode,
+    required this.targetProcessName,
+    required this.returnQuantity,
+  });
+
+  final int id;
+  final int? targetProcessId;
+  final String targetProcessCode;
+  final String targetProcessName;
+  final int returnQuantity;
+
+  factory RepairReturnRouteDetailItem.fromJson(Map<String, dynamic> json) {
+    return RepairReturnRouteDetailItem(
+      id: (json['id'] as int?) ?? 0,
+      targetProcessId: json['target_process_id'] as int?,
+      targetProcessCode: (json['target_process_code'] as String?) ?? '',
+      targetProcessName: (json['target_process_name'] as String?) ?? '',
+      returnQuantity: (json['return_quantity'] as int?) ?? 0,
+    );
+  }
+}
+
+class RepairOrderDetailItem {
+  RepairOrderDetailItem({
+    required this.id,
+    required this.repairOrderCode,
+    required this.sourceOrderId,
+    required this.sourceOrderCode,
+    required this.productId,
+    required this.productName,
+    required this.sourceOrderProcessId,
+    required this.sourceProcessCode,
+    required this.sourceProcessName,
+    required this.senderUserId,
+    required this.senderUsername,
+    required this.productionQuantity,
+    required this.repairQuantity,
+    required this.repairedQuantity,
+    required this.scrapQuantity,
+    required this.scrapReplenished,
+    required this.repairTime,
+    required this.status,
+    required this.completedAt,
+    required this.repairOperatorUserId,
+    required this.repairOperatorUsername,
+    required this.defectRows,
+    required this.causeRows,
+    required this.returnRoutes,
+  });
+
+  final int id;
+  final String repairOrderCode;
+  final int? sourceOrderId;
+  final String? sourceOrderCode;
+  final int? productId;
+  final String? productName;
+  final int? sourceOrderProcessId;
+  final String sourceProcessCode;
+  final String sourceProcessName;
+  final int? senderUserId;
+  final String? senderUsername;
+  final int productionQuantity;
+  final int repairQuantity;
+  final int repairedQuantity;
+  final int scrapQuantity;
+  final bool scrapReplenished;
+  final DateTime repairTime;
+  final String status;
+  final DateTime? completedAt;
+  final int? repairOperatorUserId;
+  final String? repairOperatorUsername;
+  final List<RepairDefectPhenomenonDetailItem> defectRows;
+  final List<RepairCauseDetailItem> causeRows;
+  final List<RepairReturnRouteDetailItem> returnRoutes;
+
+  factory RepairOrderDetailItem.fromJson(Map<String, dynamic> json) {
+    return RepairOrderDetailItem(
+      id: (json['id'] as int?) ?? 0,
+      repairOrderCode: (json['repair_order_code'] as String?) ?? '',
+      sourceOrderId: json['source_order_id'] as int?,
+      sourceOrderCode: json['source_order_code'] as String?,
+      productId: json['product_id'] as int?,
+      productName: json['product_name'] as String?,
+      sourceOrderProcessId: json['source_order_process_id'] as int?,
+      sourceProcessCode: (json['source_process_code'] as String?) ?? '',
+      sourceProcessName: (json['source_process_name'] as String?) ?? '',
+      senderUserId: json['sender_user_id'] as int?,
+      senderUsername: json['sender_username'] as String?,
+      productionQuantity: (json['production_quantity'] as int?) ?? 0,
+      repairQuantity: (json['repair_quantity'] as int?) ?? 0,
+      repairedQuantity: (json['repaired_quantity'] as int?) ?? 0,
+      scrapQuantity: (json['scrap_quantity'] as int?) ?? 0,
+      scrapReplenished: (json['scrap_replenished'] as bool?) ?? false,
+      repairTime: DateTime.parse(json['repair_time'] as String),
+      status: (json['status'] as String?) ?? 'in_repair',
+      completedAt: _parseDateOrNull(json['completed_at']),
+      repairOperatorUserId: json['repair_operator_user_id'] as int?,
+      repairOperatorUsername: json['repair_operator_username'] as String?,
+      defectRows: (json['defect_rows'] as List<dynamic>? ?? const [])
+          .map(
+            (e) => RepairDefectPhenomenonDetailItem.fromJson(
+              e as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+      causeRows: (json['cause_rows'] as List<dynamic>? ?? const [])
+          .map(
+            (e) => RepairCauseDetailItem.fromJson(e as Map<String, dynamic>),
+          )
+          .toList(),
+      returnRoutes: (json['return_routes'] as List<dynamic>? ?? const [])
+          .map(
+            (e) => RepairReturnRouteDetailItem.fromJson(
+              e as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}

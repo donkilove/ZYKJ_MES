@@ -125,7 +125,7 @@ def create_assist_authorization(
                 ProductionAssistAuthorization.order_process_id == order_process_id,
                 ProductionAssistAuthorization.target_operator_user_id == target_operator_user_id,
                 ProductionAssistAuthorization.requester_user_id == requester.id,
-                ProductionAssistAuthorization.status == ASSIST_STATUS_APPROVED,
+                ProductionAssistAuthorization.status.in_([ASSIST_STATUS_PENDING, ASSIST_STATUS_APPROVED]),
                 ProductionAssistAuthorization.end_production_used_at.is_(None),
             )
         )
@@ -135,17 +135,14 @@ def create_assist_authorization(
     if duplicate is not None:
         raise RuntimeError("Active assist authorization already exists")
 
-    now = datetime.now(timezone.utc)
     row = ProductionAssistAuthorization(
         order_id=order_id,
         order_process_id=order_process_id,
         target_operator_user_id=target_operator_user_id,
         requester_user_id=requester.id,
         helper_user_id=helper_user_id,
-        status=ASSIST_STATUS_APPROVED,
+        status=ASSIST_STATUS_PENDING,
         reason=(reason or "").strip() or None,
-        reviewer_user_id=requester.id,
-        reviewed_at=now,
     )
     db.add(row)
     db.flush()
@@ -153,9 +150,9 @@ def create_assist_authorization(
     add_order_event_log(
         db,
         order_id=order.id,
-        event_type="assist_authorization_activated",
-        event_title="代班发起",
-        event_detail=f"{requester.username} 发起 {helper.username} 代班执行 {process_row.process_name}（立即生效）",
+        event_type="assist_authorization_created",
+        event_title="代班申请发起",
+        event_detail=f"{requester.username} 发起 {helper.username} 代班执行 {process_row.process_name}，等待审批",
         operator_user_id=requester.id,
         payload={
             "assist_authorization_id": row.id,
@@ -225,7 +222,58 @@ def review_assist_authorization(
     reviewer: User,
     review_remark: str | None,
 ) -> ProductionAssistAuthorization:
-    raise RuntimeError("代班流程已改为发起即生效，无需审批")
+    row = (
+        db.execute(
+            select(ProductionAssistAuthorization)
+            .where(ProductionAssistAuthorization.id == authorization_id)
+            .options(
+                selectinload(ProductionAssistAuthorization.order),
+                selectinload(ProductionAssistAuthorization.order_process),
+                selectinload(ProductionAssistAuthorization.helper),
+                selectinload(ProductionAssistAuthorization.requester),
+            )
+            .with_for_update()
+        )
+        .scalars()
+        .first()
+    )
+    if row is None:
+        raise ValueError("Assist authorization not found")
+    if row.status != ASSIST_STATUS_PENDING:
+        raise ValueError(f"Only pending authorizations can be reviewed, current status: {row.status}")
+
+    now = datetime.now(timezone.utc)
+    row.reviewer_user_id = reviewer.id
+    row.reviewed_at = now
+    row.review_remark = (review_remark or "").strip() or None
+
+    if approve:
+        row.status = ASSIST_STATUS_APPROVED
+        event_type = "assist_authorization_approved"
+        event_title = "代班审批通过"
+        event_detail = f"{reviewer.username} 审批通过 {row.helper.username if row.helper else ''} 代班申请"
+    else:
+        row.status = ASSIST_STATUS_REJECTED
+        event_type = "assist_authorization_rejected"
+        event_title = "代班审批拒绝"
+        event_detail = f"{reviewer.username} 拒绝代班申请，原因：{row.review_remark or '无'}"
+
+    add_order_event_log(
+        db,
+        order_id=row.order_id,
+        event_type=event_type,
+        event_title=event_title,
+        event_detail=event_detail,
+        operator_user_id=reviewer.id,
+        payload={
+            "assist_authorization_id": row.id,
+            "approve": approve,
+            "review_remark": row.review_remark,
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def get_usable_assist_authorization_for_operation(

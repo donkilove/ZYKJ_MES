@@ -600,3 +600,145 @@ class ProductionExportResult(BaseModel):
     mime_type: str
     content_base64: str
     exported_count: int = 0
+
+
+class RepairCauseItemDetail(BaseModel):
+    phenomenon: str
+    reason: str
+    quantity: int
+    is_scrap: bool
+
+
+class RepairReturnRouteDetail(BaseModel):
+    target_order_process_id: int | None = None
+    target_process_code: str
+    target_process_name: str
+    quantity: int
+
+
+class RepairOrderDetail(BaseModel):
+    id: int
+    repair_order_code: str
+    source_order_id: int | None = None
+    source_order_code: str | None = None
+    product_id: int | None = None
+    product_name: str | None = None
+    source_order_process_id: int | None = None
+    source_process_code: str
+    source_process_name: str
+    sender_user_id: int | None = None
+    sender_username: str | None = None
+    production_quantity: int
+    repair_quantity: int
+    repaired_quantity: int
+    scrap_quantity: int
+    scrap_replenished: bool
+    repair_time: datetime
+    status: str
+    completed_at: datetime | None = None
+    repair_operator_user_id: int | None = None
+    repair_operator_username: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    cause_items: list[RepairCauseItemDetail] = []
+    return_routes: list[RepairReturnRouteDetail] = []
+
+
+class OrdersExportRequest(BaseModel):
+    keyword: str | None = Field(default=None, max_length=128)
+    status: str | None = Field(default=None, max_length=32)
+    product_name: str | None = Field(default=None, max_length=128)
+    pipeline_enabled: bool | None = None
+    start_date_from: date | None = None
+    start_date_to: date | None = None
+    due_date_from: date | None = None
+    due_date_to: date | None = None
+
+
+class PipelineInstanceItem(BaseModel):
+    id: int
+    sub_order_id: int
+    order_id: int
+    order_process_id: int
+    process_code: str
+    pipeline_seq: int
+    pipeline_sub_order_no: str
+    is_active: bool
+    invalid_reason: str | None = None
+    invalidated_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PipelineInstanceListResult(BaseModel):
+    total: int
+    items: list[PipelineInstanceItem]
+
+
+class ScrapStatisticsDetailItem(BaseModel):
+    id: int
+    order_id: int | None = None
+    order_code: str | None = None
+    product_id: int | None = None
+    product_name: str | None = None
+    process_id: int | None = None
+    process_code: str | None = None
+    process_name: str | None = None
+    scrap_reason: str
+    scrap_quantity: int
+    last_scrap_time: datetime | None = None
+    progress: str
+    applied_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RepairDefectPhenomenonItem(BaseModel):
+    id: int
+    phenomenon: str
+    quantity: int
+
+
+class RepairCauseDetailItem(BaseModel):
+    id: int
+    phenomenon: str
+    reason: str
+    quantity: int
+    is_scrap: bool
+
+
+class RepairReturnRouteItem(BaseModel):
+    id: int
+    target_process_id: int | None = None
+    target_process_code: str
+    target_process_name: str
+    return_quantity: int
+
+
+class RepairOrderDetailItem(BaseModel):
+    id: int
+    repair_order_code: str
+    source_order_id: int | None = None
+    source_order_code: str | None = None
+    product_id: int | None = None
+    product_name: str | None = None
+    source_order_process_id: int | None = None
+    source_process_code: str
+    source_process_name: str
+    sender_user_id: int | None = None
+    sender_username: str | None = None
+    production_quantity: int
+    repair_quantity: int
+    repaired_quantity: int
+    scrap_quantity: int
+    scrap_replenished: bool
+    repair_time: datetime
+    status: str
+    completed_at: datetime | None = None
+    repair_operator_user_id: int | None = None
+    repair_operator_username: str | None = None
+    defect_rows: list[RepairDefectPhenomenonItem] = Field(default_factory=list)
+    cause_rows: list[RepairCauseDetailItem] = Field(default_factory=list)
+    return_routes: list[RepairReturnRouteItem] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
