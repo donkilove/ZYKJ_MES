@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class UserBase(BaseModel):
-    username: str = Field(min_length=2, max_length=64)
+    username: str = Field(min_length=2, max_length=10)
     full_name: str | None = Field(default=None, max_length=128)
     remark: str | None = Field(default=None, max_length=255)
 
@@ -18,7 +18,7 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
-    username: str | None = Field(default=None, min_length=2, max_length=64)
+    username: str | None = Field(default=None, min_length=2, max_length=10)
     full_name: str | None = Field(default=None, max_length=128)
     remark: str | None = Field(default=None, max_length=255)
     password: str | None = Field(default=None, min_length=6, max_length=128)

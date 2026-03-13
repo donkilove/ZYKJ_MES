@@ -41,6 +41,8 @@ class UserPage extends StatefulWidget {
 }
 
 class _UserPageState extends State<UserPage> {
+  int _currentTabIndex = 0;
+
   bool _hasPermission(String code) => widget.capabilityCodes.contains(code);
 
   bool get _canManageUsers =>
@@ -78,9 +80,11 @@ class _UserPageState extends State<UserPage> {
 
   List<_UserTabItem> _buildTabs() {
     final tabs = <_UserTabItem>[];
-    for (final code in _sortedVisibleTabCodes()) {
+    final sortedCodes = _sortedVisibleTabCodes();
+    for (final code in sortedCodes) {
       switch (code) {
         case 'user_management':
+          final roleManagementIndex = sortedCodes.indexOf('role_management');
           tabs.add(
             _UserTabItem(
               code: code,
@@ -89,6 +93,11 @@ class _UserPageState extends State<UserPage> {
                 session: widget.session,
                 onLogout: widget.onLogout,
                 canWrite: _canManageUsers,
+                onNavigateToRoleManagement: roleManagementIndex >= 0
+                    ? () {
+                        setState(() => _currentTabIndex = roleManagementIndex);
+                      }
+                    : null,
               ),
             ),
           );
@@ -193,34 +202,54 @@ class _UserPageState extends State<UserPage> {
           child: DefaultTabController(
             key: ValueKey(tabs.map((item) => item.code).join('|')),
             length: tabs.length,
-            child: Column(
-              children: [
-                Material(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: TabBar(
-                    isScrollable: false,
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    labelPadding: EdgeInsets.zero,
-                    tabs: tabs
-                        .map(
-                          (item) => Tab(
-                            child: Text(
-                              item.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-                Expanded(
-                  child: TabBarView(
-                    children: tabs.map((item) => item.child).toList(),
-                  ),
-                ),
-              ],
+            initialIndex: _currentTabIndex.clamp(0, tabs.length - 1),
+            child: Builder(
+              builder: (context) {
+                final tabController = DefaultTabController.of(context);
+                tabController.addListener(() {
+                  if (!tabController.indexIsChanging) {
+                    _currentTabIndex = tabController.index;
+                  }
+                });
+                if (_currentTabIndex != tabController.index &&
+                    _currentTabIndex >= 0 &&
+                    _currentTabIndex < tabs.length) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (tabController.index != _currentTabIndex) {
+                      tabController.animateTo(_currentTabIndex);
+                    }
+                  });
+                }
+                return Column(
+                  children: [
+                    Material(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: TabBar(
+                        isScrollable: false,
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        labelPadding: EdgeInsets.zero,
+                        tabs: tabs
+                            .map(
+                              (item) => Tab(
+                                child: Text(
+                                  item.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: tabs.map((item) => item.child).toList(),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),

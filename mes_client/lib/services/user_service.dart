@@ -60,8 +60,9 @@ class UserService {
     String? roleCode,
     int? stageId,
     bool? isActive,
+    String format = 'csv',
   }) async {
-    final query = <String, String>{};
+    final query = <String, String>{'format': format};
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
     }

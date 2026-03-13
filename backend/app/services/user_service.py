@@ -29,6 +29,26 @@ REG_STATUS_APPROVED = "approved"
 REG_STATUS_REJECTED = "rejected"
 
 
+def validate_password(password: str, db: Session | None = None, exclude_user_id: int | None = None) -> str | None:
+    """校验密码规则，返回错误信息或 None。"""
+    if len(password) < 6:
+        return "密码长度不能少于6位"
+    # 不得连续4位相同字符
+    for i in range(len(password) - 3):
+        if password[i] == password[i + 1] == password[i + 2] == password[i + 3]:
+            return "密码不得包含连续4位相同字符"
+    # 不支持与已有用户相同密码
+    if db is not None:
+        stmt = select(User).where(User.is_deleted.is_(False))
+        if exclude_user_id is not None:
+            stmt = stmt.where(User.id != exclude_user_id)
+        users = db.execute(stmt).scalars().all()
+        for u in users:
+            if verify_password(password, u.password_hash):
+                return "密码不能与系统中已有用户的密码相同"
+    return None
+
+
 def _now_utc() -> datetime:
     return datetime.now(UTC)
 
@@ -390,6 +410,10 @@ def create_user(db: Session, payload: UserCreate) -> tuple[User | None, str | No
     if existing:
         return None, "Username already exists"
 
+    pwd_error = validate_password(payload.password, db=db)
+    if pwd_error:
+        return None, pwd_error
+
     roles, roles_error = _resolve_roles(db, payload.role_codes)
     if roles_error:
         return None, roles_error
@@ -608,6 +632,9 @@ def update_user(
     if payload.remark is not None:
         user.remark = payload.remark.strip() if payload.remark else None
     if payload.password:
+        pwd_error = validate_password(payload.password, db=db, exclude_user_id=user.id)
+        if pwd_error:
+            return None, pwd_error
         user.password_hash = get_password_hash(payload.password)
         user.must_change_password = bool(payload.must_change_password) if payload.must_change_password is not None else True
         user.password_changed_at = _now_utc()
@@ -688,13 +715,16 @@ def reset_user_password(
     *,
     user: User,
     new_password: str,
-) -> User:
+) -> tuple[User | None, str | None]:
+    pwd_error = validate_password(new_password, db=db, exclude_user_id=user.id)
+    if pwd_error:
+        return None, pwd_error
     user.password_hash = get_password_hash(new_password)
     user.must_change_password = True
     user.password_changed_at = _now_utc()
     db.commit()
     db.refresh(user)
-    return user
+    return user, None
 
 
 def change_user_password(
@@ -711,6 +741,9 @@ def change_user_password(
         return False, "New password and confirm password do not match"
     if old_password == new_password:
         return False, "New password cannot be the same as original password"
+    pwd_error = validate_password(new_password, db=db, exclude_user_id=user.id)
+    if pwd_error:
+        return False, pwd_error
     user.password_hash = get_password_hash(new_password)
     user.must_change_password = False
     user.password_changed_at = _now_utc()

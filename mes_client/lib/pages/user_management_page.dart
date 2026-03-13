@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -10,7 +12,7 @@ import '../services/craft_service.dart';
 import '../services/user_service.dart';
 import '../widgets/locked_form_dialog.dart';
 
-enum _UserAction { edit, delete }
+enum _UserAction { edit, disable, enable, resetPassword, delete }
 
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({
@@ -18,11 +20,13 @@ class UserManagementPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canWrite,
+    this.onNavigateToRoleManagement,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canWrite;
+  final VoidCallback? onNavigateToRoleManagement;
 
   @override
   State<UserManagementPage> createState() => _UserManagementPageState();
@@ -48,6 +52,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
   Timer? _onlineStatusTimer;
   static const Duration _onlineRefreshInterval = Duration(seconds: 5);
   bool _onlineRefreshInFlight = false;
+
+  // 筛选条件
+  String? _filterRoleCode;
+  int? _filterStageId;
+  bool? _filterIsOnline; // null=全部, true=在线, false=离线
+  bool? _filterIsActive; // null=全部, true=启用, false=停用
 
   bool _loading = false;
   String _message = '';
@@ -254,6 +264,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
           page: 1,
           pageSize: 50,
           keyword: _keywordController.text.trim(),
+          roleCode: _filterRoleCode,
+          stageId: _filterStageId,
+          isActive: _filterIsActive,
         ),
       ]);
       final roles = result[0] as RoleListResult;
@@ -264,12 +277,16 @@ class _UserManagementPageState extends State<UserManagementPage> {
       if (!mounted) {
         return;
       }
+      final userItems = users.items;
+      final filtered = _filterIsOnline == null
+          ? userItems
+          : userItems.where((u) => u.isOnline == _filterIsOnline).toList();
       setState(() {
         _roles = roles.items;
         _processes = processes.items;
         _stages = stages.items;
-        _users = users.items;
-        _total = users.total;
+        _users = filtered;
+        _total = _filterIsOnline == null ? users.total : filtered.length;
       });
     } catch (error) {
       if (!mounted) {
@@ -306,13 +323,20 @@ class _UserManagementPageState extends State<UserManagementPage> {
         page: 1,
         pageSize: 50,
         keyword: _keywordController.text.trim(),
+        roleCode: _filterRoleCode,
+        stageId: _filterStageId,
+        isActive: _filterIsActive,
       );
       if (!mounted) {
         return;
       }
+      // 前端过滤在线状态（后端不支持在线状态筛选参数）
+      final filtered = _filterIsOnline == null
+          ? result.items
+          : result.items.where((u) => u.isOnline == _filterIsOnline).toList();
       setState(() {
-        _users = result.items;
-        _total = result.total;
+        _users = filtered;
+        _total = _filterIsOnline == null ? result.total : filtered.length;
       });
     } catch (error) {
       if (!mounted) {
@@ -379,6 +403,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             }
                             if (value.trim().length < 2) {
                               return '账号至少 2 个字符';
+                            }
+                            if (value.trim().length > 10) {
+                              return '账号最多 10 个字符';
                             }
                             return null;
                           },
@@ -605,6 +632,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             if (value.trim().length < 2) {
                               return '账号至少 2 个字符';
                             }
+                            if (value.trim().length > 10) {
+                              return '账号最多 10 个字符';
+                            }
                             return null;
                           },
                         ),
@@ -826,6 +856,171 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
+  Future<void> _toggleUserActive(UserItem user, {required bool active}) async {
+    if (!widget.canWrite) {
+      _showNoPermission();
+      return;
+    }
+    final actionLabel = active ? '启用' : '停用';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('$actionLabel用户'),
+          content: Text('确认$actionLabel用户"${user.username}"吗？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(actionLabel),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+
+    try {
+      if (active) {
+        await _userService.enableUser(userId: user.id);
+      } else {
+        await _userService.disableUser(userId: user.id);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('用户 ${user.username} 已$actionLabel')),
+        );
+      }
+      await _loadUsers();
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$actionLabel用户失败：${_errorMessage(error)}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showResetPasswordDialog(UserItem user) async {
+    if (!widget.canWrite) {
+      _showNoPermission();
+      return;
+    }
+    final passwordController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final confirmed = await showLockedFormDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('重置密码：${user.username}'),
+          content: SizedBox(
+            width: 400,
+            child: Form(
+              key: formKey,
+              child: TextFormField(
+                controller: passwordController,
+                decoration: const InputDecoration(labelText: '新密码'),
+                obscureText: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) return '请输入新密码';
+                  if (value.length < 6) return '密码至少 6 个字符';
+                  return null;
+                },
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                try {
+                  await _userService.resetUserPassword(
+                    userId: user.id,
+                    password: passwordController.text,
+                  );
+                  if (context.mounted) {
+                    Navigator.of(context).pop(true);
+                  }
+                } catch (error) {
+                  if (_isUnauthorized(error)) {
+                    widget.onLogout();
+                    return;
+                  }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('重置密码失败：${_errorMessage(error)}'),
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('确认重置'),
+            ),
+          ],
+        );
+      },
+    );
+
+    passwordController.dispose();
+    if (confirmed == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('用户 ${user.username} 密码已重置')),
+      );
+    }
+  }
+
+  Future<void> _exportUsers({String format = 'csv'}) async {
+    setState(() => _loading = true);
+    try {
+      final result = await _userService.exportUsers(
+        keyword: _keywordController.text.trim().isEmpty
+            ? null
+            : _keywordController.text.trim(),
+        roleCode: _filterRoleCode,
+        stageId: _filterStageId,
+        isActive: _filterIsActive,
+        format: format,
+      );
+      if (!mounted) return;
+      final bytes = base64Decode(result.contentBase64);
+      final downloadsDir = Directory(
+        '${Platform.environment['USERPROFILE'] ?? '.'}\\Downloads',
+      );
+      final file = File('${downloadsDir.path}\\${result.filename}');
+      await file.writeAsBytes(bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已导出到 ${file.path}')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出失败：${_errorMessage(error)}')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _handleUserAction(_UserAction action, UserItem user) async {
     if (!widget.canWrite) {
       _showNoPermission();
@@ -834,6 +1029,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
     switch (action) {
       case _UserAction.edit:
         await _showEditUserDialog(user);
+        return;
+      case _UserAction.disable:
+        await _toggleUserActive(user, active: false);
+        return;
+      case _UserAction.enable:
+        await _toggleUserActive(user, active: true);
+        return;
+      case _UserAction.resetPassword:
+        await _showResetPasswordDialog(user);
         return;
       case _UserAction.delete:
         await _confirmDeleteUser(user);
@@ -893,6 +1097,123 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 icon: const Icon(Icons.person_add),
                 label: const Text('新建用户'),
               ),
+              if (widget.onNavigateToRoleManagement != null) ...[
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: widget.onNavigateToRoleManagement,
+                  icon: const Icon(Icons.admin_panel_settings),
+                  label: const Text('角色管理'),
+                ),
+              ],
+              const SizedBox(width: 12),
+              PopupMenuButton<String>(
+                onSelected: (value) => _exportUsers(format: value),
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'csv', child: Text('导出 CSV')),
+                  PopupMenuItem(value: 'excel', child: Text('导出 Excel')),
+                ],
+                child: OutlinedButton.icon(
+                  onPressed: _loading ? null : () {},
+                  icon: const Icon(Icons.download),
+                  label: const Text('导出'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // 高级筛选行
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              SizedBox(
+                width: 150,
+                child: DropdownButtonFormField<String?>(
+                  value: _filterRoleCode,
+                  decoration: const InputDecoration(
+                    labelText: '角色',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  isExpanded: true,
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('全部')),
+                    ..._roles.map((role) => DropdownMenuItem(
+                      value: role.code,
+                      child: Text(role.name, overflow: TextOverflow.ellipsis),
+                    )),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _filterRoleCode = value);
+                    _loadUsers();
+                  },
+                ),
+              ),
+              SizedBox(
+                width: 150,
+                child: DropdownButtonFormField<int?>(
+                  value: _filterStageId,
+                  decoration: const InputDecoration(
+                    labelText: '工段',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  isExpanded: true,
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('全部')),
+                    ..._stages.map((stage) => DropdownMenuItem(
+                      value: stage.id,
+                      child: Text(stage.name, overflow: TextOverflow.ellipsis),
+                    )),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _filterStageId = value);
+                    _loadUsers();
+                  },
+                ),
+              ),
+              SizedBox(
+                width: 130,
+                child: DropdownButtonFormField<bool?>(
+                  value: _filterIsOnline,
+                  decoration: const InputDecoration(
+                    labelText: '在线状态',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  isExpanded: true,
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('全部')),
+                    DropdownMenuItem(value: true, child: Text('在线')),
+                    DropdownMenuItem(value: false, child: Text('离线')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _filterIsOnline = value);
+                    _loadUsers();
+                  },
+                ),
+              ),
+              SizedBox(
+                width: 130,
+                child: DropdownButtonFormField<bool?>(
+                  value: _filterIsActive,
+                  decoration: const InputDecoration(
+                    labelText: '账号状态',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  isExpanded: true,
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('全部')),
+                    DropdownMenuItem(value: true, child: Text('启用')),
+                    DropdownMenuItem(value: false, child: Text('停用')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _filterIsActive = value);
+                    _loadUsers();
+                  },
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -929,6 +1250,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             final statusColor = user.isOnline
                                 ? Colors.green
                                 : theme.colorScheme.outline;
+                            final activeLabel = user.isActive ? '启用' : '停用';
+                            final activeColor = user.isActive
+                                ? Colors.blue
+                                : Colors.red;
                             return Container(
                               padding: const EdgeInsets.symmetric(
                                 vertical: 12,
@@ -995,6 +1320,35 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                   Container(
                                     alignment: Alignment.center,
                                     margin: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: activeColor.withValues(
+                                        alpha: 0.14,
+                                      ),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: activeColor.withValues(
+                                          alpha: 0.45,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      activeLabel,
+                                      style: TextStyle(
+                                        color: activeColor,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    alignment: Alignment.center,
+                                    margin: const EdgeInsets.symmetric(
                                       horizontal: 12,
                                     ),
                                     padding: const EdgeInsets.symmetric(
@@ -1010,12 +1364,26 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                       onSelected: (action) {
                                         _handleUserAction(action, user);
                                       },
-                                      itemBuilder: (context) => const [
-                                        PopupMenuItem(
+                                      itemBuilder: (context) => [
+                                        const PopupMenuItem(
                                           value: _UserAction.edit,
                                           child: Text('编辑'),
                                         ),
-                                        PopupMenuItem(
+                                        if (user.isActive)
+                                          const PopupMenuItem(
+                                            value: _UserAction.disable,
+                                            child: Text('停用'),
+                                          )
+                                        else
+                                          const PopupMenuItem(
+                                            value: _UserAction.enable,
+                                            child: Text('启用'),
+                                          ),
+                                        const PopupMenuItem(
+                                          value: _UserAction.resetPassword,
+                                          child: Text('重置密码'),
+                                        ),
+                                        const PopupMenuItem(
                                           value: _UserAction.delete,
                                           child: Text('删除'),
                                         ),

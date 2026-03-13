@@ -63,14 +63,14 @@ def _build_csv_export(users: list[User], online_user_ids: set[int]) -> str:
     writer.writerow(
         [
             "id",
-            "username",
-            "role_names",
-            "stage_name",
-            "is_online",
-            "is_active",
-            "must_change_password",
-            "created_at",
-            "last_login_at",
+            "用户名",
+            "角色",
+            "工段",
+            "在线状态",
+            "账号状态",
+            "首次登录需改密",
+            "创建时间",
+            "最近登录时间",
         ]
     )
     for user in users:
@@ -80,14 +80,41 @@ def _build_csv_export(users: list[User], online_user_ids: set[int]) -> str:
                 user.username,
                 " / ".join(sorted(role.name for role in user.roles)),
                 user.stage.name if user.stage else "/",
-                "online" if user.id in online_user_ids else "offline",
-                "enabled" if user.is_active else "disabled",
-                "yes" if user.must_change_password else "no",
+                "在线" if user.id in online_user_ids else "离线",
+                "启用" if user.is_active else "停用",
+                "是" if user.must_change_password else "否",
                 user.created_at.isoformat(),
                 user.last_login_at.isoformat() if user.last_login_at else "",
             ]
         )
-    return base64.b64encode(buffer.getvalue().encode("utf-8")).decode("ascii")
+    return base64.b64encode(buffer.getvalue().encode("utf-8-sig")).decode("ascii")
+
+
+def _build_excel_export(users: list[User], online_user_ids: set[int]) -> str:
+    try:
+        import openpyxl
+    except ImportError:
+        return ""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "用户列表"
+    headers = ["id", "用户名", "角色", "工段", "在线状态", "账号状态", "首次登录需改密", "创建时间", "最近登录时间"]
+    ws.append(headers)
+    for user in users:
+        ws.append([
+            user.id,
+            user.username,
+            " / ".join(sorted(role.name for role in user.roles)),
+            user.stage.name if user.stage else "/",
+            "在线" if user.id in online_user_ids else "离线",
+            "启用" if user.is_active else "停用",
+            "是" if user.must_change_password else "否",
+            user.created_at.isoformat(),
+            user.last_login_at.isoformat() if user.last_login_at else "",
+        ])
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
 @router.get("", response_model=ApiResponse[UserListResult])
@@ -123,6 +150,7 @@ def export_users(
     role_code: str | None = Query(default=None),
     stage_id: int | None = Query(default=None, ge=1),
     is_active: bool | None = Query(default=None),
+    format: str = Query(default="csv", pattern="^(csv|excel)$"),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("user.users.export")),
 ) -> ApiResponse[UserExportResult]:
@@ -137,6 +165,17 @@ def export_users(
         include_deleted=False,
     )
     online_user_ids = list_online_user_ids(db)
+    if format == "excel":
+        content_base64 = _build_excel_export(users, online_user_ids)
+        if not content_base64:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Excel export not available (openpyxl not installed)")
+        return success_response(
+            UserExportResult(
+                filename="users_export.xlsx",
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                content_base64=content_base64,
+            )
+        )
     content_base64 = _build_csv_export(users, online_user_ids)
     return success_response(
         UserExportResult(
@@ -312,7 +351,11 @@ def reset_password_api(
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    updated = reset_user_password(db, user=user, new_password=password)
+    updated, error_message = reset_user_password(db, user=user, new_password=password)
+    if error_message:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password")
     write_audit_log(
         db,
         action_code="user.reset_password",
