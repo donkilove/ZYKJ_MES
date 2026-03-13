@@ -1093,6 +1093,22 @@ def disable_product_version(
     return revision
 
 
+def update_product_version_note(
+    db: Session,
+    *,
+    product_id: int,
+    version: int,
+    note: str,
+) -> ProductRevision:
+    revision = get_product_version(db, product_id=product_id, version=version)
+    if revision is None:
+        raise ValueError("版本不存在")
+    revision.note = note.strip() or None
+    db.commit()
+    db.refresh(revision)
+    return revision
+
+
 def delete_product_version(
     db: Session,
     *,

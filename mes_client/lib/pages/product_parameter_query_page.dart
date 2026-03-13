@@ -11,6 +11,8 @@ import '../services/product_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
+const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
+
 enum _ProductParameterQueryListAction { view }
 
 class ProductParameterQueryPage extends StatefulWidget {
@@ -43,6 +45,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   int _total = 0;
   List<ProductItem> _products = const [];
   int _handledJumpSeq = 0;
+  String _selectedCategoryFilter = '';
+  String _selectedStatusFilter = '';
+  final TextEditingController _versionFilterController = TextEditingController();
 
   @override
   void initState() {
@@ -71,6 +76,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   @override
   void dispose() {
     _keywordController.dispose();
+    _versionFilterController.dispose();
     super.dispose();
   }
 
@@ -93,6 +99,18 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     final min = local.minute.toString().padLeft(2, '0');
     final sec = local.second.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd $hh:$min:$sec';
+  }
+
+  String _lifecycleLabel(String value) {
+    switch (value) {
+      case 'active':
+      case 'effective':
+        return '启用';
+      case 'inactive':
+        return '停用';
+      default:
+        return value;
+    }
   }
 
   List<PopupMenuEntry<_ProductParameterQueryListAction>>
@@ -135,6 +153,8 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
         page: 1,
         pageSize: 100,
         keyword: _keywordController.text.trim(),
+        category: _selectedCategoryFilter,
+        lifecycleStatus: _selectedStatusFilter,
       );
       if (!mounted) {
         return;
@@ -161,6 +181,15 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
         });
       }
     }
+  }
+
+  List<ProductItem> get _filteredProducts {
+    final versionFilter = _versionFilterController.text.trim().toLowerCase();
+    if (versionFilter.isEmpty) return _products;
+    return _products.where((p) {
+      final label = p.effectiveVersion > 0 ? 'v1.${p.effectiveVersion}' : '';
+      return label.contains(versionFilter);
+    }).toList();
   }
 
   Future<void> _handleJumpCommand(ProductJumpCommand command) async {
@@ -235,6 +264,28 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   }
 
   Future<void> _showParametersDialog(ProductItem product) async {
+    if (product.effectiveVersion == 0) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text('产品参数 - ${product.name}'),
+            content: const SizedBox(
+              width: 420,
+              child: Text('该产品暂无生效版本，无法查看参数。\n请先在产品管理中激活一个版本。'),
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('关闭'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
     ProductParameterListResult result;
     try {
       result = await _productService.listProductParameters(
@@ -261,9 +312,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('产品参数 - ${product.name}'),
+          title: Text('产品参数 - ${product.name}（V1.${product.effectiveVersion}）'),
           content: SizedBox(
-            width: 900,
+            width: 1000,
             height: 520,
             child: result.items.isEmpty
                 ? const Center(child: Text('该产品暂无参数'))
@@ -274,6 +325,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                         DataColumn(label: Text('参数分类')),
                         DataColumn(label: Text('参数类型')),
                         DataColumn(label: Text('参数值')),
+                        DataColumn(label: Text('参数说明')),
                       ],
                       rows: result.items.map((item) {
                         return DataRow(
@@ -282,6 +334,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                             DataCell(Text(item.category)),
                             DataCell(Text(item.type)),
                             DataCell(_buildParameterValueCell(item)),
+                            DataCell(Text(item.description.isEmpty ? '-' : item.description)),
                           ],
                         );
                       }).toList(),
@@ -338,10 +391,76 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                 ),
               ),
               const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedCategoryFilter,
+                  decoration: const InputDecoration(
+                    labelText: '分类筛选',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String>(value: '', child: Text('全部')),
+                    ..._productCategoryOptions.map(
+                      (c) => DropdownMenuItem<String>(value: c, child: Text(c)),
+                    ),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _selectedCategoryFilter = value ?? '';
+                          });
+                          _loadProducts();
+                        },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedStatusFilter,
+                  decoration: const InputDecoration(
+                    labelText: '状态筛选',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem<String>(value: '', child: Text('全部')),
+                    DropdownMenuItem<String>(value: 'active', child: Text('启用')),
+                    DropdownMenuItem<String>(value: 'inactive', child: Text('停用')),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _selectedStatusFilter = value ?? '';
+                          });
+                          _loadProducts();
+                        },
+                ),
+              ),
+              const SizedBox(width: 12),
               FilledButton.icon(
                 onPressed: _loading ? null : _loadProducts,
                 icon: const Icon(Icons.search),
                 label: const Text('搜索'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              SizedBox(
+                width: 200,
+                child: TextField(
+                  controller: _versionFilterController,
+                  decoration: const InputDecoration(
+                    labelText: '生效版本号筛选',
+                    hintText: '如 V1.2',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
               ),
             ],
           ),
@@ -370,23 +489,24 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                         child: DataTable(
                           columns: [
                             UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                            UnifiedListTableHeaderStyle.column(context, '产品分类'),
+                            UnifiedListTableHeaderStyle.column(context, '生效版本'),
+                            UnifiedListTableHeaderStyle.column(context, '当前状态'),
                             UnifiedListTableHeaderStyle.column(context, '创建时间'),
-                            UnifiedListTableHeaderStyle.column(
-                              context,
-                              '最后修改时间',
-                            ),
                             UnifiedListTableHeaderStyle.column(
                               context,
                               '操作',
                               textAlign: TextAlign.center,
                             ),
                           ],
-                          rows: _products.map((product) {
+                          rows: _filteredProducts.map((product) {
                             return DataRow(
                               cells: [
                                 DataCell(Text(product.name)),
+                                DataCell(Text(product.category.isEmpty ? '-' : product.category)),
+                                DataCell(Text(product.effectiveVersion > 0 ? 'V1.${product.effectiveVersion}' : '-')),
+                                DataCell(Text(_lifecycleLabel(product.lifecycleStatus))),
                                 DataCell(Text(_formatTime(product.createdAt))),
-                                DataCell(Text(_formatTime(product.updatedAt))),
                                 DataCell(
                                   UnifiedListTableHeaderStyle.actionMenuButton<
                                     _ProductParameterQueryListAction

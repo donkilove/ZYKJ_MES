@@ -34,6 +34,7 @@ from app.schemas.product import (
     ProductVersionDisableRequest,
     ProductVersionItem,
     ProductVersionListResult,
+    ProductVersionNoteUpdateRequest,
 )
 from app.services.product_service import (
     activate_product_version,
@@ -58,6 +59,7 @@ from app.services.product_service import (
     rollback_product_to_version,
     summarize_changed_keys,
     update_product_parameters,
+    update_product_version_note,
 )
 
 
@@ -491,6 +493,26 @@ def delete_product_version_api(
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     return success_response({"deleted": True}, message="deleted")
+
+
+@router.patch("/{product_id}/versions/{version}/note", response_model=ApiResponse[ProductVersionItem])
+def update_product_version_note_api(
+    product_id: int,
+    version: int,
+    body: ProductVersionNoteUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("product.versions.manage")),
+) -> ApiResponse[ProductVersionItem]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    try:
+        revision = update_product_version_note(
+            db, product_id=product_id, version=version, note=body.note
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(_to_version_item(revision))
 
 
 @router.get("/{product_id}/versions/compare", response_model=ApiResponse[ProductVersionCompareResult])

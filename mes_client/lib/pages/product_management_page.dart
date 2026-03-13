@@ -321,44 +321,172 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       return;
     }
 
-    ProductVersionListResult versions;
-    try {
-      versions = await _productService.listProductVersions(
-        productId: product.id,
-      );
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('加载版本失败：${_errorMessage(error)}')));
-      return;
-    }
-    if (!mounted) {
-      return;
-    }
-
     int? fromVersion;
     int? toVersion;
     ProductVersionCompareResult? compareResult;
+    var versions = ProductVersionListResult(total: 0, items: const []);
+    var loadingVersions = true;
+    var operationLoading = false;
+    var compareLoading = false;
+    var initialized = false;
+    var dialogClosed = false;
+    String? operationLabel;
+    BuildContext? dialogContext;
+
+    Future<bool> reloadVersions(StateSetter setLocalState) async {
+      if (dialogClosed) {
+        return false;
+      }
+      setLocalState(() {
+        loadingVersions = true;
+      });
+      try {
+        final result = await _productService.listProductVersions(
+          productId: product.id,
+        );
+        if (!mounted || dialogClosed) {
+          return false;
+        }
+        setLocalState(() {
+          versions = result;
+          loadingVersions = false;
+          final versionItems = result.items;
+          final previousFrom = fromVersion;
+          final previousTo = toVersion;
+          final hasFrom = previousFrom != null &&
+              versionItems.any((item) => item.version == previousFrom);
+          final hasTo = previousTo != null &&
+              versionItems.any((item) => item.version == previousTo);
+          final nextFrom = hasFrom
+              ? previousFrom
+              : (versionItems.isNotEmpty ? versionItems.first.version : null);
+          final nextTo = hasTo
+              ? previousTo
+              : (versionItems.length >= 2 ? versionItems[1].version : nextFrom);
+          if (nextFrom != previousFrom || nextTo != previousTo) {
+            compareResult = null;
+          }
+          fromVersion = nextFrom;
+          toVersion = nextTo;
+          if (versionItems.isEmpty) {
+            compareResult = null;
+          }
+        });
+        return true;
+      } catch (error) {
+        if (!mounted || dialogClosed) {
+          return false;
+        }
+        setLocalState(() {
+          loadingVersions = false;
+        });
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+          return false;
+        }
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          SnackBar(content: Text('加载版本失败：${_errorMessage(error)}')),
+        );
+        return false;
+      }
+    }
+
+    Future<bool> confirmVersionAction({
+      required String title,
+      required String content,
+      required String confirmText,
+      Color? confirmColor,
+    }) async {
+      final confirmed = await showLockedFormDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text(title),
+            content: SizedBox(width: 420, child: Text(content)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                style: confirmColor == null
+                    ? null
+                    : FilledButton.styleFrom(backgroundColor: confirmColor),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(confirmText),
+              ),
+            ],
+          );
+        },
+      );
+      return confirmed == true;
+    }
+
+    Future<void> runVersionOperation(
+      StateSetter setLocalState, {
+      required String loadingText,
+      required String errorPrefix,
+      required Future<void> Function() action,
+    }) async {
+      if (dialogClosed || operationLoading) {
+        return;
+      }
+      setLocalState(() {
+        operationLoading = true;
+        operationLabel = loadingText;
+      });
+      try {
+        await action();
+      } catch (error) {
+        if (!mounted || dialogClosed) {
+          return;
+        }
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+          return;
+        }
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          SnackBar(content: Text('$errorPrefix：${_errorMessage(error)}')),
+        );
+      } finally {
+        if (!dialogClosed && mounted && (dialogContext?.mounted ?? false)) {
+          setLocalState(() {
+            operationLoading = false;
+            operationLabel = null;
+          });
+        }
+      }
+    }
+
+    TextButton buildActionButton({
+      required String label,
+      required VoidCallback? onPressed,
+      Color? foregroundColor,
+    }) {
+      return TextButton(
+        style: TextButton.styleFrom(
+          foregroundColor: foregroundColor,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+        onPressed: onPressed,
+        child: Text(label),
+      );
+    }
 
     await showLockedFormDialog<void>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setLocalState) {
+            dialogContext = context;
+            if (!initialized) {
+              initialized = true;
+              Future.microtask(() => reloadVersions(setLocalState));
+            }
             final versionItems = versions.items;
-            fromVersion ??= versionItems.isNotEmpty
-                ? versionItems.first.version
-                : null;
-            toVersion ??= versionItems.length >= 2
-                ? versionItems[1].version
-                : fromVersion;
             return AlertDialog(
               title: Text('版本管理 - ${product.name}'),
               content: SizedBox(
@@ -367,6 +495,49 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: operationLoading || loadingVersions
+                                ? null
+                                : () async {
+                                    await runVersionOperation(
+                                      setLocalState,
+                                      loadingText: '正在新建版本...',
+                                      errorPrefix: '新建版本失败',
+                                      action: () async {
+                                        await _productService
+                                            .createProductVersion(
+                                              productId: product.id,
+                                            );
+                                        if (!mounted) {
+                                          return;
+                                        }
+                                        ScaffoldMessenger.of(
+                                          this.context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('新建版本成功'),
+                                          ),
+                                        );
+                                        await reloadVersions(setLocalState);
+                                      },
+                                    );
+                                  },
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('新建版本'),
+                          ),
+                        ],
+                      ),
+                      if (loadingVersions || operationLoading) ...[
+                        const SizedBox(height: 12),
+                        const LinearProgressIndicator(),
+                        if (operationLabel != null) ...[
+                          const SizedBox(height: 6),
+                          Text(operationLabel!),
+                        ],
+                      ],
+                      const SizedBox(height: 12),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -383,11 +554,13 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (value) {
-                              setLocalState(() {
-                                fromVersion = value;
-                              });
-                            },
+                            onChanged: loadingVersions || operationLoading
+                                ? null
+                                : (value) {
+                                    setLocalState(() {
+                                      fromVersion = value;
+                                    });
+                                  },
                           ),
                           DropdownButton<int>(
                             value: toVersion,
@@ -400,19 +573,27 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (value) {
-                              setLocalState(() {
-                                toVersion = value;
-                              });
-                            },
+                            onChanged: loadingVersions || operationLoading
+                                ? null
+                                : (value) {
+                                    setLocalState(() {
+                                      toVersion = value;
+                                    });
+                                  },
                           ),
                           FilledButton(
                             onPressed:
-                                !widget.canCompareVersions ||
+                                loadingVersions ||
+                                    operationLoading ||
+                                    compareLoading ||
+                                    !widget.canCompareVersions ||
                                     fromVersion == null ||
                                     toVersion == null
                                 ? null
                                 : () async {
+                                    setLocalState(() {
+                                      compareLoading = true;
+                                    });
                                     try {
                                       final result = await _productService
                                           .compareProductVersions(
@@ -420,24 +601,38 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                             fromVersion: fromVersion!,
                                             toVersion: toVersion!,
                                           );
+                                      if (!mounted ||
+                                          dialogClosed ||
+                                          !(dialogContext?.mounted ?? false)) {
+                                        return;
+                                      }
                                       setLocalState(() {
                                         compareResult = result;
                                       });
                                     } catch (error) {
+                                      if (!mounted || dialogClosed) {
+                                        return;
+                                      }
                                       if (_isUnauthorized(error)) {
                                         widget.onLogout();
                                         return;
                                       }
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              '版本对比失败：${_errorMessage(error)}',
-                                            ),
+                                      ScaffoldMessenger.of(
+                                        this.context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            '版本对比失败：${_errorMessage(error)}',
                                           ),
-                                        );
+                                        ),
+                                      );
+                                    } finally {
+                                      if (!dialogClosed &&
+                                          mounted &&
+                                          (dialogContext?.mounted ?? false)) {
+                                        setLocalState(() {
+                                          compareLoading = false;
+                                        });
                                       }
                                     }
                                   },
@@ -462,90 +657,416 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                       ],
                       const Text('版本列表'),
                       const SizedBox(height: 8),
-                      ...versions.items.map(
-                        (item) => ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            '${item.displayVersion} / ${item.action} / ${_lifecycleLabel(item.lifecycleStatus)}',
-                          ),
-                          subtitle: Text(
-                            '${_formatTime(item.createdAt)} ${item.createdByUsername ?? '-'} ${item.note ?? ''}',
-                          ),
-                          trailing: TextButton(
-                            onPressed: !widget.canRollbackVersion
-                                ? null
-                                : () async {
-                                    try {
-                                      var confirmed = false;
-                                      if (widget.canViewImpactAnalysis) {
-                                        final impact = await _productService
-                                            .getProductImpactAnalysis(
-                                              productId: product.id,
-                                              operation: 'rollback',
-                                              targetVersion: item.version,
+                      if (!loadingVersions && versionItems.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('暂无版本记录'),
+                        )
+                      else
+                        ...versionItems.map((item) {
+                          final isDraft = item.lifecycleStatus == 'draft';
+                          final isEffective =
+                              item.lifecycleStatus == 'effective';
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              '${item.displayVersion} / ${_lifecycleLabel(item.lifecycleStatus)}',
+                            ),
+                            subtitle: Text(
+                              [
+                                _formatTime(item.createdAt),
+                                item.createdByUsername ?? '-',
+                                if (item.note != null && item.note!.isNotEmpty) item.note!,
+                                if (isEffective && product.effectiveAt != null)
+                                  '生效时间：${_formatTime(product.effectiveAt!)}',
+                              ].join('  '),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.canEditParameters && isDraft)
+                                  buildActionButton(
+                                    label: '维护参数',
+                                    onPressed: operationLoading || loadingVersions
+                                        ? null
+                                        : () {
+                                            dialogClosed = true;
+                                            Navigator.of(context).pop();
+                                            widget.onEditParameters(product);
+                                          },
+                                  ),
+                                if (isDraft)
+                                  buildActionButton(
+                                    label: '编辑备注',
+                                    onPressed: operationLoading || loadingVersions
+                                        ? null
+                                        : () async {
+                                            final noteController =
+                                                TextEditingController(
+                                                  text: item.note ?? '',
+                                                );
+                                            final newNote =
+                                                await showLockedFormDialog<String?>(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                title: Text(
+                                                  '编辑 ${item.displayVersion} 备注',
+                                                ),
+                                                content: SizedBox(
+                                                  width: 360,
+                                                  child: TextField(
+                                                    controller: noteController,
+                                                    maxLength: 256,
+                                                    decoration:
+                                                        const InputDecoration(
+                                                      labelText: '版本备注',
+                                                      border:
+                                                          OutlineInputBorder(),
+                                                    ),
+                                                  ),
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(ctx)
+                                                            .pop(null),
+                                                    child: const Text('取消'),
+                                                  ),
+                                                  FilledButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(ctx).pop(
+                                                          noteController.text,
+                                                        ),
+                                                    child: const Text('保存'),
+                                                  ),
+                                                ],
+                                              ),
                                             );
-                                        if (impact.requiresConfirmation) {
-                                          confirmed = await _confirmImpact(
-                                            impact,
-                                            title: '回滚影响确认',
+                                            noteController.dispose();
+                                            if (newNote == null) return;
+                                            await runVersionOperation(
+                                              setLocalState,
+                                              loadingText: '正在保存备注...',
+                                              errorPrefix: '保存备注失败',
+                                              action: () async {
+                                                await _productService
+                                                    .updateProductVersionNote(
+                                                      productId: product.id,
+                                                      version: item.version,
+                                                      note: newNote,
+                                                    );
+                                                await reloadVersions(
+                                                  setLocalState,
+                                                );
+                                              },
+                                            );
+                                          },
+                                  ),
+                                buildActionButton(
+                                  label: '复制',
+                                  onPressed: operationLoading || loadingVersions
+                                      ? null
+                                      : () async {
+                                          await runVersionOperation(
+                                            setLocalState,
+                                            loadingText:
+                                                '正在复制 ${item.displayVersion}...',
+                                            errorPrefix: '复制版本失败',
+                                            action: () async {
+                                              await _productService
+                                                  .copyProductVersion(
+                                                    productId: product.id,
+                                                    sourceVersion: item.version,
+                                                  );
+                                              if (!mounted) {
+                                                return;
+                                              }
+                                              ScaffoldMessenger.of(
+                                                this.context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    '复制版本成功（来源：${item.displayVersion}）',
+                                                  ),
+                                                ),
+                                              );
+                                              await reloadVersions(
+                                                setLocalState,
+                                              );
+                                            },
                                           );
-                                          if (!confirmed) {
-                                            return;
-                                          }
-                                        }
-                                      }
+                                        },
+                                ),
+                                if (isDraft)
+                                  buildActionButton(
+                                    label: '激活',
+                                    onPressed:
+                                        operationLoading || loadingVersions
+                                        ? null
+                                        : () async {
+                                            final confirmed =
+                                                await confirmVersionAction(
+                                                  title: '确认生效',
+                                                  content:
+                                                      '确认将版本 ${item.displayVersion} 设为生效版本？\n生效后，当前生效版本将自动变为已失效。',
+                                                  confirmText: '确认生效',
+                                                );
+                                            if (!confirmed) {
+                                              return;
+                                            }
+                                            await runVersionOperation(
+                                              setLocalState,
+                                              loadingText:
+                                                  '正在激活 ${item.displayVersion}...',
+                                              errorPrefix: '版本激活失败',
+                                              action: () async {
+                                                try {
+                                                  await _productService
+                                                      .activateProductVersion(
+                                                        productId: product.id,
+                                                        version: item.version,
+                                                      );
+                                                } catch (error) {
+                                                  if (_isUnauthorized(error) ||
+                                                      !_errorMessage(error)
+                                                          .contains(
+                                                            'Impact confirmation required',
+                                                          )) {
+                                                    rethrow;
+                                                  }
+                                                  final impact =
+                                                      await _productService
+                                                          .getProductImpactAnalysis(
+                                                            productId:
+                                                                product.id,
+                                                            operation:
+                                                                'activate_version',
+                                                            targetVersion:
+                                                                item.version,
+                                                          );
+                                                  final impactConfirmed =
+                                                      await _confirmImpact(
+                                                        impact,
+                                                        title: '生效影响确认',
+                                                      );
+                                                  if (!impactConfirmed) {
+                                                    return;
+                                                  }
+                                                  await _productService
+                                                      .activateProductVersion(
+                                                        productId: product.id,
+                                                        version: item.version,
+                                                        confirmed: true,
+                                                      );
+                                                }
+                                                if (!mounted) {
+                                                  return;
+                                                }
+                                                ScaffoldMessenger.of(
+                                                  this.context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      '版本 ${item.displayVersion} 已生效',
+                                                    ),
+                                                  ),
+                                                );
+                                                await reloadVersions(
+                                                  setLocalState,
+                                                );
+                                              },
+                                            );
+                                          },
+                                  ),
+                                if (isEffective)
+                                  buildActionButton(
+                                    label: '停用',
+                                    onPressed:
+                                        operationLoading || loadingVersions
+                                        ? null
+                                        : () async {
+                                            final confirmed =
+                                                await confirmVersionAction(
+                                                  title: '确认停用',
+                                                  content:
+                                                      '确认停用版本 ${item.displayVersion}？停用后不可直接恢复，如需再次使用请复制出新草稿。',
+                                                  confirmText: '确认停用',
+                                                  confirmColor: Colors.orange,
+                                                );
+                                            if (!confirmed) {
+                                              return;
+                                            }
+                                            await runVersionOperation(
+                                              setLocalState,
+                                              loadingText:
+                                                  '正在停用 ${item.displayVersion}...',
+                                              errorPrefix: '停用版本失败',
+                                              action: () async {
+                                                await _productService
+                                                    .disableProductVersion(
+                                                      productId: product.id,
+                                                      version: item.version,
+                                                    );
+                                                if (!mounted) {
+                                                  return;
+                                                }
+                                                ScaffoldMessenger.of(
+                                                  this.context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      '版本 ${item.displayVersion} 已停用',
+                                                    ),
+                                                  ),
+                                                );
+                                                await reloadVersions(
+                                                  setLocalState,
+                                                );
+                                              },
+                                            );
+                                          },
+                                  ),
+                                if (isDraft)
+                                  buildActionButton(
+                                    label: '删除',
+                                    foregroundColor:
+                                        Theme.of(context).colorScheme.error,
+                                    onPressed:
+                                        operationLoading || loadingVersions
+                                        ? null
+                                        : () async {
+                                            final confirmed =
+                                                await confirmVersionAction(
+                                                  title: '确认删除',
+                                                  content:
+                                                      '确认删除草稿版本 ${item.displayVersion}？此操作不可撤销。',
+                                                  confirmText: '确认删除',
+                                                  confirmColor: Colors.red,
+                                                );
+                                            if (!confirmed) {
+                                              return;
+                                            }
+                                            await runVersionOperation(
+                                              setLocalState,
+                                              loadingText:
+                                                  '正在删除 ${item.displayVersion}...',
+                                              errorPrefix: '删除版本失败',
+                                              action: () async {
+                                                await _productService
+                                                    .deleteProductVersion(
+                                                      productId: product.id,
+                                                      version: item.version,
+                                                    );
+                                                if (!mounted) {
+                                                  return;
+                                                }
+                                                ScaffoldMessenger.of(
+                                                  this.context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      '版本 ${item.displayVersion} 已删除',
+                                                    ),
+                                                  ),
+                                                );
+                                                await reloadVersions(
+                                                  setLocalState,
+                                                );
+                                              },
+                                            );
+                                          },
+                                  ),
+                                if (widget.canRollbackVersion)
+                                  buildActionButton(
+                                    label: '回滚',
+                                    onPressed:
+                                        operationLoading || loadingVersions
+                                        ? null
+                                        : () async {
+                                            await runVersionOperation(
+                                              setLocalState,
+                                              loadingText:
+                                                  '正在回滚到 ${item.displayVersion}...',
+                                              errorPrefix: '版本回滚失败',
+                                              action: () async {
+                                                var confirmed = false;
+                                                if (widget
+                                                    .canViewImpactAnalysis) {
+                                                  final impact =
+                                                      await _productService
+                                                          .getProductImpactAnalysis(
+                                                            productId:
+                                                                product.id,
+                                                            operation:
+                                                                'rollback',
+                                                            targetVersion:
+                                                                item.version,
+                                                          );
+                                                  if (impact
+                                                      .requiresConfirmation) {
+                                                    confirmed =
+                                                        await _confirmImpact(
+                                                          impact,
+                                                          title: '回滚影响确认',
+                                                        );
+                                                    if (!confirmed) {
+                                                      return;
+                                                    }
+                                                  }
+                                                }
 
-                                      await _productService.rollbackProduct(
-                                        productId: product.id,
-                                        targetVersion: item.version,
-                                        confirmed: confirmed,
-                                        note: '回滚到${item.displayVersion}',
-                                      );
-                                      if (context.mounted) {
-                                        Navigator.of(context).pop();
-                                      }
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(
-                                          this.context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              '已回滚到 ${item.displayVersion}',
-                                            ),
-                                          ),
-                                        );
-                                        await _loadProducts();
-                                      }
-                                    } catch (error) {
-                                      if (_isUnauthorized(error)) {
-                                        widget.onLogout();
-                                        return;
-                                      }
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              '版本回滚失败：${_errorMessage(error)}',
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  },
-                            child: const Text('回滚到此版本'),
-                          ),
-                        ),
-                      ),
+                                                await _productService
+                                                    .rollbackProduct(
+                                                      productId: product.id,
+                                                      targetVersion:
+                                                          item.version,
+                                                      confirmed: confirmed,
+                                                      note:
+                                                          '回滚到${item.displayVersion}',
+                                                    );
+                                                if (!mounted) {
+                                                  return;
+                                                }
+                                                await reloadVersions(
+                                                  setLocalState,
+                                                );
+                                                dialogClosed = true;
+                                                if (dialogContext?.mounted ??
+                                                    false) {
+                                                  Navigator.of(
+                                                    dialogContext!,
+                                                  ).pop();
+                                                }
+                                                if (mounted) {
+                                                  ScaffoldMessenger.of(
+                                                    this.context,
+                                                  ).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        '已回滚到 ${item.displayVersion}',
+                                                      ),
+                                                    ),
+                                                  );
+                                                  await _loadProducts();
+                                                }
+                                              },
+                                            );
+                                          },
+                                  ),
+                              ],
+                            ),
+                          );
+                        }),
                     ],
                   ),
                 ),
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: operationLoading
+                      ? null
+                      : () => Navigator.of(context).pop(),
                   child: const Text('关闭'),
                 ),
               ],
@@ -554,6 +1075,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         );
       },
     );
+    dialogClosed = true;
   }
 
   Future<void> _loadProducts() async {

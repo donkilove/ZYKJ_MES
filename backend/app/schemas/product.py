@@ -134,6 +134,10 @@ class ProductVersionCreateRequest(BaseModel):
     pass  # no body needed
 
 
+class ProductVersionNoteUpdateRequest(BaseModel):
+    note: str = Field(default="", max_length=256)
+
+
 class ProductVersionCopyRequest(BaseModel):
     source_version: int = Field(gt=0)
 

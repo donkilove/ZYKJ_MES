@@ -383,6 +383,29 @@ class ProductService {
     }
   }
 
+  Future<ProductVersionItem> updateProductVersionNote({
+    required int productId,
+    required int version,
+    required String note,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/$productId/versions/$version/note',
+    );
+    final response = await http.patch(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'note': note}),
+    );
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return ProductVersionItem.fromJson(json['data'] as Map<String, dynamic>);
+  }
+
   Future<ProductVersionCompareResult> compareProductVersions({
     required int productId,
     required int fromVersion,

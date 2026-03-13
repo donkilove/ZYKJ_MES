@@ -61,6 +61,9 @@ class _ProductParameterManagementPageState
   String _message = '';
   int _total = 0;
   List<ProductItem> _products = const [];
+  String _selectedCategoryFilter = '';
+  final TextEditingController _versionFilterController = TextEditingController();
+  final TextEditingController _paramNameFilterController = TextEditingController();
 
   int _handledJumpSeq = 0;
 
@@ -97,6 +100,8 @@ class _ProductParameterManagementPageState
   void dispose() {
     _disposeEditorRows();
     _keywordController.dispose();
+    _versionFilterController.dispose();
+    _paramNameFilterController.dispose();
     _remarkController.dispose();
     _editorVerticalController.dispose();
     _editorHorizontalController.dispose();
@@ -235,6 +240,7 @@ class _ProductParameterManagementPageState
         page: 1,
         pageSize: 100,
         keyword: _keywordController.text.trim(),
+        category: _selectedCategoryFilter,
       );
       if (!mounted) {
         return;
@@ -261,6 +267,23 @@ class _ProductParameterManagementPageState
         });
       }
     }
+  }
+
+  List<ProductItem> get _filteredProducts {
+    final versionFilter = _versionFilterController.text.trim().toLowerCase();
+    final paramFilter = _paramNameFilterController.text.trim().toLowerCase();
+    if (versionFilter.isEmpty && paramFilter.isEmpty) return _products;
+    return _products.where((p) {
+      if (versionFilter.isNotEmpty) {
+        final label = p.effectiveVersion > 0 ? 'v1.${p.effectiveVersion}' : '';
+        if (!label.contains(versionFilter)) return false;
+      }
+      if (paramFilter.isNotEmpty) {
+        final summary = (p.lastParameterSummary ?? '').toLowerCase();
+        if (!summary.contains(paramFilter)) return false;
+      }
+      return true;
+    }).toList();
   }
 
   Future<void> _handleJumpCommand(ProductJumpCommand command) async {
@@ -1088,10 +1111,64 @@ class _ProductParameterManagementPageState
               ),
             ),
             const SizedBox(width: 12),
+            SizedBox(
+              width: 160,
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedCategoryFilter,
+                decoration: const InputDecoration(
+                  labelText: '分类筛选',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem<String>(value: '', child: Text('全部')),
+                  DropdownMenuItem<String>(value: '贴片', child: Text('贴片')),
+                  DropdownMenuItem<String>(value: 'DTU', child: Text('DTU')),
+                  DropdownMenuItem<String>(value: '套件', child: Text('套件')),
+                ],
+                onChanged: _loading
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _selectedCategoryFilter = value ?? '';
+                        });
+                        _loadProducts();
+                      },
+              ),
+            ),
+            const SizedBox(width: 12),
             FilledButton.icon(
               onPressed: _loading ? null : _loadProducts,
               icon: const Icon(Icons.search),
               label: const Text('搜索'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            SizedBox(
+              width: 200,
+              child: TextField(
+                controller: _versionFilterController,
+                decoration: const InputDecoration(
+                  labelText: '版本号筛选',
+                  hintText: '如 V1.2',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 200,
+              child: TextField(
+                controller: _paramNameFilterController,
+                decoration: const InputDecoration(
+                  labelText: '参数名称筛选',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
             ),
           ],
         ),
@@ -1120,6 +1197,8 @@ class _ProductParameterManagementPageState
                       child: DataTable(
                         columns: [
                           UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                          UnifiedListTableHeaderStyle.column(context, '产品分类'),
+                          UnifiedListTableHeaderStyle.column(context, '生效版本'),
                           UnifiedListTableHeaderStyle.column(context, '创建时间'),
                           UnifiedListTableHeaderStyle.column(context, '最后修改时间'),
                           UnifiedListTableHeaderStyle.column(context, '最后修改参数'),
@@ -1129,10 +1208,12 @@ class _ProductParameterManagementPageState
                             textAlign: TextAlign.center,
                           ),
                         ],
-                        rows: _products.map((product) {
+                        rows: _filteredProducts.map((product) {
                           return DataRow(
                             cells: [
                               DataCell(Text(product.name)),
+                              DataCell(Text(product.category.isEmpty ? '-' : product.category)),
+                              DataCell(Text(product.effectiveVersion > 0 ? 'V1.${product.effectiveVersion}' : '-')),
                               DataCell(Text(_formatTime(product.createdAt))),
                               DataCell(Text(_formatTime(product.updatedAt))),
                               DataCell(
