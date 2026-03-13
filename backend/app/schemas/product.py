@@ -14,6 +14,13 @@ from app.core.product_lifecycle import (
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     category: str = Field(default="", max_length=32)
+    remark: str = Field(default="", max_length=500)
+
+
+class ProductUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    category: str = Field(default="", max_length=32)
+    remark: str = Field(default="", max_length=500)
 
 
 class ProductDeleteRequest(BaseModel):
@@ -24,6 +31,7 @@ class ProductItem(BaseModel):
     id: int
     name: str
     category: str = ""
+    remark: str = ""
     lifecycle_status: str = PRODUCT_LIFECYCLE_ACTIVE
     current_version: int = 1
     effective_version: int = 0
@@ -51,6 +59,7 @@ class ProductParameterItem(BaseModel):
     category: str
     type: Literal["Text", "Link"]
     value: str
+    description: str = ""
     sort_order: int
     is_preset: bool
 
@@ -78,6 +87,8 @@ class ProductParameterHistoryItem(BaseModel):
     remark: str
     changed_keys: list[str]
     operator_username: str
+    before_snapshot: str = "{}"
+    after_snapshot: str = "{}"
     created_at: datetime
 
 
@@ -103,10 +114,12 @@ class ProductLifecycleUpdateRequest(BaseModel):
 
 class ProductVersionItem(BaseModel):
     version: int
+    version_label: str = "V1.0"
     lifecycle_status: str
     action: str
     note: str | None = None
     source_version: int | None = None
+    source_version_label: str | None = None
     created_by_user_id: int | None = None
     created_by_username: str | None = None
     created_at: datetime
@@ -115,6 +128,22 @@ class ProductVersionItem(BaseModel):
 class ProductVersionListResult(BaseModel):
     total: int
     items: list[ProductVersionItem]
+
+
+class ProductVersionCreateRequest(BaseModel):
+    pass  # no body needed
+
+
+class ProductVersionCopyRequest(BaseModel):
+    source_version: int = Field(gt=0)
+
+
+class ProductVersionActivateRequest(BaseModel):
+    confirmed: bool = False
+
+
+class ProductVersionDisableRequest(BaseModel):
+    pass  # no body needed
 
 
 class ProductVersionDiffItem(BaseModel):

@@ -11,6 +11,7 @@ import '../widgets/unified_list_table_header_style.dart';
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
 
 enum _ProductTableAction {
+  edit,
   deactivate,
   reactivate,
   version,
@@ -62,6 +63,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   bool _loading = false;
   String _message = '';
   String _selectedCategoryFilter = '';
+  String _selectedStatusFilter = '';
   int _total = 0;
   List<ProductItem> _products = const [];
 
@@ -566,6 +568,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         pageSize: 100,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
+        lifecycleStatus: _selectedStatusFilter,
       );
       if (!mounted) {
         return;
@@ -594,6 +597,130 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     }
   }
 
+  Future<void> _showEditProductDialog(ProductItem product) async {
+    if (!widget.canCreateProduct) {
+      _showPermissionDenied('编辑产品');
+      return;
+    }
+
+    final nameController = TextEditingController(text: product.name);
+    final remarkController = TextEditingController(text: product.remark);
+    final formKey = GlobalKey<FormState>();
+    var selectedCategory = _productCategoryOptions.contains(product.category)
+        ? product.category
+        : _productCategoryOptions.first;
+
+    final updated = await showLockedFormDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            return AlertDialog(
+              title: const Text('编辑产品'),
+              content: Form(
+                key: formKey,
+                child: SizedBox(
+                  width: 420,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: '产品名称',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入产品名称';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedCategory,
+                        decoration: const InputDecoration(
+                          labelText: '产品分类',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _productCategoryOptions
+                            .map(
+                              (category) => DropdownMenuItem<String>(
+                                value: category,
+                                child: Text(category),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setLocalState(() {
+                            selectedCategory = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: remarkController,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: '备注',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+                    try {
+                      await _productService.updateProduct(
+                        productId: product.id,
+                        name: nameController.text.trim(),
+                        category: selectedCategory,
+                        remark: remarkController.text.trim(),
+                      );
+                      if (context.mounted) {
+                        Navigator.of(context).pop(true);
+                      }
+                    } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('编辑产品失败：${_errorMessage(error)}'),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+    remarkController.dispose();
+
+    if (updated == true) {
+      await _loadProducts();
+    }
+  }
+
   Future<void> _showCreateProductDialog() async {
     if (!widget.canCreateProduct) {
       _showPermissionDenied('创建产品');
@@ -601,6 +728,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     }
 
     final nameController = TextEditingController();
+    final remarkController = TextEditingController();
     final formKey = GlobalKey<FormState>();
     var selectedCategory = _productCategoryOptions.first;
 
@@ -655,6 +783,15 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                           });
                         },
                       ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: remarkController,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: '备注',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -673,6 +810,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                       await _productService.createProduct(
                         name: nameController.text.trim(),
                         category: selectedCategory,
+                        remark: remarkController.text.trim(),
                       );
                       if (context.mounted) {
                         Navigator.of(context).pop(true);
@@ -701,6 +839,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     );
 
     nameController.dispose();
+    remarkController.dispose();
 
     if (created == true) {
       await _loadProducts();
@@ -822,6 +961,14 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     }
 
     final utilityItems = <PopupMenuEntry<_ProductTableAction>>[];
+    if (widget.canCreateProduct) {
+      utilityItems.add(
+        const PopupMenuItem(
+          value: _ProductTableAction.edit,
+          child: Text('编辑产品'),
+        ),
+      );
+    }
     if (widget.canViewVersions) {
       utilityItems.add(
         const PopupMenuItem(
@@ -866,6 +1013,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     ProductItem product,
   ) async {
     switch (action) {
+      case _ProductTableAction.edit:
+        await _showEditProductDialog(product);
+        return;
       case _ProductTableAction.reactivate:
         await _changeLifecycle(product, 'active');
         return;
@@ -948,6 +1098,30 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                       : (value) {
                           setState(() {
                             _selectedCategoryFilter = value ?? '';
+                          });
+                          _loadProducts();
+                        },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedStatusFilter,
+                  decoration: const InputDecoration(
+                    labelText: '状态筛选',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem<String>(value: '', child: Text('全部')),
+                    DropdownMenuItem<String>(value: 'active', child: Text('启用')),
+                    DropdownMenuItem<String>(value: 'inactive', child: Text('停用')),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _selectedStatusFilter = value ?? '';
                           });
                           _loadProducts();
                         },

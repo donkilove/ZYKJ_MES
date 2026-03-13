@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -21,6 +21,12 @@ class ProductRevision(Base, TimestampMixin):
         index=True,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_label: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="V1.0",
+        server_default=text("'V1.0'"),
+    )
     lifecycle_status: Mapped[str] = mapped_column(String(32), nullable=False)
     action: Mapped[str] = mapped_column(String(32), nullable=False, default="snapshot")
     note: Mapped[str | None] = mapped_column(String(256), nullable=True)

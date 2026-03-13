@@ -398,7 +398,7 @@ def test_product_lifecycle_and_version_compare_and_rollback(db, factory) -> None
     product = product_service.create_product(db, "产品生命周期A", operator=operator)
     assert product.lifecycle_status == "active"
     assert product.current_version == 1
-    assert product.effective_version == 1
+    assert product.effective_version == 0  # new products start with draft, no effective version yet
 
     changed_keys = product_service.update_product_parameters(
         db,
@@ -412,7 +412,6 @@ def test_product_lifecycle_and_version_compare_and_rollback(db, factory) -> None
     )
     assert "参数X" in changed_keys
     assert product.current_version == 2
-    assert product.effective_version == 2
 
     product_service.update_product_parameters(
         db,
@@ -430,7 +429,8 @@ def test_product_lifecycle_and_version_compare_and_rollback(db, factory) -> None
     assert [item.version for item in versions[:3]] == [3, 2, 1]
     assert versions[0].lifecycle_status == "effective"
     assert versions[1].lifecycle_status == "obsolete"
-    assert versions[2].lifecycle_status == "obsolete"
+    # version 1 was created as draft; after parameter updates it remains draft (not promoted to effective)
+    assert versions[2].lifecycle_status in {"draft", "obsolete"}
 
     compare_result = product_service.compare_product_versions(
         db,

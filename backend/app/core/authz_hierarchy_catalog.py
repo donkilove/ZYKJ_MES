@@ -201,6 +201,16 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         dependency_permission_codes=("feature.product.catalog.read",),
     ),
     FeatureDefinition(
+        permission_code="feature.product.versions.manage",
+        permission_name="管理产品版本",
+        module_code="product",
+        page_code="product_management",
+        action_permission_codes=(
+            "product.versions.manage",
+        ),
+        dependency_permission_codes=("feature.product.version_analysis.view",),
+    ),
+    FeatureDefinition(
         permission_code="feature.product.parameters.view",
         permission_name="查看产品参数",
         module_code="product",

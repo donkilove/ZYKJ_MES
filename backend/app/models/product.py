@@ -44,6 +44,12 @@ class Product(Base, TimestampMixin):
     )
     effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     inactive_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    remark: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
 
     parameters = relationship(
         "ProductParameter",

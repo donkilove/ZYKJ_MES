@@ -63,6 +63,7 @@ void main() {
           expect(jsonDecode(request.bodyText), {
             'name': 'Product B',
             'category': '',
+            'remark': '',
           });
           return TestResponse.json(201, body: {'data': {}});
         },
@@ -185,6 +186,7 @@ void main() {
               'items': [
                 {
                   'version': 2,
+                  'version_label': 'V1.2',
                   'lifecycle_status': 'effective',
                   'action': 'update_parameters',
                   'note': 'n2',

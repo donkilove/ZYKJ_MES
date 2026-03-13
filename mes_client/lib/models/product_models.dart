@@ -3,6 +3,7 @@ class ProductItem {
     required this.id,
     required this.name,
     required this.category,
+    required this.remark,
     required this.lifecycleStatus,
     required this.currentVersion,
     required this.effectiveVersion,
@@ -16,6 +17,7 @@ class ProductItem {
   final int id;
   final String name;
   final String category;
+  final String remark;
   final String lifecycleStatus;
   final int currentVersion;
   final int effectiveVersion;
@@ -30,6 +32,7 @@ class ProductItem {
       id: json['id'] as int,
       name: json['name'] as String,
       category: (json['category'] as String?) ?? '',
+      remark: (json['remark'] as String?) ?? '',
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'active',
       currentVersion: (json['current_version'] as int?) ?? 1,
       effectiveVersion: (json['effective_version'] as int?) ?? 0,
@@ -57,6 +60,7 @@ class ProductParameterItem {
     required this.category,
     required this.type,
     required this.value,
+    required this.description,
     required this.sortOrder,
     required this.isPreset,
   });
@@ -65,6 +69,7 @@ class ProductParameterItem {
   final String category;
   final String type;
   final String value;
+  final String description;
   final int sortOrder;
   final bool isPreset;
 
@@ -74,6 +79,7 @@ class ProductParameterItem {
       category: (json['category'] as String?) ?? '',
       type: (json['type'] as String?) ?? 'Text',
       value: (json['value'] as String?) ?? '',
+      description: (json['description'] as String?) ?? '',
       sortOrder: (json['sort_order'] as int?) ?? 0,
       isPreset: (json['is_preset'] as bool?) ?? false,
     );
@@ -132,6 +138,8 @@ class ProductParameterHistoryItem {
     required this.remark,
     required this.changedKeys,
     required this.operatorUsername,
+    required this.beforeSnapshot,
+    required this.afterSnapshot,
     required this.createdAt,
   });
 
@@ -139,6 +147,8 @@ class ProductParameterHistoryItem {
   final String remark;
   final List<String> changedKeys;
   final String operatorUsername;
+  final String beforeSnapshot;
+  final String afterSnapshot;
   final DateTime createdAt;
 
   factory ProductParameterHistoryItem.fromJson(Map<String, dynamic> json) {
@@ -148,6 +158,8 @@ class ProductParameterHistoryItem {
       changedKeys: (json['changed_keys'] as List<dynamic>? ?? const [])
           .cast<String>(),
       operatorUsername: json['operator_username'] as String? ?? '-',
+      beforeSnapshot: (json['before_snapshot'] as String?) ?? '{}',
+      afterSnapshot: (json['after_snapshot'] as String?) ?? '{}',
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -267,33 +279,39 @@ class ProductImpactAnalysisResult {
 class ProductVersionItem {
   ProductVersionItem({
     required this.version,
+    required this.versionLabel,
     required this.lifecycleStatus,
     required this.action,
     required this.note,
     required this.sourceVersion,
+    required this.sourceVersionLabel,
     required this.createdByUserId,
     required this.createdByUsername,
     required this.createdAt,
   });
 
   final int version;
+  final String versionLabel;
   final String lifecycleStatus;
   final String action;
   final String? note;
   final int? sourceVersion;
+  final String? sourceVersionLabel;
   final int? createdByUserId;
   final String? createdByUsername;
   final DateTime createdAt;
 
-  String get displayVersion => 'V1.$version';
+  String get displayVersion => versionLabel;
 
   factory ProductVersionItem.fromJson(Map<String, dynamic> json) {
     return ProductVersionItem(
       version: (json['version'] as int?) ?? 0,
+      versionLabel: (json['version_label'] as String?) ?? 'V1.0',
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? '',
       action: (json['action'] as String?) ?? '',
       note: json['note'] as String?,
       sourceVersion: json['source_version'] as int?,
+      sourceVersionLabel: json['source_version_label'] as String?,
       createdByUserId: json['created_by_user_id'] as int?,
       createdByUsername: json['created_by_username'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),

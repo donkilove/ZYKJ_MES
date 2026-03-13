@@ -7,13 +7,16 @@ import '../models/product_models.dart';
 import 'product_management_page.dart';
 import 'product_parameter_management_page.dart';
 import 'product_parameter_query_page.dart';
+import 'product_version_management_page.dart';
 
 const String productManagementTabCode = 'product_management';
+const String productVersionManagementTabCode = 'product_version_management';
 const String productParameterManagementTabCode = 'product_parameter_management';
 const String productParameterQueryTabCode = 'product_parameter_query';
 
 const List<String> _defaultTabOrder = [
   productManagementTabCode,
+  productVersionManagementTabCode,
   productParameterManagementTabCode,
   productParameterQueryTabCode,
 ];
@@ -151,6 +154,8 @@ class _ProductPageState extends State<ProductPage>
     switch (code) {
       case productManagementTabCode:
         return '产品管理';
+      case productVersionManagementTabCode:
+        return '版本管理';
       case productParameterManagementTabCode:
         return '产品参数管理';
       case productParameterQueryTabCode:
@@ -207,6 +212,17 @@ class _ProductPageState extends State<ProductPage>
               product: product,
             );
           },
+        );
+      case productVersionManagementTabCode:
+        return ProductVersionManagementPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          tabCode: productVersionManagementTabCode,
+          jumpCommand: _jumpCommand,
+          onJumpHandled: _handleJumpConsumed,
+          canManageVersions: _hasPermission(
+            ProductFeaturePermissionCodes.versionAnalysisView,
+          ),
         );
       case productParameterManagementTabCode:
         return ProductParameterManagementPage(

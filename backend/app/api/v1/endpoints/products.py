@@ -26,18 +26,28 @@ from app.schemas.product import (
     ProductParameterUpdateResult,
     ProductRollbackRequest,
     ProductRollbackResult,
+    ProductUpdate,
+    ProductVersionActivateRequest,
     ProductVersionCompareResult,
+    ProductVersionCopyRequest,
     ProductVersionDiffItem,
+    ProductVersionDisableRequest,
     ProductVersionItem,
     ProductVersionListResult,
 )
 from app.services.product_service import (
+    activate_product_version,
     analyze_product_impact,
     change_product_lifecycle,
     compare_product_versions,
+    copy_product_version,
     create_product,
+    create_product_version,
     delete_product,
+    delete_product_version,
+    disable_product_version,
     ensure_product_parameter_template_initialized,
+    get_latest_history_map_by_product_ids,
     get_product_by_id,
     get_product_by_name,
     get_product_version,
@@ -69,6 +79,7 @@ def to_product_item(
         id=product.id,
         name=product.name,
         category=product.category or "",
+        remark=product.remark or "",
         lifecycle_status=product.lifecycle_status,
         current_version=product.current_version,
         effective_version=product.effective_version,
@@ -86,10 +97,11 @@ def get_products(
     page_size: int = Query(default=50, ge=1, le=200),
     keyword: str | None = Query(default=None),
     category: str | None = Query(default=None),
+    lifecycle_status: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("product.products.list")),
 ) -> ApiResponse[ProductListResult]:
-    total, products, latest_map = list_products(db, page, page_size, keyword, category)
+    total, products, latest_map = list_products(db, page, page_size, keyword, category, lifecycle_status)
     return success_response(
         ProductListResult(
             total=total,
@@ -114,12 +126,56 @@ def create_product_api(
             db,
             normalized_name,
             category=payload.category,
+            remark=payload.remark,
             operator=current_user,
         )
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
     return success_response(to_product_item(product, None), message="created")
+
+
+@router.get("/{product_id}", response_model=ApiResponse[ProductItem])
+def get_product_detail_api(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("product.products.list")),
+) -> ApiResponse[ProductItem]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(product.id)
+    return success_response(to_product_item(product, latest_history))
+
+
+@router.put("/{product_id}", response_model=ApiResponse[ProductItem])
+def update_product_api(
+    product_id: int,
+    payload: ProductUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("product.products.create")),
+) -> ApiResponse[ProductItem]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    normalized_name = payload.name.strip()
+    if not normalized_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Product name is required")
+
+    if normalized_name != product.name:
+        existing = get_product_by_name(db, normalized_name)
+        if existing and existing.id != product.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Product name already exists")
+
+    product.name = normalized_name
+    product.category = payload.category
+    product.remark = (payload.remark or "").strip()
+    db.commit()
+    db.refresh(product)
+
+    latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(product.id)
+    return success_response(to_product_item(product, latest_history), message="updated")
 
 
 @router.post("/{product_id}/delete", response_model=ApiResponse[dict[str, bool]])
@@ -158,6 +214,7 @@ def get_product_parameters(
             category=parameter.param_category,
             type=parameter.param_type,
             value=parameter.param_value,
+            description=parameter.param_description,
             sort_order=parameter.sort_order,
             is_preset=parameter.is_preset,
         )
@@ -283,6 +340,21 @@ def update_product_lifecycle(
     return success_response(to_product_item(updated, None), message="updated")
 
 
+def _to_version_item(row: "ProductRevision") -> ProductVersionItem:
+    return ProductVersionItem(
+        version=row.version,
+        version_label=row.version_label,
+        lifecycle_status=row.lifecycle_status,
+        action=row.action,
+        note=row.note,
+        source_version=row.source_revision.version if row.source_revision else None,
+        source_version_label=row.source_revision.version_label if row.source_revision else None,
+        created_by_user_id=row.created_by_user_id,
+        created_by_username=row.created_by.username if row.created_by else None,
+        created_at=row.created_at,
+    )
+
+
 @router.get("/{product_id}/versions", response_model=ApiResponse[ProductVersionListResult])
 def get_product_versions(
     product_id: int,
@@ -296,21 +368,129 @@ def get_product_versions(
     return success_response(
         ProductVersionListResult(
             total=len(rows),
-            items=[
-                ProductVersionItem(
-                    version=row.version,
-                    lifecycle_status=row.lifecycle_status,
-                    action=row.action,
-                    note=row.note,
-                    source_version=row.source_revision.version if row.source_revision else None,
-                    created_by_user_id=row.created_by_user_id,
-                    created_by_username=row.created_by.username if row.created_by else None,
-                    created_at=row.created_at,
-                )
-                for row in rows
-            ],
+            items=[_to_version_item(row) for row in rows],
         )
     )
+
+
+@router.post("/{product_id}/versions", response_model=ApiResponse[ProductVersionItem], status_code=status.HTTP_201_CREATED)
+def create_product_version_api(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("product.versions.manage")),
+) -> ApiResponse[ProductVersionItem]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    try:
+        revision = create_product_version(db, product=product, operator=current_user)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+    from app.models.product_revision import ProductRevision as _PR
+    revision = db.execute(
+        select(_PR).where(_PR.id == revision.id)
+        .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+    ).scalars().first() or revision
+    return success_response(_to_version_item(revision), message="created")
+
+
+@router.post("/{product_id}/versions/{version}/copy", response_model=ApiResponse[ProductVersionItem], status_code=status.HTTP_201_CREATED)
+def copy_product_version_api(
+    product_id: int,
+    version: int,
+    payload: ProductVersionCopyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("product.versions.manage")),
+) -> ApiResponse[ProductVersionItem]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    try:
+        revision = copy_product_version(
+            db, product=product, source_version=payload.source_version, operator=current_user
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+    from app.models.product_revision import ProductRevision as _PR
+    revision = db.execute(
+        select(_PR).where(_PR.id == revision.id)
+        .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+    ).scalars().first() or revision
+    return success_response(_to_version_item(revision), message="created")
+
+
+@router.post("/{product_id}/versions/{version}/activate", response_model=ApiResponse[ProductVersionItem])
+def activate_product_version_api(
+    product_id: int,
+    version: int,
+    payload: ProductVersionActivateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("product.versions.manage")),
+) -> ApiResponse[ProductVersionItem]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    try:
+        revision = activate_product_version(
+            db, product=product, version=version, confirmed=payload.confirmed, operator=current_user
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+    from app.models.product_revision import ProductRevision as _PR
+    revision = db.execute(
+        select(_PR).where(_PR.id == revision.id)
+        .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+    ).scalars().first() or revision
+    return success_response(_to_version_item(revision), message="activated")
+
+
+@router.post("/{product_id}/versions/{version}/disable", response_model=ApiResponse[ProductVersionItem])
+def disable_product_version_api(
+    product_id: int,
+    version: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("product.versions.manage")),
+) -> ApiResponse[ProductVersionItem]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    try:
+        revision = disable_product_version(
+            db, product=product, version=version, operator=current_user
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+    from app.models.product_revision import ProductRevision as _PR
+    revision = db.execute(
+        select(_PR).where(_PR.id == revision.id)
+        .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+    ).scalars().first() or revision
+    return success_response(_to_version_item(revision), message="disabled")
+
+
+@router.delete("/{product_id}/versions/{version}", response_model=ApiResponse[dict[str, bool]])
+def delete_product_version_api(
+    product_id: int,
+    version: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("product.versions.manage")),
+) -> ApiResponse[dict[str, bool]]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    try:
+        delete_product_version(db, product=product, version=version, operator=current_user)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response({"deleted": True}, message="deleted")
 
 
 @router.get("/{product_id}/versions/compare", response_model=ApiResponse[ProductVersionCompareResult])
@@ -415,6 +595,8 @@ def get_parameter_history(
             remark=row.remark,
             changed_keys=[str(value) for value in (row.changed_keys or [])],
             operator_username=row.operator_username,
+            before_snapshot=row.before_snapshot or "{}",
+            after_snapshot=row.after_snapshot or "{}",
             created_at=row.created_at,
         )
         for row in rows

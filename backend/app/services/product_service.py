@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.product_lifecycle import (
     PRODUCT_LIFECYCLE_ACTIVE,
+    PRODUCT_LIFECYCLE_DISABLED,
     PRODUCT_LIFECYCLE_DRAFT,
     PRODUCT_LIFECYCLE_EFFECTIVE,
     PRODUCT_LIFECYCLE_INACTIVE,
@@ -280,6 +281,7 @@ def list_products(
     page_size: int,
     keyword: str | None,
     category: str | None,
+    lifecycle_status: str | None = None,
 ) -> tuple[int, list[Product], dict[int, ProductParameterHistory]]:
     stmt = select(Product).order_by(Product.id.asc())
     if keyword:
@@ -287,6 +289,8 @@ def list_products(
         stmt = stmt.where(Product.name.ilike(like_pattern))
     if category is not None and category != "":
         stmt = stmt.where(Product.category == category)
+    if lifecycle_status is not None and lifecycle_status != "":
+        stmt = stmt.where(Product.lifecycle_status == lifecycle_status)
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
     total = db.execute(total_stmt).scalar_one()
@@ -398,12 +402,14 @@ def _create_product_revision_snapshot(
     note: str | None,
     operator: User,
     source_revision_id: int | None = None,
+    version_label: str | None = None,
 ) -> ProductRevision:
     parameters = list_product_parameters(db, product.id)
     payload = _build_snapshot_payload(product_name=product.name, parameters=parameters)
     row = ProductRevision(
         product_id=product.id,
         version=product.current_version,
+        version_label=version_label or f"V1.{product.current_version - 1}",
         lifecycle_status=_normalize_revision_lifecycle_status(lifecycle_status),
         action=action,
         note=(note or "").strip() or None,
@@ -450,17 +456,19 @@ def create_product(
     name: str,
     *,
     category: str = "",
+    remark: str = "",
     operator: User,
 ) -> Product:
     normalized_name = _normalize_product_name(name)
     product = Product(
         name=normalized_name,
         category=category,
+        remark=(remark or "").strip(),
         parameter_template_initialized=True,
         lifecycle_status=PRODUCT_LIFECYCLE_ACTIVE,
         current_version=1,
-        effective_version=1,
-        effective_at=datetime.now(UTC),
+        effective_version=0,
+        effective_at=None,
         inactive_reason=None,
     )
     db.add(product)
@@ -487,10 +495,11 @@ def create_product(
     _create_product_revision_snapshot(
         db,
         product=product,
-        lifecycle_status=PRODUCT_LIFECYCLE_EFFECTIVE,
+        lifecycle_status=PRODUCT_LIFECYCLE_DRAFT,
         action="create",
-        note="Product created",
+        note="Initial draft V1.0",
         operator=operator,
+        version_label="V1.0",
     )
 
     _clone_default_craft_template_for_new_product(
@@ -739,6 +748,10 @@ def update_product_parameters(
     if not changed_keys:
         raise ValueError("No parameter changes detected")
 
+    before_snapshot = _snapshot_signature(
+        _build_snapshot_payload(product_name=product.name, parameters=current_parameters)
+    )
+
     db.execute(delete(ProductParameter).where(ProductParameter.product_id == product.id))
 
     for item in normalized_items:
@@ -754,6 +767,9 @@ def update_product_parameters(
             )
         )
 
+    after_snapshot = _snapshot_signature(
+        {"name": candidate_product_name, "parameters": normalized_items}
+    )
     db.add(
         ProductParameterHistory(
             product_id=product.id,
@@ -761,6 +777,8 @@ def update_product_parameters(
             operator_username=operator.username,
             remark=normalized_remark,
             changed_keys=changed_keys,
+            before_snapshot=before_snapshot,
+            after_snapshot=after_snapshot,
         )
     )
     product.name = candidate_product_name
@@ -887,6 +905,221 @@ def get_product_version(db: Session, *, product_id: int, version: int) -> Produc
     )
 
 
+def get_draft_revision(db: Session, *, product_id: int) -> ProductRevision | None:
+    return (
+        db.execute(
+            select(ProductRevision)
+            .where(
+                ProductRevision.product_id == product_id,
+                ProductRevision.lifecycle_status == PRODUCT_LIFECYCLE_DRAFT,
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
+def _next_version_label(db: Session, product_id: int) -> str:
+    labels = db.execute(
+        select(ProductRevision.version_label).where(ProductRevision.product_id == product_id)
+    ).scalars().all()
+    max_minor = -1
+    for label in labels:
+        if label and label.startswith("V1."):
+            try:
+                minor = int(label[3:])
+                max_minor = max(max_minor, minor)
+            except ValueError:
+                pass
+    return f"V1.{max_minor + 1}"
+
+
+def create_product_version(
+    db: Session,
+    *,
+    product: Product,
+    operator: User,
+) -> ProductRevision:
+    existing_draft = get_draft_revision(db, product_id=product.id)
+    if existing_draft is not None:
+        raise ValueError(
+            f"已存在草稿版本 {existing_draft.version_label}，请先完成或删除当前草稿后再新建版本"
+        )
+
+    version_label = _next_version_label(db, product.id)
+    next_version = max(product.current_version, 0) + 1
+    product.current_version = next_version
+    db.flush()
+
+    revision = _create_product_revision_snapshot(
+        db,
+        product=product,
+        lifecycle_status=PRODUCT_LIFECYCLE_DRAFT,
+        action="create",
+        note=None,
+        operator=operator,
+        version_label=version_label,
+    )
+    db.commit()
+    db.refresh(revision)
+    return revision
+
+
+def copy_product_version(
+    db: Session,
+    *,
+    product: Product,
+    source_version: int,
+    operator: User,
+) -> ProductRevision:
+    existing_draft = get_draft_revision(db, product_id=product.id)
+    if existing_draft is not None:
+        raise ValueError(
+            f"已存在草稿版本 {existing_draft.version_label}，请先完成或删除当前草稿后再复制版本"
+        )
+
+    source = get_product_version(db, product_id=product.id, version=source_version)
+    if source is None:
+        raise ValueError("来源版本不存在")
+
+    version_label = _next_version_label(db, product.id)
+    next_version = max(product.current_version, 0) + 1
+    product.current_version = next_version
+
+    # Restore source snapshot to current parameters
+    source_snapshot = _parse_revision_snapshot(source)
+    db.execute(delete(ProductParameter).where(ProductParameter.product_id == product.id))
+    for item in source_snapshot["parameters"]:
+        item_dict = dict(item)
+        db.add(
+            ProductParameter(
+                product_id=product.id,
+                param_key=str(item_dict["name"]),
+                param_category=str(item_dict["category"]),
+                param_type=str(item_dict["type"]),
+                param_value=str(item_dict["value"]),
+                sort_order=int(item_dict["sort_order"]),
+                is_preset=bool(item_dict["is_preset"]),
+            )
+        )
+    db.flush()
+
+    revision = _create_product_revision_snapshot(
+        db,
+        product=product,
+        lifecycle_status=PRODUCT_LIFECYCLE_DRAFT,
+        action="copy",
+        note=f"Copied from {source.version_label}",
+        operator=operator,
+        source_revision_id=source.id,
+        version_label=version_label,
+    )
+    db.commit()
+    db.refresh(revision)
+    return revision
+
+
+def activate_product_version(
+    db: Session,
+    *,
+    product: Product,
+    version: int,
+    confirmed: bool,
+    operator: User,
+) -> ProductRevision:
+    revision = get_product_version(db, product_id=product.id, version=version)
+    if revision is None:
+        raise ValueError("版本不存在")
+    if revision.lifecycle_status != PRODUCT_LIFECYCLE_DRAFT:
+        raise ValueError("只有草稿版本可以生效")
+    if product.lifecycle_status != PRODUCT_LIFECYCLE_ACTIVE:
+        raise ValueError("产品必须处于启用状态才能生效版本")
+
+    # Check version has parameters
+    try:
+        snapshot = _parse_revision_snapshot(revision)
+    except ValueError as error:
+        raise ValueError(f"版本参数快照无效: {error}") from error
+    if not snapshot.get("parameters"):
+        raise ValueError("版本下至少需要一条参数记录才能生效")
+
+    impact = analyze_product_impact(
+        db,
+        product=product,
+        operation="lifecycle",
+        target_status=PRODUCT_LIFECYCLE_ACTIVE,
+    )
+    if impact.requires_confirmation and not confirmed:
+        raise ValueError("存在未完成工单，请确认后再生效")
+
+    # Mark previous effective as obsolete
+    for row in db.execute(
+        select(ProductRevision).where(ProductRevision.product_id == product.id)
+    ).scalars():
+        if row.id != revision.id and row.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE:
+            row.lifecycle_status = PRODUCT_LIFECYCLE_OBSOLETE
+
+    revision.lifecycle_status = PRODUCT_LIFECYCLE_EFFECTIVE
+    product.effective_version = version
+    product.effective_at = datetime.now(UTC)
+    product.updated_at = datetime.now(UTC)
+
+    db.commit()
+    db.refresh(revision)
+    return revision
+
+
+def disable_product_version(
+    db: Session,
+    *,
+    product: Product,
+    version: int,
+    operator: User,
+) -> ProductRevision:
+    revision = get_product_version(db, product_id=product.id, version=version)
+    if revision is None:
+        raise ValueError("版本不存在")
+    if revision.lifecycle_status not in {PRODUCT_LIFECYCLE_EFFECTIVE, PRODUCT_LIFECYCLE_OBSOLETE}:
+        raise ValueError("只有已生效或已失效的版本可以停用")
+
+    revision.lifecycle_status = PRODUCT_LIFECYCLE_DISABLED
+    if product.effective_version == version:
+        product.effective_version = 0
+        product.effective_at = None
+    product.updated_at = datetime.now(UTC)
+
+    db.commit()
+    db.refresh(revision)
+    return revision
+
+
+def delete_product_version(
+    db: Session,
+    *,
+    product: Product,
+    version: int,
+    operator: User,
+) -> None:
+    revision = get_product_version(db, product_id=product.id, version=version)
+    if revision is None:
+        raise ValueError("版本不存在")
+    if revision.lifecycle_status != PRODUCT_LIFECYCLE_DRAFT:
+        raise ValueError("只有草稿版本可以删除")
+
+    # Ensure at least one non-draft revision remains
+    other_revisions = db.execute(
+        select(ProductRevision).where(
+            ProductRevision.product_id == product.id,
+            ProductRevision.id != revision.id,
+        )
+    ).scalars().all()
+    if not other_revisions:
+        raise ValueError("产品至少需要保留一个版本记录，无法删除唯一版本")
+
+    db.delete(revision)
+    db.commit()
+
+
 def compare_product_versions(
     db: Session,
     *,
@@ -1010,6 +1243,8 @@ def rollback_product_to_version(
         next_items=next_items,
     )
 
+    before_snapshot = _snapshot_signature(current_snapshot)
+
     db.execute(delete(ProductParameter).where(ProductParameter.product_id == product.id))
     for item in next_items:
         db.add(
@@ -1024,6 +1259,7 @@ def rollback_product_to_version(
             )
         )
 
+    after_snapshot = _snapshot_signature(target_snapshot)
     product.name = candidate_name
     product.updated_at = datetime.now(UTC)
     product.current_version = max(product.current_version, 0) + 1
@@ -1041,6 +1277,8 @@ def rollback_product_to_version(
             operator_username=operator.username,
             remark=rollback_note,
             changed_keys=changed_keys,
+            before_snapshot=before_snapshot,
+            after_snapshot=after_snapshot,
         )
     )
     db.flush()

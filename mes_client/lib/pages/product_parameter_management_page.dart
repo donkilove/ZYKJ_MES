@@ -327,6 +327,43 @@ class _ProductParameterManagementPageState
                           '操作人：${item.operatorUsername}   修改参数：$keySummary',
                         ),
                         isThreeLine: true,
+                        trailing: item.beforeSnapshot != '{}' || item.afterSnapshot != '{}'
+                            ? TextButton(
+                                onPressed: () {
+                                  showDialog<void>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('变更前后快照'),
+                                      content: SizedBox(
+                                        width: 680,
+                                        height: 400,
+                                        child: SingleChildScrollView(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text('变更前：', style: TextStyle(fontWeight: FontWeight.bold)),
+                                              const SizedBox(height: 4),
+                                              SelectableText(item.beforeSnapshot),
+                                              const SizedBox(height: 12),
+                                              const Text('变更后：', style: TextStyle(fontWeight: FontWeight.bold)),
+                                              const SizedBox(height: 4),
+                                              SelectableText(item.afterSnapshot),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      actions: [
+                                        FilledButton(
+                                          onPressed: () => Navigator.of(ctx).pop(),
+                                          child: const Text('关闭'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                                child: const Text('查看快照'),
+                              )
+                            : null,
                       );
                     },
                   ),

@@ -233,6 +233,7 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("product.lifecycle.update", "更新产品生命周期", AUTHZ_MODULE_PRODUCT, "product_management"),
     ("product.versions.list", "查看产品版本列表", AUTHZ_MODULE_PRODUCT, "product_management"),
     ("product.versions.compare", "比较产品版本", AUTHZ_MODULE_PRODUCT, "product_management"),
+    ("product.versions.manage", "管理产品版本（新建/复制/生效/停用/删除）", AUTHZ_MODULE_PRODUCT, "product_management"),
     ("product.rollback", "回滚产品版本", AUTHZ_MODULE_PRODUCT, "product_management"),
     ("product.parameter_history.list", "查看参数历史", AUTHZ_MODULE_PRODUCT, "product_parameter_query"),
     ("equipment.admin_owners.list", "查看设备负责人选项", AUTHZ_MODULE_EQUIPMENT, "equipment_ledger"),

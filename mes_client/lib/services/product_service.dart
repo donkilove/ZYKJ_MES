@@ -23,6 +23,7 @@ class ProductService {
     required int pageSize,
     String? keyword,
     String? category,
+    String? lifecycleStatus,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -30,6 +31,9 @@ class ProductService {
     }
     if (category != null && category.trim().isNotEmpty) {
       query['category'] = category.trim();
+    }
+    if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
+      query['lifecycle_status'] = lifecycleStatus.trim();
     }
     final uri = Uri.parse(
       '${session.baseUrl}/products',
@@ -53,12 +57,17 @@ class ProductService {
   Future<void> createProduct({
     required String name,
     String category = '',
+    String remark = '',
   }) async {
     final uri = Uri.parse('${session.baseUrl}/products');
     final response = await http.post(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({'name': name, 'category': category.trim()}),
+      body: jsonEncode({
+        'name': name,
+        'category': category.trim(),
+        'remark': remark.trim(),
+      }),
     );
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
@@ -67,6 +76,47 @@ class ProductService {
         response.statusCode,
       );
     }
+  }
+
+  Future<ProductItem> getProduct({required int productId}) async {
+    final uri = Uri.parse('${session.baseUrl}/products/$productId');
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    return ProductItem.fromJson(data);
+  }
+
+  Future<ProductItem> updateProduct({
+    required int productId,
+    required String name,
+    String category = '',
+    String remark = '',
+  }) async {
+    final uri = Uri.parse('${session.baseUrl}/products/$productId');
+    final response = await http.put(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'name': name.trim(),
+        'category': category.trim(),
+        'remark': remark.trim(),
+      }),
+    );
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    return ProductItem.fromJson(data);
   }
 
   Future<void> deleteProduct({
@@ -232,6 +282,105 @@ class ProductService {
       total: (data['total'] as int?) ?? 0,
       items: items,
     );
+  }
+
+  Future<ProductVersionItem> createProductVersion({
+    required int productId,
+  }) async {
+    final uri = Uri.parse('${session.baseUrl}/products/$productId/versions');
+    final response = await http.post(uri, headers: _authHeaders, body: '{}');
+    final json = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    return ProductVersionItem.fromJson(data);
+  }
+
+  Future<ProductVersionItem> copyProductVersion({
+    required int productId,
+    required int sourceVersion,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/$productId/versions/$sourceVersion/copy',
+    );
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'source_version': sourceVersion}),
+    );
+    final json = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    return ProductVersionItem.fromJson(data);
+  }
+
+  Future<ProductVersionItem> activateProductVersion({
+    required int productId,
+    required int version,
+    bool confirmed = false,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/$productId/versions/$version/activate',
+    );
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'confirmed': confirmed}),
+    );
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    return ProductVersionItem.fromJson(data);
+  }
+
+  Future<ProductVersionItem> disableProductVersion({
+    required int productId,
+    required int version,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/$productId/versions/$version/disable',
+    );
+    final response = await http.post(uri, headers: _authHeaders, body: '{}');
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    return ProductVersionItem.fromJson(data);
+  }
+
+  Future<void> deleteProductVersion({
+    required int productId,
+    required int version,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/$productId/versions/$version',
+    );
+    final response = await http.delete(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
   }
 
   Future<ProductVersionCompareResult> compareProductVersions({

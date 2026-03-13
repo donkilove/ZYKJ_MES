@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -21,6 +21,12 @@ class ProductParameter(Base, TimestampMixin):
     param_category: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     param_type: Mapped[str] = mapped_column(String(16), nullable=False, default="Text")
     param_value: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    param_description: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
     is_preset: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

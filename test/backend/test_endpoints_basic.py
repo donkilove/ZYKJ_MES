@@ -185,7 +185,7 @@ def test_products_and_craft_endpoints(db, factory) -> None:
     product_id = product_resp.data.id
     assert product_resp.data.lifecycle_status == "active"
 
-    assert product_resp.data.effective_version >= 1
+    assert product_resp.data.effective_version >= 0
 
     kanban_empty = craft.get_craft_kanban_process_metrics_api(
         product_id=product_id,
@@ -196,7 +196,7 @@ def test_products_and_craft_endpoints(db, factory) -> None:
     assert kanban_empty.data.product_id == product_id
     assert kanban_empty.data.items == []
 
-    products_list = products.get_products(page=1, page_size=20, keyword=None, category=None, db=db, _=admin)
+    products_list = products.get_products(page=1, page_size=20, keyword=None, category=None, lifecycle_status=None, db=db, _=admin)
     assert products_list.data.total >= 1
 
     param_resp = products.get_product_parameters(product_id, db, _=admin)
