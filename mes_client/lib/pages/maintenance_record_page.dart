@@ -30,6 +30,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   List<MaintenanceRecordItem> _items = const [];
   DateTime? _startDate;
   DateTime? _endDate;
+  String? _resultSummaryFilter;
 
   @override
   void initState() {
@@ -100,6 +101,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
         keyword: _keywordController.text.trim(),
         startDate: _startDate,
         endDate: _endDate,
+        resultSummary: _resultSummaryFilter,
       );
       if (!mounted) {
         return;
@@ -126,6 +128,82 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
         });
       }
     }
+  }
+
+  Future<void> _showDetail(MaintenanceRecordItem item) async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    MaintenanceRecordDetail? detail;
+    try {
+      detail = await _equipmentService.getRecordDetail(recordId: item.id);
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('加载详情失败：${_errorMessage(error)}')),
+      );
+      setState(() => _loading = false);
+      return;
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('保养记录详情 #${detail!.id}'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _detailRow('设备', detail.equipmentName),
+                if (detail.sourceEquipmentCode != null)
+                  _detailRow('设备编号', detail.sourceEquipmentCode!),
+                _detailRow('项目', detail.itemName),
+                _detailRow('到期日期', _formatDate(detail.dueDate)),
+                _detailRow('完成时间', _formatDateTime(detail.completedAt)),
+                _detailRow('执行人', detail.executorUsername ?? '-'),
+                _detailRow('结果摘要', detail.resultSummary),
+                if (detail.resultRemark != null)
+                  _detailRow('备注', detail.resultRemark!),
+                if (detail.attachmentLink != null)
+                  _detailRow('附件链接', detail.attachmentLink!),
+                if (detail.sourcePlanCycleDays != null)
+                  _detailRow('计划周期(天)', '${detail.sourcePlanCycleDays}'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text('$label：', style: const TextStyle(fontWeight: FontWeight.w500)),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -224,6 +302,30 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              SizedBox(
+                width: 160,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _resultSummaryFilter,
+                  items: const [
+                    DropdownMenuItem<String?>(value: null, child: Text('全部结果')),
+                    DropdownMenuItem<String?>(value: '完成', child: Text('完成')),
+                    DropdownMenuItem<String?>(value: '失败', child: Text('失败')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _resultSummaryFilter = value);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '结果',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           Text('总数：$_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
@@ -252,6 +354,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                           DataColumn(label: Text('执行人')),
                           DataColumn(label: Text('结果摘要')),
                           DataColumn(label: Text('备注')),
+                          DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
                           return DataRow(
@@ -264,6 +367,12 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                               DataCell(Text(item.executorUsername ?? '-')),
                               DataCell(Text(item.resultSummary)),
                               DataCell(Text(item.resultRemark ?? '-')),
+                              DataCell(
+                                TextButton(
+                                  onPressed: () => _showDetail(item),
+                                  child: const Text('详情'),
+                                ),
+                              ),
                             ],
                           );
                         }).toList(),

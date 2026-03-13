@@ -13,6 +13,7 @@ from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.equipment import (
+    EquipmentDetailResult,
     EquipmentLedgerItem,
     EquipmentLedgerListResult,
     EquipmentLedgerUpsertRequest,
@@ -24,16 +25,19 @@ from app.schemas.equipment import (
     MaintenancePlanGenerateResult,
     MaintenancePlanItem,
     MaintenancePlanListResult,
+    MaintenanceRecordDetail,
     MaintenanceRecordItem,
     MaintenanceRecordListResult,
     MaintenancePlanToggleRequest,
     MaintenancePlanUpsertRequest,
     MaintenanceWorkOrderCompleteRequest,
+    MaintenanceWorkOrderDetail,
     MaintenanceWorkOrderItem,
     MaintenanceWorkOrderListResult,
     ToggleEnabledRequest,
 )
 from app.services.equipment_service import (
+    cancel_work_order,
     complete_work_order,
     create_equipment,
     create_maintenance_item,
@@ -43,9 +47,12 @@ from app.services.equipment_service import (
     delete_maintenance_plan,
     generate_work_order_for_plan,
     get_equipment_by_id,
+    get_equipment_detail,
     get_maintenance_item_by_id,
     get_maintenance_plan_by_id,
+    get_maintenance_record_by_id,
     get_work_order_by_id,
+    list_active_owners,
     list_active_system_admin_owners,
     list_equipment,
     list_maintenance_items,
@@ -74,6 +81,7 @@ def to_equipment_item(row: Equipment) -> EquipmentLedgerItem:
         model=row.model,
         location=row.location,
         owner_name=row.owner_name,
+        remark=row.remark,
         is_enabled=row.is_enabled,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -84,7 +92,10 @@ def to_maintenance_item(row: MaintenanceItem) -> MaintenanceItemEntry:
     return MaintenanceItemEntry(
         id=row.id,
         name=row.name,
+        category=row.category,
         default_cycle_days=row.default_cycle_days,
+        default_duration_minutes=row.default_duration_minutes,
+        standard_description=row.standard_description,
         is_enabled=row.is_enabled,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -166,7 +177,7 @@ def get_admin_owners(
         EquipmentOwnerOptionListResult(
             total=len(users),
             items=[
-                EquipmentOwnerOption(username=user.username, full_name=user.full_name)
+                EquipmentOwnerOption(id=user.id, username=user.username, full_name=user.full_name)
                 for user in users
             ],
         )
@@ -212,6 +223,7 @@ def create_equipment_ledger(
             model=payload.model,
             location=payload.location,
             owner_name=payload.owner_name,
+            remark=payload.remark,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -239,6 +251,7 @@ def update_equipment_ledger(
             model=payload.model,
             location=payload.location,
             owner_name=payload.owner_name,
+            remark=payload.remark,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -328,6 +341,9 @@ def create_maintenance_item_api(
             db,
             name=payload.name,
             default_cycle_days=payload.default_cycle_days,
+            category=payload.category,
+            default_duration_minutes=payload.default_duration_minutes,
+            standard_description=payload.standard_description,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -351,6 +367,9 @@ def update_maintenance_item_api(
             row=row,
             name=payload.name,
             default_cycle_days=payload.default_cycle_days,
+            category=payload.category,
+            default_duration_minutes=payload.default_duration_minutes,
+            standard_description=payload.standard_description,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -442,6 +461,7 @@ def create_maintenance_plan_api(
             db,
             equipment_id=payload.equipment_id,
             item_id=payload.item_id,
+            cycle_days=payload.cycle_days,
             execution_process_code=payload.execution_process_code,
             estimated_duration_minutes=payload.estimated_duration_minutes,
             start_date=payload.start_date,
@@ -469,6 +489,7 @@ def update_maintenance_plan_api(
             row=row,
             equipment_id=payload.equipment_id,
             item_id=payload.item_id,
+            cycle_days=payload.cycle_days,
             execution_process_code=payload.execution_process_code,
             estimated_duration_minutes=payload.estimated_duration_minutes,
             start_date=payload.start_date,
@@ -645,6 +666,8 @@ def get_maintenance_records(
     page_size: int = Query(default=50, ge=1, le=200),
     keyword: str | None = Query(default=None),
     executor_id: int | None = Query(default=None, ge=1),
+    result_summary: str | None = Query(default=None),
+    equipment_id: int | None = Query(default=None, ge=1),
     start_date: date_type | None = Query(default=None),
     end_date: date_type | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -667,6 +690,8 @@ def get_maintenance_records(
             page_size=page_size,
             keyword=keyword,
             executor_user_id=executor_id,
+            result_summary=result_summary,
+            equipment_id=equipment_id,
             start_date=start_date,
             end_date=end_date,
         )
@@ -677,5 +702,118 @@ def get_maintenance_records(
         MaintenanceRecordListResult(
             total=total,
             items=[to_maintenance_record_item(row) for row in rows],
+        )
+    )
+
+@router.get("/owners", response_model=ApiResponse[EquipmentOwnerOptionListResult])
+def get_all_owners(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.admin_owners.list")),
+) -> ApiResponse[EquipmentOwnerOptionListResult]:
+    users = list_active_owners(db)
+    return success_response(
+        EquipmentOwnerOptionListResult(
+            total=len(users),
+            items=[
+                EquipmentOwnerOption(id=user.id, username=user.username, full_name=user.full_name)
+                for user in users
+            ],
+        )
+    )
+
+
+@router.get("/ledger/{equipment_id}/detail", response_model=ApiResponse[EquipmentDetailResult])
+def get_equipment_detail_api(
+    equipment_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.ledger.list")),
+) -> ApiResponse[EquipmentDetailResult]:
+    result = get_equipment_detail(db, equipment_id)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipment not found")
+    row, active_plan_count, pending_work_order_count, recent_records = result
+    return success_response(
+        EquipmentDetailResult(
+            id=row.id,
+            code=row.code,
+            name=row.name,
+            model=row.model,
+            location=row.location,
+            owner_name=row.owner_name,
+            remark=row.remark,
+            is_enabled=row.is_enabled,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            active_plan_count=active_plan_count,
+            pending_work_order_count=pending_work_order_count,
+            recent_records=[to_maintenance_record_item(r) for r in recent_records],
+        )
+    )
+
+
+@router.get("/executions/{work_order_id}/detail", response_model=ApiResponse[MaintenanceWorkOrderDetail])
+def get_work_order_detail_api(
+    work_order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.executions.list")),
+) -> ApiResponse[MaintenanceWorkOrderDetail]:
+    row = get_work_order_by_id(db, work_order_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work order not found")
+    base = to_work_order_item(row)
+    return success_response(
+        MaintenanceWorkOrderDetail(
+            **base.model_dump(),
+            source_plan_id=row.source_plan_id,
+            source_plan_cycle_days=row.source_plan_cycle_days,
+            source_execution_process_code=row.source_execution_process_code,
+        )
+    )
+
+
+@router.post("/executions/{work_order_id}/cancel", response_model=ApiResponse[MaintenanceWorkOrderItem])
+def cancel_maintenance_execution(
+    work_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("equipment.executions.cancel")),
+) -> ApiResponse[MaintenanceWorkOrderItem]:
+    row = get_work_order_by_id(db, work_order_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work order not found")
+    try:
+        updated = cancel_work_order(
+            db,
+            row=row,
+            operator=current_user,
+            current_user_role_codes=[role.code for role in current_user.roles],
+            current_user_stage_codes=sorted(
+                resolve_user_stage_codes(
+                    db,
+                    process_codes=[process.code for process in current_user.processes],
+                )
+            ),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(to_work_order_item(updated), message="cancelled")
+
+
+@router.get("/records/{record_id}/detail", response_model=ApiResponse[MaintenanceRecordDetail])
+def get_maintenance_record_detail_api(
+    record_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.records.list")),
+) -> ApiResponse[MaintenanceRecordDetail]:
+    row = get_maintenance_record_by_id(db, record_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    base = to_maintenance_record_item(row)
+    return success_response(
+        MaintenanceRecordDetail(
+            **base.model_dump(),
+            source_plan_id=row.source_plan_id,
+            source_plan_cycle_days=row.source_plan_cycle_days,
+            source_equipment_code=row.source_equipment_code,
+            source_item_id=row.source_item_id,
         )
     )

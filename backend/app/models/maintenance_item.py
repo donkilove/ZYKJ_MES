@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Integer, String, text
+from sqlalchemy import Boolean, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -12,6 +12,7 @@ class MaintenanceItem(Base, TimestampMixin):
     category: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     default_cycle_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     default_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    standard_description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     is_enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

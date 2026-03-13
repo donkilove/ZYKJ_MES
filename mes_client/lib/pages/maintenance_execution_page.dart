@@ -32,6 +32,8 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   String _message = '';
   int _total = 0;
   List<MaintenanceWorkOrderItem> _items = const [];
+  String? _statusFilter;
+  bool _mineOnly = false;
 
   @override
   void initState() {
@@ -94,6 +96,8 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         page: 1,
         pageSize: 200,
         keyword: _keywordController.text.trim(),
+        status: _statusFilter,
+        mineOnly: _mineOnly,
       );
       if (!mounted) {
         return;
@@ -151,6 +155,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     }
     final pageContext = context;
     final remarkController = TextEditingController();
+    final attachmentController = TextEditingController();
     final formKey = GlobalKey<FormState>();
     String selectedSummary = '完成';
 
@@ -216,6 +221,14 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                             },
                           ),
                         ],
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: attachmentController,
+                          decoration: const InputDecoration(
+                            labelText: '附件链接（可选）',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -244,6 +257,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
 
     if (confirmed != true) {
       remarkController.dispose();
+      attachmentController.dispose();
       return;
     }
 
@@ -254,6 +268,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         resultRemark: selectedSummary == '失败'
             ? remarkController.text.trim()
             : null,
+        attachmentLink: attachmentController.text.trim().isEmpty
+            ? null
+            : attachmentController.text.trim(),
       );
       if (mounted) {
         ScaffoldMessenger.of(
@@ -274,7 +291,136 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
       ).showSnackBar(SnackBar(content: Text('完成执行失败：${_errorMessage(error)}')));
     } finally {
       remarkController.dispose();
+      attachmentController.dispose();
     }
+  }
+
+  Future<void> _cancelExecution(MaintenanceWorkOrderItem item) async {
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('取消工单'),
+        content: Text('确认取消工单"${item.equipmentName} / ${item.itemName}"吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _equipmentService.cancelExecution(workOrderId: item.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('工单已取消')));
+      }
+      await _loadItems();
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('取消工单失败：${_errorMessage(error)}')),
+      );
+    }
+  }
+
+  Future<void> _showDetail(MaintenanceWorkOrderItem item) async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    MaintenanceWorkOrderDetail? detail;
+    try {
+      detail = await _equipmentService.getWorkOrderDetail(workOrderId: item.id);
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('加载详情失败：${_errorMessage(error)}')),
+      );
+      setState(() => _loading = false);
+      return;
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('工单详情 #${detail!.id}'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _detailRow('设备', detail.equipmentName),
+                _detailRow('项目', detail.itemName),
+                _detailRow('到期日期', _formatDate(detail.dueDate)),
+                _detailRow('状态', _statusLabel(detail.status)),
+                _detailRow('执行人', detail.executorUsername ?? '-'),
+                if (detail.startedAt != null)
+                  _detailRow('开始时间', _formatDateTime(detail.startedAt!)),
+                if (detail.completedAt != null)
+                  _detailRow('完成时间', _formatDateTime(detail.completedAt!)),
+                if (detail.resultSummary != null)
+                  _detailRow('结果摘要', detail.resultSummary!),
+                if (detail.resultRemark != null)
+                  _detailRow('备注', detail.resultRemark!),
+                if (detail.attachmentLink != null)
+                  _detailRow('附件链接', detail.attachmentLink!),
+                if (detail.sourcePlanCycleDays != null)
+                  _detailRow('计划周期(天)', '${detail.sourcePlanCycleDays}'),
+                if (detail.sourceExecutionProcessCode != null)
+                  _detailRow('执行工段', detail.sourceExecutionProcessCode!),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text('$label：', style: const TextStyle(fontWeight: FontWeight.w500)),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
+  String _formatDateTime(DateTime value) {
+    final local = value.toLocal();
+    final mm = local.month.toString().padLeft(2, '0');
+    final dd = local.day.toString().padLeft(2, '0');
+    final hh = local.hour.toString().padLeft(2, '0');
+    final min = local.minute.toString().padLeft(2, '0');
+    return '${local.year}-$mm-$dd $hh:$min';
   }
 
   @override
@@ -322,6 +468,43 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              SizedBox(
+                width: 160,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _statusFilter,
+                  items: const [
+                    DropdownMenuItem<String?>(value: null, child: Text('全部状态')),
+                    DropdownMenuItem<String?>(value: 'pending', child: Text('待执行')),
+                    DropdownMenuItem<String?>(value: 'in_progress', child: Text('执行中')),
+                    DropdownMenuItem<String?>(value: 'overdue', child: Text('已逾期')),
+                    DropdownMenuItem<String?>(value: 'done', child: Text('已完成')),
+                    DropdownMenuItem<String?>(value: 'cancelled', child: Text('已取消')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _statusFilter = value);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '状态',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Row(
+                children: [
+                  const Text('仅看我的任务'),
+                  Switch(
+                    value: _mineOnly,
+                    onChanged: (v) => setState(() => _mineOnly = v),
+                  ),
+                ],
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           Text('总数：$_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
@@ -358,6 +541,11 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                                   item.status == 'overdue');
                           final canComplete =
                               widget.canExecute && item.status == 'in_progress';
+                          final canCancel =
+                              widget.canExecute &&
+                              (item.status == 'pending' ||
+                                  item.status == 'overdue' ||
+                                  item.status == 'in_progress');
                           return DataRow(
                             cells: [
                               DataCell(Text(item.equipmentName)),
@@ -381,6 +569,18 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                                           ? () => _completeExecution(item)
                                           : null,
                                       child: const Text('完成执行'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: canCancel
+                                          ? () => _cancelExecution(item)
+                                          : null,
+                                      child: const Text('取消'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: () => _showDetail(item),
+                                      child: const Text('详情'),
                                     ),
                                   ],
                                 ),

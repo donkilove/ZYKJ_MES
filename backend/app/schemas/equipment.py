@@ -13,6 +13,7 @@ class EquipmentLedgerUpsertRequest(BaseModel):
     model: str = Field(default="", min_length=0, max_length=128)
     location: str = Field(default="", min_length=0, max_length=255)
     owner_name: str = Field(default="", min_length=0, max_length=64)
+    remark: str = Field(default="", max_length=1024)
 
 
 class EquipmentLedgerItem(BaseModel):
@@ -22,6 +23,7 @@ class EquipmentLedgerItem(BaseModel):
     model: str
     location: str
     owner_name: str
+    remark: str
     is_enabled: bool
     created_at: datetime
     updated_at: datetime
@@ -33,6 +35,7 @@ class EquipmentLedgerListResult(BaseModel):
 
 
 class EquipmentOwnerOption(BaseModel):
+    id: int
     username: str
     full_name: str | None = None
 
@@ -45,12 +48,18 @@ class EquipmentOwnerOptionListResult(BaseModel):
 class MaintenanceItemUpsertRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     default_cycle_days: int = Field(ge=1, le=3650)
+    category: str = Field(default="", max_length=64)
+    default_duration_minutes: int | None = Field(default=None, ge=1, le=1440)
+    standard_description: str = Field(default="", max_length=1024)
 
 
 class MaintenanceItemEntry(BaseModel):
     id: int
     name: str
+    category: str
     default_cycle_days: int
+    default_duration_minutes: int
+    standard_description: str
     is_enabled: bool
     created_at: datetime
     updated_at: datetime
@@ -161,4 +170,33 @@ class MaintenanceRecordItem(BaseModel):
 class MaintenanceRecordListResult(BaseModel):
     total: int
     items: list[MaintenanceRecordItem]
+
+
+class EquipmentDetailResult(BaseModel):
+    id: int
+    code: str
+    name: str
+    model: str
+    location: str
+    owner_name: str
+    remark: str
+    is_enabled: bool
+    created_at: datetime
+    updated_at: datetime
+    active_plan_count: int
+    pending_work_order_count: int
+    recent_records: list[MaintenanceRecordItem]
+
+
+class MaintenanceWorkOrderDetail(MaintenanceWorkOrderItem):
+    source_plan_id: int | None
+    source_plan_cycle_days: int | None
+    source_execution_process_code: str | None
+
+
+class MaintenanceRecordDetail(MaintenanceRecordItem):
+    source_plan_id: int | None
+    source_plan_cycle_days: int | None
+    source_equipment_code: str | None
+    source_item_id: int | None
 

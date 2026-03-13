@@ -121,6 +121,12 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     final pageContext = context;
     final isCreate = item == null;
     final nameController = TextEditingController(text: item?.name ?? '');
+    final durationController = TextEditingController(
+      text: item?.defaultDurationMinutes != null && item!.defaultDurationMinutes > 0
+          ? '${item.defaultDurationMinutes}'
+          : '',
+    );
+    final standardDescController = TextEditingController(text: item?.standardDescription ?? '');
     final formKey = GlobalKey<FormState>();
     _ExecutionRuleOption selectedRule = _executionRules.first;
     if (item != null) {
@@ -131,6 +137,11 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
           cycleDays: item.defaultCycleDays,
         ),
       );
+    }
+    const categoryOptions = ['', '点检', '润滑', '校准', '清洁'];
+    var selectedCategory = item?.category ?? '';
+    if (!categoryOptions.contains(selectedCategory)) {
+      selectedCategory = '';
     }
 
     final saved = await showLockedFormDialog<bool>(
@@ -194,6 +205,54 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                             border: OutlineInputBorder(),
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedCategory,
+                          items: categoryOptions
+                              .map(
+                                (c) => DropdownMenuItem<String>(
+                                  value: c,
+                                  child: Text(c.isEmpty ? '(不限)' : c),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            setInnerState(() {
+                              selectedCategory = value ?? '';
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            labelText: '类别',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: durationController,
+                          decoration: const InputDecoration(
+                            labelText: '默认时长(分钟)',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value != null && value.trim().isNotEmpty) {
+                              final n = int.tryParse(value.trim());
+                              if (n == null || n < 1 || n > 1440) {
+                                return '请输入1-1440之间的整数';
+                              }
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: standardDescController,
+                          decoration: const InputDecoration(
+                            labelText: '标准描述',
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLines: 3,
+                        ),
                       ],
                     ),
                   ),
@@ -209,17 +268,25 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                     if (!formKey.currentState!.validate()) {
                       return;
                     }
+                    final durationText = durationController.text.trim();
+                    final duration = durationText.isNotEmpty ? int.tryParse(durationText) : null;
                     try {
                       if (isCreate) {
                         await _equipmentService.createMaintenanceItem(
                           name: nameController.text.trim(),
                           defaultCycleDays: selectedRule.cycleDays,
+                          category: selectedCategory,
+                          defaultDurationMinutes: duration,
+                          standardDescription: standardDescController.text.trim(),
                         );
                       } else {
                         await _equipmentService.updateMaintenanceItem(
                           itemId: item.id,
                           name: nameController.text.trim(),
                           defaultCycleDays: selectedRule.cycleDays,
+                          category: selectedCategory,
+                          defaultDurationMinutes: duration,
+                          standardDescription: standardDescController.text.trim(),
                         );
                       }
                       if (dialogContext.mounted) {
@@ -249,6 +316,8 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     );
 
     nameController.dispose();
+    durationController.dispose();
+    standardDescController.dispose();
 
     if (saved == true) {
       await _loadItems();
@@ -428,8 +497,10 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                       child: DataTable(
                         columns: const [
                           DataColumn(label: Text('项目名称')),
+                          DataColumn(label: Text('类别')),
                           DataColumn(label: Text('执行日期')),
                           DataColumn(label: Text('周期(天)')),
+                          DataColumn(label: Text('时长(分钟)')),
                           DataColumn(label: Text('状态')),
                           DataColumn(label: Text('最后修改时间')),
                           DataColumn(label: Text('操作')),
@@ -438,8 +509,10 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                           return DataRow(
                             cells: [
                               DataCell(Text(item.name)),
+                              DataCell(Text(item.category.isEmpty ? '-' : item.category)),
                               DataCell(Text(item.executionDateLabel)),
                               DataCell(Text('${item.defaultCycleDays}')),
+                              DataCell(Text(item.defaultDurationMinutes > 0 ? '${item.defaultDurationMinutes}' : '-')),
                               DataCell(Text(item.isEnabled ? '启用' : '停用')),
                               DataCell(Text(_formatDateTime(item.updatedAt))),
                               DataCell(

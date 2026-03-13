@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, String, text
+from sqlalchemy import Boolean, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -13,6 +13,7 @@ class Equipment(Base, TimestampMixin):
     model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     location: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     owner_name: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    remark: Mapped[str] = mapped_column(Text, nullable=False, default="")
     is_enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

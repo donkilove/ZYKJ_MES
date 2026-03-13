@@ -24,13 +24,6 @@ class EquipmentLedgerPage extends StatefulWidget {
 }
 
 class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
-  static const List<String> _locationOptions = <String>[
-    '激光打标',
-    '产品测试',
-    '产品组装',
-    '产品包装',
-  ];
-
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
 
@@ -84,7 +77,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     });
     try {
       if (widget.canWrite && (reloadOwners || _ownerOptions.isEmpty)) {
-        _ownerOptions = await _equipmentService.listAdminOwners();
+        _ownerOptions = await _equipmentService.listAllOwners();
       }
       final result = await _equipmentService.listEquipment(
         page: 1,
@@ -127,12 +120,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     final codeController = TextEditingController(text: item?.code ?? '');
     final nameController = TextEditingController(text: item?.name ?? '');
     final modelController = TextEditingController(text: item?.model ?? '');
+    final locationController = TextEditingController(text: item?.location ?? '');
+    final remarkController = TextEditingController(text: item?.remark ?? '');
     final formKey = GlobalKey<FormState>();
-    var selectedLocation = (item?.location ?? '').trim();
-    if (selectedLocation.isNotEmpty &&
-        !_locationOptions.contains(selectedLocation)) {
-      selectedLocation = '';
-    }
     var selectedOwner = (item?.ownerName ?? '').trim();
     final ownerNames = _ownerOptions.map((owner) => owner.username).toSet();
     if (selectedOwner.isNotEmpty && !ownerNames.contains(selectedOwner)) {
@@ -190,33 +180,12 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedLocation.isEmpty
-                              ? null
-                              : selectedLocation,
-                          items: _locationOptions
-                              .map(
-                                (entry) => DropdownMenuItem<String>(
-                                  value: entry,
-                                  child: Text(entry),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            setInnerState(() {
-                              selectedLocation = value ?? '';
-                            });
-                          },
+                        TextFormField(
+                          controller: locationController,
                           decoration: const InputDecoration(
                             labelText: '位置',
                             border: OutlineInputBorder(),
                           ),
-                          validator: (value) {
-                            if ((value ?? '').trim().isEmpty) {
-                              return '请选择位置';
-                            }
-                            return null;
-                          },
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
@@ -247,6 +216,15 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                             return null;
                           },
                         ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: remarkController,
+                          decoration: const InputDecoration(
+                            labelText: '备注',
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLines: 3,
+                        ),
                       ],
                     ),
                   ),
@@ -268,8 +246,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                           code: codeController.text.trim(),
                           name: nameController.text.trim(),
                           model: modelController.text.trim(),
-                          location: selectedLocation,
+                          location: locationController.text.trim(),
                           ownerName: selectedOwner,
+                          remark: remarkController.text.trim(),
                         );
                       } else {
                         await _equipmentService.updateEquipment(
@@ -277,8 +256,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                           code: codeController.text.trim(),
                           name: nameController.text.trim(),
                           model: modelController.text.trim(),
-                          location: selectedLocation,
+                          location: locationController.text.trim(),
                           ownerName: selectedOwner,
+                          remark: remarkController.text.trim(),
                         );
                       }
                       if (dialogContext.mounted) {
@@ -310,10 +290,106 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     codeController.dispose();
     nameController.dispose();
     modelController.dispose();
+    locationController.dispose();
+    remarkController.dispose();
 
     if (saved == true) {
       await _loadItems();
     }
+  }
+
+  Future<void> _showDetailDialog(EquipmentLedgerItem item) async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    EquipmentDetailResult? detail;
+    try {
+      detail = await _equipmentService.getEquipmentDetail(equipmentId: item.id);
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('加载设备详情失败: ${_errorMessage(error)}')),
+      );
+      setState(() => _loading = false);
+      return;
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+    if (!mounted || detail == null) return;    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('设备详情 - ${detail!.name}'),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _detailRow('设备编号', detail.code),
+                _detailRow('设备名称', detail.name),
+                _detailRow('型号', detail.model.isEmpty ? '-' : detail.model),
+                _detailRow('位置', detail.location.isEmpty ? '-' : detail.location),
+                _detailRow('负责人', detail.ownerName.isEmpty ? '-' : detail.ownerName),
+                _detailRow('备注', detail.remark.isEmpty ? '-' : detail.remark),
+                _detailRow('状态', detail.isEnabled ? '启用' : '停用'),
+                _detailRow('启用保养计划数', '${detail.activePlanCount}'),
+                _detailRow('待执行工单数', '${detail.pendingWorkOrderCount}'),
+                if (detail.recentRecords.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('最近保养记录:', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  ...detail.recentRecords.map(
+                    (r) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '${_formatDate(r.completedAt)}  ${r.itemName}  ${r.resultSummary}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label：',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime value) {
+    final local = value.toLocal();
+    final mm = local.month.toString().padLeft(2, '0');
+    final dd = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$mm-$dd';
   }
 
   Future<void> _toggleItem(EquipmentLedgerItem item) async {
@@ -545,6 +621,11 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                                           ? () => _deleteItem(item)
                                           : null,
                                       child: const Text('删除'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: () => _showDetailDialog(item),
+                                      child: const Text('详情'),
                                     ),
                                   ],
                                 ),

@@ -11,6 +11,7 @@ class EquipmentLedgerItem {
     required this.model,
     required this.location,
     required this.ownerName,
+    required this.remark,
     required this.isEnabled,
     required this.createdAt,
     required this.updatedAt,
@@ -22,6 +23,7 @@ class EquipmentLedgerItem {
   final String model;
   final String location;
   final String ownerName;
+  final String remark;
   final bool isEnabled;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -34,6 +36,7 @@ class EquipmentLedgerItem {
       model: (json['model'] as String?) ?? '',
       location: (json['location'] as String?) ?? '',
       ownerName: (json['owner_name'] as String?) ?? '',
+      remark: (json['remark'] as String?) ?? '',
       isEnabled: (json['is_enabled'] as bool?) ?? true,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -49,8 +52,9 @@ class EquipmentLedgerListResult {
 }
 
 class EquipmentOwnerOption {
-  EquipmentOwnerOption({required this.username, required this.fullName});
+  EquipmentOwnerOption({required this.userId, required this.username, required this.fullName});
 
+  final int userId;
   final String username;
   final String? fullName;
 
@@ -63,6 +67,7 @@ class EquipmentOwnerOption {
 
   factory EquipmentOwnerOption.fromJson(Map<String, dynamic> json) {
     return EquipmentOwnerOption(
+      userId: (json['id'] as int?) ?? 0,
       username: (json['username'] as String?) ?? '',
       fullName: json['full_name'] as String?,
     );
@@ -73,7 +78,10 @@ class MaintenanceItemEntry {
   MaintenanceItemEntry({
     required this.id,
     required this.name,
+    required this.category,
     required this.defaultCycleDays,
+    required this.defaultDurationMinutes,
+    required this.standardDescription,
     required this.isEnabled,
     required this.createdAt,
     required this.updatedAt,
@@ -81,7 +89,10 @@ class MaintenanceItemEntry {
 
   final int id;
   final String name;
+  final String category;
   final int defaultCycleDays;
+  final int defaultDurationMinutes;
+  final String standardDescription;
   final bool isEnabled;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -105,7 +116,10 @@ class MaintenanceItemEntry {
     return MaintenanceItemEntry(
       id: json['id'] as int,
       name: (json['name'] as String?) ?? '',
+      category: (json['category'] as String?) ?? '',
       defaultCycleDays: (json['default_cycle_days'] as int?) ?? 0,
+      defaultDurationMinutes: (json['default_duration_minutes'] as int?) ?? 60,
+      standardDescription: (json['standard_description'] as String?) ?? '',
       isEnabled: (json['is_enabled'] as bool?) ?? true,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -339,4 +353,163 @@ class MaintenanceRecordListResult {
 
   final int total;
   final List<MaintenanceRecordItem> items;
+}
+
+class EquipmentDetailResult {
+  EquipmentDetailResult({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.model,
+    required this.location,
+    required this.ownerName,
+    required this.remark,
+    required this.isEnabled,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.activePlanCount,
+    required this.pendingWorkOrderCount,
+    required this.recentRecords,
+  });
+
+  final int id;
+  final String code;
+  final String name;
+  final String model;
+  final String location;
+  final String ownerName;
+  final String remark;
+  final bool isEnabled;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int activePlanCount;
+  final int pendingWorkOrderCount;
+  final List<MaintenanceRecordItem> recentRecords;
+
+  factory EquipmentDetailResult.fromJson(Map<String, dynamic> json) {
+    return EquipmentDetailResult(
+      id: json['id'] as int,
+      code: (json['code'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      model: (json['model'] as String?) ?? '',
+      location: (json['location'] as String?) ?? '',
+      ownerName: (json['owner_name'] as String?) ?? '',
+      remark: (json['remark'] as String?) ?? '',
+      isEnabled: (json['is_enabled'] as bool?) ?? true,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+      activePlanCount: (json['active_plan_count'] as int?) ?? 0,
+      pendingWorkOrderCount: (json['pending_work_order_count'] as int?) ?? 0,
+      recentRecords: (json['recent_records'] as List<dynamic>? ?? const [])
+          .map((e) => MaintenanceRecordItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class MaintenanceWorkOrderDetail extends MaintenanceWorkOrderItem {
+  MaintenanceWorkOrderDetail({
+    required super.id,
+    required super.planId,
+    required super.equipmentId,
+    required super.equipmentName,
+    required super.itemId,
+    required super.itemName,
+    required super.dueDate,
+    required super.status,
+    required super.executorUserId,
+    required super.executorUsername,
+    required super.startedAt,
+    required super.completedAt,
+    required super.resultSummary,
+    required super.resultRemark,
+    required super.attachmentLink,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.sourcePlanId,
+    required this.sourcePlanCycleDays,
+    required this.sourceExecutionProcessCode,
+  });
+
+  final int? sourcePlanId;
+  final int? sourcePlanCycleDays;
+  final String? sourceExecutionProcessCode;
+
+  factory MaintenanceWorkOrderDetail.fromJson(Map<String, dynamic> json) {
+    return MaintenanceWorkOrderDetail(
+      id: json['id'] as int,
+      planId: json['plan_id'] as int?,
+      equipmentId: json['equipment_id'] as int?,
+      equipmentName: (json['equipment_name'] as String?) ?? '',
+      itemId: json['item_id'] as int?,
+      itemName: (json['item_name'] as String?) ?? '',
+      dueDate: DateTime.parse(json['due_date'] as String),
+      status: (json['status'] as String?) ?? 'pending',
+      executorUserId: json['executor_user_id'] as int?,
+      executorUsername: json['executor_username'] as String?,
+      startedAt: json['started_at'] != null
+          ? DateTime.parse(json['started_at'] as String)
+          : null,
+      completedAt: json['completed_at'] != null
+          ? DateTime.parse(json['completed_at'] as String)
+          : null,
+      resultSummary: json['result_summary'] as String?,
+      resultRemark: json['result_remark'] as String?,
+      attachmentLink: json['attachment_link'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+      sourcePlanId: json['source_plan_id'] as int?,
+      sourcePlanCycleDays: json['source_plan_cycle_days'] as int?,
+      sourceExecutionProcessCode: json['source_execution_process_code'] as String?,
+    );
+  }
+}
+
+class MaintenanceRecordDetail extends MaintenanceRecordItem {
+  MaintenanceRecordDetail({
+    required super.id,
+    required super.workOrderId,
+    required super.equipmentName,
+    required super.itemName,
+    required super.dueDate,
+    required super.executorUserId,
+    required super.executorUsername,
+    required super.completedAt,
+    required super.resultSummary,
+    required super.resultRemark,
+    required super.attachmentLink,
+    required super.createdAt,
+    required super.updatedAt,
+    required this.sourcePlanId,
+    required this.sourcePlanCycleDays,
+    required this.sourceEquipmentCode,
+    required this.sourceItemId,
+  });
+
+  final int? sourcePlanId;
+  final int? sourcePlanCycleDays;
+  final String? sourceEquipmentCode;
+  final int? sourceItemId;
+
+  factory MaintenanceRecordDetail.fromJson(Map<String, dynamic> json) {
+    return MaintenanceRecordDetail(
+      id: json['id'] as int,
+      workOrderId: (json['work_order_id'] as int?) ?? 0,
+      equipmentName: (json['equipment_name'] as String?) ?? '',
+      itemName: (json['item_name'] as String?) ?? '',
+      dueDate: DateTime.parse(json['due_date'] as String),
+      executorUserId: json['executor_user_id'] as int?,
+      executorUsername: json['executor_username'] as String?,
+      completedAt: DateTime.parse(json['completed_at'] as String),
+      resultSummary: (json['result_summary'] as String?) ?? '',
+      resultRemark: json['result_remark'] as String?,
+      attachmentLink: json['attachment_link'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+      sourcePlanId: json['source_plan_id'] as int?,
+      sourcePlanCycleDays: json['source_plan_cycle_days'] as int?,
+      sourceEquipmentCode: json['source_equipment_code'] as String?,
+      sourceItemId: json['source_item_id'] as int?,
+    );
+  }
 }

@@ -324,6 +324,9 @@ def create_maintenance_item(
     *,
     name: str,
     default_cycle_days: int,
+    category: str = "",
+    default_duration_minutes: int | None = None,
+    standard_description: str = "",
 ) -> MaintenanceItem:
     normalized_name = _normalize_name(name, field_name="Maintenance item name")
     if get_maintenance_item_by_name(db, normalized_name):
@@ -333,9 +336,10 @@ def create_maintenance_item(
 
     row = MaintenanceItem(
         name=normalized_name,
-        category="",
+        category=category.strip(),
         default_cycle_days=default_cycle_days,
-        default_duration_minutes=MAINTENANCE_ITEM_DEFAULT_DURATION_MINUTES,
+        default_duration_minutes=default_duration_minutes or MAINTENANCE_ITEM_DEFAULT_DURATION_MINUTES,
+        standard_description=standard_description.strip(),
         is_enabled=True,
     )
     db.add(row)
@@ -350,6 +354,9 @@ def update_maintenance_item(
     row: MaintenanceItem,
     name: str,
     default_cycle_days: int,
+    category: str = "",
+    default_duration_minutes: int | None = None,
+    standard_description: str = "",
 ) -> MaintenanceItem:
     normalized_name = _normalize_name(name, field_name="Maintenance item name")
     existing = get_maintenance_item_by_name(db, normalized_name)
@@ -360,10 +367,10 @@ def update_maintenance_item(
 
     cycle_changed = row.default_cycle_days != default_cycle_days
     row.name = normalized_name
-    row.category = ""
+    row.category = category.strip()
     row.default_cycle_days = default_cycle_days
-    if row.default_duration_minutes <= 0:
-        row.default_duration_minutes = MAINTENANCE_ITEM_DEFAULT_DURATION_MINUTES
+    row.default_duration_minutes = default_duration_minutes or MAINTENANCE_ITEM_DEFAULT_DURATION_MINUTES
+    row.standard_description = standard_description.strip()
 
     if cycle_changed:
         plans = db.execute(
@@ -501,6 +508,7 @@ def create_maintenance_plan(
     *,
     equipment_id: int,
     item_id: int,
+    cycle_days: int | None,
     execution_process_code: str,
     estimated_duration_minutes: int | None,
     start_date: date,
@@ -508,7 +516,7 @@ def create_maintenance_plan(
     default_executor_user_id: int | None,
 ) -> MaintenancePlan:
     _, item = _validate_plan_relations(db, equipment_id=equipment_id, item_id=item_id)
-    cycle_days = _resolve_plan_cycle_days(item)
+    resolved_cycle_days = cycle_days if (cycle_days and cycle_days > 0) else _resolve_plan_cycle_days(item)
     normalized_process_code = _normalize_execution_process_code(db, execution_process_code)
     if estimated_duration_minutes is not None and estimated_duration_minutes <= 0:
         raise ValueError("Estimated duration minutes must be greater than 0")
@@ -536,7 +544,7 @@ def create_maintenance_plan(
     row = MaintenancePlan(
         equipment_id=equipment_id,
         item_id=item_id,
-        cycle_days=cycle_days,
+        cycle_days=resolved_cycle_days,
         execution_process_code=normalized_process_code,
         estimated_duration_minutes=estimated_duration_minutes,
         start_date=start_date,
@@ -556,6 +564,7 @@ def update_maintenance_plan(
     row: MaintenancePlan,
     equipment_id: int,
     item_id: int,
+    cycle_days: int | None,
     execution_process_code: str,
     estimated_duration_minutes: int | None,
     start_date: date,
@@ -563,7 +572,7 @@ def update_maintenance_plan(
     default_executor_user_id: int | None,
 ) -> MaintenancePlan:
     _, item = _validate_plan_relations(db, equipment_id=equipment_id, item_id=item_id)
-    cycle_days = _resolve_plan_cycle_days(item)
+    resolved_cycle_days = cycle_days if (cycle_days and cycle_days > 0) else _resolve_plan_cycle_days(item)
     normalized_process_code = _normalize_execution_process_code(db, execution_process_code)
     if estimated_duration_minutes is not None and estimated_duration_minutes <= 0:
         raise ValueError("Estimated duration minutes must be greater than 0")
@@ -591,7 +600,7 @@ def update_maintenance_plan(
 
     row.equipment_id = equipment_id
     row.item_id = item_id
-    row.cycle_days = cycle_days
+    row.cycle_days = resolved_cycle_days
     row.execution_process_code = normalized_process_code
     row.estimated_duration_minutes = estimated_duration_minutes
     row.start_date = start_date
@@ -862,6 +871,8 @@ def list_maintenance_records(
     page_size: int,
     keyword: str | None,
     executor_user_id: int | None,
+    result_summary: str | None = None,
+    equipment_id: int | None = None,
     start_date: date | None,
     end_date: date | None,
 ) -> tuple[int, list[MaintenanceRecord]]:
@@ -869,6 +880,12 @@ def list_maintenance_records(
 
     if executor_user_id is not None:
         filters.append(MaintenanceRecord.executor_user_id == executor_user_id)
+
+    if result_summary is not None:
+        filters.append(MaintenanceRecord.result_summary == result_summary)
+
+    if equipment_id is not None:
+        filters.append(MaintenanceRecord.source_equipment_id == equipment_id)
 
     if start_date is not None:
         start_dt = datetime.combine(start_date, time.min, tzinfo=UTC)
@@ -1014,6 +1031,32 @@ def complete_work_order(
             )
         )
 
+    db.commit()
+    db.refresh(row)
+    return get_work_order_by_id(db, row.id) or row
+
+def cancel_work_order(
+    db: Session,
+    *,
+    row: MaintenanceWorkOrder,
+    operator: User,
+    current_user_role_codes: list[str],
+    current_user_stage_codes: list[str],
+) -> MaintenanceWorkOrder:
+    _ensure_work_order_process_permission(
+        row=row,
+        current_user_role_codes={
+            code.strip() for code in current_user_role_codes if code and code.strip()
+        },
+        current_user_stage_codes={
+            code.strip() for code in current_user_stage_codes if code and code.strip()
+        },
+    )
+    if row.status == WORK_ORDER_STATUS_DONE:
+        raise ValueError("Completed work orders cannot be cancelled")
+    if row.status == WORK_ORDER_STATUS_CANCELLED:
+        raise ValueError("Work order is already cancelled")
+    row.status = WORK_ORDER_STATUS_CANCELLED
     db.commit()
     db.refresh(row)
     return get_work_order_by_id(db, row.id) or row

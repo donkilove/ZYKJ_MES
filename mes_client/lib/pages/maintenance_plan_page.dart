@@ -36,6 +36,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   List<EquipmentLedgerItem> _equipmentOptions = const [];
   List<MaintenanceItemEntry> _itemOptions = const [];
   List<CraftStageItem> _stageOptions = const [];
+  List<EquipmentOwnerOption> _ownerOptions = const [];
   int? _equipmentFilterId;
   int? _itemFilterId;
 
@@ -92,6 +93,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         );
         _equipmentOptions = equipmentResult.items;
         _itemOptions = itemResult.items;
+        _ownerOptions = await _equipmentService.listAllOwners();
         _stageOptions = [...stageResult.items]
           ..sort((a, b) {
             final orderCompare = a.sortOrder.compareTo(b.sortOrder);
@@ -169,9 +171,16 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     )) {
       selectedExecutionProcessCode = _stageOptions.first.code;
     }
-    final startDate = plan?.startDate ?? DateTime.now();
-    final nextDueDate = plan?.nextDueDate;
-    final estimatedDurationMinutes = plan?.estimatedDurationMinutes;
+    var selectedStartDate = plan?.startDate ?? DateTime.now();
+    var selectedDefaultExecutorUserId = plan?.defaultExecutorUserId;
+    final cycleDaysController = TextEditingController(
+      text: plan?.cycleDays != null ? '${plan!.cycleDays}' : '',
+    );
+    final estimatedDurationController = TextEditingController(
+      text: plan?.estimatedDurationMinutes != null
+          ? '${plan!.estimatedDurationMinutes}'
+          : '',
+    );
 
     final saved = await showLockedFormDialog<bool>(
       context: pageContext,
@@ -259,18 +268,91 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                             });
                           },
                           decoration: const InputDecoration(
-                            labelText: '执行工序',
+                            labelText: '执行工段',
                             border: OutlineInputBorder(),
                           ),
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
-                          key: ValueKey<int>(selectedItem.id),
-                          initialValue: '${selectedItem.defaultCycleDays}',
-                          readOnly: true,
-                          enabled: false,
+                          controller: cycleDaysController,
+                          decoration: InputDecoration(
+                            labelText: '周期(天，留空使用项目默认: ${selectedItem.defaultCycleDays}天)',
+                            border: const OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value != null && value.trim().isNotEmpty) {
+                              final n = int.tryParse(value.trim());
+                              if (n == null || n < 1 || n > 3650) {
+                                return '请输入1-3650之间的整数';
+                              }
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: innerContext,
+                              initialDate: selectedStartDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2099),
+                            );
+                            if (picked != null) {
+                              setInnerState(() {
+                                selectedStartDate = picked;
+                              });
+                            }
+                          },
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: '起始日期',
+                              border: OutlineInputBorder(),
+                            ),
+                            child: Text(_formatDate(selectedStartDate)),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: estimatedDurationController,
                           decoration: const InputDecoration(
-                            labelText: '项目周期(天)',
+                            labelText: '预计时长(分钟，可选)',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value != null && value.trim().isNotEmpty) {
+                              final n = int.tryParse(value.trim());
+                              if (n == null || n < 1 || n > 1440) {
+                                return '请输入1-1440之间的整数';
+                              }
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int?>(
+                          initialValue: selectedDefaultExecutorUserId,
+                          items: [
+                            const DropdownMenuItem<int?>(
+                              value: null,
+                              child: Text('(不指定)'),
+                            ),
+                            ..._ownerOptions.map(
+                              (u) => DropdownMenuItem<int?>(
+                                value: u.userId,
+                                child: Text(u.displayName),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setInnerState(() {
+                              selectedDefaultExecutorUserId = value;
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            labelText: '默认执行人',
                             border: OutlineInputBorder(),
                           ),
                         ),
@@ -289,16 +371,21 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                     if (!formKey.currentState!.validate()) {
                       return;
                     }
+                    final cycleDaysText = cycleDaysController.text.trim();
+                    final cycleDays = cycleDaysText.isNotEmpty ? int.tryParse(cycleDaysText) : null;
+                    final durationText = estimatedDurationController.text.trim();
+                    final duration = durationText.isNotEmpty ? int.tryParse(durationText) : null;
                     try {
                       if (isCreate) {
                         await _equipmentService.createMaintenancePlan(
                           equipmentId: selectedEquipmentId,
                           itemId: selectedItemId,
                           executionProcessCode: selectedExecutionProcessCode,
-                          startDate: startDate,
-                          estimatedDurationMinutes: null,
-                          nextDueDate: nextDueDate,
-                          defaultExecutorUserId: null,
+                          startDate: selectedStartDate,
+                          estimatedDurationMinutes: duration,
+                          nextDueDate: null,
+                          defaultExecutorUserId: selectedDefaultExecutorUserId,
+                          cycleDays: cycleDays,
                         );
                       } else {
                         await _equipmentService.updateMaintenancePlan(
@@ -306,10 +393,11 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                           equipmentId: selectedEquipmentId,
                           itemId: selectedItemId,
                           executionProcessCode: selectedExecutionProcessCode,
-                          startDate: startDate,
-                          estimatedDurationMinutes: estimatedDurationMinutes,
-                          nextDueDate: nextDueDate,
-                          defaultExecutorUserId: null,
+                          startDate: selectedStartDate,
+                          estimatedDurationMinutes: duration,
+                          nextDueDate: null,
+                          defaultExecutorUserId: selectedDefaultExecutorUserId,
+                          cycleDays: cycleDays,
                         );
                       }
                       if (dialogContext.mounted) {
@@ -337,6 +425,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         );
       },
     );
+
+    cycleDaysController.dispose();
+    estimatedDurationController.dispose();
 
     if (saved == true) {
       await _loadAll();
