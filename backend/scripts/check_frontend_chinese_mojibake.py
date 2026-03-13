@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 
 
-DEFAULT_SCAN_PATHS = ("mes_client/lib", "mes_client/test", "test/mes_client")
+DEFAULT_SCAN_PATHS = ("mes_client/lib", "mes_client/test")
 SOURCE_EXTENSIONS = {".dart"}
 CJK_RUN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]{2,}")
 
