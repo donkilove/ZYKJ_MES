@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/services/api_exception.dart';

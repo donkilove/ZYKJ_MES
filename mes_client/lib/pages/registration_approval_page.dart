@@ -338,30 +338,33 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                     padding: EdgeInsets.symmetric(vertical: 8),
                                     child: Text('暂无可分配工段'),
                                   )
-                                : Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: _stages.map((stage) {
-                                      return RadioListTile<int>(
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        title: Text(stage.name),
-                                        subtitle: Text(stage.code),
-                                        value: stage.id,
-                                        groupValue: selectedStageId,
-                                        onChanged: (value) {
-                                          if (value != null) {
-                                            setDialogState(() {
-                                              selectedStageId = value;
-                                              selectedProcessCodes =
-                                                  _getProcessCodesByStage(
-                                                    value,
-                                                  ).toSet();
-                                            });
-                                          }
-                                        },
-                                      );
-                                    }).toList(),
+                                : RadioGroup<int>(
+                                    groupValue: selectedStageId,
+                                    onChanged: (value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setDialogState(() {
+                                        selectedStageId = value;
+                                        selectedProcessCodes =
+                                            _getProcessCodesByStage(
+                                              value,
+                                            ).toSet();
+                                      });
+                                    },
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: _stages.map((stage) {
+                                        return RadioListTile<int>(
+                                          dense: true,
+                                          contentPadding: EdgeInsets.zero,
+                                          title: Text(stage.name),
+                                          subtitle: Text(stage.code),
+                                          value: stage.id,
+                                        );
+                                      }).toList(),
+                                    ),
                                   ),
                           ),
                         ),

@@ -140,87 +140,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
     return firstProcess.stageId;
   }
 
-  Map<String, List<ProcessItem>> _groupProcessesByStage() {
-    final sorted = [..._processes]
-      ..sort((a, b) {
-        final stageCompare = (a.stageName ?? '').compareTo(b.stageName ?? '');
-        if (stageCompare != 0) {
-          return stageCompare;
-        }
-        final nameCompare = a.name.compareTo(b.name);
-        if (nameCompare != 0) {
-          return nameCompare;
-        }
-        return a.code.compareTo(b.code);
-      });
-    final groups = <String, List<ProcessItem>>{};
-    for (final process in sorted) {
-      final stageName = (process.stageName ?? '').trim();
-      final stageCode = (process.stageCode ?? '').trim();
-      final label = stageName.isEmpty
-          ? '未分组'
-          : (stageCode.isEmpty ? stageName : '$stageName ($stageCode)');
-      groups.putIfAbsent(label, () => <ProcessItem>[]).add(process);
-    }
-    return groups;
-  }
-
-  Widget _buildProcessSelection({
-    required BuildContext context,
-    required bool enabled,
-    required Set<String> selectedCodes,
-    required void Function(String processCode, bool checked) onChanged,
-  }) {
-    final groups = _groupProcessesByStage();
-    if (groups.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text('暂无可分配工序'),
-      );
-    }
-    return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: IgnorePointer(
-        ignoring: !enabled,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: groups.entries.map((entry) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 2, bottom: 2),
-                    child: Text(
-                      entry.key,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  ...entry.value.map((process) {
-                    return CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      title: Text(process.name),
-                      subtitle: Text(process.code),
-                      value: selectedCodes.contains(process.code),
-                      onChanged: (value) {
-                        onChanged(process.code, value ?? false);
-                      },
-                    );
-                  }),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
   void _startOnlineStatusRefresh() {
     _onlineStatusTimer?.cancel();
     _onlineStatusTimer = Timer.periodic(_onlineRefreshInterval, (_) {
@@ -238,15 +157,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
     _onlineStatusTimer?.cancel();
     _onlineStatusTimer = null;
     _onlineRefreshInFlight = false;
-  }
-
-  String _formatLastSeen(DateTime? value) {
-    if (value == null) {
-      return '-';
-    }
-    final local = value.toLocal();
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    return '${twoDigits(local.hour)}:${twoDigits(local.minute)}:${twoDigits(local.second)}';
   }
 
   Future<void> _loadInitialData() async {
@@ -476,30 +386,33 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                     padding: EdgeInsets.symmetric(vertical: 8),
                                     child: Text('暂无可分配工段'),
                                   )
-                                : Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: _stages.map((stage) {
-                                      return RadioListTile<int>(
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        title: Text(stage.name),
-                                        subtitle: Text(stage.code),
-                                        value: stage.id,
-                                        groupValue: selectedStageId,
-                                        onChanged: (value) {
-                                          if (value != null) {
-                                            setDialogState(() {
-                                              selectedStageId = value;
-                                              selectedProcessCodes =
-                                                  _getProcessCodesByStage(
-                                                    value,
-                                                  ).toSet();
-                                            });
-                                          }
-                                        },
-                                      );
-                                    }).toList(),
+                                : RadioGroup<int>(
+                                    groupValue: selectedStageId,
+                                    onChanged: (value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setDialogState(() {
+                                        selectedStageId = value;
+                                        selectedProcessCodes =
+                                            _getProcessCodesByStage(
+                                              value,
+                                            ).toSet();
+                                      });
+                                    },
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: _stages.map((stage) {
+                                        return RadioListTile<int>(
+                                          dense: true,
+                                          contentPadding: EdgeInsets.zero,
+                                          title: Text(stage.name),
+                                          subtitle: Text(stage.code),
+                                          value: stage.id,
+                                        );
+                                      }).toList(),
+                                    ),
                                   ),
                           ),
                         ),
@@ -705,30 +618,33 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                     padding: EdgeInsets.symmetric(vertical: 8),
                                     child: Text('暂无可分配工段'),
                                   )
-                                : Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: _stages.map((stage) {
-                                      return RadioListTile<int>(
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        title: Text(stage.name),
-                                        subtitle: Text(stage.code),
-                                        value: stage.id,
-                                        groupValue: selectedStageId,
-                                        onChanged: (value) {
-                                          if (value != null) {
-                                            setDialogState(() {
-                                              selectedStageId = value;
-                                              selectedProcessCodes =
-                                                  _getProcessCodesByStage(
-                                                    value,
-                                                  ).toSet();
-                                            });
-                                          }
-                                        },
-                                      );
-                                    }).toList(),
+                                : RadioGroup<int>(
+                                    groupValue: selectedStageId,
+                                    onChanged: (value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setDialogState(() {
+                                        selectedStageId = value;
+                                        selectedProcessCodes =
+                                            _getProcessCodesByStage(
+                                              value,
+                                            ).toSet();
+                                      });
+                                    },
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: _stages.map((stage) {
+                                        return RadioListTile<int>(
+                                          dense: true,
+                                          contentPadding: EdgeInsets.zero,
+                                          title: Text(stage.name),
+                                          subtitle: Text(stage.code),
+                                          value: stage.id,
+                                        );
+                                      }).toList(),
+                                    ),
                                   ),
                           ),
                         ),
@@ -961,9 +877,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                   }
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('重置密码失败：${_errorMessage(error)}'),
-                      ),
+                      SnackBar(content: Text('重置密码失败：${_errorMessage(error)}')),
                     );
                   }
                 }
@@ -977,9 +891,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
     passwordController.dispose();
     if (confirmed == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('用户 ${user.username} 密码已重置')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('用户 ${user.username} 密码已重置')));
     }
   }
 
@@ -1003,9 +917,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
       final file = File('${downloadsDir.path}\\${result.filename}');
       await file.writeAsBytes(bytes);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已导出到 ${file.path}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已导出到 ${file.path}')));
       }
     } catch (error) {
       if (!mounted) return;
@@ -1013,9 +927,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
         widget.onLogout();
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败：${_errorMessage(error)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出失败：${_errorMessage(error)}')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1129,19 +1043,24 @@ class _UserManagementPageState extends State<UserManagementPage> {
               SizedBox(
                 width: 150,
                 child: DropdownButtonFormField<String?>(
-                  value: _filterRoleCode,
+                  initialValue: _filterRoleCode,
                   decoration: const InputDecoration(
                     labelText: '角色',
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                   isExpanded: true,
                   items: [
                     const DropdownMenuItem(value: null, child: Text('全部')),
-                    ..._roles.map((role) => DropdownMenuItem(
-                      value: role.code,
-                      child: Text(role.name, overflow: TextOverflow.ellipsis),
-                    )),
+                    ..._roles.map(
+                      (role) => DropdownMenuItem(
+                        value: role.code,
+                        child: Text(role.name, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
                   ],
                   onChanged: (value) {
                     setState(() => _filterRoleCode = value);
@@ -1152,19 +1071,27 @@ class _UserManagementPageState extends State<UserManagementPage> {
               SizedBox(
                 width: 150,
                 child: DropdownButtonFormField<int?>(
-                  value: _filterStageId,
+                  initialValue: _filterStageId,
                   decoration: const InputDecoration(
                     labelText: '工段',
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                   isExpanded: true,
                   items: [
                     const DropdownMenuItem(value: null, child: Text('全部')),
-                    ..._stages.map((stage) => DropdownMenuItem(
-                      value: stage.id,
-                      child: Text(stage.name, overflow: TextOverflow.ellipsis),
-                    )),
+                    ..._stages.map(
+                      (stage) => DropdownMenuItem(
+                        value: stage.id,
+                        child: Text(
+                          stage.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                   ],
                   onChanged: (value) {
                     setState(() => _filterStageId = value);
@@ -1175,11 +1102,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
               SizedBox(
                 width: 130,
                 child: DropdownButtonFormField<bool?>(
-                  value: _filterIsOnline,
+                  initialValue: _filterIsOnline,
                   decoration: const InputDecoration(
                     labelText: '在线状态',
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                   isExpanded: true,
                   items: const [
@@ -1196,11 +1126,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
               SizedBox(
                 width: 130,
                 child: DropdownButtonFormField<bool?>(
-                  value: _filterIsActive,
+                  initialValue: _filterIsActive,
                   decoration: const InputDecoration(
                     labelText: '账号状态',
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                   isExpanded: true,
                   items: const [

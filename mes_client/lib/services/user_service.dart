@@ -42,8 +42,9 @@ class UserService {
     }
     query['include_deleted'] = '$includeDeleted';
 
-    final uri =
-        Uri.parse('${session.baseUrl}/users').replace(queryParameters: query);
+    final uri = Uri.parse(
+      '${session.baseUrl}/users',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
@@ -94,8 +95,9 @@ class UserService {
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
     }
-    final uri =
-        Uri.parse('${session.baseUrl}/roles').replace(queryParameters: query);
+    final uri = Uri.parse(
+      '${session.baseUrl}/roles',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
@@ -191,9 +193,7 @@ class UserService {
     while (true) {
       final uri = Uri.parse(
         '${session.baseUrl}/processes',
-      ).replace(
-        queryParameters: {'page': '$page', 'page_size': '$pageSize'},
-      );
+      ).replace(queryParameters: {'page': '$page', 'page_size': '$pageSize'});
       final response = await http.get(uri, headers: _authHeaders);
       final json = _decodeBody(response);
       _throwIfNotSuccess(response, json, expectedCode: 200);
@@ -262,16 +262,21 @@ class UserService {
     final uri = Uri.parse(
       '${session.baseUrl}/auth/register-requests/$requestId/approve',
     );
+    final payload = <String, dynamic>{
+      'account': account.trim(),
+      'role_codes': roleCodes,
+      'process_codes': processCodes,
+    };
+    if (password != null && password.isNotEmpty) {
+      payload['password'] = password;
+    }
+    if (stageId != null) {
+      payload['stage_id'] = stageId;
+    }
     final response = await http.post(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({
-        'account': account.trim(),
-        'role_codes': roleCodes,
-        'process_codes': processCodes,
-        if (password != null && password.isNotEmpty) 'password': password,
-        if (stageId != null) 'stage_id': stageId,
-      }),
+      body: jsonEncode(payload),
     );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
@@ -425,8 +430,9 @@ class UserService {
       query['end_time'] = endTime.toIso8601String();
     }
 
-    final uri =
-        Uri.parse('${session.baseUrl}/audits').replace(queryParameters: query);
+    final uri = Uri.parse(
+      '${session.baseUrl}/audits',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
@@ -526,7 +532,9 @@ class UserService {
 
     final data = _dataObject(json);
     final items = (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => OnlineSessionItem.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) => OnlineSessionItem.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
     return OnlineSessionListResult(
       total: (data['total'] as int?) ?? 0,

@@ -33,14 +33,14 @@ void main() {
                 'role_items': [
                   {
                     'role_code': 'system_admin',
-                    'role_name': '系统管理员',
+                    'role_name': 'System admin',
                     'readonly': true,
                     'is_system_admin': true,
                     'granted_permission_codes': ['page.production.view'],
                   },
                   {
                     'role_code': 'production_admin',
-                    'role_name': '生产管理员',
+                    'role_name': 'Production admin',
                     'readonly': false,
                     'is_system_admin': false,
                     'granted_permission_codes': [],
@@ -65,7 +65,7 @@ void main() {
                   'role_results': [
                     {
                       'role_code': 'production_admin',
-                      'role_name': '生产管理员',
+                      'role_name': 'Production admin',
                       'readonly': false,
                       'is_system_admin': false,
                       'ignored_input': false,
@@ -84,7 +84,7 @@ void main() {
           }
           return TestResponse.json(
             410,
-            body: {'detail': '旧权限写入入口已下线，请改用能力包配置'},
+            body: {'detail': 'legacy matrix apply endpoint is offline'},
           );
         },
       });
@@ -126,7 +126,7 @@ void main() {
               .having(
                 (e) => e.message,
                 'message',
-                '旧权限写入入口已下线，请改用能力包配置',
+                'legacy matrix apply endpoint is offline',
               ),
         ),
       );
@@ -164,11 +164,11 @@ void main() {
                 'module_code': 'production',
                 'module_codes': ['production', 'system'],
                 'module_permission_code': 'module.production.access',
-                'module_name': '生产管理',
+                'module_name': 'Production',
                 'pages': [
                   {
                     'page_code': 'production_order_management',
-                    'page_name': '订单管理',
+                    'page_name': 'Order management',
                     'permission_code': 'page.production_order_management.view',
                     'parent_page_code': 'production',
                   },
@@ -176,7 +176,7 @@ void main() {
                 'features': [
                   {
                     'feature_code': 'order_management.manage',
-                    'feature_name': '维护生产订单',
+                    'feature_name': 'Manage orders',
                     'permission_code':
                         'feature.production.order_management.manage',
                     'page_permission_code':
@@ -199,7 +199,7 @@ void main() {
             body: {
               'data': {
                 'role_code': 'production_admin',
-                'role_name': '生产管理员',
+                'role_name': 'Production admin',
                 'readonly': false,
                 'module_code': 'production',
                 'module_enabled': true,
@@ -229,7 +229,7 @@ void main() {
           );
           return TestResponse.json(
             410,
-            body: {'detail': '旧权限写入入口已下线，请改用能力包配置'},
+            body: {'detail': 'legacy hierarchy apply endpoint is offline'},
           );
         },
         'POST /authz/hierarchy/preview': (request) {
@@ -243,7 +243,7 @@ void main() {
                 'role_results': [
                   {
                     'role_code': 'production_admin',
-                    'role_name': '生产管理员',
+                    'role_name': 'Production admin',
                     'readonly': false,
                     'ignored_input': false,
                     'module_code': 'production',
@@ -313,7 +313,7 @@ void main() {
               .having(
                 (e) => e.message,
                 'message',
-                '旧权限写入入口已下线，请改用能力包配置',
+                'legacy hierarchy apply endpoint is offline',
               ),
         ),
       );
@@ -321,41 +321,39 @@ void main() {
 
     test('loads capability pack endpoints', () async {
       final server = await TestHttpServer.start({
-        'GET /authz/snapshot': (_) {
-          return TestResponse.json(
-            200,
-            body: {
-              'data': {
-                'revision': 3,
-                'role_codes': ['production_admin'],
-                'visible_sidebar_codes': ['production'],
-                'tab_codes_by_parent': {
-                  'production': ['production_order_query'],
-                },
-                'module_items': [
-                  {
-                    'module_code': 'production',
-                    'module_name': '生产管理',
-                    'module_revision': 3,
-                    'module_enabled': true,
-                    'effective_permission_codes': [
-                      'page.production_order_query.view',
-                    ],
-                    'effective_page_permission_codes': [
-                      'page.production_order_query.view',
-                    ],
-                    'effective_capability_codes': [
-                      'feature.production.order_query.execute',
-                    ],
-                    'effective_action_permission_codes': [
-                      'production.my_orders.list',
-                    ],
-                  },
-                ],
+        'GET /authz/snapshot': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'revision': 3,
+              'role_codes': ['production_admin'],
+              'visible_sidebar_codes': ['production'],
+              'tab_codes_by_parent': {
+                'production': ['production_order_query'],
               },
+              'module_items': [
+                {
+                  'module_code': 'production',
+                  'module_name': 'Production',
+                  'module_revision': 3,
+                  'module_enabled': true,
+                  'effective_permission_codes': [
+                    'page.production_order_query.view',
+                  ],
+                  'effective_page_permission_codes': [
+                    'page.production_order_query.view',
+                  ],
+                  'effective_capability_codes': [
+                    'feature.production.order_query.execute',
+                  ],
+                  'effective_action_permission_codes': [
+                    'production.my_orders.list',
+                  ],
+                },
+              ],
             },
-          );
-        },
+          },
+        ),
         'GET /authz/capability-packs/catalog': (request) {
           expect(request.uri.queryParameters['module'], 'production');
           return TestResponse.json(
@@ -364,18 +362,18 @@ void main() {
               'data': {
                 'module_code': 'production',
                 'module_codes': ['production', 'system'],
-                'module_name': '生产管理',
+                'module_name': 'Production',
                 'module_revision': 3,
                 'module_permission_code': 'module.production.access',
                 'capability_packs': [
                   {
                     'capability_code': 'feature.production.order_query.execute',
-                    'capability_name': '执行首件与报工',
+                    'capability_name': 'Execute order query',
                     'group_code': 'production.execution',
-                    'group_name': '生产执行',
+                    'group_name': 'Production execution',
                     'page_code': 'production_order_query',
-                    'page_name': '订单查询',
-                    'description': '执行首件与报工',
+                    'page_name': 'Order query',
+                    'description': 'Execute order query',
                     'dependency_capability_codes': [],
                     'linked_action_permission_codes': [
                       'production.execution.first_article',
@@ -385,11 +383,11 @@ void main() {
                 'role_templates': [
                   {
                     'role_code': 'production_admin',
-                    'role_name': '生产管理员',
+                    'role_name': 'Production admin',
                     'capability_codes': [
                       'feature.production.order_query.execute',
                     ],
-                    'description': '推荐模板',
+                    'description': 'Recommended template',
                   },
                 ],
               },
@@ -404,7 +402,7 @@ void main() {
             body: {
               'data': {
                 'role_code': 'production_admin',
-                'role_name': '生产管理员',
+                'role_name': 'Production admin',
                 'readonly': false,
                 'module_code': 'production',
                 'module_enabled': true,
@@ -424,18 +422,22 @@ void main() {
         },
         'PUT /authz/capability-packs/role-config/production_admin': (request) {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          final dryRun = body['dry_run'] == true;
           expect(body['module_code'], 'production');
           expect(body['module_enabled'], true);
           expect(
             body['capability_codes'],
             contains('feature.production.order_query.execute'),
           );
+          if (dryRun) {
+            expect(body['remark'], 'preview');
+          }
           return TestResponse.json(
             200,
             body: {
               'data': {
                 'role_code': 'production_admin',
-                'role_name': '生产管理员',
+                'role_name': 'Production admin',
                 'readonly': false,
                 'ignored_input': false,
                 'module_code': 'production',
@@ -455,46 +457,7 @@ void main() {
                   'page.production_order_query.view',
                 ],
                 'updated_count': 1,
-                'dry_run': false,
-              },
-            },
-          );
-        },
-        'POST /authz/capability-packs/batch-preview': (request) {
-          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
-          expect(body['module_code'], 'production');
-          return TestResponse.json(
-            200,
-            body: {
-              'data': {
-                'module_code': 'production',
-                'module_revision': 3,
-                'role_results': [
-                  {
-                    'role_code': 'production_admin',
-                    'role_name': '生产管理员',
-                    'readonly': false,
-                    'ignored_input': false,
-                    'module_code': 'production',
-                    'before_capability_codes': [],
-                    'after_capability_codes': [
-                      'feature.production.order_query.execute',
-                    ],
-                    'added_capability_codes': [
-                      'feature.production.order_query.execute',
-                    ],
-                    'removed_capability_codes': [],
-                    'auto_linked_dependencies': [],
-                    'effective_capability_codes': [
-                      'feature.production.order_query.execute',
-                    ],
-                    'effective_page_permission_codes': [
-                      'page.production_order_query.view',
-                    ],
-                    'updated_count': 1,
-                    'dry_run': true,
-                  },
-                ],
+                'dry_run': dryRun,
               },
             },
           );
@@ -512,7 +475,7 @@ void main() {
                 'role_results': [
                   {
                     'role_code': 'production_admin',
-                    'role_name': '生产管理员',
+                    'role_name': 'Production admin',
                     'readonly': false,
                     'ignored_input': false,
                     'module_code': 'production',
@@ -539,155 +502,6 @@ void main() {
             },
           );
         },
-        'GET /authz/capability-packs/history': (request) {
-          expect(request.uri.queryParameters['module'], 'production');
-          expect(request.uri.queryParameters['limit'], '20');
-          return TestResponse.json(
-            200,
-            body: {
-              'data': {
-                'module_code': 'production',
-                'module_revision': 4,
-                'items': [
-                  {
-                    'change_log_id': 11,
-                    'module_code': 'production',
-                    'module_revision': 4,
-                    'change_type': 'apply',
-                    'remark': 'batch apply',
-                    'operator_user_id': 1,
-                    'operator_username': 'authz_admin',
-                    'rollback_of_change_log_id': null,
-                    'rollback_of_revision': null,
-                    'changed_role_count': 1,
-                    'added_capability_count': 1,
-                    'removed_capability_count': 0,
-                    'auto_linked_dependency_count': 0,
-                    'is_current_revision': true,
-                    'is_noop': true,
-                    'can_rollback': false,
-                    'created_at': '2026-03-09T10:00:00Z',
-                    'role_results': [
-                      {
-                        'role_code': 'production_admin',
-                        'role_name': '生产管理员',
-                        'readonly': false,
-                        'ignored_input': false,
-                        'module_code': 'production',
-                        'before_capability_codes': [],
-                        'after_capability_codes': [
-                          'feature.production.order_query.execute',
-                        ],
-                        'added_capability_codes': [
-                          'feature.production.order_query.execute',
-                        ],
-                        'removed_capability_codes': [],
-                        'auto_linked_dependencies': [],
-                        'effective_capability_codes': [
-                          'feature.production.order_query.execute',
-                        ],
-                        'effective_page_permission_codes': [
-                          'page.production_order_query.view',
-                        ],
-                        'updated_count': 1,
-                      },
-                    ],
-                  },
-                ],
-              },
-            },
-          );
-        },
-        'POST /authz/capability-packs/rollback-preview': (request) {
-          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
-          expect(body['module_code'], 'production');
-          expect(body['change_log_id'], 11);
-          return TestResponse.json(
-            200,
-            body: {
-              'data': {
-                'module_code': 'production',
-                'module_revision': 4,
-                'role_results': [
-                  {
-                    'role_code': 'production_admin',
-                    'role_name': '生产管理员',
-                    'readonly': false,
-                    'ignored_input': false,
-                    'module_code': 'production',
-                    'before_capability_codes': [
-                      'feature.production.order_query.proxy',
-                    ],
-                    'after_capability_codes': [
-                      'feature.production.order_query.execute',
-                    ],
-                    'added_capability_codes': [
-                      'feature.production.order_query.execute',
-                    ],
-                    'removed_capability_codes': [
-                      'feature.production.order_query.proxy',
-                    ],
-                    'auto_linked_dependencies': [],
-                    'effective_capability_codes': [
-                      'feature.production.order_query.execute',
-                    ],
-                    'effective_page_permission_codes': [
-                      'page.production_order_query.view',
-                    ],
-                    'updated_count': 2,
-                    'dry_run': true,
-                  },
-                ],
-              },
-            },
-          );
-        },
-        'POST /authz/capability-packs/rollback': (request) {
-          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
-          expect(body['module_code'], 'production');
-          expect(body['change_log_id'], 11);
-          expect(body['expected_revision'], 4);
-          expect(body['remark'], 'rollback to revision 4');
-          return TestResponse.json(
-            200,
-            body: {
-              'data': {
-                'module_code': 'production',
-                'module_revision': 5,
-                'role_results': [
-                  {
-                    'role_code': 'production_admin',
-                    'role_name': '生产管理员',
-                    'readonly': false,
-                    'ignored_input': false,
-                    'module_code': 'production',
-                    'before_capability_codes': [
-                      'feature.production.order_query.proxy',
-                    ],
-                    'after_capability_codes': [
-                      'feature.production.order_query.execute',
-                    ],
-                    'added_capability_codes': [
-                      'feature.production.order_query.execute',
-                    ],
-                    'removed_capability_codes': [
-                      'feature.production.order_query.proxy',
-                    ],
-                    'auto_linked_dependencies': [],
-                    'effective_capability_codes': [
-                      'feature.production.order_query.execute',
-                    ],
-                    'effective_page_permission_codes': [
-                      'page.production_order_query.view',
-                    ],
-                    'updated_count': 2,
-                    'dry_run': false,
-                  },
-                ],
-              },
-            },
-          );
-        },
         'GET /authz/capability-packs/effective': (request) {
           expect(request.uri.queryParameters['role_code'], 'production_admin');
           expect(request.uri.queryParameters['module'], 'production');
@@ -696,7 +510,7 @@ void main() {
             body: {
               'data': {
                 'role_code': 'production_admin',
-                'role_name': '生产管理员',
+                'role_name': 'Production admin',
                 'module_code': 'production',
                 'module_enabled': true,
                 'effective_page_permission_codes': [
@@ -708,7 +522,7 @@ void main() {
                 'capability_items': [
                   {
                     'capability_code': 'feature.production.order_query.execute',
-                    'capability_name': '执行首件与报工',
+                    'capability_name': 'Execute order query',
                     'available': true,
                     'reason_codes': [],
                     'reason_messages': [],
@@ -733,15 +547,13 @@ void main() {
         roleCode: 'production_admin',
         moduleCode: 'production',
       );
-      final preview = await service.previewCapabilityPacks(
+      final preview = await service.updateCapabilityPackRoleConfig(
+        roleCode: 'production_admin',
         moduleCode: 'production',
-        roleItems: const [
-          CapabilityPackRoleDraftItem(
-            roleCode: 'production_admin',
-            moduleEnabled: true,
-            capabilityCodes: ['feature.production.order_query.execute'],
-          ),
-        ],
+        moduleEnabled: true,
+        capabilityCodes: ['feature.production.order_query.execute'],
+        dryRun: true,
+        remark: 'preview',
       );
       final batchApplied = await service.applyCapabilityPacks(
         moduleCode: 'production',
@@ -754,19 +566,6 @@ void main() {
         ],
         expectedRevision: 3,
         remark: 'batch apply',
-      );
-      final history = await service.loadCapabilityPackHistory(
-        moduleCode: 'production',
-      );
-      final rollbackPreview = await service.previewRollbackCapabilityPacks(
-        moduleCode: 'production',
-        changeLogId: 11,
-      );
-      final rolledBack = await service.rollbackCapabilityPacks(
-        moduleCode: 'production',
-        changeLogId: 11,
-        expectedRevision: 4,
-        remark: 'rollback to revision 4',
       );
       final updated = await service.updateCapabilityPackRoleConfig(
         roleCode: 'production_admin',
@@ -788,21 +587,11 @@ void main() {
       expect(catalog.moduleRevision, 3);
       expect(catalog.capabilityPacks, hasLength(1));
       expect(roleConfig.moduleEnabled, isTrue);
-      expect(preview.moduleRevision, 3);
-      expect(preview.roleResults, hasLength(1));
-      expect(batchApplied.moduleRevision, 4);
-      expect(history.moduleRevision, 4);
-      expect(history.items.single.changeLogId, 11);
-      expect(history.items.single.changedRoleCount, 1);
-      expect(history.items.single.isCurrentRevision, isTrue);
-      expect(history.items.single.canRollback, isFalse);
-      expect(history.items.single.roleResults.single.afterCapabilityCodes, [
+      expect(preview.dryRun, isTrue);
+      expect(preview.afterCapabilityCodes, [
         'feature.production.order_query.execute',
       ]);
-      expect(rollbackPreview.roleResults.single.removedCapabilityCodes, [
-        'feature.production.order_query.proxy',
-      ]);
-      expect(rolledBack.moduleRevision, 5);
+      expect(batchApplied.moduleRevision, 4);
       expect(updated.updatedCount, 1);
       expect(
         updated.afterCapabilityCodes,

@@ -25,7 +25,8 @@ void main() {
                   'items': [
                     {
                       'id': 8,
-                      'name': '产品A',
+                      'name': 'Product A',
+                      'category': 'fixture',
                       'lifecycle_status': 'effective',
                       'current_version': 3,
                       'effective_version': 3,
@@ -48,7 +49,8 @@ void main() {
                 'items': [
                   {
                     'id': 8,
-                    'name': '产品A',
+                    'name': 'Product A',
+                    'category': 'fixture',
                     'created_at': '2026-03-01T00:00:00Z',
                     'updated_at': '2026-03-01T00:00:00Z',
                   },
@@ -58,7 +60,10 @@ void main() {
           );
         },
         'POST /products': (request) {
-          expect(jsonDecode(request.bodyText), {'name': '产品B'});
+          expect(jsonDecode(request.bodyText), {
+            'name': 'Product B',
+            'category': '',
+          });
           return TestResponse.json(201, body: {'data': {}});
         },
         'POST /products/8/delete': (request) {
@@ -70,12 +75,12 @@ void main() {
           body: {
             'data': {
               'product_id': 8,
-              'product_name': '产品A',
+              'product_name': 'Product A',
               'total': 1,
               'items': [
                 {
-                  'name': '参数1',
-                  'category': '分类',
+                  'name': 'Param 1',
+                  'category': 'General',
                   'type': 'Text',
                   'value': 'v',
                   'sort_order': 1,
@@ -94,7 +99,7 @@ void main() {
             body: {
               'data': {
                 'updated_count': 1,
-                'changed_keys': ['参数1'],
+                'changed_keys': ['Param 1'],
               },
             },
           );
@@ -110,8 +115,8 @@ void main() {
                 'items': [
                   {
                     'id': 9,
-                    'remark': '变更',
-                    'changed_keys': ['参数1'],
+                    'remark': 'Changed',
+                    'changed_keys': ['Param 1'],
                     'operator_username': 'admin',
                     'created_at': '2026-03-01T00:00:00Z',
                   },
@@ -121,26 +126,24 @@ void main() {
           );
         },
         'POST /products/8/lifecycle': (request) {
-          expect(
-            jsonDecode(request.bodyText),
-            {
-              'target_status': 'inactive',
-              'confirmed': true,
-              'note': null,
-              'inactive_reason': '停用原因',
-            },
-          );
+          expect(jsonDecode(request.bodyText), {
+            'target_status': 'inactive',
+            'confirmed': true,
+            'note': null,
+            'inactive_reason': 'reason',
+          });
           return TestResponse.json(
             200,
             body: {
               'data': {
                 'id': 8,
-                'name': '产品A',
+                'name': 'Product A',
+                'category': 'fixture',
                 'lifecycle_status': 'inactive',
                 'current_version': 3,
                 'effective_version': 3,
                 'effective_at': '2026-03-01T00:00:00Z',
-                'inactive_reason': '停用原因',
+                'inactive_reason': 'reason',
                 'last_parameter_summary': null,
                 'created_at': '2026-03-01T00:00:00Z',
                 'updated_at': '2026-03-03T00:00:00Z',
@@ -218,7 +221,7 @@ void main() {
                 'changed_items': 1,
                 'items': [
                   {
-                    'key': '参数:参数1',
+                    'key': 'Param:Param 1',
                     'diff_type': 'changed',
                     'from_value': 'v1',
                     'to_value': 'v2',
@@ -239,7 +242,8 @@ void main() {
               'data': {
                 'product': {
                   'id': 8,
-                  'name': '产品A',
+                  'name': 'Product A',
+                  'category': 'fixture',
                   'lifecycle_status': 'effective',
                   'current_version': 4,
                   'effective_version': 4,
@@ -249,7 +253,7 @@ void main() {
                   'created_at': '2026-03-01T00:00:00Z',
                   'updated_at': '2026-03-03T00:00:00Z',
                 },
-                'changed_keys': ['参数1'],
+                'changed_keys': ['Param 1'],
               },
             },
           );
@@ -266,7 +270,7 @@ void main() {
         pageSize: 20,
         keyword: '  abc ',
       );
-      await service.createProduct(name: '产品B');
+      await service.createProduct(name: 'Product B');
       await service.deleteProduct(productId: 8, password: 'pwd123');
       final parameters = await service.listProductParameters(productId: 8);
       final updateResult = await service.updateProductParameters(
@@ -274,8 +278,8 @@ void main() {
         remark: 'batch update',
         items: [
           ProductParameterUpdateItem(
-            name: '参数1',
-            category: '分类',
+            name: 'Param 1',
+            category: 'General',
             type: 'Text',
             value: 'new',
           ),
@@ -291,7 +295,7 @@ void main() {
         payload: ProductLifecycleUpdateRequest(
           targetStatus: 'inactive',
           confirmed: true,
-          inactiveReason: '停用原因',
+          inactiveReason: 'reason',
         ),
       );
       final impact = await service.getProductImpactAnalysis(
@@ -312,25 +316,24 @@ void main() {
         note: 'rollback',
       );
 
-      expect(products.items.single.name, '产品A');
+      expect(products.items.single.name, 'Product A');
       expect(products.items.single.lifecycleStatus, 'effective');
-      expect(parameters.items.single.name, '参数1');
+      expect(parameters.items.single.name, 'Param 1');
       expect(updateResult.updatedCount, 1);
-      expect(history.items.single.remark, '变更');
+      expect(history.items.single.remark, 'Changed');
       expect(lifecycleUpdated.lifecycleStatus, 'inactive');
       expect(impact.requiresConfirmation, isTrue);
       expect(versions.total, 2);
+      expect(versions.items.first.displayVersion, 'V1.2');
       expect(compare.changedItems, 1);
-      expect(rollback.changedKeys.single, '参数1');
+      expect(rollback.changedKeys.single, 'Param 1');
       expect(server.requests.length, 11);
     });
 
     test('throws ApiException when create product fails', () async {
       final server = await TestHttpServer.start({
-        'POST /products': (_) => TestResponse.json(
-          400,
-          body: {'detail': 'invalid product'},
-        ),
+        'POST /products': (_) =>
+            TestResponse.json(400, body: {'detail': 'invalid product'}),
       });
       addTearDown(server.close);
 
