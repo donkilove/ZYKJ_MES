@@ -22,3 +22,5 @@ mes_client/build/
 .vscode/
 .codex/
 .github/
+.claude/
+.ai_collab/
