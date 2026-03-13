@@ -347,30 +347,6 @@ class AuthzService {
     return CapabilityPackRoleUpdateResult.fromJson(data);
   }
 
-  Future<CapabilityPackPreviewResult> previewCapabilityPacks({
-    required String moduleCode,
-    required List<CapabilityPackRoleDraftItem> roleItems,
-  }) async {
-    final uri = Uri.parse('$_basePath/capability-packs/batch-preview');
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({
-        'module_code': moduleCode,
-        'role_items': roleItems.map((item) => item.toJson()).toList(),
-      }),
-    );
-    final body = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(body, response.statusCode),
-        response.statusCode,
-      );
-    }
-    final data = body['data'] as Map<String, dynamic>;
-    return CapabilityPackPreviewResult.fromJson(data);
-  }
-
   Future<CapabilityPackPreviewResult> applyCapabilityPacks({
     required String moduleCode,
     required List<CapabilityPackRoleDraftItem> roleItems,
@@ -386,80 +362,6 @@ class AuthzService {
         'role_items': roleItems.map((item) => item.toJson()).toList(),
         'expected_revision': expectedRevision,
         'remark': remark,
-      }),
-    );
-    final body = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(body, response.statusCode),
-        response.statusCode,
-      );
-    }
-    final data = body['data'] as Map<String, dynamic>;
-    return CapabilityPackPreviewResult.fromJson(data);
-  }
-
-  Future<CapabilityPackChangeLogListResult> loadCapabilityPackHistory({
-    required String moduleCode,
-    int limit = 20,
-  }) async {
-    final uri = Uri.parse(
-      '$_basePath/capability-packs/history',
-    ).replace(queryParameters: {
-      'module': moduleCode,
-      'limit': '$limit',
-    });
-    final response = await http.get(uri, headers: _authHeaders);
-    final body = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(body, response.statusCode),
-        response.statusCode,
-      );
-    }
-    final data = body['data'] as Map<String, dynamic>;
-    return CapabilityPackChangeLogListResult.fromJson(data);
-  }
-
-  Future<CapabilityPackPreviewResult> rollbackCapabilityPacks({
-    required String moduleCode,
-    required int changeLogId,
-    required int expectedRevision,
-    String? remark,
-  }) async {
-    final uri = Uri.parse('$_basePath/capability-packs/rollback');
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({
-        'module_code': moduleCode,
-        'change_log_id': changeLogId,
-        'expected_revision': expectedRevision,
-        'remark': remark,
-      }),
-    );
-    final body = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(body, response.statusCode),
-        response.statusCode,
-      );
-    }
-    final data = body['data'] as Map<String, dynamic>;
-    return CapabilityPackPreviewResult.fromJson(data);
-  }
-
-  Future<CapabilityPackPreviewResult> previewRollbackCapabilityPacks({
-    required String moduleCode,
-    required int changeLogId,
-  }) async {
-    final uri = Uri.parse('$_basePath/capability-packs/rollback-preview');
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({
-        'module_code': moduleCode,
-        'change_log_id': changeLogId,
       }),
     );
     final body = _decodeBody(response);

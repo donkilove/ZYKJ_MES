@@ -199,6 +199,8 @@ class _UserPageState extends State<UserPage> {
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: TabBar(
                     isScrollable: false,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    labelPadding: EdgeInsets.zero,
                     tabs: tabs
                         .map(
                           (item) => Tab(

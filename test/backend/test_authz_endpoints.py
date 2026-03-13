@@ -10,7 +10,6 @@ from app.core.authz_catalog import (
     PERM_PROD_ORDERS_CREATE,
     PERM_PROD_ORDERS_LIST,
     PERM_PROD_MY_ORDERS_LIST,
-    PERM_PROD_MY_ORDERS_PROXY,
     PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW,
     PERM_PAGE_PRODUCTION_VIEW,
 )
@@ -236,24 +235,6 @@ def test_authz_capability_pack_endpoints(db, factory) -> None:
     assert role_config_resp.data.role_code == ROLE_PRODUCTION_ADMIN
     assert role_config_resp.data.module_enabled is False
 
-    preview_resp = authz.preview_capability_packs_api(
-        authz.CapabilityPackPreviewRequest(
-            module_code="production",
-            role_items=[
-                {
-                    "role_code": ROLE_PRODUCTION_ADMIN,
-                    "module_enabled": True,
-                    "capability_codes": ["feature.production.order_query.execute"],
-                }
-            ],
-        ),
-        db=db,
-        _=sys_admin,
-    )
-    assert preview_resp.data.module_code == "production"
-    assert preview_resp.data.role_results[0].role_code == ROLE_PRODUCTION_ADMIN
-    assert "feature.production.order_query.execute" in preview_resp.data.role_results[0].after_capability_codes
-
     update_resp = authz.put_capability_pack_role_config_api(
         role_code=ROLE_PRODUCTION_ADMIN,
         payload=authz.CapabilityPackRoleConfigUpdateRequest(
@@ -427,10 +408,12 @@ def test_capability_pack_batch_apply_rejects_stale_revision(db, factory) -> None
     assert "authz revision conflict" in str(exc_info.value.detail)
 
 
-def test_capability_pack_history_and_rollback_endpoints(db, factory) -> None:
+def test_capability_pack_batch_apply_rejects_system_admin(db, factory) -> None:
     factory.ensure_default_roles()
-    sys_admin = factory.user(username="authz_history_admin", role_codes=[ROLE_SYSTEM_ADMIN])
-    prod_admin = factory.user(username="authz_history_prod", role_codes=[ROLE_PRODUCTION_ADMIN])
+    sys_admin = factory.user(
+        username="authz_batch_apply_system_admin",
+        role_codes=[ROLE_SYSTEM_ADMIN],
+    )
     db.commit()
 
     catalog_resp = authz.get_capability_pack_catalog_api(
@@ -438,130 +421,24 @@ def test_capability_pack_history_and_rollback_endpoints(db, factory) -> None:
         db=db,
         _=sys_admin,
     )
-    first_apply_resp = authz.apply_capability_packs_batch_api(
-        CapabilityPackBatchApplyRequest(
-            module_code="production",
-            expected_revision=catalog_resp.data.module_revision,
-            role_items=[
-                {
-                    "role_code": ROLE_PRODUCTION_ADMIN,
-                    "module_enabled": True,
-                    "capability_codes": ["feature.production.order_query.execute"],
-                }
-            ],
-            remark="first revision",
-        ),
-        db=db,
-        current_user=sys_admin,
-    )
-    second_apply_resp = authz.apply_capability_packs_batch_api(
-        CapabilityPackBatchApplyRequest(
-            module_code="production",
-            expected_revision=first_apply_resp.data.module_revision,
-            role_items=[
-                {
-                    "role_code": ROLE_PRODUCTION_ADMIN,
-                    "module_enabled": True,
-                    "capability_codes": ["feature.production.order_query.proxy"],
-                }
-            ],
-            remark="second revision",
-        ),
-        db=db,
-        current_user=sys_admin,
-    )
-
-    me_after_second = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
-    assert PERM_PROD_MY_ORDERS_PROXY in me_after_second.data.permission_codes
-    assert PERM_PROD_MY_ORDERS_LIST not in me_after_second.data.permission_codes
-
-    history_resp = authz.list_capability_pack_change_logs_api(
-        module="production",
-        limit=20,
-        db=db,
-        _=sys_admin,
-    )
-    assert history_resp.data.module_code == "production"
-    assert history_resp.data.module_revision == second_apply_resp.data.module_revision
-    assert len(history_resp.data.items) >= 2
-    latest_log = history_resp.data.items[0]
-    previous_log = history_resp.data.items[1]
-    assert latest_log.change_type == "apply"
-    assert latest_log.remark == "second revision"
-    assert latest_log.changed_role_count >= 1
-    assert latest_log.added_capability_count >= 1
-    assert latest_log.is_current_revision is True
-    assert latest_log.can_rollback is False
-    assert latest_log.role_results[0].after_capability_codes == [
-        "feature.production.order_query.proxy"
-    ]
-    assert previous_log.change_type == "apply"
-    assert previous_log.remark == "first revision"
-    assert previous_log.can_rollback is True
-    assert previous_log.role_results[0].after_capability_codes == [
-        "feature.production.order_query.execute"
-    ]
-
-    rollback_preview = authz.preview_capability_pack_rollback_api(
-        authz.CapabilityPackRollbackRequest(
-            module_code="production",
-            change_log_id=previous_log.change_log_id,
-        ),
-        db=db,
-        _=sys_admin,
-    )
-    preview_prod_role = next(
-        item
-        for item in rollback_preview.data.role_results
-        if item.role_code == ROLE_PRODUCTION_ADMIN
-    )
-    assert preview_prod_role.after_capability_codes == [
-        "feature.production.order_query.execute"
-    ]
 
     with pytest.raises(HTTPException) as exc_info:
-        authz.rollback_capability_pack_api(
-            authz.CapabilityPackRollbackRequest(
+        authz.apply_capability_packs_batch_api(
+            CapabilityPackBatchApplyRequest(
                 module_code="production",
-                change_log_id=latest_log.change_log_id,
-                expected_revision=second_apply_resp.data.module_revision,
-                remark="noop rollback",
+                expected_revision=catalog_resp.data.module_revision,
+                role_items=[
+                    {
+                        "role_code": ROLE_SYSTEM_ADMIN,
+                        "module_enabled": True,
+                        "capability_codes": ["feature.production.order_query.execute"],
+                    }
+                ],
+                remark="invalid system admin update",
             ),
             db=db,
             current_user=sys_admin,
         )
 
     assert exc_info.value.status_code == 400
-    assert "无需回滚" in str(exc_info.value.detail)
-
-    rollback_resp = authz.rollback_capability_pack_api(
-        authz.CapabilityPackRollbackRequest(
-            module_code="production",
-            change_log_id=previous_log.change_log_id,
-            expected_revision=second_apply_resp.data.module_revision,
-            remark="rollback to first revision",
-        ),
-        db=db,
-        current_user=sys_admin,
-    )
-    assert rollback_resp.data.module_revision > second_apply_resp.data.module_revision
-    rollback_prod_role = next(
-        item for item in rollback_resp.data.role_results if item.role_code == ROLE_PRODUCTION_ADMIN
-    )
-    assert rollback_prod_role.after_capability_codes == [
-        "feature.production.order_query.execute"
-    ]
-
-    me_after_rollback = authz.get_my_permissions_api(module="production", db=db, current_user=prod_admin)
-    assert PERM_PROD_MY_ORDERS_LIST in me_after_rollback.data.permission_codes
-    assert PERM_PROD_MY_ORDERS_PROXY not in me_after_rollback.data.permission_codes
-
-    history_after_rollback = authz.list_capability_pack_change_logs_api(
-        module="production",
-        limit=20,
-        db=db,
-        _=sys_admin,
-    )
-    assert history_after_rollback.data.items[0].change_type == "rollback"
-    assert history_after_rollback.data.items[0].rollback_of_change_log_id == previous_log.change_log_id
-    assert history_after_rollback.data.items[0].rollback_of_revision == previous_log.module_revision
+    assert "system_admin" in str(exc_info.value.detail)
