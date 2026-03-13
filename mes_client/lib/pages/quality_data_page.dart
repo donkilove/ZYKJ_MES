@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -11,10 +13,12 @@ class QualityDataPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    this.canExport = false,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canExport;
 
   @override
   State<QualityDataPage> createState() => _QualityDataPageState();
@@ -24,6 +28,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
   late final QualityService _service;
 
   bool _loading = false;
+  bool _exporting = false;
   String _message = '';
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 29));
   DateTime _endDate = DateTime.now();
@@ -39,6 +44,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
   );
   List<QualityProcessStatItem> _processItems = const [];
   List<QualityOperatorStatItem> _operatorItems = const [];
+  List<QualityProductStatItem> _productItems = const [];
 
   @override
   void initState() {
@@ -127,6 +133,10 @@ class _QualityDataPageState extends State<QualityDataPage> {
         startDate: _startDate,
         endDate: _endDate,
       );
+      final productItems = await _service.getQualityProductStats(
+        startDate: _startDate,
+        endDate: _endDate,
+      );
       if (!mounted) {
         return;
       }
@@ -134,6 +144,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
         _overview = overview;
         _processItems = processItems;
         _operatorItems = operatorItems;
+        _productItems = productItems;
       });
     } catch (error) {
       if (!mounted) {
@@ -152,6 +163,56 @@ class _QualityDataPageState extends State<QualityDataPage> {
           _loading = false;
         });
       }
+    }
+  }
+
+  Future<void> _exportCsv() async {
+    setState(() {
+      _exporting = true;
+      _message = '';
+    });
+    try {
+      final csvBase64 = await _service.exportQualityStats(
+        startDate: _startDate,
+        endDate: _endDate,
+      );
+      if (!mounted) return;
+      if (csvBase64.isEmpty) {
+        setState(() => _message = '导出失败：服务端返回空数据');
+        return;
+      }
+      final csvText = utf8.decode(base64Decode(csvBase64));
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('导出品质统计'),
+          content: SizedBox(
+            width: 600,
+            height: 400,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                csvText,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() => _message = '导出失败：${_errorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
     }
   }
 
@@ -201,6 +262,15 @@ class _QualityDataPageState extends State<QualityDataPage> {
                 ),
               ),
               const Spacer(),
+              if (widget.canExport)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: OutlinedButton.icon(
+                    onPressed: (_loading || _exporting) ? null : _exportCsv,
+                    icon: const Icon(Icons.download),
+                    label: const Text('导出'),
+                  ),
+                ),
               IconButton(
                 tooltip: '刷新',
                 onPressed: _loading ? null : _loadStats,
@@ -314,13 +384,14 @@ class _QualityDataPageState extends State<QualityDataPage> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : DefaultTabController(
-                    length: 2,
+                    length: 3,
                     child: Column(
                       children: [
                         const TabBar(
                           tabs: [
                             Tab(text: '按工序'),
                             Tab(text: '按人员'),
+                            Tab(text: '按产品'),
                           ],
                         ),
                         Expanded(
@@ -424,6 +495,38 @@ class _QualityDataPageState extends State<QualityDataPage> {
                                                     ),
                                                   ),
                                                 ),
+                                              ],
+                                            );
+                                          }).toList(),
+                                        ),
+                                      ),
+                              ),
+                              Card(
+                                child: _productItems.isEmpty
+                                    ? const Center(child: Text('暂无产品品质数据'))
+                                    : AdaptiveTableContainer(
+                                        child: DataTable(
+                                          columns: const [
+                                            DataColumn(label: Text('产品编码')),
+                                            DataColumn(label: Text('产品名称')),
+                                            DataColumn(label: Text('首件总数')),
+                                            DataColumn(label: Text('通过数')),
+                                            DataColumn(label: Text('不通过数')),
+                                            DataColumn(label: Text('通过率')),
+                                            DataColumn(label: Text('报废数')),
+                                            DataColumn(label: Text('维修数')),
+                                          ],
+                                          rows: _productItems.map((item) {
+                                            return DataRow(
+                                              cells: [
+                                                DataCell(Text(item.productCode)),
+                                                DataCell(Text(item.productName)),
+                                                DataCell(Text('${item.firstArticleTotal}')),
+                                                DataCell(Text('${item.passedTotal}')),
+                                                DataCell(Text('${item.failedTotal}')),
+                                                DataCell(Text(_formatRate(item.passRatePercent))),
+                                                DataCell(Text('${item.scrapTotal}')),
+                                                DataCell(Text('${item.repairTotal}')),
                                               ],
                                             );
                                           }).toList(),

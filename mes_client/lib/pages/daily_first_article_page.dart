@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -5,16 +7,21 @@ import '../models/quality_models.dart';
 import '../services/api_exception.dart';
 import '../services/quality_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import 'first_article_disposition_page.dart';
 
 class DailyFirstArticlePage extends StatefulWidget {
   const DailyFirstArticlePage({
     super.key,
     required this.session,
     required this.onLogout,
+    this.canExport = false,
+    this.canDispose = false,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canExport;
+  final bool canDispose;
 
   @override
   State<DailyFirstArticlePage> createState() => _DailyFirstArticlePageState();
@@ -27,8 +34,10 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
+  bool _exporting = false;
   String _message = '';
   DateTime _queryDate = DateTime.now();
+  String? _resultFilter;
   int _page = 1;
   int _total = 0;
   String? _verificationCode;
@@ -94,6 +103,7 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
       final result = await _service.listFirstArticles(
         date: _queryDate,
         keyword: _keywordController.text.trim(),
+        result: _resultFilter,
         page: _page,
         pageSize: _pageSize,
       );
@@ -164,6 +174,86 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
     await _loadFirstArticles(page: 1);
   }
 
+  Future<void> _exportCsv() async {
+    setState(() {
+      _exporting = true;
+      _message = '';
+    });
+    try {
+      final csvBase64 = await _service.exportFirstArticles(
+        date: _queryDate,
+        keyword: _keywordController.text.trim(),
+        result: _resultFilter,
+      );
+      if (!mounted) return;
+      if (csvBase64.isEmpty) {
+        setState(() {
+          _message = '导出失败：服务端返回空数据';
+        });
+        return;
+      }
+      _showExportDialog(csvBase64);
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '导出失败：${_errorMessage(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exporting = false;
+        });
+      }
+    }
+  }
+
+  void _showExportDialog(String csvBase64) {
+    final csvText = utf8.decode(base64Decode(csvBase64));
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('导出首件记录'),
+        content: SizedBox(
+          width: 600,
+          height: 400,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              csvText,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDetailDialog(FirstArticleListItem item) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => FirstArticleDetailDialog(
+        session: widget.session,
+        recordId: item.id,
+        canDispose: widget.canDispose,
+        onLogout: widget.onLogout,
+        onDisposed: () {
+          Navigator.of(ctx).pop();
+          _loadFirstArticles();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -182,6 +272,15 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                 ),
               ),
               const Spacer(),
+              if (widget.canExport)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: OutlinedButton.icon(
+                    onPressed: (_loading || _exporting) ? null : _exportCsv,
+                    icon: const Icon(Icons.download),
+                    label: const Text('导出'),
+                  ),
+                ),
               IconButton(
                 tooltip: '刷新',
                 onPressed: _loading ? null : _loadFirstArticles,
@@ -196,6 +295,26 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                 onPressed: _loading ? null : _pickQueryDate,
                 icon: const Icon(Icons.calendar_month),
                 label: Text('查询日期：${_formatDate(_queryDate)}'),
+              ),
+              const SizedBox(width: 12),
+              DropdownButton<String?>(
+                value: _resultFilter,
+                hint: const Text('全部结果'),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('全部结果')),
+                  DropdownMenuItem(value: 'pass', child: Text('合格')),
+                  DropdownMenuItem(value: 'fail', child: Text('不合格')),
+                  DropdownMenuItem(value: 'conditional', child: Text('条件放行')),
+                ],
+                onChanged: _loading
+                    ? null
+                    : (v) {
+                        setState(() {
+                          _resultFilter = v;
+                          _page = 1;
+                        });
+                        _loadFirstArticles(page: 1);
+                      },
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -256,15 +375,17 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                         child: Card(
                           child: AdaptiveTableContainer(
                             child: DataTable(
-                              columns: const [
-                                DataColumn(label: Text('提交时间')),
-                                DataColumn(label: Text('订单号')),
-                                DataColumn(label: Text('产品')),
-                                DataColumn(label: Text('工序')),
-                                DataColumn(label: Text('操作员')),
-                                DataColumn(label: Text('结果')),
-                                DataColumn(label: Text('校验日期')),
-                                DataColumn(label: Text('备注')),
+                              columns: [
+                                const DataColumn(label: Text('提交时间')),
+                                const DataColumn(label: Text('订单号')),
+                                const DataColumn(label: Text('产品')),
+                                const DataColumn(label: Text('工序')),
+                                const DataColumn(label: Text('操作员')),
+                                const DataColumn(label: Text('结果')),
+                                const DataColumn(label: Text('校验日期')),
+                                const DataColumn(label: Text('备注')),
+                                if (widget.canDispose)
+                                  const DataColumn(label: Text('操作')),
                               ],
                               rows: _items.map((item) {
                                 return DataRow(
@@ -289,6 +410,14 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                                       Text(_formatDate(item.verificationDate)),
                                     ),
                                     DataCell(Text(item.remark ?? '-')),
+                                    if (widget.canDispose)
+                                      DataCell(
+                                        TextButton(
+                                          onPressed: () =>
+                                              _showDetailDialog(item),
+                                          child: const Text('详情/处置'),
+                                        ),
+                                      ),
                                   ],
                                 );
                               }).toList(),

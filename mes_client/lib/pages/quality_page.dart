@@ -3,14 +3,23 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import 'daily_first_article_page.dart';
+import 'production_repair_orders_page.dart';
+import 'production_scrap_statistics_page.dart';
 import 'quality_data_page.dart';
+import 'quality_trend_page.dart';
 
 const String firstArticleManagementTabCode = 'first_article_management';
 const String qualityDataQueryTabCode = 'quality_data_query';
+const String qualityScrapStatisticsTabCode = 'quality_scrap_statistics';
+const String qualityRepairOrdersTabCode = 'quality_repair_orders';
+const String qualityTrendTabCode = 'quality_trend';
 
 const List<String> _defaultTabOrder = [
   firstArticleManagementTabCode,
   qualityDataQueryTabCode,
+  qualityScrapStatisticsTabCode,
+  qualityRepairOrdersTabCode,
+  qualityTrendTabCode,
 ];
 
 class QualityPage extends StatefulWidget {
@@ -110,6 +119,12 @@ class _QualityPageState extends State<QualityPage>
         return '每日首件';
       case qualityDataQueryTabCode:
         return '质量数据';
+      case qualityScrapStatisticsTabCode:
+        return '报废统计';
+      case qualityRepairOrdersTabCode:
+        return '维修订单';
+      case qualityTrendTabCode:
+        return '质量趋势';
       default:
         return code;
     }
@@ -121,9 +136,30 @@ class _QualityPageState extends State<QualityPage>
         return DailyFirstArticlePage(
           session: widget.session,
           onLogout: widget.onLogout,
+          canExport: widget.capabilityCodes.contains('quality.first_articles.export'),
+          canDispose: widget.capabilityCodes.contains('quality.first_articles.disposition'),
         );
       case qualityDataQueryTabCode:
         return QualityDataPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          canExport: widget.capabilityCodes.contains('quality.stats.export'),
+        );
+      case qualityScrapStatisticsTabCode:
+        return ProductionScrapStatisticsPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          canExport: false,
+        );
+      case qualityRepairOrdersTabCode:
+        return ProductionRepairOrdersPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          canComplete: false,
+          canExport: false,
+        );
+      case qualityTrendTabCode:
+        return QualityTrendPage(
           session: widget.session,
           onLogout: widget.onLogout,
         );

@@ -23,6 +23,7 @@ class QualityService {
   Future<FirstArticleListResult> listFirstArticles({
     DateTime? date,
     String? keyword,
+    String? result,
     int page = 1,
     int pageSize = 20,
   }) async {
@@ -36,6 +37,9 @@ class QualityService {
     }
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
+    }
+    if (result != null && result.isNotEmpty) {
+      query['result'] = result;
     }
 
     final uri = Uri.parse(
@@ -51,6 +55,151 @@ class QualityService {
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
     return FirstArticleListResult.fromJson(data);
+  }
+
+  Future<FirstArticleDetail> getFirstArticleDetail(int recordId) async {
+    final uri = Uri.parse('$_basePath/first-articles/$recordId');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return FirstArticleDetail.fromJson(data);
+  }
+
+  Future<String> exportFirstArticles({
+    DateTime? date,
+    String? keyword,
+    String? result,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (date != null) payload['query_date'] = _formatDate(date);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      payload['keyword'] = keyword.trim();
+    }
+    if (result != null && result.isNotEmpty) payload['result_filter'] = result;
+
+    final uri = Uri.parse('$_basePath/first-articles/export');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode(payload),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return (data['csv_base64'] as String?) ?? '';
+  }
+
+  Future<void> submitDisposition({
+    required int recordId,
+    required String dispositionOpinion,
+    required String recheckResult,
+    required String finalJudgment,
+    required String operator_,
+  }) async {
+    final uri = Uri.parse('$_basePath/first-articles/$recordId/disposition');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'disposition_opinion': dispositionOpinion,
+        'recheck_result': recheckResult,
+        'final_judgment': finalJudgment,
+        'operator': operator_,
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+  }
+
+  Future<List<QualityProductStatItem>> getQualityProductStats({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final query = <String, String>{};
+    if (startDate != null) query['start_date'] = _formatDate(startDate);
+    if (endDate != null) query['end_date'] = _formatDate(endDate);
+    final uri = Uri.parse(
+      '$_basePath/stats/products',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (e) => QualityProductStatItem.fromJson(e as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  Future<String> exportQualityStats({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (startDate != null) payload['start_date'] = _formatDate(startDate);
+    if (endDate != null) payload['end_date'] = _formatDate(endDate);
+
+    final uri = Uri.parse('$_basePath/stats/export');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode(payload),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return (data['csv_base64'] as String?) ?? '';
+  }
+
+  Future<List<QualityTrendItem>> getQualityTrend({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final query = <String, String>{};
+    if (startDate != null) query['start_date'] = _formatDate(startDate);
+    if (endDate != null) query['end_date'] = _formatDate(endDate);
+    final uri = Uri.parse(
+      '$_basePath/trend',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return (data['items'] as List<dynamic>? ?? const [])
+        .map((e) => QualityTrendItem.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<QualityStatsOverview> getQualityOverview({

@@ -225,3 +225,156 @@ class QualityOperatorStatItem {
     );
   }
 }
+
+class QualityProductStatItem {
+  const QualityProductStatItem({
+    required this.productId,
+    required this.productCode,
+    required this.productName,
+    required this.firstArticleTotal,
+    required this.passedTotal,
+    required this.failedTotal,
+    required this.passRatePercent,
+    required this.scrapTotal,
+    required this.repairTotal,
+  });
+
+  final int productId;
+  final String productCode;
+  final String productName;
+  final int firstArticleTotal;
+  final int passedTotal;
+  final int failedTotal;
+  final double passRatePercent;
+  final int scrapTotal;
+  final int repairTotal;
+
+  factory QualityProductStatItem.fromJson(Map<String, dynamic> json) {
+    return QualityProductStatItem(
+      productId: (json['product_id'] as int?) ?? 0,
+      productCode: (json['product_code'] as String?) ?? '',
+      productName: (json['product_name'] as String?) ?? '',
+      firstArticleTotal: (json['first_article_total'] as int?) ?? 0,
+      passedTotal: (json['passed_total'] as int?) ?? 0,
+      failedTotal: (json['failed_total'] as int?) ?? 0,
+      passRatePercent: ((json['pass_rate_percent'] as num?) ?? 0).toDouble(),
+      scrapTotal: (json['scrap_total'] as int?) ?? 0,
+      repairTotal: (json['repair_total'] as int?) ?? 0,
+    );
+  }
+}
+
+class QualityTrendItem {
+  const QualityTrendItem({
+    required this.date,
+    required this.firstArticleTotal,
+    required this.passedTotal,
+    required this.failedTotal,
+    required this.scrapTotal,
+    required this.repairTotal,
+  });
+
+  final String date;
+  final int firstArticleTotal;
+  final int passedTotal;
+  final int failedTotal;
+  final int scrapTotal;
+  final int repairTotal;
+
+  factory QualityTrendItem.fromJson(Map<String, dynamic> json) {
+    return QualityTrendItem(
+      date: (json['date'] as String?) ?? '',
+      firstArticleTotal: (json['first_article_total'] as int?) ?? 0,
+      passedTotal: (json['passed_total'] as int?) ?? 0,
+      failedTotal: (json['failed_total'] as int?) ?? 0,
+      scrapTotal: (json['scrap_total'] as int?) ?? 0,
+      repairTotal: (json['repair_total'] as int?) ?? 0,
+    );
+  }
+}
+
+class FirstArticleDispositionInfo {
+  const FirstArticleDispositionInfo({
+    required this.dispositionOpinion,
+    required this.dispositionUsername,
+    required this.dispositionAt,
+    required this.recheckResult,
+    required this.finalJudgment,
+  });
+
+  final String dispositionOpinion;
+  final String dispositionUsername;
+  final DateTime? dispositionAt;
+  final String recheckResult;
+  final String finalJudgment;
+
+  factory FirstArticleDispositionInfo.fromJson(Map<String, dynamic> json) {
+    return FirstArticleDispositionInfo(
+      dispositionOpinion: (json['disposition_opinion'] as String?) ?? '',
+      dispositionUsername: (json['disposition_username'] as String?) ?? '',
+      dispositionAt: _parseDateTimeOrNull(json['disposition_at']),
+      recheckResult: (json['recheck_result'] as String?) ?? '',
+      finalJudgment: (json['final_judgment'] as String?) ?? '',
+    );
+  }
+}
+
+class FirstArticleDetail {
+  const FirstArticleDetail({
+    required this.id,
+    required this.verificationCode,
+    required this.productionOrderId,
+    required this.productionOrderCode,
+    required this.productId,
+    required this.productCode,
+    required this.productName,
+    required this.processId,
+    required this.processName,
+    required this.operatorUserId,
+    required this.operatorUsername,
+    required this.checkResult,
+    required this.defectDescription,
+    required this.checkAt,
+    this.disposition,
+  });
+
+  final int id;
+  final String verificationCode;
+  final int? productionOrderId;
+  final String productionOrderCode;
+  final int? productId;
+  final String productCode;
+  final String productName;
+  final int? processId;
+  final String processName;
+  final int? operatorUserId;
+  final String operatorUsername;
+  final String checkResult;
+  final String defectDescription;
+  final DateTime? checkAt;
+  final FirstArticleDispositionInfo? disposition;
+
+  factory FirstArticleDetail.fromJson(Map<String, dynamic> json) {
+    return FirstArticleDetail(
+      id: (json['id'] as int?) ?? 0,
+      verificationCode: (json['verification_code'] as String?) ?? '',
+      productionOrderId: json['production_order_id'] as int?,
+      productionOrderCode: (json['production_order_code'] as String?) ?? '',
+      productId: json['product_id'] as int?,
+      productCode: (json['product_code'] as String?) ?? '',
+      productName: (json['product_name'] as String?) ?? '',
+      processId: json['process_id'] as int?,
+      processName: (json['process_name'] as String?) ?? '',
+      operatorUserId: json['operator_user_id'] as int?,
+      operatorUsername: (json['operator_username'] as String?) ?? '',
+      checkResult: (json['check_result'] as String?) ?? '',
+      defectDescription: (json['defect_description'] as String?) ?? '',
+      checkAt: _parseDateTimeOrNull(json['check_at']),
+      disposition: json['disposition'] != null
+          ? FirstArticleDispositionInfo.fromJson(
+              json['disposition'] as Map<String, dynamic>,
+            )
+          : null,
+    );
+  }
+}
