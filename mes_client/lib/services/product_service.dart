@@ -24,6 +24,7 @@ class ProductService {
     String? keyword,
     String? category,
     String? lifecycleStatus,
+    bool? hasEffectiveVersion,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -34,6 +35,9 @@ class ProductService {
     }
     if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
       query['lifecycle_status'] = lifecycleStatus.trim();
+    }
+    if (hasEffectiveVersion != null) {
+      query['has_effective_version'] = hasEffectiveVersion ? 'true' : 'false';
     }
     final uri = Uri.parse(
       '${session.baseUrl}/products',

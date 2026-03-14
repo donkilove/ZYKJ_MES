@@ -52,6 +52,7 @@ class ProductParameterInputItem(BaseModel):
     category: str = Field(min_length=1, max_length=128)
     type: Literal["Text", "Link"]
     value: str = Field(min_length=0, max_length=1024)
+    description: str = Field(default="", max_length=500)
 
 
 class ProductParameterItem(BaseModel):

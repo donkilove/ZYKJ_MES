@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -100,10 +102,18 @@ def get_products(
     keyword: str | None = Query(default=None),
     category: str | None = Query(default=None),
     lifecycle_status: str | None = Query(default=None),
+    has_effective_version: bool | None = Query(default=None),
+    updated_after: datetime | None = Query(default=None),
+    updated_before: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("product.products.list")),
 ) -> ApiResponse[ProductListResult]:
-    total, products, latest_map = list_products(db, page, page_size, keyword, category, lifecycle_status)
+    total, products, latest_map = list_products(
+        db, page, page_size, keyword, category, lifecycle_status,
+        has_effective_version=has_effective_version,
+        updated_after=updated_after,
+        updated_before=updated_before,
+    )
     return success_response(
         ProductListResult(
             total=total,
@@ -248,7 +258,7 @@ def update_parameters(
         changed_keys = update_product_parameters(
             db,
             product=product,
-            items=[(item.name, item.category, item.type, item.value) for item in payload.items],
+            items=[(item.name, item.category, item.type, item.value, item.description) for item in payload.items],
             remark=payload.remark,
             operator=current_user,
             confirmed=payload.confirmed,

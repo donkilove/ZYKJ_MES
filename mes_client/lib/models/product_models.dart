@@ -92,15 +92,17 @@ class ProductParameterUpdateItem {
     required this.category,
     required this.type,
     required this.value,
+    this.description = '',
   });
 
   final String name;
   final String category;
   final String type;
   final String value;
+  final String description;
 
   Map<String, dynamic> toJson() {
-    return {'name': name, 'category': category, 'type': type, 'value': value};
+    return {'name': name, 'category': category, 'type': type, 'value': value, 'description': description};
   }
 }
 

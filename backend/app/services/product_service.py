@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
@@ -102,6 +103,19 @@ def _normalize_revision_lifecycle_status(value: str | None) -> str:
     return normalized
 
 
+_LINK_VALUE_PATTERN = re.compile(
+    r"^(https?://|\\\\|[A-Za-z]:[/\\])",
+    re.IGNORECASE,
+)
+
+
+def _validate_link_value(value: str) -> None:
+    if value and not _LINK_VALUE_PATTERN.match(value):
+        raise ValueError(
+            f"Link 参数值格式无效，必须以 http://、https://、\\\\（UNC）或盘符路径（如 C:\\）开头：{value!r}"
+        )
+
+
 def _normalize_parameter_items(items: list[tuple[str, str, str, str]]) -> list[dict[str, object]]:
     normalized_items: list[dict[str, object]] = []
     key_set: set[str] = set()
@@ -119,6 +133,8 @@ def _normalize_parameter_items(items: list[tuple[str, str, str, str]]) -> list[d
             raise ValueError(f"Invalid parameter type: {normalized_type}")
         if normalized_name in key_set:
             raise ValueError(f"Duplicate parameter name: {normalized_name}")
+        if normalized_type == "Link":
+            _validate_link_value(normalized_value)
 
         key_set.add(normalized_name)
         normalized_items.append(
@@ -266,12 +282,12 @@ def summarize_changed_keys(changed_keys: list[str], *, max_count: int = 3) -> st
 
 
 def get_product_by_id(db: Session, product_id: int) -> Product | None:
-    stmt = select(Product).where(Product.id == product_id)
+    stmt = select(Product).where(Product.id == product_id, Product.is_deleted.is_(False))
     return db.execute(stmt).scalars().first()
 
 
 def get_product_by_name(db: Session, name: str) -> Product | None:
-    stmt = select(Product).where(Product.name == name)
+    stmt = select(Product).where(Product.name == name, Product.is_deleted.is_(False))
     return db.execute(stmt).scalars().first()
 
 
@@ -282,8 +298,11 @@ def list_products(
     keyword: str | None,
     category: str | None,
     lifecycle_status: str | None = None,
+    has_effective_version: bool | None = None,
+    updated_after: datetime | None = None,
+    updated_before: datetime | None = None,
 ) -> tuple[int, list[Product], dict[int, ProductParameterHistory]]:
-    stmt = select(Product).order_by(Product.id.asc())
+    stmt = select(Product).where(Product.is_deleted.is_(False)).order_by(Product.updated_at.desc())
     if keyword:
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(Product.name.ilike(like_pattern))
@@ -291,6 +310,14 @@ def list_products(
         stmt = stmt.where(Product.category == category)
     if lifecycle_status is not None and lifecycle_status != "":
         stmt = stmt.where(Product.lifecycle_status == lifecycle_status)
+    if has_effective_version is True:
+        stmt = stmt.where(Product.effective_version > 0)
+    elif has_effective_version is False:
+        stmt = stmt.where(Product.effective_version == 0)
+    if updated_after is not None:
+        stmt = stmt.where(Product.updated_at >= updated_after)
+    if updated_before is not None:
+        stmt = stmt.where(Product.updated_at <= updated_before)
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
     total = db.execute(total_stmt).scalar_one()
@@ -514,7 +541,7 @@ def create_product(
 
 
 def delete_product(db: Session, product: Product) -> None:
-    db.delete(product)
+    product.is_deleted = True
     db.commit()
 
 
@@ -706,7 +733,7 @@ def update_product_parameters(
     db: Session,
     *,
     product: Product,
-    items: list[tuple[str, str, str, str]],
+    items: list[tuple[str, str, str, str, str]],
     remark: str,
     operator: User,
     confirmed: bool = False,
@@ -723,7 +750,8 @@ def update_product_parameters(
     if impact.requires_confirmation and not confirmed:
         raise ValueError("Impact confirmation required before updating active product")
 
-    normalized_items = _normalize_parameter_items(items)
+    normalized_items = _normalize_parameter_items([(name, cat, ptype, val) for name, cat, ptype, val, _desc in items])
+    description_map = {name.strip(): desc.strip() for name, _cat, _ptype, _val, desc in items}
     normalized_by_name = {
         str(item["name"]): item
         for item in normalized_items
@@ -755,13 +783,15 @@ def update_product_parameters(
     db.execute(delete(ProductParameter).where(ProductParameter.product_id == product.id))
 
     for item in normalized_items:
+        item_name = str(item["name"])
         db.add(
             ProductParameter(
                 product_id=product.id,
-                param_key=str(item["name"]),
+                param_key=item_name,
                 param_category=str(item["category"]),
                 param_type=str(item["type"]),
                 param_value=str(item["value"]),
+                param_description=description_map.get(item_name, ""),
                 sort_order=int(item["sort_order"]),
                 is_preset=bool(item["is_preset"]),
             )

@@ -11,6 +11,7 @@ import '../widgets/unified_list_table_header_style.dart';
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
 
 enum _ProductTableAction {
+  viewDetail,
   edit,
   deactivate,
   reactivate,
@@ -66,6 +67,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   String _message = '';
   String _selectedCategoryFilter = '';
   String _selectedStatusFilter = '';
+  String _selectedEffectiveVersionFilter = '';
   int _total = 0;
   List<ProductItem> _products = const [];
 
@@ -1118,6 +1120,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         lifecycleStatus: _selectedStatusFilter,
+        hasEffectiveVersion: _selectedEffectiveVersionFilter == 'yes'
+            ? true
+            : _selectedEffectiveVersionFilter == 'no'
+            ? false
+            : null,
       );
       if (!mounted) {
         return;
@@ -1484,7 +1491,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   List<PopupMenuEntry<_ProductTableAction>> _buildProductActionMenuItems(
     ProductItem product,
   ) {
-    final items = <PopupMenuEntry<_ProductTableAction>>[];
+    final items = <PopupMenuEntry<_ProductTableAction>>[
+      const PopupMenuItem(
+        value: _ProductTableAction.viewDetail,
+        child: Text('查看详情'),
+      ),
+    ];
     if (widget.canUpdateLifecycle) {
       switch (product.lifecycleStatus) {
         case 'active':
@@ -1562,6 +1574,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     ProductItem product,
   ) async {
     switch (action) {
+      case _ProductTableAction.viewDetail:
+        await _showDetailDrawer(product);
+        return;
       case _ProductTableAction.edit:
         await _showEditProductDialog(product);
         return;
@@ -1584,6 +1599,66 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         await _deleteProduct(product);
         return;
     }
+  }
+
+  Future<void> _showDetailDrawer(ProductItem product) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('产品详情 - ${product.name}'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _detailRow('产品名称', product.name),
+                  _detailRow('产品分类', product.category.isEmpty ? '-' : product.category),
+                  _detailRow('状态', _lifecycleLabel(product.lifecycleStatus)),
+                  _detailRow('当前版本', _formatDisplayVersion(product.currentVersion)),
+                  _detailRow(
+                    '生效版本',
+                    product.effectiveVersion > 0
+                        ? _formatDisplayVersion(product.effectiveVersion)
+                        : '-',
+                  ),
+                  if (product.effectiveAt != null)
+                    _detailRow('生效时间', _formatTime(product.effectiveAt!)),
+                  if (product.inactiveReason != null && product.inactiveReason!.isNotEmpty)
+                    _detailRow('停用原因', product.inactiveReason!),
+                  _detailRow('备注', product.remark.isEmpty ? '-' : product.remark),
+                  _detailRow('创建时间', _formatTime(product.createdAt)),
+                  _detailRow('更新时间', _formatTime(product.updatedAt)),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          Expanded(child: SelectableText(value)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1677,6 +1752,30 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                       : (value) {
                           setState(() {
                             _selectedStatusFilter = value ?? '';
+                          });
+                          _loadProducts();
+                        },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedEffectiveVersionFilter,
+                  decoration: const InputDecoration(
+                    labelText: '生效版本',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem<String>(value: '', child: Text('全部')),
+                    DropdownMenuItem<String>(value: 'yes', child: Text('有生效版本')),
+                    DropdownMenuItem<String>(value: 'no', child: Text('无生效版本')),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _selectedEffectiveVersionFilter = value ?? '';
                           });
                           _loadProducts();
                         },

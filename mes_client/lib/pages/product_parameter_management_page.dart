@@ -544,6 +544,7 @@ class _ProductParameterManagementPageState
         category: item.category,
         parameterType: item.type,
         value: item.value,
+        description: item.description,
       );
       _attachCategoryDirtyListener(row);
       return row;
@@ -624,6 +625,7 @@ class _ProductParameterManagementPageState
           category: category,
           type: parameterType,
           value: value,
+          description: row.descriptionController.text.trim(),
         ),
       );
     }
@@ -715,6 +717,8 @@ class _ProductParameterManagementPageState
         _buildHeaderCell('参数类型', flex: 2),
         const SizedBox(width: 8),
         _buildHeaderCell('参数值', flex: 5),
+        const SizedBox(width: 8),
+        _buildHeaderCell('参数说明', flex: 3),
         const SizedBox(width: _rowActionColumnWidth),
       ],
     );
@@ -861,6 +865,19 @@ class _ProductParameterManagementPageState
                     isDense: true,
                   ),
                 ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 3,
+          child: TextField(
+            controller: row.descriptionController,
+            onChanged: (_) => _markDirty(),
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              isDense: true,
+              hintText: '可选',
+            ),
+          ),
         ),
         const SizedBox(width: 8),
         SizedBox(
@@ -1262,21 +1279,25 @@ class _ParameterEditorRow {
     required String category,
     required String parameterType,
     required String value,
+    required String description,
   }) : nameController = TextEditingController(text: name),
        categoryController = TextEditingController(text: category),
        valueController = TextEditingController(text: value),
+       descriptionController = TextEditingController(text: description),
        parameterType = parameterType == 'Link' ? 'Link' : 'Text';
 
   _ParameterEditorRow.empty({required this.rowId})
     : nameController = TextEditingController(),
       categoryController = TextEditingController(),
       valueController = TextEditingController(),
+      descriptionController = TextEditingController(),
       parameterType = 'Text';
 
   final int rowId;
   final TextEditingController nameController;
   final TextEditingController categoryController;
   final TextEditingController valueController;
+  final TextEditingController descriptionController;
   String parameterType;
   bool categoryListenerBound = false;
 
@@ -1284,5 +1305,6 @@ class _ParameterEditorRow {
     nameController.dispose();
     categoryController.dispose();
     valueController.dispose();
+    descriptionController.dispose();
   }
 }

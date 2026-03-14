@@ -11,6 +11,13 @@ class Product(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+        index=True,
+    )
     category: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
