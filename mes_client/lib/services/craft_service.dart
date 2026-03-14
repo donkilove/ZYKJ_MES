@@ -762,6 +762,35 @@ class CraftService {
     );
   }
 
+  Future<String> exportStages({String? keyword, bool? enabled}) async {
+    final query = <String, String>{};
+    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
+    if (enabled != null) query['enabled'] = '$enabled';
+    final uri = Uri.parse('$_basePath/stages/export').replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(body, response.statusCode), response.statusCode);
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return (data['content_base64'] as String?) ?? '';
+  }
+
+  Future<String> exportProcesses({String? keyword, int? stageId, bool? enabled}) async {
+    final query = <String, String>{};
+    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
+    if (stageId != null) query['stage_id'] = '$stageId';
+    if (enabled != null) query['enabled'] = '$enabled';
+    final uri = Uri.parse('$_basePath/processes/export').replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(body, response.statusCode), response.statusCode);
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return (data['content_base64'] as String?) ?? '';
+  }
+
   Map<String, dynamic> _decodeBody(http.Response response) {
     if (response.body.isEmpty) {
       return {};

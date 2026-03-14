@@ -17,6 +17,7 @@ from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
 from app.schemas.equipment import (
     EquipmentDetailResult,
+    EquipmentExportResult,
     EquipmentLedgerItem,
     EquipmentLedgerListResult,
     EquipmentLedgerUpsertRequest,
@@ -56,6 +57,11 @@ from app.services.equipment_service import (
     delete_equipment,
     delete_maintenance_item,
     delete_maintenance_plan,
+    export_equipment_ledger_csv,
+    export_maintenance_items_csv,
+    export_maintenance_plans_csv,
+    export_maintenance_records_csv,
+    export_work_orders_csv,
     generate_work_order_for_plan,
     get_equipment_by_id,
     get_equipment_detail,
@@ -892,6 +898,84 @@ def get_maintenance_record_detail_api(
             source_item_id=row.source_item_id,
         )
     )
+
+
+@router.get("/ledger/export", response_model=ApiResponse[EquipmentExportResult])
+def export_equipment_ledger_api(
+    keyword: str | None = Query(default=None),
+    enabled: bool | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.ledger.list")),
+) -> ApiResponse[EquipmentExportResult]:
+    result = export_equipment_ledger_csv(db, keyword=keyword, enabled=enabled)
+    return success_response(EquipmentExportResult(**result))
+
+
+@router.get("/items/export", response_model=ApiResponse[EquipmentExportResult])
+def export_maintenance_items_api(
+    keyword: str | None = Query(default=None),
+    enabled: bool | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.items.list")),
+) -> ApiResponse[EquipmentExportResult]:
+    result = export_maintenance_items_csv(db, keyword=keyword, enabled=enabled)
+    return success_response(EquipmentExportResult(**result))
+
+
+@router.get("/plans/export", response_model=ApiResponse[EquipmentExportResult])
+def export_maintenance_plans_api(
+    equipment_id: int | None = Query(default=None, ge=1),
+    item_id: int | None = Query(default=None, ge=1),
+    enabled: bool | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.plans.list")),
+) -> ApiResponse[EquipmentExportResult]:
+    result = export_maintenance_plans_csv(db, equipment_id=equipment_id, item_id=item_id, enabled=enabled)
+    return success_response(EquipmentExportResult(**result))
+
+
+@router.get("/records/export", response_model=ApiResponse[EquipmentExportResult])
+def export_maintenance_records_api(
+    keyword: str | None = Query(default=None),
+    executor_id: int | None = Query(default=None, ge=1),
+    result_summary: str | None = Query(default=None),
+    equipment_id: int | None = Query(default=None, ge=1),
+    start_date: date_type | None = Query(default=None),
+    end_date: date_type | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.records.list")),
+) -> ApiResponse[EquipmentExportResult]:
+    result = export_maintenance_records_csv(
+        db,
+        keyword=keyword,
+        executor_user_id=executor_id,
+        result_summary=result_summary,
+        equipment_id=equipment_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return success_response(EquipmentExportResult(**result))
+
+
+@router.get("/executions/export", response_model=ApiResponse[EquipmentExportResult])
+def export_work_orders_api(
+    status_filter: str | None = Query(default=None, alias="status"),
+    keyword: str | None = Query(default=None),
+    due_date_start: date_type | None = Query(default=None),
+    due_date_end: date_type | None = Query(default=None),
+    stage_code: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.executions.list")),
+) -> ApiResponse[EquipmentExportResult]:
+    result = export_work_orders_csv(
+        db,
+        status=status_filter,
+        keyword=keyword,
+        due_date_start=due_date_start,
+        due_date_end=due_date_end,
+        stage_code=stage_code,
+    )
+    return success_response(EquipmentExportResult(**result))
 
 
 # ── 设备规则 ──────────────────────────────────────────────────────────────────

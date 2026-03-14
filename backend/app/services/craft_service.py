@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import csv
+import io
 from datetime import UTC, datetime
 from dataclasses import dataclass
 from math import ceil
@@ -2202,3 +2205,73 @@ def get_template_references(
         total=len(items),
         items=items,
     )
+
+
+# ── CSV 导出 ─────────────────────────────────────────────────────────────────
+
+def _craft_csv_base64(headers: list[str], rows: list[list[object]]) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow(row)
+    return base64.b64encode(output.getvalue().encode("utf-8-sig")).decode("ascii")
+
+
+def export_stages_csv(
+    db: Session,
+    *,
+    keyword: str | None = None,
+    enabled: bool | None = None,
+) -> dict[str, object]:
+    _, rows = list_stages(db, page=1, page_size=200000, keyword=keyword, enabled=enabled)
+    csv_rows: list[list[object]] = []
+    for row in rows:
+        csv_rows.append([
+            row.code,
+            row.name,
+            row.sort_order,
+            "启用" if row.is_enabled else "停用",
+            len(row.processes) if row.processes else 0,
+            row.created_at.astimezone().strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
+        ])
+    content_base64 = _craft_csv_base64(
+        ["工段编码", "工段名称", "排序", "状态", "工序数量", "创建时间"],
+        csv_rows,
+    )
+    return {
+        "file_name": "stages_export.csv",
+        "mime_type": "text/csv",
+        "content_base64": content_base64,
+        "exported_count": len(csv_rows),
+    }
+
+
+def export_processes_csv(
+    db: Session,
+    *,
+    keyword: str | None = None,
+    stage_id: int | None = None,
+    enabled: bool | None = None,
+) -> dict[str, object]:
+    _, rows = list_craft_processes(db, page=1, page_size=200000, keyword=keyword, stage_id=stage_id, enabled=enabled)
+    csv_rows: list[list[object]] = []
+    for row in rows:
+        csv_rows.append([
+            row.stage.code if row.stage else "",
+            row.stage.name if row.stage else "",
+            row.code,
+            row.name,
+            "启用" if row.is_enabled else "停用",
+            row.created_at.astimezone().strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
+        ])
+    content_base64 = _craft_csv_base64(
+        ["所属工段编码", "所属工段名称", "工序编码", "工序名称", "状态", "创建时间"],
+        csv_rows,
+    )
+    return {
+        "file_name": "processes_export.csv",
+        "mime_type": "text/csv",
+        "content_base64": content_base64,
+        "exported_count": len(csv_rows),
+    }

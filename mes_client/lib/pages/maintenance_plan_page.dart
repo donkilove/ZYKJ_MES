@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -30,6 +32,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   late final CraftService _craftService;
 
   bool _loading = false;
+  bool _exporting = false;
   String _message = '';
   int _total = 0;
   List<MaintenancePlanItem> _plans = const [];
@@ -39,6 +42,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   List<EquipmentOwnerOption> _ownerOptions = const [];
   int? _equipmentFilterId;
   int? _itemFilterId;
+  bool? _enabledFilter;
 
   @override
   void initState() {
@@ -118,6 +122,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         pageSize: 200,
         equipmentId: _equipmentFilterId,
         itemId: _itemFilterId,
+        enabled: _enabledFilter,
       );
       if (!mounted) {
         return;
@@ -539,6 +544,50 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     }
   }
 
+  Future<void> _exportCsv() async {
+    setState(() { _exporting = true; _message = ''; });
+    try {
+      final csvBase64 = await _equipmentService.exportMaintenancePlans(
+        equipmentId: _equipmentFilterId,
+        itemId: _itemFilterId,
+      );
+      if (!mounted) return;
+      if (csvBase64.isEmpty) {
+        setState(() => _message = '导出失败：服务端返回空数据');
+        return;
+      }
+      final csvText = utf8.decode(base64Decode(csvBase64));
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('导出保养计划'),
+          content: SizedBox(
+            width: 600,
+            height: 400,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                csvText,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) { widget.onLogout(); return; }
+      setState(() => _message = '导出失败：${_errorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -556,6 +605,14 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                 ),
               ),
               const Spacer(),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: OutlinedButton.icon(
+                  onPressed: (_loading || _exporting) ? null : _exportCsv,
+                  icon: const Icon(Icons.download),
+                  label: const Text('导出'),
+                ),
+              ),
               IconButton(
                 tooltip: '刷新',
                 onPressed: _loading
@@ -618,6 +675,26 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                   decoration: const InputDecoration(
                     labelText: '项目筛选',
                     border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<bool?>(
+                  initialValue: _enabledFilter,
+                  items: const [
+                    DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
+                    DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+                    DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _enabledFilter = value);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '状态',
+                    border: OutlineInputBorder(),
+                    isDense: true,
                   ),
                 ),
               ),

@@ -63,6 +63,7 @@ from app.schemas.craft import (
     ProcessReferenceResult,
     TemplateReferenceItem,
     TemplateReferenceResult,
+    CraftExportResult,
 )
 from app.services.craft_service import (
     TemplateSyncConflictError,
@@ -95,6 +96,8 @@ from app.services.craft_service import (
     list_craft_processes,
     list_stages,
     list_templates,
+    export_stages_csv,
+    export_processes_csv,
     update_process,
     update_system_master_template,
     update_stage,
@@ -376,6 +379,29 @@ def delete_stage_api(
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     return success_response({"deleted": True}, message="deleted")
+
+
+@router.get("/stages/export", response_model=ApiResponse[CraftExportResult])
+def export_stages_api(
+    keyword: str | None = Query(default=None),
+    enabled: bool | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.stages.list")),
+) -> ApiResponse[CraftExportResult]:
+    result = export_stages_csv(db, keyword=keyword, enabled=enabled)
+    return success_response(CraftExportResult(**result))
+
+
+@router.get("/processes/export", response_model=ApiResponse[CraftExportResult])
+def export_processes_api(
+    keyword: str | None = Query(default=None),
+    stage_id: int | None = Query(default=None, ge=1),
+    enabled: bool | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.processes.list")),
+) -> ApiResponse[CraftExportResult]:
+    result = export_processes_csv(db, keyword=keyword, stage_id=stage_id, enabled=enabled)
+    return success_response(CraftExportResult(**result))
 
 
 @router.get("/processes", response_model=ApiResponse[CraftProcessListResult])

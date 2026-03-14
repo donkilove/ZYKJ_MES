@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -35,9 +37,11 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
+  bool _exporting = false;
   String _message = '';
   int _total = 0;
   List<MaintenanceItemEntry> _items = const [];
+  bool? _enabledFilter;
 
   @override
   void initState() {
@@ -86,6 +90,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
         page: 1,
         pageSize: 100,
         keyword: _keywordController.text.trim(),
+        enabled: _enabledFilter,
       );
       if (!mounted) {
         return;
@@ -421,6 +426,49 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     }
   }
 
+  Future<void> _exportCsv() async {
+    setState(() { _exporting = true; _message = ''; });
+    try {
+      final csvBase64 = await _equipmentService.exportMaintenanceItems(
+        keyword: _keywordController.text.trim(),
+      );
+      if (!mounted) return;
+      if (csvBase64.isEmpty) {
+        setState(() => _message = '导出失败：服务端返回空数据');
+        return;
+      }
+      final csvText = utf8.decode(base64Decode(csvBase64));
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('导出保养项目'),
+          content: SizedBox(
+            width: 600,
+            height: 400,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                csvText,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) { widget.onLogout(); return; }
+      setState(() => _message = '导出失败：${_errorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -438,6 +486,14 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                 ),
               ),
               const Spacer(),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: OutlinedButton.icon(
+                  onPressed: (_loading || _exporting) ? null : _exportCsv,
+                  icon: const Icon(Icons.download),
+                  label: const Text('导出'),
+                ),
+              ),
               IconButton(
                 tooltip: '刷新',
                 onPressed: _loading ? null : _loadItems,
@@ -456,6 +512,26 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                     border: OutlineInputBorder(),
                   ),
                   onSubmitted: (_) => _loadItems(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<bool?>(
+                  initialValue: _enabledFilter,
+                  items: const [
+                    DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
+                    DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+                    DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _enabledFilter = value);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '状态',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),

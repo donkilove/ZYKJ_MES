@@ -5,6 +5,7 @@ class MessageItem {
     required this.priority,
     required this.title,
     required this.summary,
+    required this.content,
     required this.sourceModule,
     required this.sourceType,
     required this.sourceCode,
@@ -23,6 +24,7 @@ class MessageItem {
   final String priority;
   final String title;
   final String? summary;
+  final String? content;
   final String? sourceModule;
   final String? sourceType;
   final String? sourceCode;
@@ -42,6 +44,7 @@ class MessageItem {
       priority: json['priority'] as String,
       title: json['title'] as String,
       summary: json['summary'] as String?,
+      content: json['content'] as String?,
       sourceModule: json['source_module'] as String?,
       sourceType: json['source_type'] as String?,
       sourceCode: json['source_code'] as String?,

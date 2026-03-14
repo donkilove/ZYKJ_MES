@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -26,6 +28,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   final TextEditingController _executorController = TextEditingController();
 
   bool _loading = false;
+  bool _exporting = false;
   String _message = '';
   int _total = 0;
   List<MaintenanceRecordItem> _items = const [];
@@ -211,6 +214,50 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
     );
   }
 
+  Future<void> _exportCsv() async {
+    setState(() { _exporting = true; _message = ''; });
+    try {
+      final csvBase64 = await _equipmentService.exportMaintenanceRecords(
+        keyword: _keywordController.text.trim().isNotEmpty
+            ? _keywordController.text.trim()
+            : null,
+        startDate: _startDate,
+        endDate: _endDate,
+        resultSummary: _resultSummaryFilter,
+        equipmentId: _equipmentIdFilter,
+      );
+      if (!mounted) return;
+      if (csvBase64.isEmpty) {
+        setState(() => _message = '导出失败：服务端返回空数据');
+        return;
+      }
+      final csvText = utf8.decode(base64Decode(csvBase64));
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('导出保养记录'),
+          content: SizedBox(
+            width: 600,
+            height: 400,
+            child: SelectableText(csvText),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) { widget.onLogout(); return; }
+      setState(() => _message = '导出失败：${_errorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   Widget _detailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -244,6 +291,14 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                 ),
               ),
               const Spacer(),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: OutlinedButton.icon(
+                  onPressed: (_loading || _exporting) ? null : _exportCsv,
+                  icon: const Icon(Icons.download),
+                  label: const Text('导出'),
+                ),
+              ),
               IconButton(
                 tooltip: '刷新',
                 onPressed: _loading ? null : _loadItems,

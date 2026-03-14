@@ -854,4 +854,95 @@ class EquipmentService {
       throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
     }
   }
+
+  // ── 导出 ────────────────────────────────────────────────────────────────────
+
+  Future<String> exportEquipmentLedger({String? keyword, bool? enabled}) async {
+    final query = <String, String>{};
+    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
+    if (enabled != null) query['enabled'] = '$enabled';
+    final uri = Uri.parse('$_basePath/ledger/export').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+    final data = json['data'] as Map<String, dynamic>? ?? const {};
+    return (data['content_base64'] as String?) ?? '';
+  }
+
+  Future<String> exportMaintenanceItems({String? keyword, bool? enabled}) async {
+    final query = <String, String>{};
+    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
+    if (enabled != null) query['enabled'] = '$enabled';
+    final uri = Uri.parse('$_basePath/items/export').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+    final data = json['data'] as Map<String, dynamic>? ?? const {};
+    return (data['content_base64'] as String?) ?? '';
+  }
+
+  Future<String> exportMaintenancePlans({int? equipmentId, int? itemId, bool? enabled}) async {
+    final query = <String, String>{};
+    if (equipmentId != null) query['equipment_id'] = '$equipmentId';
+    if (itemId != null) query['item_id'] = '$itemId';
+    if (enabled != null) query['enabled'] = '$enabled';
+    final uri = Uri.parse('$_basePath/plans/export').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+    final data = json['data'] as Map<String, dynamic>? ?? const {};
+    return (data['content_base64'] as String?) ?? '';
+  }
+
+  Future<String> exportMaintenanceRecords({
+    String? keyword,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? resultSummary,
+    int? equipmentId,
+  }) async {
+    final query = <String, String>{};
+    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
+    if (startDate != null) query['start_date'] = _formatDate(startDate);
+    if (endDate != null) query['end_date'] = _formatDate(endDate);
+    if (resultSummary != null) query['result_summary'] = resultSummary;
+    if (equipmentId != null) query['equipment_id'] = '$equipmentId';
+    final uri = Uri.parse('$_basePath/records/export').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+    final data = json['data'] as Map<String, dynamic>? ?? const {};
+    return (data['content_base64'] as String?) ?? '';
+  }
+
+  Future<String> exportWorkOrders({
+    String? status,
+    String? keyword,
+    DateTime? dueDateStart,
+    DateTime? dueDateEnd,
+    String? stageCode,
+  }) async {
+    final query = <String, String>{};
+    if (status != null) query['status'] = status;
+    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
+    if (dueDateStart != null) query['due_date_start'] = _formatDate(dueDateStart);
+    if (dueDateEnd != null) query['due_date_end'] = _formatDate(dueDateEnd);
+    if (stageCode != null) query['stage_code'] = stageCode;
+    final uri = Uri.parse('$_basePath/executions/export').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+    final data = json['data'] as Map<String, dynamic>? ?? const {};
+    return (data['content_base64'] as String?) ?? '';
+  }
 }

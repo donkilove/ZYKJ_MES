@@ -275,6 +275,7 @@ class QualityTrendItem {
     required this.firstArticleTotal,
     required this.passedTotal,
     required this.failedTotal,
+    required this.passRatePercent,
     required this.scrapTotal,
     required this.repairTotal,
   });
@@ -283,6 +284,7 @@ class QualityTrendItem {
   final int firstArticleTotal;
   final int passedTotal;
   final int failedTotal;
+  final double passRatePercent;
   final int scrapTotal;
   final int repairTotal;
 
@@ -292,6 +294,7 @@ class QualityTrendItem {
       firstArticleTotal: (json['first_article_total'] as int?) ?? 0,
       passedTotal: (json['passed_total'] as int?) ?? 0,
       failedTotal: (json['failed_total'] as int?) ?? 0,
+      passRatePercent: ((json['pass_rate_percent'] as num?) ?? 0).toDouble(),
       scrapTotal: (json['scrap_total'] as int?) ?? 0,
       repairTotal: (json['repair_total'] as int?) ?? 0,
     );

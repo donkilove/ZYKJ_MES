@@ -247,10 +247,16 @@ class QualityService {
   Future<List<QualityTrendItem>> getQualityTrend({
     DateTime? startDate,
     DateTime? endDate,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
   }) async {
     final query = <String, String>{};
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
+    if (productName != null && productName.trim().isNotEmpty) query['product_name'] = productName.trim();
+    if (processCode != null && processCode.trim().isNotEmpty) query['process_code'] = processCode.trim();
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) query['operator_username'] = operatorUsername.trim();
     final uri = Uri.parse(
       '$_basePath/trend',
     ).replace(queryParameters: query.isEmpty ? null : query);
@@ -434,6 +440,7 @@ class QualityService {
     DateTime? startDate,
     DateTime? endDate,
     int? productId,
+    String? productName,
     String? processCode,
     int topN = 10,
   }) async {
@@ -441,6 +448,7 @@ class QualityService {
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
     if (productId != null) query['product_id'] = '$productId';
+    if (productName != null && productName.isNotEmpty) query['product_name'] = productName;
     if (processCode != null && processCode.isNotEmpty) {
       query['process_code'] = processCode;
     }

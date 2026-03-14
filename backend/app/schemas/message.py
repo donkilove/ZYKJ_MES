@@ -13,6 +13,7 @@ class MessageItem(BaseModel):
     priority: str
     title: str
     summary: str | None
+    content: str | None = None
     source_module: str | None
     source_type: str | None
     source_code: str | None

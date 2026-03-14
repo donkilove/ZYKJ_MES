@@ -438,3 +438,10 @@ class TemplateReferenceResult(BaseModel):
     product_name: str
     total: int
     items: list[TemplateReferenceItem]
+
+
+class CraftExportResult(BaseModel):
+    file_name: str
+    mime_type: str
+    content_base64: str
+    exported_count: int = 0

@@ -613,18 +613,40 @@ def get_quality_trend(
     *,
     start_date: date | None,
     end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
 ) -> list[dict[str, Any]]:
     resolved_start = start_date or (date.today() - timedelta(days=29))
     resolved_end = end_date or date.today()
 
-    rows = (
-        db.execute(
-            select(FirstArticleRecord)
-            .where(*_build_created_at_filters(start_date=resolved_start, end_date=resolved_end))
-        )
-        .scalars()
-        .all()
+    extra_filters: list[object] = []
+    need_joins = False
+    if product_name and product_name.strip():
+        extra_filters.append(Product.name.ilike(f"%{product_name.strip()}%"))
+        need_joins = True
+    if process_code and process_code.strip():
+        extra_filters.append(ProductionOrderProcess.process_code.ilike(f"%{process_code.strip()}%"))
+        need_joins = True
+    if operator_username and operator_username.strip():
+        extra_filters.append(User.username.ilike(f"%{operator_username.strip()}%"))
+        need_joins = True
+
+    stmt = (
+        select(FirstArticleRecord)
+        .where(*_build_created_at_filters(start_date=resolved_start, end_date=resolved_end))
     )
+    if need_joins:
+        stmt = (
+            stmt
+            .join(FirstArticleRecord.order)
+            .join(ProductionOrder.product)
+            .join(FirstArticleRecord.order_process)
+            .join(FirstArticleRecord.operator)
+            .where(*extra_filters)
+        )
+
+    rows = db.execute(stmt).scalars().all()
 
     grouped: dict[date, dict[str, Any]] = {}
     current = resolved_start
@@ -871,6 +893,7 @@ def get_defect_analysis(
     start_date: date | None = None,
     end_date: date | None = None,
     product_id: int | None = None,
+    product_name: str | None = None,
     process_code: str | None = None,
     top_n: int = 10,
 ) -> dict:
@@ -887,6 +910,8 @@ def get_defect_analysis(
         )
     if product_id is not None:
         stmt = stmt.where(RepairDefectPhenomenon.product_id == product_id)
+    if product_name and product_name.strip():
+        stmt = stmt.where(RepairDefectPhenomenon.product_name.ilike(f"%{product_name.strip()}%"))
     if process_code:
         stmt = stmt.where(RepairDefectPhenomenon.process_code == process_code)
 

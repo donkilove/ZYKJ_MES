@@ -200,3 +200,10 @@ class MaintenanceRecordDetail(MaintenanceRecordItem):
     source_equipment_code: str | None
     source_item_id: int | None
 
+
+class EquipmentExportResult(BaseModel):
+    file_name: str
+    mime_type: str
+    content_base64: str
+    exported_count: int = 0
+

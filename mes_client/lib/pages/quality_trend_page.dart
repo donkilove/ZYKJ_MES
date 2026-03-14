@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -22,6 +25,9 @@ class QualityTrendPage extends StatefulWidget {
 
 class _QualityTrendPageState extends State<QualityTrendPage> {
   late final QualityService _service;
+  final TextEditingController _productController = TextEditingController();
+  final TextEditingController _processController = TextEditingController();
+  final TextEditingController _operatorController = TextEditingController();
 
   bool _loading = false;
   String _message = '';
@@ -36,6 +42,13 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
     _loadTrend();
   }
 
+  @override
+  void dispose() {
+    _productController.dispose();
+    _processController.dispose();
+    _operatorController.dispose();
+    super.dispose();
+  }
   bool _isUnauthorized(Object error) =>
       error is ApiException && error.statusCode == 401;
 
@@ -72,101 +85,116 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
       setState(() => _message = '开始日期不能晚于结束日期');
       return;
     }
-    setState(() {
-      _loading = true;
-      _message = '';
-    });
+    setState(() { _loading = true; _message = ''; });
     try {
       final items = await _service.getQualityTrend(
         startDate: _startDate,
         endDate: _endDate,
+        productName: _productController.text.trim(),
+        processCode: _processController.text.trim(),
+        operatorUsername: _operatorController.text.trim(),
       );
       if (!mounted) return;
       setState(() => _items = items);
     } catch (error) {
       if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
+      if (_isUnauthorized(error)) { widget.onLogout(); return; }
       setState(() => _message = '加载质量趋势失败：${_errorMessage(error)}');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
+  Widget _buildChart() {
+    if (_items.length < 2) return const SizedBox.shrink();
+    final maxFirst = _items.fold<int>(0, (m, e) => math.max(m, e.firstArticleTotal));
+    final maxY = (maxFirst + 2).toDouble();
+    return SizedBox(
+      height: 220,
+      child: LineChart(
+        LineChartData(
+          minY: 0,
+          maxY: maxY,
+          gridData: const FlGridData(show: true),
+          borderData: FlBorderData(show: true),
+          titlesData: FlTitlesData(
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 28,
+                interval: math.max(1, (_items.length / 6).ceilToDouble()),
+                getTitlesWidget: (value, _) {
+                  final idx = value.toInt();
+                  if (idx < 0 || idx >= _items.length) return const SizedBox.shrink();
+                  final d = _items[idx].date;
+                  return Text(d.length >= 5 ? d.substring(5) : d, style: const TextStyle(fontSize: 10));
+                },
+              ),
+            ),
+            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          ),
+          lineBarsData: [
+            _line(_items.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.passedTotal.toDouble())).toList(), Colors.green, '通过'),
+            _line(_items.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.failedTotal.toDouble())).toList(), Colors.red, '不通过'),
+            _line(_items.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.scrapTotal.toDouble())).toList(), Colors.orange, '报废'),
+          ],
+        ),
+      ),
+    );
+  }
 
+  LineChartBarData _line(List<FlSpot> spots, Color color, String label) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      preventCurveOverShooting: true,
+      color: color,
+      barWidth: 2,
+      dotData: const FlDotData(show: false),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '质量趋势',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadTrend,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
-          ),
+          Row(children: [
+            Text('质量趋势', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
+            const Spacer(),
+            IconButton(tooltip: '刷新', onPressed: _loading ? null : _loadTrend, icon: const Icon(Icons.refresh)),
+          ]),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () => _pickDate(
-                          current: _startDate,
-                          helpText: '选择开始日期',
-                          onChanged: (v) => setState(() => _startDate = v),
-                        ),
-                icon: const Icon(Icons.event),
-                label: Text('开始：${_formatDate(_startDate)}'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () => _pickDate(
-                          current: _endDate,
-                          helpText: '选择结束日期',
-                          onChanged: (v) => setState(() => _endDate = v),
-                        ),
-                icon: const Icon(Icons.event_available),
-                label: Text('结束：${_formatDate(_endDate)}'),
-              ),
-              FilledButton.icon(
-                onPressed: _loading ? null : _loadTrend,
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
-              Text('默认最近30天', style: theme.textTheme.bodySmall),
-            ],
-          ),
+          Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            OutlinedButton.icon(
+              onPressed: _loading ? null : () => _pickDate(current: _startDate, helpText: '选择开始日期', onChanged: (v) => setState(() => _startDate = v)),
+              icon: const Icon(Icons.event), label: Text('开始：${_formatDate(_startDate)}'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _loading ? null : () => _pickDate(current: _endDate, helpText: '选择结束日期', onChanged: (v) => setState(() => _endDate = v)),
+              icon: const Icon(Icons.event_available), label: Text('结束：${_formatDate(_endDate)}'),
+            ),
+            SizedBox(width: 130, child: TextField(controller: _productController, decoration: const InputDecoration(labelText: '产品名称', border: OutlineInputBorder(), isDense: true), onSubmitted: (_) => _loadTrend())),
+            SizedBox(width: 120, child: TextField(controller: _processController, decoration: const InputDecoration(labelText: '工序编码', border: OutlineInputBorder(), isDense: true), onSubmitted: (_) => _loadTrend())),
+            SizedBox(width: 120, child: TextField(controller: _operatorController, decoration: const InputDecoration(labelText: '操作员', border: OutlineInputBorder(), isDense: true), onSubmitted: (_) => _loadTrend())),
+            FilledButton.icon(onPressed: _loading ? null : _loadTrend, icon: const Icon(Icons.search), label: const Text('查询')),
+          ]),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
+            Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_message, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error))),
+          if (!_loading && _items.length >= 2) ...[
+            _buildChart(),
+            const SizedBox(height: 8),
+            Wrap(spacing: 16, children: [
+              _legendDot(Colors.green, '通过'),
+              _legendDot(Colors.red, '不通过'),
+              _legendDot(Colors.orange, '报废'),
+            ]),
+            const SizedBox(height: 12),
+          ],
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -180,21 +208,19 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
                               DataColumn(label: Text('首件总数')),
                               DataColumn(label: Text('通过数')),
                               DataColumn(label: Text('不通过数')),
+                              DataColumn(label: Text('通过率')),
                               DataColumn(label: Text('报废数')),
                               DataColumn(label: Text('维修数')),
                             ],
-                            rows: _items.map((item) {
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(item.date)),
-                                  DataCell(Text('${item.firstArticleTotal}')),
-                                  DataCell(Text('${item.passedTotal}')),
-                                  DataCell(Text('${item.failedTotal}')),
-                                  DataCell(Text('${item.scrapTotal}')),
-                                  DataCell(Text('${item.repairTotal}')),
-                                ],
-                              );
-                            }).toList(),
+                            rows: _items.map((item) => DataRow(cells: [
+                              DataCell(Text(item.date)),
+                              DataCell(Text('${item.firstArticleTotal}')),
+                              DataCell(Text('${item.passedTotal}')),
+                              DataCell(Text('${item.failedTotal}')),
+                              DataCell(Text('${item.passRatePercent.toStringAsFixed(1)}%')),
+                              DataCell(Text('${item.scrapTotal}')),
+                              DataCell(Text('${item.repairTotal}')),
+                            ])).toList(),
                           ),
                         ),
                       ),
@@ -202,5 +228,13 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         ],
       ),
     );
+  }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      const SizedBox(width: 4),
+      Text(label, style: const TextStyle(fontSize: 12)),
+    ]);
   }
 }

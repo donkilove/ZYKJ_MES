@@ -315,11 +315,21 @@ def export_quality_stats_api(
 def get_quality_trend_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    product_name: str | None = Query(default=None),
+    process_code: str | None = Query(default=None),
+    operator_username: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("quality.trend")),
 ) -> ApiResponse[QualityTrendResult]:
     _validate_date_range(start_date, end_date)
-    rows = get_quality_trend(db, start_date=start_date, end_date=end_date)
+    rows = get_quality_trend(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+    )
     return success_response(QualityTrendResult(items=[QualityTrendItem(**item) for item in rows]))
 
 
@@ -328,6 +338,7 @@ def get_defect_analysis_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     product_id: int | None = Query(default=None),
+    product_name: str | None = Query(default=None),
     process_code: str | None = Query(default=None),
     top_n: int = Query(default=10, ge=1, le=50),
     db: Session = Depends(get_db),
@@ -339,6 +350,7 @@ def get_defect_analysis_api(
         start_date=start_date,
         end_date=end_date,
         product_id=product_id,
+        product_name=product_name,
         process_code=process_code,
         top_n=top_n,
     )

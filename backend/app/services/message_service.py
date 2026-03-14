@@ -21,6 +21,7 @@ def _to_item(msg: Message, recipient: MessageRecipient) -> MessageItem:
         priority=msg.priority,
         title=msg.title,
         summary=msg.summary,
+        content=msg.content,
         source_module=msg.source_module,
         source_type=msg.source_type,
         source_code=msg.source_code,

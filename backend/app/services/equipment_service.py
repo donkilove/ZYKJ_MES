@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import base64
+import csv
+import io
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Any
 
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
@@ -1136,3 +1140,214 @@ def cancel_work_order(
     db.commit()
     db.refresh(row)
     return get_work_order_by_id(db, row.id) or row
+
+
+# ── 导出工具 ──────────────────────────────────────────────────────────────────
+
+def _build_csv_base64(headers: list[str], rows: list[list[Any]]) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow(row)
+    return base64.b64encode(output.getvalue().encode("utf-8-sig")).decode("ascii")
+
+
+def _now_utc() -> datetime:
+    return datetime.now(UTC)
+
+
+def export_equipment_ledger_csv(
+    db: Session,
+    *,
+    keyword: str | None = None,
+    enabled: bool | None = None,
+) -> dict[str, Any]:
+    _, rows = list_equipment(db, page=1, page_size=200000, keyword=keyword, enabled=enabled)
+    csv_rows: list[list[Any]] = []
+    for row in rows:
+        csv_rows.append([
+            row.code,
+            row.name,
+            row.model or "",
+            row.location or "",
+            row.owner_name or "",
+            row.remark or "",
+            "启用" if row.is_enabled else "停用",
+            row.created_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+        ])
+    content_base64 = _build_csv_base64(
+        ["设备编号", "设备名称", "型号", "位置", "负责人", "备注", "状态", "创建时间"],
+        csv_rows,
+    )
+    now = _now_utc()
+    return {
+        "file_name": f"equipment_ledger_{now.strftime('%Y%m%d_%H%M%S')}.csv",
+        "mime_type": "text/csv",
+        "content_base64": content_base64,
+        "exported_count": len(rows),
+    }
+
+
+def export_maintenance_items_csv(
+    db: Session,
+    *,
+    keyword: str | None = None,
+    enabled: bool | None = None,
+) -> dict[str, Any]:
+    _, rows = list_maintenance_items(db, page=1, page_size=200000, keyword=keyword, enabled=enabled)
+    csv_rows: list[list[Any]] = []
+    for row in rows:
+        csv_rows.append([
+            row.name,
+            row.category or "",
+            row.default_cycle_days,
+            row.default_duration_minutes or "",
+            row.standard_description or "",
+            "启用" if row.is_enabled else "停用",
+        ])
+    content_base64 = _build_csv_base64(
+        ["项目名称", "类别", "默认周期(天)", "默认时长(分钟)", "标准描述", "状态"],
+        csv_rows,
+    )
+    now = _now_utc()
+    return {
+        "file_name": f"maintenance_items_{now.strftime('%Y%m%d_%H%M%S')}.csv",
+        "mime_type": "text/csv",
+        "content_base64": content_base64,
+        "exported_count": len(rows),
+    }
+
+
+def export_maintenance_plans_csv(
+    db: Session,
+    *,
+    equipment_id: int | None = None,
+    item_id: int | None = None,
+    enabled: bool | None = None,
+) -> dict[str, Any]:
+    _, rows = list_maintenance_plans(
+        db, page=1, page_size=200000,
+        equipment_id=equipment_id, item_id=item_id, enabled=enabled,
+    )
+    csv_rows: list[list[Any]] = []
+    for row in rows:
+        csv_rows.append([
+            row.equipment.name if row.equipment else "",
+            row.item.name if row.item else "",
+            row.execution_process_code or "",
+            row.cycle_days,
+            row.start_date.strftime("%Y-%m-%d"),
+            row.next_due_date.strftime("%Y-%m-%d"),
+            row.default_executor.username if row.default_executor else "",
+            "启用" if row.is_enabled else "停用",
+        ])
+    content_base64 = _build_csv_base64(
+        ["设备", "保养项目", "执行工段", "周期(天)", "起始日期", "下次到期", "默认执行人", "状态"],
+        csv_rows,
+    )
+    now = _now_utc()
+    return {
+        "file_name": f"maintenance_plans_{now.strftime('%Y%m%d_%H%M%S')}.csv",
+        "mime_type": "text/csv",
+        "content_base64": content_base64,
+        "exported_count": len(rows),
+    }
+
+
+def export_maintenance_records_csv(
+    db: Session,
+    *,
+    keyword: str | None = None,
+    executor_user_id: int | None = None,
+    result_summary: str | None = None,
+    equipment_id: int | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> dict[str, Any]:
+    _, rows = list_maintenance_records(
+        db, page=1, page_size=200000,
+        keyword=keyword,
+        executor_user_id=executor_user_id,
+        result_summary=result_summary,
+        equipment_id=equipment_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    csv_rows: list[list[Any]] = []
+    for row in rows:
+        csv_rows.append([
+            row.source_equipment_name or "",
+            row.source_item_name or "",
+            row.due_date.strftime("%Y-%m-%d"),
+            row.completed_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+            row.executor_username or "",
+            row.result_summary or "",
+            row.result_remark or "",
+        ])
+    content_base64 = _build_csv_base64(
+        ["设备", "保养项目", "到期日期", "完成时间", "执行人", "结果摘要", "备注"],
+        csv_rows,
+    )
+    now = _now_utc()
+    return {
+        "file_name": f"maintenance_records_{now.strftime('%Y%m%d_%H%M%S')}.csv",
+        "mime_type": "text/csv",
+        "content_base64": content_base64,
+        "exported_count": len(rows),
+    }
+
+
+_WORK_ORDER_STATUS_LABELS = {
+    "pending": "待执行",
+    "in_progress": "执行中",
+    "overdue": "已逾期",
+    "done": "已完成",
+    "cancelled": "已取消",
+}
+
+
+def export_work_orders_csv(
+    db: Session,
+    *,
+    status: str | None = None,
+    keyword: str | None = None,
+    due_date_start: date | None = None,
+    due_date_end: date | None = None,
+    stage_code: str | None = None,
+) -> dict[str, Any]:
+    _, rows = list_work_orders(
+        db, page=1, page_size=200000,
+        status=status, keyword=keyword,
+        mine=False, current_user_id=None,
+        current_user_role_codes=[], current_user_stage_codes=[],
+        done_only=False, executor_user_id=None,
+        start_date=None, end_date=None,
+        due_date_start=due_date_start, due_date_end=due_date_end,
+        stage_code_filter=stage_code,
+    )
+    csv_rows: list[list[Any]] = []
+    for row in rows:
+        csv_rows.append([
+            row.id,
+            row.source_equipment_name or "",
+            row.source_item_name or "",
+            row.due_date.strftime("%Y-%m-%d"),
+            _WORK_ORDER_STATUS_LABELS.get(row.status, row.status),
+            row.executor.username if row.executor else "",
+            row.started_at.astimezone().strftime("%Y-%m-%d %H:%M") if row.started_at else "",
+            row.completed_at.astimezone().strftime("%Y-%m-%d %H:%M") if row.completed_at else "",
+            row.result_summary or "",
+            row.result_remark or "",
+        ])
+    content_base64 = _build_csv_base64(
+        ["工单编号", "设备", "保养项目", "到期日期", "状态", "执行人", "开始时间", "完成时间", "结果摘要", "备注"],
+        csv_rows,
+    )
+    now = _now_utc()
+    return {
+        "file_name": f"work_orders_{now.strftime('%Y%m%d_%H%M%S')}.csv",
+        "mime_type": "text/csv",
+        "content_base64": content_base64,
+        "exported_count": len(rows),
+    }

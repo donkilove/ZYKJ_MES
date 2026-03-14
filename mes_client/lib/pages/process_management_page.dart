@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -42,6 +44,8 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   String _processKeyword = '';
   bool? _stageEnabledFilter;
   bool? _processEnabledFilter;
+  int? _processStageFilter;
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -71,6 +75,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
 
   List<CraftProcessItem> get _filteredProcesses {
     var list = _processes;
+    if (_processStageFilter != null) {
+      list = list.where((p) => p.stageId == _processStageFilter).toList();
+    }
     if (_processKeyword.isNotEmpty) {
       final kw = _processKeyword.toLowerCase();
       list = list
@@ -97,6 +104,47 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       return error.message;
     }
     return error.toString();
+  }
+
+  Future<void> _exportCsv({required bool isStage}) async {
+    setState(() { _exporting = true; _message = ''; });
+    try {
+      final csvBase64 = isStage
+          ? await _service.exportStages(
+              keyword: _stageKeyword.isNotEmpty ? _stageKeyword : null,
+              enabled: _stageEnabledFilter,
+            )
+          : await _service.exportProcesses(
+              keyword: _processKeyword.isNotEmpty ? _processKeyword : null,
+              stageId: _processStageFilter,
+              enabled: _processEnabledFilter,
+            );
+      if (!mounted) return;
+      if (csvBase64.isEmpty) {
+        setState(() => _message = '无数据可导出');
+        return;
+      }
+      final bytes = base64Decode(csvBase64);
+      final csvString = String.fromCharCodes(bytes);
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(isStage ? '工段导出预览' : '工序导出预览'),
+          content: SizedBox(
+            width: 600,
+            height: 400,
+            child: SingleChildScrollView(child: SelectableText(csvString)),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      if (_isUnauthorized(e)) { widget.onLogout(); return; }
+      setState(() => _message = '导出失败：${_errorMessage(e)}');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   void _showNoPermission() {
@@ -934,6 +982,12 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                           ],
                                           onChanged: (v) => setState(() => _stageEnabledFilter = v),
                                         ),
+                                        const Spacer(),
+                                        IconButton(
+                                          tooltip: '导出工段',
+                                          onPressed: _exporting ? null : () => _exportCsv(isStage: true),
+                                          icon: const Icon(Icons.download, size: 20),
+                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 8),
@@ -1075,6 +1129,23 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                             DropdownMenuItem(value: false, child: Text('停用')),
                                           ],
                                           onChanged: (v) => setState(() => _processEnabledFilter = v),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        DropdownButton<int?>(
+                                          value: _processStageFilter,
+                                          isDense: true,
+                                          hint: const Text('全部工段'),
+                                          items: [
+                                            const DropdownMenuItem<int?>(value: null, child: Text('全部工段')),
+                                            ..._stages.map((s) => DropdownMenuItem<int?>(value: s.id, child: Text(s.name))),
+                                          ],
+                                          onChanged: (v) => setState(() => _processStageFilter = v),
+                                        ),
+                                        const Spacer(),
+                                        IconButton(
+                                          tooltip: '导出工序',
+                                          onPressed: _exporting ? null : () => _exportCsv(isStage: false),
+                                          icon: const Icon(Icons.download, size: 20),
                                         ),
                                       ],
                                     ),
