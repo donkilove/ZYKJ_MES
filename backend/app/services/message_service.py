@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import case, func, select
@@ -8,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.models.message import Message
 from app.models.message_recipient import MessageRecipient
 from app.schemas.message import MessageCreateRequest, MessageItem
+
+logger = logging.getLogger(__name__)
 
 
 def _to_item(msg: Message, recipient: MessageRecipient) -> MessageItem:
@@ -112,7 +116,7 @@ def get_unread_count(db: Session, *, user_id: int) -> int:
 
 
 def mark_message_read(db: Session, *, user_id: int, message_id: int) -> bool:
-    """标记单条消息已读，返回是否成功"""
+    """标记单条消息已读，返回是否成功（不提交，由调用方负责 commit）"""
     stmt = select(MessageRecipient).where(
         MessageRecipient.message_id == message_id,
         MessageRecipient.recipient_user_id == user_id,
@@ -124,12 +128,11 @@ def mark_message_read(db: Session, *, user_id: int, message_id: int) -> bool:
     if not recipient.is_read:
         recipient.is_read = True
         recipient.read_at = datetime.now(UTC)
-        db.commit()
     return True
 
 
 def mark_all_read(db: Session, *, user_id: int) -> int:
-    """全部标记已读，返回更新条数"""
+    """全部标记已读，返回更新条数（不提交，由调用方负责 commit）"""
     stmt = select(MessageRecipient).where(
         MessageRecipient.recipient_user_id == user_id,
         MessageRecipient.is_read.is_(False),
@@ -142,8 +145,6 @@ def mark_all_read(db: Session, *, user_id: int) -> int:
         r.is_read = True
         r.read_at = now
         count += 1
-    if count:
-        db.commit()
     return count
 
 
@@ -193,7 +194,32 @@ def create_message(db: Session, *, req: MessageCreateRequest) -> Message:
 
     db.commit()
     db.refresh(msg)
+
+    # 提交后向每位收件人推送实时通知
+    _push_message_created_async(db, msg)
+
     return msg
+
+
+def _push_message_created_async(db: Session, msg: Message) -> None:
+    """在同步上下文中调度异步 WebSocket 推送（fire-and-forget）"""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return  # 无事件循环（如单元测试），跳过推送
+
+    from app.services.message_push_service import push_message_created
+    from app.services.message_service import get_unread_count
+
+    stmt = select(MessageRecipient.recipient_user_id).where(
+        MessageRecipient.message_id == msg.id,
+        MessageRecipient.is_deleted.is_(False),
+    )
+    recipient_ids: list[int] = list(db.execute(stmt).scalars().all())
+
+    for uid in recipient_ids:
+        unread = get_unread_count(db, user_id=uid)
+        loop.create_task(push_message_created(uid, msg.id, unread))
 
 
 def create_message_for_users(

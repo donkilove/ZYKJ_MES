@@ -67,10 +67,23 @@ def _guard_role_permission_codes(
     effective_codes = set(permission_codes)
     if allowed_codes is not None:
         effective_codes.intersection_update(allowed_codes)
-    # 非系统管理员不得持有 system 模块功能权限
+    # 非系统管理员不得持有 system 模块功能权限及权限配置相关 action/page 权限
     if role_code != ROLE_SYSTEM_ADMIN:
+        _SYSTEM_ONLY_PREFIXES = (
+            "feature.system.",
+            "module.system.",
+        )
+        _SYSTEM_ONLY_EXACT = {
+            "page.function_permission_config.view",
+            "authz.permissions.catalog.view",
+            "authz.role_permissions.view",
+            "authz.role_permissions.update",
+        }
         effective_codes = {
-            code for code in effective_codes if not code.startswith("feature.system.")
+            code
+            for code in effective_codes
+            if not any(code.startswith(prefix) for prefix in _SYSTEM_ONLY_PREFIXES)
+            and code not in _SYSTEM_ONLY_EXACT
         }
     return effective_codes
 

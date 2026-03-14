@@ -186,8 +186,13 @@ class _MainShellPageState extends State<MainShellPage>
       if (count != null) {
         setState(() => _unreadCount = count);
       }
-    } else if (event.event == 'new_message') {
-      _refreshUnreadCount();
+    } else if (event.event == 'message_created') {
+      final count = event.unreadCount;
+      if (count != null) {
+        setState(() => _unreadCount = count);
+      } else {
+        _refreshUnreadCount();
+      }
     }
   }
 
@@ -611,6 +616,13 @@ class _MainShellPageState extends State<MainShellPage>
           },
           onNavigateToPage: (pageCode, {tabCode}) {
             if (!mounted) return;
+            final hasAccess = _menus.any((m) => m.code == pageCode);
+            if (!hasAccess) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('您没有访问该页面的权限')),
+              );
+              return;
+            }
             setState(() => _selectedPageCode = pageCode);
           },
         );

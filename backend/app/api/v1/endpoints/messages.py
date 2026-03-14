@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.message import MessageItem, MessageListResult, UnreadCountResult
+from app.services.audit_service import write_audit_log
 from app.services.message_connection_manager import message_connection_manager
 from app.services.message_service import (
     get_unread_count,
@@ -76,6 +77,15 @@ def api_mark_read(
     ok = mark_message_read(db, user_id=current_user.id, message_id=message_id)
     if not ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="消息不存在或无权访问")
+    write_audit_log(
+        db,
+        action_code="message.mark_read",
+        action_name="标记消息已读",
+        target_type="message",
+        target_id=str(message_id),
+        operator=current_user,
+    )
+    db.commit()
     return success_response({})
 
 
@@ -85,6 +95,15 @@ def api_mark_all_read(
     current_user: User = Depends(require_permission("message.messages.read_all")),
 ) -> ApiResponse[dict]:
     count = mark_all_read(db, user_id=current_user.id)
+    write_audit_log(
+        db,
+        action_code="message.mark_all_read",
+        action_name="全部标记已读",
+        target_type="message",
+        operator=current_user,
+        remark=f"共标记 {count} 条",
+    )
+    db.commit()
     return success_response({"updated": count})
 
 

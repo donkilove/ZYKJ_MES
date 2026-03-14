@@ -406,7 +406,8 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         : item.priority == 'important'
             ? Colors.orange
             : null;
-    final hasTarget = item.targetPageCode != null && item.targetPageCode!.isNotEmpty;
+    final isActive = item.status == 'active';
+    final hasTarget = isActive && item.targetPageCode != null && item.targetPageCode!.isNotEmpty;
 
     return InkWell(
       onTap: () => _markRead(item),
@@ -522,6 +523,17 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                if (!isActive)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '来源已失效',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ),
                 if (hasTarget && widget.onNavigateToPage != null)
                   TextButton(
                     onPressed: () {

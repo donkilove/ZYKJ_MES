@@ -540,7 +540,7 @@ def approve_registration_request(
     *,
     request: RegistrationRequest,
     account: str,
-    password: str | None,
+    password: str,
     role_codes: list[str],
     process_codes: list[str],
     stage_id: int | None,
@@ -548,6 +548,9 @@ def approve_registration_request(
 ) -> tuple[User | None, str | None]:
     if request.status != REG_STATUS_PENDING:
         return None, "Registration request is not pending"
+
+    if not password or len(password.strip()) < 6:
+        return None, "Initial password is required and must be at least 6 characters"
 
     account_name = normalize_username(account)
     if not account_name:

@@ -9,8 +9,7 @@ from app.core.config import settings
 from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.db.session import SessionLocal
 from app.services.equipment_service import generate_due_work_orders_for_today
-from app.services.message_service import create_message_for_users, get_unread_count
-from app.services.message_push_service import push_unread_count_changed
+from app.services.message_service import create_message_for_users
 from app.services.user_service import get_active_user_ids_by_role
 
 logger = logging.getLogger(__name__)
@@ -108,9 +107,6 @@ async def run_maintenance_auto_generate_loop() -> None:
                         recipient_user_ids=recipient_ids,
                         dedupe_key=f"maint_wo_created_{wo.id}",
                     )
-                    for uid in recipient_ids:
-                        unread = get_unread_count(db, user_id=uid)
-                        await push_unread_count_changed(uid, unread)
         except Exception:
             logger.exception("[MAINT_SCHED] Auto generation failed.")
         finally:
