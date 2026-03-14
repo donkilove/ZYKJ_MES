@@ -20,6 +20,17 @@ class QualityService {
     };
   }
 
+  String _normalizeResultCode(String value) {
+    switch (value) {
+      case 'pass':
+        return 'passed';
+      case 'fail':
+        return 'failed';
+      default:
+        return value;
+    }
+  }
+
   Future<FirstArticleListResult> listFirstArticles({
     DateTime? date,
     String? keyword,
@@ -39,7 +50,7 @@ class QualityService {
       query['keyword'] = keyword.trim();
     }
     if (result != null && result.isNotEmpty) {
-      query['result'] = result;
+      query['result'] = _normalizeResultCode(result);
     }
 
     final uri = Uri.parse(
@@ -81,7 +92,9 @@ class QualityService {
     if (keyword != null && keyword.trim().isNotEmpty) {
       payload['keyword'] = keyword.trim();
     }
-    if (result != null && result.isNotEmpty) payload['result_filter'] = result;
+    if (result != null && result.isNotEmpty) {
+      payload['result'] = _normalizeResultCode(result);
+    }
 
     final uri = Uri.parse('$_basePath/first-articles/export');
     final response = await http.post(
@@ -97,7 +110,7 @@ class QualityService {
       );
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
-    return (data['csv_base64'] as String?) ?? '';
+    return (data['content_base64'] as String?) ?? '';
   }
 
   Future<void> submitDisposition({
@@ -105,7 +118,7 @@ class QualityService {
     required String dispositionOpinion,
     required String recheckResult,
     required String finalJudgment,
-    required String operator_,
+    String? operator_,
   }) async {
     final uri = Uri.parse('$_basePath/first-articles/$recordId/disposition');
     final response = await http.post(
@@ -115,7 +128,6 @@ class QualityService {
         'disposition_opinion': dispositionOpinion,
         'recheck_result': recheckResult,
         'final_judgment': finalJudgment,
-        'operator': operator_,
       }),
     );
     final body = _decodeBody(response);
@@ -147,9 +159,7 @@ class QualityService {
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
     return (data['items'] as List<dynamic>? ?? const [])
-        .map(
-          (e) => QualityProductStatItem.fromJson(e as Map<String, dynamic>),
-        )
+        .map((e) => QualityProductStatItem.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
@@ -175,7 +185,7 @@ class QualityService {
       );
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
-    return (data['csv_base64'] as String?) ?? '';
+    return (data['content_base64'] as String?) ?? '';
   }
 
   Future<List<QualityTrendItem>> getQualityTrend({

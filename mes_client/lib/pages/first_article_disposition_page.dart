@@ -35,7 +35,7 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
   FirstArticleDetail? _detail;
 
   final _opinionController = TextEditingController();
-  String _recheckResult = 'pass';
+  String _recheckResult = 'passed';
   String _finalJudgment = 'accept';
 
   @override
@@ -63,14 +63,12 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
         _detail = detail;
         if (detail.disposition != null) {
           _opinionController.text = detail.disposition!.dispositionOpinion;
-          _recheckResult =
-              detail.disposition!.recheckResult.isNotEmpty
-                  ? detail.disposition!.recheckResult
-                  : 'pass';
-          _finalJudgment =
-              detail.disposition!.finalJudgment.isNotEmpty
-                  ? detail.disposition!.finalJudgment
-                  : 'accept';
+          _recheckResult = detail.disposition!.recheckResult.isNotEmpty
+              ? detail.disposition!.recheckResult
+              : 'passed';
+          _finalJudgment = detail.disposition!.finalJudgment.isNotEmpty
+              ? detail.disposition!.finalJudgment
+              : 'accept';
         }
       });
     } catch (error) {
@@ -80,7 +78,8 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
         return;
       }
       setState(() {
-        _message = '加载详情失败：${error is ApiException ? error.message : error.toString()}';
+        _message =
+            '加载详情失败：${error is ApiException ? error.message : error.toString()}';
       });
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -114,7 +113,8 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
         return;
       }
       setState(() {
-        _message = '提交失败：${error is ApiException ? error.message : error.toString()}';
+        _message =
+            '提交失败：${error is ApiException ? error.message : error.toString()}';
       });
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -161,22 +161,46 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
                       '检验结果',
                       firstArticleResultLabel(_detail!.checkResult),
                     ),
-                    _InfoRow('缺陷描述', _detail!.defectDescription.isEmpty ? '-' : _detail!.defectDescription),
+                    _InfoRow(
+                      '缺陷描述',
+                      _detail!.defectDescription.isEmpty
+                          ? '-'
+                          : _detail!.defectDescription,
+                    ),
                     _InfoRow('检验时间', _formatDateTime(_detail!.checkAt)),
                     const Divider(height: 24),
-                    Text(
-                      '首件处置',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
+                    Text('首件处置', style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 8),
                     if (_detail!.disposition != null) ...[
-                      _InfoRow('处置人', _detail!.disposition!.dispositionUsername),
-                      _InfoRow('处置时间', _formatDateTime(_detail!.disposition!.dispositionAt)),
-                      _InfoRow('复检结果', _recheckResultLabel(_detail!.disposition!.recheckResult)),
-                      _InfoRow('最终判定', _finalJudgmentLabel(_detail!.disposition!.finalJudgment)),
-                      _InfoRow('处置意见', _detail!.disposition!.dispositionOpinion),
+                      _InfoRow(
+                        '处置人',
+                        _detail!.disposition!.dispositionUsername,
+                      ),
+                      _InfoRow(
+                        '处置时间',
+                        _formatDateTime(_detail!.disposition!.dispositionAt),
+                      ),
+                      _InfoRow(
+                        '复检结果',
+                        _recheckResultLabel(
+                          _detail!.disposition!.recheckResult,
+                        ),
+                      ),
+                      _InfoRow(
+                        '最终判定',
+                        _finalJudgmentLabel(
+                          _detail!.disposition!.finalJudgment,
+                        ),
+                      ),
+                      _InfoRow(
+                        '处置意见',
+                        _detail!.disposition!.dispositionOpinion,
+                      ),
                       const Divider(height: 16),
-                      Text('修改处置', style: Theme.of(context).textTheme.labelMedium),
+                      Text(
+                        '修改处置',
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
                       const SizedBox(height: 8),
                     ],
                     if (widget.canDispose) ...[
@@ -188,10 +212,16 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
                         ),
                         items: const [
                           DropdownMenuItem(value: 'pass', child: Text('合格')),
+                          DropdownMenuItem(value: 'passed', child: Text('合格')),
                           DropdownMenuItem(value: 'fail', child: Text('不合格')),
-                          DropdownMenuItem(value: 'conditional', child: Text('条件放行')),
+                          DropdownMenuItem(value: 'failed', child: Text('不合格')),
+                          DropdownMenuItem(
+                            value: 'conditional',
+                            child: Text('条件放行'),
+                          ),
                         ],
-                        onChanged: (v) => setState(() => _recheckResult = v ?? 'pass'),
+                        onChanged: (v) =>
+                            setState(() => _recheckResult = v ?? 'passed'),
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
@@ -206,7 +236,8 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
                           DropdownMenuItem(value: 'rework', child: Text('返工')),
                           DropdownMenuItem(value: 'scrap', child: Text('报废')),
                         ],
-                        onChanged: (v) => setState(() => _finalJudgment = v ?? 'accept'),
+                        onChanged: (v) =>
+                            setState(() => _finalJudgment = v ?? 'accept'),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -254,8 +285,10 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
 
   String _recheckResultLabel(String v) {
     switch (v) {
+      case 'passed':
       case 'pass':
         return '合格';
+      case 'failed':
       case 'fail':
         return '不合格';
       case 'conditional':

@@ -11,8 +11,10 @@ DateTime? _parseDateTimeOrNull(Object? value) {
 
 String firstArticleResultLabel(String result) {
   switch (result) {
+    case 'pass':
     case 'passed':
       return '通过';
+    case 'fail':
     case 'failed':
       return '不通过';
     default:
@@ -259,7 +261,10 @@ class QualityProductStatItem {
       failedTotal: (json['failed_total'] as int?) ?? 0,
       passRatePercent: ((json['pass_rate_percent'] as num?) ?? 0).toDouble(),
       scrapTotal: (json['scrap_total'] as int?) ?? 0,
-      repairTotal: (json['repair_total'] as int?) ?? 0,
+      repairTotal:
+          (json['repair_total'] as int?) ??
+          (json['repair_order_count'] as int?) ??
+          0,
     );
   }
 }
@@ -283,7 +288,7 @@ class QualityTrendItem {
 
   factory QualityTrendItem.fromJson(Map<String, dynamic> json) {
     return QualityTrendItem(
-      date: (json['date'] as String?) ?? '',
+      date: (json['date'] as String?) ?? (json['stat_date'] as String?) ?? '',
       firstArticleTotal: (json['first_article_total'] as int?) ?? 0,
       passedTotal: (json['passed_total'] as int?) ?? 0,
       failedTotal: (json['failed_total'] as int?) ?? 0,
@@ -355,26 +360,66 @@ class FirstArticleDetail {
   final FirstArticleDispositionInfo? disposition;
 
   factory FirstArticleDetail.fromJson(Map<String, dynamic> json) {
+    final nestedDisposition = json['disposition'];
+    FirstArticleDispositionInfo? disposition;
+    if (nestedDisposition is Map) {
+      disposition = FirstArticleDispositionInfo.fromJson(
+        Map<String, dynamic>.from(nestedDisposition),
+      );
+    } else {
+      final flatDispositionOpinion = json['disposition_opinion'] as String?;
+      final flatDispositionUsername = json['disposition_username'] as String?;
+      final flatRecheckResult = json['recheck_result'] as String?;
+      final flatFinalJudgment = json['final_judgment'] as String?;
+      final flatDispositionAt = _parseDateTimeOrNull(json['disposition_at']);
+      final hasFlatDisposition =
+          (flatDispositionOpinion != null &&
+              flatDispositionOpinion.isNotEmpty) ||
+          (flatDispositionUsername != null &&
+              flatDispositionUsername.isNotEmpty) ||
+          (flatRecheckResult != null && flatRecheckResult.isNotEmpty) ||
+          (flatFinalJudgment != null && flatFinalJudgment.isNotEmpty) ||
+          flatDispositionAt != null;
+      if (hasFlatDisposition) {
+        disposition = FirstArticleDispositionInfo(
+          dispositionOpinion: flatDispositionOpinion ?? '',
+          dispositionUsername: flatDispositionUsername ?? '',
+          dispositionAt: flatDispositionAt,
+          recheckResult: flatRecheckResult ?? '',
+          finalJudgment: flatFinalJudgment ?? '',
+        );
+      }
+    }
+
     return FirstArticleDetail(
       id: (json['id'] as int?) ?? 0,
       verificationCode: (json['verification_code'] as String?) ?? '',
-      productionOrderId: json['production_order_id'] as int?,
-      productionOrderCode: (json['production_order_code'] as String?) ?? '',
+      productionOrderId:
+          (json['production_order_id'] as int?) ?? (json['order_id'] as int?),
+      productionOrderCode:
+          (json['production_order_code'] as String?) ??
+          (json['order_code'] as String?) ??
+          '',
       productId: json['product_id'] as int?,
       productCode: (json['product_code'] as String?) ?? '',
       productName: (json['product_name'] as String?) ?? '',
-      processId: json['process_id'] as int?,
+      processId:
+          (json['process_id'] as int?) ?? (json['order_process_id'] as int?),
       processName: (json['process_name'] as String?) ?? '',
       operatorUserId: json['operator_user_id'] as int?,
       operatorUsername: (json['operator_username'] as String?) ?? '',
-      checkResult: (json['check_result'] as String?) ?? '',
-      defectDescription: (json['defect_description'] as String?) ?? '',
-      checkAt: _parseDateTimeOrNull(json['check_at']),
-      disposition: json['disposition'] != null
-          ? FirstArticleDispositionInfo.fromJson(
-              json['disposition'] as Map<String, dynamic>,
-            )
-          : null,
+      checkResult:
+          (json['check_result'] as String?) ??
+          (json['result'] as String?) ??
+          '',
+      defectDescription:
+          (json['defect_description'] as String?) ??
+          (json['remark'] as String?) ??
+          '',
+      checkAt:
+          _parseDateTimeOrNull(json['check_at']) ??
+          _parseDateTimeOrNull(json['created_at']),
+      disposition: disposition,
     );
   }
 }

@@ -86,6 +86,7 @@ def test_quality_service_first_article_list_and_stats(db, factory) -> None:
         db,
         query_date=date.today(),
         keyword="ORD-QA",
+        result_filter=None,
         page=1,
         page_size=20,
     )

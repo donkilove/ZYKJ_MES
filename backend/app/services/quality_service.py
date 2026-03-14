@@ -23,20 +23,46 @@ from app.models.repair_order import RepairOrder
 from app.models.user import User
 
 
-def _build_created_at_filters(
+def _build_datetime_range_filters(
+    column,
     *,
     start_date: date | None,
     end_date: date | None,
 ) -> list[object]:
     filters: list[object] = []
     if start_date is not None:
-        filters.append(FirstArticleRecord.created_at >= datetime.combine(start_date, time.min))
+        filters.append(column >= datetime.combine(start_date, time.min))
     if end_date is not None:
-        filters.append(
-            FirstArticleRecord.created_at
-            < datetime.combine(end_date + timedelta(days=1), time.min)
-        )
+        filters.append(column < datetime.combine(end_date + timedelta(days=1), time.min))
     return filters
+
+
+def _build_created_at_filters(
+    *,
+    start_date: date | None,
+    end_date: date | None,
+) -> list[object]:
+    return _build_datetime_range_filters(
+        FirstArticleRecord.created_at,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+def _normalize_stat_date(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return date.fromisoformat(text[:10])
+        except ValueError:
+            return None
+    return None
 
 
 def _round_rate(passed: int, total: int) -> float:
@@ -451,13 +477,21 @@ def get_quality_product_stats(
     # 补充报废和维修数量
     if grouped:
         product_ids = list(grouped.keys())
+        scrap_time_filters = _build_datetime_range_filters(
+            ProductionScrapStatistics.last_scrap_time,
+            start_date=start_date,
+            end_date=end_date,
+        )
         scrap_rows = (
             db.execute(
                 select(
                     ProductionScrapStatistics.product_id,
                     func.sum(ProductionScrapStatistics.scrap_quantity).label("total"),
                 )
-                .where(ProductionScrapStatistics.product_id.in_(product_ids))
+                .where(
+                    ProductionScrapStatistics.product_id.in_(product_ids),
+                    *scrap_time_filters,
+                )
                 .group_by(ProductionScrapStatistics.product_id)
             )
             .all()
@@ -466,13 +500,21 @@ def get_quality_product_stats(
             if sr.product_id in grouped:
                 grouped[sr.product_id]["scrap_total"] = int(sr.total or 0)
 
+        repair_time_filters = _build_datetime_range_filters(
+            RepairOrder.repair_time,
+            start_date=start_date,
+            end_date=end_date,
+        )
         repair_rows = (
             db.execute(
                 select(
                     RepairOrder.product_id,
                     func.count(RepairOrder.id).label("cnt"),
                 )
-                .where(RepairOrder.product_id.in_(product_ids))
+                .where(
+                    RepairOrder.product_id.in_(product_ids),
+                    *repair_time_filters,
+                )
                 .group_by(RepairOrder.product_id)
             )
             .all()
@@ -549,8 +591,9 @@ def get_quality_trend(
         .all()
     )
     for sr in scrap_rows:
-        if sr.d and sr.d in grouped:
-            grouped[sr.d]["scrap_total"] = int(sr.total or 0)
+        stat_date = _normalize_stat_date(sr.d)
+        if stat_date is not None and stat_date in grouped:
+            grouped[stat_date]["scrap_total"] = int(sr.total or 0)
 
     result = list(grouped.values())
     for item in result:

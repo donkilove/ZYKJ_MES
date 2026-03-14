@@ -64,8 +64,14 @@ void main() {
 
     expect(result.total, 1);
     expect(result.items.single.processName, '焊接');
-    expect(result.queryDate.isAfter(before.subtract(const Duration(seconds: 1))), isTrue);
-    expect(result.queryDate.isBefore(after.add(const Duration(seconds: 1))), isTrue);
+    expect(
+      result.queryDate.isAfter(before.subtract(const Duration(seconds: 1))),
+      isTrue,
+    );
+    expect(
+      result.queryDate.isBefore(after.add(const Duration(seconds: 1))),
+      isTrue,
+    );
   });
 
   test('quality stats models parse nullable timestamps and defaults', () {
@@ -99,9 +105,79 @@ void main() {
     });
 
     expect(overview.firstArticleTotal, 5);
-    expect(overview.latestFirstArticleAt, DateTime.parse('2026-03-02T10:00:00Z'));
+    expect(
+      overview.latestFirstArticleAt,
+      DateTime.parse('2026-03-02T10:00:00Z'),
+    );
     expect(processStat.latestFirstArticleAt, isNull);
     expect(operatorStat.latestFirstArticleAt, isNull);
     expect(operatorStat.passRatePercent, 100);
+  });
+
+  test(
+    'QualityProductStatItem parses repair_order_count field from backend',
+    () {
+      final item = QualityProductStatItem.fromJson({
+        'product_id': 9,
+        'product_name': '产品C',
+        'first_article_total': 10,
+        'passed_total': 8,
+        'failed_total': 2,
+        'pass_rate_percent': 80,
+        'scrap_total': 3,
+        'repair_order_count': 6,
+      });
+
+      expect(item.productId, 9);
+      expect(item.productName, '产品C');
+      expect(item.repairTotal, 6);
+    },
+  );
+
+  test('QualityTrendItem parses stat_date field from backend', () {
+    final item = QualityTrendItem.fromJson({
+      'stat_date': '2026-03-01',
+      'first_article_total': 4,
+      'passed_total': 3,
+      'failed_total': 1,
+      'pass_rate_percent': 75,
+      'scrap_total': 2,
+    });
+
+    expect(item.date, '2026-03-01');
+    expect(item.firstArticleTotal, 4);
+    expect(item.scrapTotal, 2);
+  });
+
+  test('FirstArticleDetail parses backend detail payload fields', () {
+    final detail = FirstArticleDetail.fromJson({
+      'id': 88,
+      'order_id': 32,
+      'order_code': 'Q-ORD-88',
+      'product_id': 11,
+      'product_name': '产品X',
+      'order_process_id': 19,
+      'process_code': '61-01',
+      'process_name': '外观检验',
+      'operator_user_id': 7,
+      'operator_username': 'quality_user',
+      'result': 'failed',
+      'verification_date': '2026-03-06',
+      'verification_code': 'VCX',
+      'remark': '尺寸偏差',
+      'created_at': '2026-03-06T09:30:00Z',
+      'disposition_opinion': '复检后返工',
+      'disposition_username': 'quality_admin',
+      'disposition_at': '2026-03-06T10:00:00Z',
+      'recheck_result': 'failed',
+      'final_judgment': 'rework',
+    });
+
+    expect(detail.id, 88);
+    expect(detail.productionOrderCode, 'Q-ORD-88');
+    expect(detail.checkResult, 'failed');
+    expect(detail.defectDescription, '尺寸偏差');
+    expect(detail.disposition, isNotNull);
+    expect(detail.disposition!.finalJudgment, 'rework');
   });
 }

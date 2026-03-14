@@ -302,9 +302,8 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                 hint: const Text('全部结果'),
                 items: const [
                   DropdownMenuItem(value: null, child: Text('全部结果')),
-                  DropdownMenuItem(value: 'pass', child: Text('合格')),
-                  DropdownMenuItem(value: 'fail', child: Text('不合格')),
-                  DropdownMenuItem(value: 'conditional', child: Text('条件放行')),
+                  DropdownMenuItem(value: 'passed', child: Text('合格')),
+                  DropdownMenuItem(value: 'failed', child: Text('不合格')),
                 ],
                 onChanged: _loading
                     ? null
