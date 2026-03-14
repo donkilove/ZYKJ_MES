@@ -234,6 +234,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     final sortController = TextEditingController(
       text: (existing?.sortOrder ?? 0).toString(),
     );
+    final remarkController = TextEditingController(text: existing?.remark ?? '');
     bool isEnabled = existing?.isEnabled ?? true;
     final formKey = GlobalKey<FormState>();
 
@@ -293,6 +294,17 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                           return null;
                         },
                       ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: remarkController,
+                        maxLength: 500,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: '备注（可选）',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                      ),
                       if (isEdit) ...[
                         const SizedBox(height: 12),
                         SwitchListTile(
@@ -329,12 +341,14 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                           name: nameController.text.trim(),
                           sortOrder: sortOrder,
                           isEnabled: isEnabled,
+                          remark: remarkController.text.trim(),
                         );
                       } else {
                         await _service.createStage(
                           code: codeController.text.trim(),
                           name: nameController.text.trim(),
                           sortOrder: sortOrder,
+                          remark: remarkController.text.trim(),
                         );
                       }
                       if (dialogContext.mounted) {
@@ -364,6 +378,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     codeController.dispose();
     nameController.dispose();
     sortController.dispose();
+    remarkController.dispose();
 
     if (saved == true) {
       await _loadData();
@@ -403,6 +418,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
 
     final isEdit = existing != null;
     final nameController = TextEditingController(text: existing?.name ?? '');
+    final remarkController = TextEditingController(text: existing?.remark ?? '');
     var selectedStageId = existing?.stageId ?? _stages.first.id;
     bool isEnabled = existing?.isEnabled ?? true;
     final formKey = GlobalKey<FormState>();
@@ -527,6 +543,17 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                           return null;
                         },
                       ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: remarkController,
+                        maxLength: 500,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: '备注（可选）',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                      ),
                       if (isEdit) ...[
                         const SizedBox(height: 12),
                         SwitchListTile(
@@ -564,12 +591,14 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                           name: nameController.text.trim(),
                           stageId: selectedStageId,
                           isEnabled: isEnabled,
+                          remark: remarkController.text.trim(),
                         );
                       } else {
                         await _service.createProcess(
                           code: code,
                           name: nameController.text.trim(),
                           stageId: selectedStageId,
+                          remark: remarkController.text.trim(),
                         );
                       }
                       if (dialogContext.mounted) {
@@ -598,6 +627,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
 
     nameController.dispose();
     serialController.dispose();
+    remarkController.dispose();
 
     if (saved == true) {
       await _loadData();
@@ -628,6 +658,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             name: item.name,
             sortOrder: item.sortOrder,
             isEnabled: !item.isEnabled,
+            remark: item.remark,
           );
           await _loadData();
         } catch (error) {
@@ -650,11 +681,56 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           _showNoPermission();
           return;
         }
+        // 先加载引用分析
+        List<_RefEntry> refs = [];
+        try {
+          final result = await _service.getStageReferences(stageId: item.id);
+          refs = result.items
+              .map((e) => _RefEntry(e.refType, e.refName, '#${e.refId}', e.detail))
+              .toList();
+        } catch (error) {
+          if (_isUnauthorized(error)) {
+            widget.onLogout();
+            return;
+          }
+        }
+        if (!mounted) return;
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('删除工段'),
-            content: Text('确认删除工段 ${item.name} 吗？'),
+            content: SizedBox(
+              width: 520,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('确认删除工段 ${item.name} 吗？'),
+                  if (refs.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text('该工段存在 ${refs.length} 条引用关系：',
+                        style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: refs.length,
+                        itemBuilder: (context, index) {
+                          final ref = refs[index];
+                          return ListTile(
+                            dense: true,
+                            leading: Text(ref.refType),
+                            title: Text(ref.refName),
+                            subtitle: Text(ref.detail ?? ''),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -712,6 +788,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             name: item.name,
             stageId: item.stageId ?? 0,
             isEnabled: !item.isEnabled,
+            remark: item.remark,
           );
           await _loadData();
         } catch (error) {
@@ -734,11 +811,56 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           _showNoPermission();
           return;
         }
-        final confirmed = await showDialog<bool>(
+        // 先加载引用分析
+        List<_RefEntry> processRefs = [];
+        try {
+          final result = await _service.getProcessReferences(processId: item.id);
+          processRefs = result.items
+              .map((e) => _RefEntry(e.refType, e.refName, '#${e.refId}', e.detail))
+              .toList();
+        } catch (error) {
+          if (_isUnauthorized(error)) {
+            widget.onLogout();
+            return;
+          }
+        }
+        if (!mounted) return;
+        final processConfirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('删除小工序'),
-            content: Text('确认删除小工序 ${item.name} 吗？'),
+            title: const Text('删除工序'),
+            content: SizedBox(
+              width: 520,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('确认删除工序 ${item.name} 吗？'),
+                  if (processRefs.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text('该工序存在 ${processRefs.length} 条引用关系：',
+                        style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: processRefs.length,
+                        itemBuilder: (context, index) {
+                          final ref = processRefs[index];
+                          return ListTile(
+                            dense: true,
+                            leading: Text(ref.refType),
+                            title: Text(ref.refName),
+                            subtitle: Text(ref.detail ?? ''),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -751,7 +873,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             ],
           ),
         );
-        if (confirmed != true) {
+        if (processConfirmed != true) {
           return;
         }
         try {
@@ -856,9 +978,11 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       children: [
         Expanded(flex: 1, child: _buildHeaderLabel(theme, '工段编码')),
         Expanded(flex: 2, child: _buildHeaderLabel(theme, '工段名称')),
+        Expanded(flex: 2, child: _buildHeaderLabel(theme, '备注')),
         Expanded(flex: 1, child: _buildHeaderLabel(theme, '排序')),
         Expanded(flex: 1, child: _buildHeaderLabel(theme, '状态')),
-        Expanded(flex: 2, child: _buildHeaderLabel(theme, '创建时间')),
+        Expanded(flex: 1, child: _buildHeaderLabel(theme, '关联工序数')),
+        Expanded(flex: 1, child: _buildHeaderLabel(theme, '创建时间')),
         SizedBox(
           width: 64,
           child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
@@ -874,8 +998,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         Expanded(flex: 2, child: _buildHeaderLabel(theme, '所属工段')),
         Expanded(flex: 1, child: _buildHeaderLabel(theme, '工序编码')),
         Expanded(flex: 2, child: _buildHeaderLabel(theme, '工序名称')),
+        Expanded(flex: 2, child: _buildHeaderLabel(theme, '备注')),
         Expanded(flex: 1, child: _buildHeaderLabel(theme, '状态')),
-        Expanded(flex: 2, child: _buildHeaderLabel(theme, '创建时间')),
+        Expanded(flex: 1, child: _buildHeaderLabel(theme, '创建时间')),
         SizedBox(
           width: 64,
           child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
@@ -1008,13 +1133,21 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                     children: [
                                                       Expanded(flex: 1, child: Text(item.code)),
                                                       Expanded(flex: 2, child: Text(item.name)),
+                                                      Expanded(
+                                                        flex: 2,
+                                                        child: Text(item.remark.isEmpty ? '-' : item.remark),
+                                                      ),
                                                       Expanded(flex: 1, child: Text('${item.sortOrder}')),
                                                       Expanded(
                                                         flex: 1,
                                                         child: Text(item.isEnabled ? '启用' : '停用'),
                                                       ),
                                                       Expanded(
-                                                        flex: 2,
+                                                        flex: 1,
+                                                        child: Text('${item.processCount}'),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 1,
                                                         child: Text(
                                                           '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
                                                           style: theme.textTheme.bodySmall,
@@ -1169,11 +1302,15 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                       Expanded(flex: 1, child: Text(item.code)),
                                                       Expanded(flex: 2, child: Text(item.name)),
                                                       Expanded(
+                                                        flex: 2,
+                                                        child: Text(item.remark.isEmpty ? '-' : item.remark),
+                                                      ),
+                                                      Expanded(
                                                         flex: 1,
                                                         child: Text(item.isEnabled ? '启用' : '停用'),
                                                       ),
                                                       Expanded(
-                                                        flex: 2,
+                                                        flex: 1,
                                                         child: Text(
                                                           '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
                                                           style: theme.textTheme.bodySmall,

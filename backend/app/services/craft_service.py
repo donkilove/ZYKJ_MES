@@ -19,7 +19,11 @@ from app.core.production_constants import (
     RECORD_TYPE_PRODUCTION,
 )
 from app.models.craft_system_master_template import CraftSystemMasterTemplate
+from app.models.craft_system_master_template_revision import CraftSystemMasterTemplateRevision
+from app.models.craft_system_master_template_revision_step import CraftSystemMasterTemplateRevisionStep
 from app.models.craft_system_master_template_step import CraftSystemMasterTemplateStep
+from app.models.maintenance_plan import MaintenancePlan
+from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.models.product import Product
@@ -30,6 +34,10 @@ from app.models.product_process_template_step import ProductProcessTemplateStep
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
+from app.models.production_scrap_statistics import ProductionScrapStatistics
+from app.models.repair_cause import RepairCause
+from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
+from app.models.repair_return_route import RepairReturnRoute
 from app.models.user import User
 from app.services.process_code_rule import (
     ensure_process_code_unique,
@@ -158,6 +166,10 @@ def _normalize_text(value: str, *, field_name: str) -> str:
     return normalized
 
 
+def _normalize_remark(value: str | None) -> str:
+    return (value or "").strip()
+
+
 def _normalize_template_lifecycle_status(value: str | None) -> str:
     normalized = (value or TEMPLATE_LIFECYCLE_DRAFT).strip().lower()
     if normalized not in TEMPLATE_LIFECYCLE_OPTIONS:
@@ -211,6 +223,7 @@ def create_stage(
     code: str,
     name: str,
     sort_order: int,
+    remark: str = "",
 ) -> ProcessStage:
     normalized_code = _normalize_text(code, field_name="Stage code")
     normalized_name = _normalize_text(name, field_name="Stage name")
@@ -225,6 +238,7 @@ def create_stage(
         name=normalized_name,
         sort_order=sort_order,
         is_enabled=True,
+        remark=_normalize_remark(remark),
     )
     db.add(row)
     db.commit()
@@ -240,6 +254,7 @@ def update_stage(
     sort_order: int,
     is_enabled: bool,
     code: str | None = None,
+    remark: str | None = None,
 ) -> ProcessStage:
     if code is not None:
         normalized_code = _normalize_text(code, field_name="Stage code")
@@ -256,6 +271,8 @@ def update_stage(
     row.name = normalized_name
     row.sort_order = sort_order
     row.is_enabled = is_enabled
+    if remark is not None:
+        row.remark = _normalize_remark(remark)
     db.commit()
     db.refresh(row)
     return row
@@ -341,6 +358,7 @@ def create_process(
     code: str,
     name: str,
     stage_id: int,
+    remark: str = "",
 ) -> Process:
     stage = get_stage_for_process_write(db, stage_id=stage_id, require_enabled=True)
     normalized_code = validate_process_code_matches_stage(code=code, stage=stage)
@@ -353,6 +371,7 @@ def create_process(
         name=normalized_name,
         stage_id=stage.id,
         is_enabled=True,
+        remark=_normalize_remark(remark),
     )
     db.add(row)
     db.commit()
@@ -368,6 +387,7 @@ def update_process(
     stage_id: int,
     is_enabled: bool,
     code: str | None = None,
+    remark: str | None = None,
 ) -> Process:
     stage = get_stage_for_process_write(db, stage_id=stage_id)
     candidate_code = code if code is not None else row.code
@@ -383,6 +403,8 @@ def update_process(
     row.name = normalized_name
     row.stage_id = stage.id
     row.is_enabled = is_enabled
+    if remark is not None:
+        row.remark = _normalize_remark(remark)
     db.commit()
     db.refresh(row)
     return row
@@ -699,6 +721,41 @@ def _replace_system_master_template_steps(
     db.flush()
 
 
+def _create_system_master_revision_snapshot(
+    db: Session,
+    *,
+    template: CraftSystemMasterTemplate,
+    operator: User | None,
+    action: str,
+    note: str | None = None,
+) -> CraftSystemMasterTemplateRevision:
+    revision = CraftSystemMasterTemplateRevision(
+        template_id=template.id,
+        version=template.version,
+        action=action,
+        note=(note or "").strip() or None,
+        created_by_user_id=operator.id if operator else template.updated_by_user_id,
+    )
+    db.add(revision)
+    db.flush()
+
+    sorted_steps = sorted(template.steps, key=lambda item: (item.step_order, item.id))
+    for step in sorted_steps:
+        revision.steps.append(
+            CraftSystemMasterTemplateRevisionStep(
+                step_order=step.step_order,
+                stage_id=step.stage_id,
+                stage_code=step.stage_code,
+                stage_name=step.stage_name,
+                process_id=step.process_id,
+                process_code=step.process_code,
+                process_name=step.process_name,
+            )
+        )
+    db.flush()
+    return revision
+
+
 def create_system_master_template(
     db: Session,
     *,
@@ -721,6 +778,13 @@ def create_system_master_template(
     db.add(row)
     db.flush()
     _replace_system_master_template_steps(db, template=row, steps=step_processes)
+    _create_system_master_revision_snapshot(
+        db,
+        template=row,
+        operator=operator,
+        action="create",
+        note="System master template created",
+    )
     db.commit()
     return get_system_master_template(db) or row
 
@@ -741,8 +805,52 @@ def update_system_master_template(
     row.version += 1
     row.updated_by_user_id = operator.id
     _replace_system_master_template_steps(db, template=row, steps=step_processes)
+    _create_system_master_revision_snapshot(
+        db,
+        template=row,
+        operator=operator,
+        action="update",
+        note=f"System master template updated to v{row.version}",
+    )
     db.commit()
     return get_system_master_template(db) or row
+
+
+def list_system_master_template_versions(
+    db: Session,
+) -> SystemMasterTemplateVersionResult:
+    def _load_rows() -> list[CraftSystemMasterTemplateRevision]:
+        return (
+            db.execute(
+                select(CraftSystemMasterTemplateRevision)
+                .where(CraftSystemMasterTemplateRevision.template_id == SYSTEM_MASTER_TEMPLATE_SINGLETON_ID)
+                .options(
+                    selectinload(CraftSystemMasterTemplateRevision.created_by),
+                    selectinload(CraftSystemMasterTemplateRevision.steps),
+                )
+                .order_by(
+                    CraftSystemMasterTemplateRevision.version.desc(),
+                    CraftSystemMasterTemplateRevision.id.desc(),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    rows = _load_rows()
+    if not rows:
+        template = get_system_master_template(db)
+        if template is not None:
+            _create_system_master_revision_snapshot(
+                db,
+                template=template,
+                operator=template.updated_by,
+                action="snapshot",
+                note=f"Auto snapshot for existing system master v{template.version}",
+            )
+            db.commit()
+            rows = _load_rows()
+    return SystemMasterTemplateVersionResult(total=len(rows), items=rows)
 
 
 def resolve_system_master_template(db: Session) -> SystemMasterTemplateResolveResult:
@@ -788,6 +896,7 @@ def create_template(
     template_name: str,
     is_default: bool,
     lifecycle_status: str = TEMPLATE_LIFECYCLE_PUBLISHED,
+    remark: str = "",
     steps: list[dict[str, object]],
     operator: User,
 ) -> ProductProcessTemplate:
@@ -824,6 +933,7 @@ def create_template(
         is_enabled=True,
         created_by_user_id=operator.id,
         updated_by_user_id=operator.id,
+        remark=_normalize_remark(remark),
     )
     db.add(row)
     db.flush()
@@ -1046,6 +1156,7 @@ def update_template(
     template_name: str,
     is_default: bool,
     is_enabled: bool,
+    remark: str | None = None,
     steps: list[dict[str, object]],
     sync_orders: bool,
     operator: User,
@@ -1075,6 +1186,8 @@ def update_template(
     template.template_name = normalized_name
     template.is_default = is_default
     template.is_enabled = is_enabled
+    if remark is not None:
+        template.remark = _normalize_remark(remark)
     template.lifecycle_status = TEMPLATE_LIFECYCLE_DRAFT
     template.updated_by_user_id = operator.id
     template.version += 1
@@ -1092,6 +1205,40 @@ def update_template(
     db.refresh(template)
 
     return get_template_by_id(db, template.id) or template, sync_result
+
+
+def set_template_enabled(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+    is_enabled: bool,
+    operator: User,
+) -> ProductProcessTemplate:
+    if template.is_enabled == is_enabled:
+        return get_template_by_id(db, template.id) or template
+
+    template.is_enabled = is_enabled
+    template.updated_by_user_id = operator.id
+    template.version += 1
+
+    # Disabled templates cannot continue as default templates.
+    if not is_enabled and template.is_default:
+        template.is_default = False
+
+    if (
+        is_enabled
+        and template.is_default
+        and template.lifecycle_status == TEMPLATE_LIFECYCLE_PUBLISHED
+    ):
+        _set_product_default_template(
+            db,
+            product_id=template.product_id,
+            template_id=template.id,
+        )
+
+    db.commit()
+    db.refresh(template)
+    return get_template_by_id(db, template.id) or template
 
 
 def analyze_template_impact(
@@ -1164,10 +1311,13 @@ def publish_template(
     operator: User,
     apply_order_sync: bool,
     confirmed: bool,
+    expected_version: int | None = None,
     note: str | None = None,
 ) -> tuple[ProductProcessTemplate, TemplateSyncResult]:
     if not template.is_enabled:
         raise ValueError("Disabled template cannot be published")
+    if expected_version is not None and template.version != expected_version:
+        raise ValueError("Template has been updated by another user, please refresh and retry")
 
     step_payload = _build_steps_payload_from_template_row(template)
     if not step_payload:
@@ -1498,12 +1648,84 @@ def get_craft_kanban_process_metrics(
     return CraftKanbanProcessMetricsResult(product=product, items=items)
 
 
+def export_craft_kanban_process_metrics_csv(
+    db: Session,
+    *,
+    product_id: int,
+    stage_id: int | None = None,
+    process_id: int | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    limit: int = 5,
+) -> dict[str, object]:
+    result = get_craft_kanban_process_metrics(
+        db,
+        product_id=product_id,
+        stage_id=stage_id,
+        process_id=process_id,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+    )
+
+    csv_rows: list[list[object]] = []
+    for process_row in result.items:
+        for sample in process_row.samples:
+            csv_rows.append(
+                [
+                    result.product.id,
+                    result.product.name,
+                    process_row.stage_code or "",
+                    process_row.stage_name or "",
+                    process_row.process_code,
+                    process_row.process_name,
+                    sample.order_id,
+                    sample.order_code,
+                    sample.start_at.isoformat(),
+                    sample.end_at.isoformat(),
+                    sample.work_minutes,
+                    sample.production_qty,
+                    sample.capacity_per_hour,
+                ]
+            )
+
+    content_base64 = _craft_csv_base64(
+        [
+            "product_id",
+            "product_name",
+            "stage_code",
+            "stage_name",
+            "process_code",
+            "process_name",
+            "order_id",
+            "order_code",
+            "start_at",
+            "end_at",
+            "work_minutes",
+            "production_qty",
+            "capacity_per_hour",
+        ],
+        csv_rows,
+    )
+    return {
+        "file_name": f"craft_kanban_metrics_product_{result.product.id}.csv",
+        "mime_type": "text/csv",
+        "content_base64": content_base64,
+        "exported_count": len(csv_rows),
+    }
+
+
 def export_templates(
     db: Session,
     *,
     product_id: int | None = None,
+    keyword: str | None = None,
+    product_category: str | None = None,
+    is_default: bool | None = None,
     enabled: bool | None = None,
     lifecycle_status: str | None = None,
+    updated_from: datetime | None = None,
+    updated_to: datetime | None = None,
 ) -> list[ProductProcessTemplate]:
     stmt = (
         select(ProductProcessTemplate)
@@ -1511,6 +1733,7 @@ def export_templates(
             selectinload(ProductProcessTemplate.product),
             selectinload(ProductProcessTemplate.steps),
         )
+        .join(Product, Product.id == ProductProcessTemplate.product_id)
         .order_by(
             ProductProcessTemplate.product_id.asc(),
             ProductProcessTemplate.updated_at.desc(),
@@ -1519,11 +1742,27 @@ def export_templates(
     )
     if product_id is not None:
         stmt = stmt.where(ProductProcessTemplate.product_id == product_id)
+    if keyword:
+        like_pattern = f"%{keyword.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Product.name.ilike(like_pattern),
+                ProductProcessTemplate.template_name.ilike(like_pattern),
+            )
+        )
+    if product_category:
+        stmt = stmt.where(Product.category == product_category.strip())
+    if is_default is not None:
+        stmt = stmt.where(ProductProcessTemplate.is_default.is_(is_default))
     if enabled is not None:
         stmt = stmt.where(ProductProcessTemplate.is_enabled.is_(enabled))
     if lifecycle_status is not None:
         normalized_status = _normalize_template_lifecycle_status(lifecycle_status)
         stmt = stmt.where(ProductProcessTemplate.lifecycle_status == normalized_status)
+    if updated_from is not None:
+        stmt = stmt.where(ProductProcessTemplate.updated_at >= _normalize_kanban_datetime(updated_from))
+    if updated_to is not None:
+        stmt = stmt.where(ProductProcessTemplate.updated_at <= _normalize_kanban_datetime(updated_to))
     return db.execute(stmt).scalars().all()
 
 
@@ -1916,6 +2155,9 @@ class ReferenceItem:
     ref_id: int
     ref_name: str
     detail: str | None = None
+    ref_status: str | None = None
+    jump_module: str | None = None
+    jump_target: str | None = None
     risk_level: str | None = None  # none / low / high
     risk_note: str | None = None
 
@@ -1938,20 +2180,80 @@ class ProcessReferenceResult:
     items: list[ReferenceItem]
 
 
+@dataclass(slots=True)
+class ProductTemplateReferenceRow:
+    template_id: int
+    template_name: str
+    lifecycle_status: str
+    ref_type: str
+    ref_id: int
+    ref_name: str
+    detail: str | None = None
+    ref_status: str | None = None
+    jump_module: str | None = None
+    jump_target: str | None = None
+    risk_level: str | None = None
+    risk_note: str | None = None
+
+
+@dataclass(slots=True)
+class ProductTemplateReferenceResult:
+    product_id: int
+    product_name: str
+    total_templates: int
+    total_references: int
+    items: list[ProductTemplateReferenceRow]
+
+
+@dataclass(slots=True)
+class SystemMasterTemplateVersionResult:
+    total: int
+    items: list[CraftSystemMasterTemplateRevision]
+
+
 def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceResult:
     items: list[ReferenceItem] = []
 
-    processes = db.execute(
-        select(Process).where(Process.stage_id == stage.id).order_by(Process.id.asc())
-    ).scalars().all()
+    processes = (
+        db.execute(select(Process).where(Process.stage_id == stage.id).order_by(Process.id.asc()))
+        .scalars()
+        .all()
+    )
+    process_codes = [p.code for p in processes if p.code]
     for p in processes:
-        items.append(ReferenceItem(ref_type="process", ref_id=p.id, ref_name=p.name, detail=p.code))
+        items.append(
+            ReferenceItem(
+                ref_type="process",
+                ref_id=p.id,
+                ref_name=p.name,
+                detail=p.code,
+                ref_status="正在使用" if p.is_enabled else "历史引用",
+                jump_module="craft",
+                jump_target=f"process-management?process_id={p.id}",
+            )
+        )
 
-    users = db.execute(
-        select(User).where(User.stage_id == stage.id, User.is_deleted.is_(False)).order_by(User.id.asc())
-    ).scalars().all()
+    users = (
+        db.execute(
+            select(User)
+            .where(User.stage_id == stage.id, User.is_deleted.is_(False))
+            .order_by(User.id.asc())
+        )
+        .scalars()
+        .all()
+    )
     for u in users:
-        items.append(ReferenceItem(ref_type="user", ref_id=u.id, ref_name=u.username, detail=u.full_name))
+        items.append(
+            ReferenceItem(
+                ref_type="user",
+                ref_id=u.id,
+                ref_name=u.username,
+                detail=u.full_name,
+                ref_status="正在使用",
+                jump_module="user",
+                jump_target=f"user-management?user_id={u.id}",
+            )
+        )
 
     system_master_template_ids = (
         db.execute(
@@ -1975,6 +2277,9 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                     ref_id=template.id,
                     ref_name=template.name if hasattr(template, "name") and template.name else "系统母版",
                     detail=f"v{template.version}",
+                    ref_status="正在使用",
+                    jump_module="craft",
+                    jump_target="process-configuration?system_master=1",
                     risk_level="low",
                     risk_note="工段被系统母版引用，删除前请先从母版中移除该工段",
                 )
@@ -2008,6 +2313,9 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                     ref_id=t.id,
                     ref_name=t.template_name,
                     detail=t.lifecycle_status,
+                    ref_status="正在使用" if t.lifecycle_status == TEMPLATE_LIFECYCLE_PUBLISHED else "历史引用",
+                    jump_module="craft",
+                    jump_target=f"process-configuration?template_id={t.id}",
                     risk_level=risk_level,
                     risk_note=risk_note,
                 )
@@ -2036,8 +2344,116 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                     ref_id=o.id,
                     ref_name=o.order_code,
                     detail=o.status,
+                    ref_status="正在使用" if active else "历史引用",
+                    jump_module="production",
+                    jump_target=f"work-order?order_id={o.id}",
                     risk_level="high" if active else "none",
                     risk_note="工段被进行中工单引用，停用将影响生产进度" if active else None,
+                )
+            )
+
+    if process_codes:
+        maintenance_plans = (
+            db.execute(
+                select(MaintenancePlan)
+                .where(MaintenancePlan.execution_process_code.in_(process_codes))
+                .order_by(MaintenancePlan.id.asc())
+            )
+            .scalars()
+            .all()
+        )
+        for plan in maintenance_plans:
+            items.append(
+                ReferenceItem(
+                    ref_type="maintenance_plan",
+                    ref_id=plan.id,
+                    ref_name=f"保养计划#{plan.id}",
+                    detail=plan.execution_process_code,
+                    ref_status="正在使用" if plan.is_enabled else "历史引用",
+                    jump_module="equipment",
+                    jump_target=f"maintenance-plan?plan_id={plan.id}",
+                    risk_level="low",
+                )
+            )
+
+        maintenance_work_orders = (
+            db.execute(
+                select(MaintenanceWorkOrder)
+                .where(MaintenanceWorkOrder.source_execution_process_code.in_(process_codes))
+                .order_by(MaintenanceWorkOrder.id.asc())
+            )
+            .scalars()
+            .all()
+        )
+        for work_order in maintenance_work_orders:
+            active = work_order.status in ("pending", "in_progress", "overdue")
+            items.append(
+                ReferenceItem(
+                    ref_type="maintenance_order",
+                    ref_id=work_order.id,
+                    ref_name=f"保养工单#{work_order.id}",
+                    detail=work_order.status,
+                    ref_status="正在使用" if active else "历史引用",
+                    jump_module="equipment",
+                    jump_target=f"maintenance-work-order?work_order_id={work_order.id}",
+                    risk_level="high" if active else "none",
+                    risk_note="工段关联工序仍有待执行保养工单" if active else None,
+                )
+            )
+
+        scrap_rows = (
+            db.execute(
+                select(ProductionScrapStatistics)
+                .where(
+                    or_(
+                        ProductionScrapStatistics.process_code.in_(process_codes),
+                        ProductionScrapStatistics.process_id.in_([p.id for p in processes]),
+                    )
+                )
+                .order_by(ProductionScrapStatistics.id.asc())
+            )
+            .scalars()
+            .all()
+        )
+        for row in scrap_rows:
+            items.append(
+                ReferenceItem(
+                    ref_type="scrap_stat",
+                    ref_id=row.id,
+                    ref_name=f"报废统计#{row.id}",
+                    detail=row.progress,
+                    ref_status="历史引用" if row.progress == "applied" else "正在使用",
+                    jump_module="production",
+                    jump_target=f"scrap-stat?stat_id={row.id}",
+                    risk_level="low",
+                )
+            )
+
+        repair_defect_rows = (
+            db.execute(
+                select(RepairDefectPhenomenon)
+                .where(
+                    or_(
+                        RepairDefectPhenomenon.process_code.in_(process_codes),
+                        RepairDefectPhenomenon.process_id.in_([p.id for p in processes]),
+                    )
+                )
+                .order_by(RepairDefectPhenomenon.id.asc())
+            )
+            .scalars()
+            .all()
+        )
+        for row in repair_defect_rows:
+            items.append(
+                ReferenceItem(
+                    ref_type="quality_defect",
+                    ref_id=row.id,
+                    ref_name=row.phenomenon,
+                    detail=row.process_code,
+                    ref_status="历史引用",
+                    jump_module="quality",
+                    jump_target=f"repair-defect?row_id={row.id}",
+                    risk_level="low",
                 )
             )
 
@@ -2075,6 +2491,9 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                     ref_id=template.id,
                     ref_name=template.name if hasattr(template, "name") and template.name else "系统母版",
                     detail=f"v{template.version}",
+                    ref_status="正在使用",
+                    jump_module="craft",
+                    jump_target="process-configuration?system_master=1",
                     risk_level="low",
                     risk_note="工序被系统母版引用，删除前请先从母版中移除该工序",
                 )
@@ -2108,6 +2527,9 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                     ref_id=t.id,
                     ref_name=t.template_name,
                     detail=t.lifecycle_status,
+                    ref_status="正在使用" if t.lifecycle_status == TEMPLATE_LIFECYCLE_PUBLISHED else "历史引用",
+                    jump_module="craft",
+                    jump_target=f"process-configuration?template_id={t.id}",
                     risk_level=risk_level,
                     risk_note=risk_note,
                 )
@@ -2136,10 +2558,175 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                     ref_id=o.id,
                     ref_name=o.order_code,
                     detail=o.status,
+                    ref_status="正在使用" if active else "历史引用",
+                    jump_module="production",
+                    jump_target=f"work-order?order_id={o.id}",
                     risk_level="high" if active else "none",
                     risk_note="工序被进行中工单引用，停用将影响生产进度" if active else None,
                 )
             )
+
+    maintenance_plans = (
+        db.execute(
+            select(MaintenancePlan)
+            .where(MaintenancePlan.execution_process_code == process.code)
+            .order_by(MaintenancePlan.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    for plan in maintenance_plans:
+        items.append(
+            ReferenceItem(
+                ref_type="maintenance_plan",
+                ref_id=plan.id,
+                ref_name=f"保养计划#{plan.id}",
+                detail=plan.execution_process_code,
+                ref_status="正在使用" if plan.is_enabled else "历史引用",
+                jump_module="equipment",
+                jump_target=f"maintenance-plan?plan_id={plan.id}",
+                risk_level="low",
+            )
+        )
+
+    maintenance_work_orders = (
+        db.execute(
+            select(MaintenanceWorkOrder)
+            .where(MaintenanceWorkOrder.source_execution_process_code == process.code)
+            .order_by(MaintenanceWorkOrder.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    for work_order in maintenance_work_orders:
+        active = work_order.status in ("pending", "in_progress", "overdue")
+        items.append(
+            ReferenceItem(
+                ref_type="maintenance_order",
+                ref_id=work_order.id,
+                ref_name=f"保养工单#{work_order.id}",
+                detail=work_order.status,
+                ref_status="正在使用" if active else "历史引用",
+                jump_module="equipment",
+                jump_target=f"maintenance-work-order?work_order_id={work_order.id}",
+                risk_level="high" if active else "none",
+                risk_note="工序仍关联待执行保养工单" if active else None,
+            )
+        )
+
+    scrap_rows = (
+        db.execute(
+            select(ProductionScrapStatistics)
+            .where(
+                or_(
+                    ProductionScrapStatistics.process_code == process.code,
+                    ProductionScrapStatistics.process_id == process.id,
+                )
+            )
+            .order_by(ProductionScrapStatistics.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    for row in scrap_rows:
+        items.append(
+            ReferenceItem(
+                ref_type="scrap_stat",
+                ref_id=row.id,
+                ref_name=f"报废统计#{row.id}",
+                detail=row.progress,
+                ref_status="历史引用" if row.progress == "applied" else "正在使用",
+                jump_module="production",
+                jump_target=f"scrap-stat?stat_id={row.id}",
+                risk_level="low",
+            )
+        )
+
+    repair_defect_rows = (
+        db.execute(
+            select(RepairDefectPhenomenon)
+            .where(
+                or_(
+                    RepairDefectPhenomenon.process_code == process.code,
+                    RepairDefectPhenomenon.process_id == process.id,
+                )
+            )
+            .order_by(RepairDefectPhenomenon.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    for row in repair_defect_rows:
+        items.append(
+            ReferenceItem(
+                ref_type="quality_defect",
+                ref_id=row.id,
+                ref_name=row.phenomenon,
+                detail=row.process_code,
+                ref_status="历史引用",
+                jump_module="quality",
+                jump_target=f"repair-defect?row_id={row.id}",
+                risk_level="low",
+            )
+        )
+
+    repair_cause_rows = (
+        db.execute(
+            select(RepairCause)
+            .where(
+                or_(
+                    RepairCause.process_code == process.code,
+                    RepairCause.process_id == process.id,
+                )
+            )
+            .order_by(RepairCause.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    for row in repair_cause_rows:
+        items.append(
+            ReferenceItem(
+                ref_type="quality_cause",
+                ref_id=row.id,
+                ref_name=row.reason,
+                detail=row.process_code,
+                ref_status="历史引用",
+                jump_module="quality",
+                jump_target=f"repair-cause?row_id={row.id}",
+                risk_level="low",
+            )
+        )
+
+    return_route_rows = (
+        db.execute(
+            select(RepairReturnRoute)
+            .where(
+                or_(
+                    RepairReturnRoute.source_process_code == process.code,
+                    RepairReturnRoute.target_process_code == process.code,
+                    RepairReturnRoute.source_process_id == process.id,
+                    RepairReturnRoute.target_process_id == process.id,
+                )
+            )
+            .order_by(RepairReturnRoute.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    for row in return_route_rows:
+        items.append(
+            ReferenceItem(
+                ref_type="quality_return_route",
+                ref_id=row.id,
+                ref_name=f"{row.source_process_code}->{row.target_process_code}",
+                detail=f"数量{row.return_quantity}",
+                ref_status="历史引用",
+                jump_module="quality",
+                jump_target=f"repair-return-route?row_id={row.id}",
+                risk_level="low",
+            )
+        )
 
     return ProcessReferenceResult(
         process_id=process.id,
@@ -2156,6 +2743,9 @@ class TemplateReferenceItem:
     ref_id: int
     ref_name: str
     detail: str | None = None
+    ref_status: str | None = None
+    jump_module: str | None = None
+    jump_target: str | None = None
     risk_level: str | None = None
     risk_note: str | None = None
 
@@ -2178,6 +2768,18 @@ def get_template_references(
     items: list[TemplateReferenceItem] = []
 
     product_name = template.product.name if template.product else ""
+    items.append(
+        TemplateReferenceItem(
+            ref_type="product",
+            ref_id=template.product_id,
+            ref_name=product_name or f"产品#{template.product_id}",
+            detail=template.lifecycle_status,
+            ref_status="正在使用" if template.is_enabled else "历史引用",
+            jump_module="product",
+            jump_target=f"product-management?product_id={template.product_id}",
+            risk_level="none",
+        )
+    )
 
     active_orders = db.execute(
         select(ProductionOrder.id, ProductionOrder.order_code, ProductionOrder.status).where(
@@ -2185,15 +2787,25 @@ def get_template_references(
         )
     ).all()
     for order_id, order_code, order_status in active_orders:
-        active = order_status in (ORDER_STATUS_PENDING, ORDER_STATUS_IN_PROGRESS)
+        can_sync = order_status == ORDER_STATUS_PENDING
+        blocked = order_status == ORDER_STATUS_IN_PROGRESS
+        active = can_sync or blocked
+        ref_status = "可同步" if can_sync else ("不可同步" if blocked else "历史引用")
         items.append(
             TemplateReferenceItem(
                 ref_type="order",
                 ref_id=order_id,
                 ref_name=order_code,
                 detail=order_status,
-                risk_level="high" if active else "none",
-                risk_note="模板被进行中工单引用，归档或停用将影响生产进度" if active else None,
+                ref_status=ref_status,
+                jump_module="production",
+                jump_target=f"work-order?order_id={order_id}",
+                risk_level="high" if blocked else ("low" if can_sync else "none"),
+                risk_note=(
+                    "模板被进行中工单引用，变更将被阻断"
+                    if blocked
+                    else ("模板可同步到未开工工单" if can_sync else None)
+                ),
             )
         )
 
@@ -2204,6 +2816,69 @@ def get_template_references(
         product_name=product_name,
         total=len(items),
         items=items,
+    )
+
+
+def get_product_template_references(
+    db: Session,
+    *,
+    product: Product,
+) -> ProductTemplateReferenceResult:
+    templates = (
+        db.execute(
+            select(ProductProcessTemplate)
+            .where(ProductProcessTemplate.product_id == product.id)
+            .order_by(ProductProcessTemplate.updated_at.desc(), ProductProcessTemplate.id.desc())
+            .options(selectinload(ProductProcessTemplate.product))
+        )
+        .scalars()
+        .all()
+    )
+
+    rows: list[ProductTemplateReferenceRow] = []
+    for template in templates:
+        ref_result = get_template_references(db, template=template)
+        if not ref_result.items:
+            rows.append(
+                ProductTemplateReferenceRow(
+                    template_id=template.id,
+                    template_name=template.template_name,
+                    lifecycle_status=template.lifecycle_status,
+                    ref_type="template",
+                    ref_id=template.id,
+                    ref_name=template.template_name,
+                    detail="无下游引用",
+                    ref_status="可同步",
+                    jump_module="craft",
+                    jump_target=f"process-configuration?template_id={template.id}",
+                    risk_level="none",
+                )
+            )
+            continue
+        for item in ref_result.items:
+            rows.append(
+                ProductTemplateReferenceRow(
+                    template_id=template.id,
+                    template_name=template.template_name,
+                    lifecycle_status=template.lifecycle_status,
+                    ref_type=item.ref_type,
+                    ref_id=item.ref_id,
+                    ref_name=item.ref_name,
+                    detail=item.detail,
+                    ref_status=item.ref_status,
+                    jump_module=item.jump_module,
+                    jump_target=item.jump_target,
+                    risk_level=item.risk_level,
+                    risk_note=item.risk_note,
+                )
+            )
+
+    return ProductTemplateReferenceResult(
+        product_id=product.id,
+        product_name=product.name,
+        total_templates=len(templates),
+        total_references=len(rows),
+        items=rows,
     )
 
 

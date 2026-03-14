@@ -57,12 +57,18 @@ class CraftService {
     required String code,
     required String name,
     required int sortOrder,
+    String remark = '',
   }) async {
     final uri = Uri.parse('$_basePath/stages');
     final response = await http.post(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({'code': code, 'name': name, 'sort_order': sortOrder}),
+      body: jsonEncode({
+        'code': code,
+        'name': name,
+        'sort_order': sortOrder,
+        'remark': remark,
+      }),
     );
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
@@ -80,6 +86,7 @@ class CraftService {
     required String name,
     required int sortOrder,
     required bool isEnabled,
+    String? remark,
   }) async {
     final uri = Uri.parse('$_basePath/stages/$stageId');
     final response = await http.put(
@@ -90,6 +97,7 @@ class CraftService {
         'name': name,
         'sort_order': sortOrder,
         'is_enabled': isEnabled,
+        if (remark != null) 'remark': remark,
       }),
     );
     final body = _decodeBody(response);
@@ -159,12 +167,18 @@ class CraftService {
     required String code,
     required String name,
     required int stageId,
+    String remark = '',
   }) async {
     final uri = Uri.parse('$_basePath/processes');
     final response = await http.post(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({'code': code, 'name': name, 'stage_id': stageId}),
+      body: jsonEncode({
+        'code': code,
+        'name': name,
+        'stage_id': stageId,
+        'remark': remark,
+      }),
     );
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
@@ -182,6 +196,7 @@ class CraftService {
     required String name,
     required int stageId,
     required bool isEnabled,
+    String? remark,
   }) async {
     final uri = Uri.parse('$_basePath/processes/$processId');
     final response = await http.put(
@@ -192,6 +207,7 @@ class CraftService {
         'name': name,
         'stage_id': stageId,
         'is_enabled': isEnabled,
+        if (remark != null) 'remark': remark,
       }),
     );
     final body = _decodeBody(response);
@@ -320,6 +336,22 @@ class CraftService {
     );
   }
 
+  Future<CraftSystemMasterTemplateVersionListResult>
+  listSystemMasterTemplateVersions() async {
+    final uri = Uri.parse('$_basePath/system-master-template/versions');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftSystemMasterTemplateVersionListResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
   Future<CraftTemplateDetail> getTemplateDetail({
     required int templateId,
   }) async {
@@ -341,6 +373,7 @@ class CraftService {
     required bool isDefault,
     required List<CraftTemplateStepPayload> steps,
     String lifecycleStatus = 'draft',
+    String remark = '',
   }) async {
     final uri = Uri.parse('$_basePath/templates');
     final response = await http.post(
@@ -351,6 +384,7 @@ class CraftService {
         'template_name': templateName,
         'is_default': isDefault,
         'lifecycle_status': lifecycleStatus,
+        'remark': remark,
         'steps': steps.map((item) => item.toJson()).toList(),
       }),
     );
@@ -371,6 +405,7 @@ class CraftService {
     required bool isEnabled,
     required List<CraftTemplateStepPayload> steps,
     bool syncOrders = true,
+    String? remark,
   }) async {
     final uri = Uri.parse('$_basePath/templates/$templateId');
     final response = await http.put(
@@ -382,6 +417,7 @@ class CraftService {
         'is_enabled': isEnabled,
         'steps': steps.map((item) => item.toJson()).toList(),
         'sync_orders': syncOrders,
+        if (remark != null) 'remark': remark,
       }),
     );
     final body = _decodeBody(response);
@@ -417,6 +453,7 @@ class CraftService {
     required int templateId,
     required bool applyOrderSync,
     required bool confirmed,
+    int? expectedVersion,
     String? note,
   }) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/publish');
@@ -426,6 +463,7 @@ class CraftService {
       body: jsonEncode({
         'apply_order_sync': applyOrderSync,
         'confirmed': confirmed,
+        if (expectedVersion != null) 'expected_version': expectedVersion,
         'note': note,
       }),
     );
@@ -523,18 +561,38 @@ class CraftService {
 
   Future<CraftTemplateBatchExportResult> exportTemplates({
     int? productId,
+    String? keyword,
+    String? productCategory,
+    bool? isDefault,
     bool? enabled,
     String? lifecycleStatus,
+    DateTime? updatedFrom,
+    DateTime? updatedTo,
   }) async {
     final query = <String, String>{};
     if (productId != null) {
       query['product_id'] = '$productId';
+    }
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (productCategory != null && productCategory.trim().isNotEmpty) {
+      query['product_category'] = productCategory.trim();
+    }
+    if (isDefault != null) {
+      query['is_default'] = '$isDefault';
     }
     if (enabled != null) {
       query['enabled'] = '$enabled';
     }
     if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
       query['lifecycle_status'] = lifecycleStatus.trim().toLowerCase();
+    }
+    if (updatedFrom != null) {
+      query['updated_from'] = updatedFrom.toUtc().toIso8601String();
+    }
+    if (updatedTo != null) {
+      query['updated_to'] = updatedTo.toUtc().toIso8601String();
     }
     final uri = Uri.parse(
       '$_basePath/templates/export',
@@ -652,6 +710,32 @@ class CraftService {
     return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
   }
 
+  Future<CraftTemplateDetail> enableTemplate({required int templateId}) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/enable');
+    final response = await http.post(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<CraftTemplateDetail> disableTemplate({required int templateId}) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/disable');
+    final response = await http.post(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
   Future<CraftTemplateDetail> archiveTemplate({required int templateId}) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/archive');
     final response = await http.post(uri, headers: _authHeaders);
@@ -710,6 +794,37 @@ class CraftService {
     );
   }
 
+  Future<String> exportCraftKanbanProcessMetrics({
+    required int productId,
+    int limit = 5,
+    int? stageId,
+    int? processId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final query = <String, String>{
+      'product_id': '$productId',
+      'limit': '$limit',
+    };
+    if (stageId != null) query['stage_id'] = '$stageId';
+    if (processId != null) query['process_id'] = '$processId';
+    if (startDate != null) query['start_date'] = startDate.toUtc().toIso8601String();
+    if (endDate != null) query['end_date'] = endDate.toUtc().toIso8601String();
+    final uri = Uri.parse(
+      '$_basePath/kanban/process-metrics/export',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return (data['content_base64'] as String?) ?? '';
+  }
+
 
   Future<CraftStageReferenceResult> getStageReferences({
     required int stageId,
@@ -758,6 +873,23 @@ class CraftService {
       );
     }
     return CraftTemplateReferenceResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  Future<CraftProductTemplateReferenceResult> getProductTemplateReferences({
+    required int productId,
+  }) async {
+    final uri = Uri.parse('$_basePath/products/$productId/template-references');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftProductTemplateReferenceResult.fromJson(
       body['data'] as Map<String, dynamic>? ?? const {},
     );
   }

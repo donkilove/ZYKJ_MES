@@ -23,6 +23,7 @@ class Process(Base, TimestampMixin):
         server_default=text("true"),
         index=True,
     )
+    remark: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default=text("''"))
 
     users = relationship("User", secondary=user_processes, back_populates="processes")
     stage = relationship("ProcessStage", back_populates="processes")

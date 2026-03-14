@@ -20,15 +20,20 @@ class _TemplateStepDraft {
 }
 
 enum _TemplateAction {
+  detail,
   edit,
   publish,
   copy,
   copyToProduct,
   copyFromMaster,
+  enable,
+  disable,
   archive,
   unarchive,
   impact,
   versions,
+  compare,
+  rollback,
   delete,
 }
 
@@ -61,6 +66,13 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   String _message = '';
   int? _productFilterId;
   String? _lifecycleFilter;
+  final _templateKeywordController = TextEditingController();
+  String _templateKeyword = '';
+  String? _productCategoryFilter;
+  bool? _defaultTemplateFilter;
+  bool? _templateEnabledFilter;
+  DateTime? _updatedFromDate;
+  DateTime? _updatedToDate;
 
   List<ProductionProductOption> _products = const [];
   List<CraftStageItem> _stages = const [];
@@ -75,6 +87,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     _craftService = CraftService(widget.session);
     _productionService = ProductionService(widget.session);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _templateKeywordController.dispose();
+    super.dispose();
   }
 
   bool _isUnauthorized(Object error) {
@@ -149,6 +167,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             !_products.any((item) => item.id == _productFilterId)) {
           _productFilterId = null;
         }
+        if (_productCategoryFilter != null &&
+            !_productCategoryOptions.contains(_productCategoryFilter)) {
+          _productCategoryFilter = null;
+        }
       });
     } catch (error) {
       if (!mounted) {
@@ -171,12 +193,102 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   List<CraftTemplateItem> get _filteredTemplates {
-    if (_productFilterId == null) {
-      return _templates;
+    var rows = _templates;
+    if (_productFilterId != null) {
+      rows = rows.where((item) => item.productId == _productFilterId).toList();
     }
-    return _templates
-        .where((item) => item.productId == _productFilterId)
-        .toList();
+    if (_templateKeyword.isNotEmpty) {
+      final keyword = _templateKeyword.toLowerCase();
+      rows = rows
+          .where(
+            (item) =>
+                item.templateName.toLowerCase().contains(keyword) ||
+                item.productName.toLowerCase().contains(keyword),
+          )
+          .toList();
+    }
+    if (_productCategoryFilter != null && _productCategoryFilter!.isNotEmpty) {
+      rows = rows
+          .where((item) => item.productCategory == _productCategoryFilter)
+          .toList();
+    }
+    if (_defaultTemplateFilter != null) {
+      rows = rows.where((item) => item.isDefault == _defaultTemplateFilter).toList();
+    }
+    if (_templateEnabledFilter != null) {
+      rows = rows.where((item) => item.isEnabled == _templateEnabledFilter).toList();
+    }
+    if (_updatedFromDate != null) {
+      final from = DateTime(
+        _updatedFromDate!.year,
+        _updatedFromDate!.month,
+        _updatedFromDate!.day,
+      );
+      rows = rows
+          .where((item) => !item.updatedAt.toLocal().isBefore(from))
+          .toList();
+    }
+    if (_updatedToDate != null) {
+      final to = DateTime(
+        _updatedToDate!.year,
+        _updatedToDate!.month,
+        _updatedToDate!.day,
+        23,
+        59,
+        59,
+        999,
+        999,
+      );
+      rows = rows.where((item) => !item.updatedAt.toLocal().isAfter(to)).toList();
+    }
+    return rows;
+  }
+
+  List<String> get _productCategoryOptions {
+    final categories = <String>{
+      for (final item in _templates)
+        if (item.productCategory.trim().isNotEmpty) item.productCategory.trim(),
+    };
+    final sorted = categories.toList();
+    sorted.sort();
+    return sorted;
+  }
+
+  String _formatDateLabel(DateTime? value) {
+    if (value == null) {
+      return '未设置';
+    }
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '${value.year}-$month-$day';
+  }
+
+  Future<void> _pickUpdatedDate({required bool isFrom}) async {
+    final initialDate = isFrom
+        ? (_updatedFromDate ?? DateTime.now())
+        : (_updatedToDate ?? _updatedFromDate ?? DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020, 1, 1),
+      lastDate: DateTime(2100, 12, 31),
+    );
+    if (picked == null) {
+      return;
+    }
+    setState(() {
+      if (isFrom) {
+        _updatedFromDate = picked;
+        if (_updatedToDate != null && _updatedToDate!.isBefore(picked)) {
+          _updatedToDate = picked;
+        }
+      } else {
+        _updatedToDate = picked;
+        if (_updatedFromDate != null && _updatedFromDate!.isAfter(picked)) {
+          _updatedFromDate = picked;
+        }
+      }
+    });
   }
 
   List<CraftProcessItem> _processesByStage(int stageId) {
@@ -225,6 +337,75 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     return detail;
   }
 
+  Future<void> _showTemplateDetailDialog(CraftTemplateItem item) async {
+    if (!_canViewTemplates) {
+      _showNoPermission();
+      return;
+    }
+    try {
+      final detail = await _getTemplateDetail(item.id);
+      if (!mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('模板详情 - ${item.templateName}'),
+          content: SizedBox(
+            width: 820,
+            height: 520,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('产品：${item.productName}'),
+                Text('版本：${item.version} / 已发布 P${item.publishedVersion}'),
+                Text('生命周期：${_lifecycleLabel(item.lifecycleStatus)}'),
+                Text('状态：${item.isEnabled ? '启用' : '停用'}'),
+                if (item.remark.trim().isNotEmpty) Text('备注：${item.remark.trim()}'),
+                const SizedBox(height: 10),
+                const Text('步骤列表', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: detail.steps.isEmpty
+                      ? const Center(child: Text('暂无步骤'))
+                      : ListView.separated(
+                          itemCount: detail.steps.length,
+                          separatorBuilder: (context, index) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final step = detail.steps[index];
+                            return ListTile(
+                              dense: true,
+                              leading: Text('#${step.stepOrder}'),
+                              title: Text('${step.stageCode} ${step.stageName}'),
+                              subtitle: Text('${step.processCode} ${step.processName}'),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage(error))),
+        );
+      }
+    }
+  }
+
   Future<void> _showTemplateDialog({CraftTemplateItem? existing}) async {
     if (!_canManageTemplates) {
       _showNoPermission();
@@ -241,6 +422,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     final formKey = GlobalKey<FormState>();
     final templateNameController = TextEditingController(
       text: existing?.templateName ?? '',
+    );
+    final remarkController = TextEditingController(
+      text: existing?.remark ?? '',
     );
 
     int selectedProductId =
@@ -349,6 +533,17 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                             }
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: remarkController,
+                          maxLength: 500,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            labelText: '备注（可选）',
+                            border: OutlineInputBorder(),
+                            alignLabelWithHint: true,
+                          ),
                         ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
@@ -552,6 +747,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                           isEnabled: isEnabled,
                           steps: payloadSteps,
                           syncOrders: syncOrders,
+                          remark: remarkController.text.trim(),
                         );
                       } else {
                         await _craftService.createTemplate(
@@ -561,6 +757,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                           lifecycleStatus: createAsPublished
                               ? 'published'
                               : 'draft',
+                          remark: remarkController.text.trim(),
                           steps: payloadSteps,
                         );
                       }
@@ -589,6 +786,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     );
 
     templateNameController.dispose();
+    remarkController.dispose();
 
     if (saved == true) {
       if (existing != null) {
@@ -851,6 +1049,89 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
 
     if (saved == true) {
       await _loadData();
+    }
+  }
+
+  Future<void> _showSystemMasterVersionDialog() async {
+    if (!_canManageSystemMasterTemplate) {
+      _showNoPermission();
+      return;
+    }
+    try {
+      final result = await _craftService.listSystemMasterTemplateVersions();
+      if (!mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('系统母版历史版本'),
+            content: SizedBox(
+              width: 920,
+              height: 560,
+              child: result.items.isEmpty
+                  ? const Center(child: Text('暂无历史版本'))
+                  : ListView.separated(
+                      itemCount: result.items.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final item = result.items[index];
+                        final subtitleParts = <String>[
+                          item.createdAt.toLocal().toString(),
+                          if ((item.createdByUsername ?? '').trim().isNotEmpty)
+                            '操作人：${item.createdByUsername}',
+                          if ((item.note ?? '').trim().isNotEmpty) item.note!.trim(),
+                        ];
+                        return ExpansionTile(
+                          tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          title: Text('v${item.version} · ${item.action}'),
+                          subtitle: Text(subtitleParts.join(' · ')),
+                          children: [
+                            if (item.steps.isEmpty)
+                              const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text('该版本无步骤数据'),
+                              )
+                            else
+                              Column(
+                                children: item.steps
+                                    .map(
+                                      (step) => ListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: Text('#${step.stepOrder}'),
+                                        title: Text('${step.stageCode} ${step.stageName}'),
+                                        subtitle: Text('${step.processCode} ${step.processName}'),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('关闭'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage(error))),
+        );
+      }
     }
   }
 
@@ -1158,6 +1439,59 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
     try {
       await _craftService.unarchiveTemplate(templateId: item.id);
+      await _loadData();
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
+    }
+  }
+
+  Future<void> _setTemplateEnabled(
+    CraftTemplateItem item, {
+    required bool enabled,
+  }) async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
+    if (item.isEnabled == enabled) {
+      return;
+    }
+    final actionText = enabled ? '启用' : '停用';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$actionText模板'),
+        content: Text('确认$actionText模板 ${item.templateName} 吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(actionText),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      if (enabled) {
+        await _craftService.enableTemplate(templateId: item.id);
+      } else {
+        await _craftService.disableTemplate(templateId: item.id);
+      }
+      _detailCache.remove(item.id);
       await _loadData();
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -1513,6 +1847,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         templateId: item.id,
                         applyOrderSync: applyOrderSync,
                         confirmed: !applyOrderSync || confirmed,
+                        expectedVersion: item.version,
                         note: noteController.text.trim().isEmpty
                             ? null
                             : noteController.text.trim(),
@@ -1946,7 +2281,24 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     try {
       final result = await _craftService.exportTemplates(
         productId: _productFilterId,
+        keyword: _templateKeyword.isEmpty ? null : _templateKeyword,
+        productCategory: _productCategoryFilter,
+        isDefault: _defaultTemplateFilter,
+        enabled: _templateEnabledFilter,
         lifecycleStatus: _lifecycleFilter,
+        updatedFrom: _updatedFromDate,
+        updatedTo: _updatedToDate == null
+            ? null
+            : DateTime(
+                _updatedToDate!.year,
+                _updatedToDate!.month,
+                _updatedToDate!.day,
+                23,
+                59,
+                59,
+                999,
+                999,
+              ),
       );
       if (!mounted) {
         return;
@@ -2171,6 +2523,13 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     CraftTemplateItem item,
   ) async {
     switch (action) {
+      case _TemplateAction.detail:
+        if (!_canViewTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _showTemplateDetailDialog(item);
+        return;
       case _TemplateAction.copy:
         if (!_canManageTemplates) {
           _showNoPermission();
@@ -2191,6 +2550,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           return;
         }
         await _copyFromSystemMaster(item);
+        return;
+      case _TemplateAction.enable:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _setTemplateEnabled(item, enabled: true);
+        return;
+      case _TemplateAction.disable:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _setTemplateEnabled(item, enabled: false);
         return;
       case _TemplateAction.archive:
         if (!_canManageTemplates) {
@@ -2229,6 +2602,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         return;
       case _TemplateAction.versions:
         if (!_canViewTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _showVersionDialog(item);
+        return;
+      case _TemplateAction.compare:
+        if (!_canViewTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _showVersionDialog(item);
+        return;
+      case _TemplateAction.rollback:
+        if (!_canManageTemplates) {
           _showNoPermission();
           return;
         }
@@ -2274,6 +2661,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           Expanded(flex: 1, child: _buildHeaderLabel(theme, '版本/发布')),
           Expanded(flex: 1, child: _buildHeaderLabel(theme, '默认')),
           Expanded(flex: 1, child: _buildHeaderLabel(theme, '生命周期/状态')),
+          Expanded(flex: 1, child: _buildHeaderLabel(theme, '最近更新人')),
           Expanded(flex: 2, child: _buildHeaderLabel(theme, '更新时间')),
           SizedBox(
             width: 64,
@@ -2314,6 +2702,14 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   label: Text(
                     _systemMasterTemplate == null ? '新建系统母版' : '编辑系统母版',
                   ),
+                ),
+              if (_canManageSystemMasterTemplate && _systemMasterTemplate != null)
+                const SizedBox(width: 8),
+              if (_canManageSystemMasterTemplate && _systemMasterTemplate != null)
+                OutlinedButton.icon(
+                  onPressed: _loading ? null : _showSystemMasterVersionDialog,
+                  icon: const Icon(Icons.history),
+                  label: const Text('母版历史版本'),
                 ),
               if (_canManageSystemMasterTemplate) const SizedBox(width: 8),
               FilledButton.icon(
@@ -2358,70 +2754,213 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             child: Text(
               _systemMasterTemplate == null
                   ? '系统母版状态：未配置（新建产品将跳过自动绑定默认模板）'
-                  : '系统母版状态：已配置（版本 v${_systemMasterTemplate!.version}，步骤 ${_systemMasterTemplate!.steps.length}）',
+                  : '系统母版状态：已配置（版本 v${_systemMasterTemplate!.version}，步骤 ${_systemMasterTemplate!.steps.length}，最近更新人 ${_systemMasterTemplate!.updatedByUsername ?? '-'}，最近更新时间 ${_systemMasterTemplate!.updatedAt.toLocal()}）',
             ),
           ),
           const SizedBox(height: 12),
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 320,
-                child: DropdownButtonFormField<int?>(
-                  initialValue: _productFilterId,
-                  decoration: const InputDecoration(
-                    labelText: '按产品筛选',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('全部产品'),
-                    ),
-                    ..._products.map(
-                      (item) => DropdownMenuItem<int?>(
-                        value: item.id,
-                        child: Text(item.name),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: 320,
+                    child: DropdownButtonFormField<int?>(
+                      initialValue: _productFilterId,
+                      decoration: const InputDecoration(
+                        labelText: '按产品筛选',
+                        border: OutlineInputBorder(),
                       ),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('全部产品'),
+                        ),
+                        ..._products.map(
+                          (item) => DropdownMenuItem<int?>(
+                            value: item.id,
+                            child: Text(item.name),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _productFilterId = value;
+                        });
+                      },
                     ),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _productFilterId = value;
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 220,
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _lifecycleFilter,
-                  decoration: const InputDecoration(
-                    labelText: '按生命周期筛选',
-                    border: OutlineInputBorder(),
                   ),
-                  items: const [
-                    DropdownMenuItem<String?>(value: null, child: Text('全部状态')),
-                    DropdownMenuItem<String?>(
-                      value: 'draft',
-                      child: Text('草稿'),
+                  SizedBox(
+                    width: 220,
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: _lifecycleFilter,
+                      decoration: const InputDecoration(
+                        labelText: '按生命周期筛选',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('全部状态'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'draft',
+                          child: Text('草稿'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'published',
+                          child: Text('已发布'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'archived',
+                          child: Text('已归档'),
+                        ),
+                      ],
+                      onChanged: (value) async {
+                        setState(() {
+                          _lifecycleFilter = value;
+                        });
+                        await _loadData();
+                      },
                     ),
-                    DropdownMenuItem<String?>(
-                      value: 'published',
-                      child: Text('已发布'),
+                  ),
+                  SizedBox(
+                    width: 280,
+                    child: TextField(
+                      controller: _templateKeywordController,
+                      decoration: const InputDecoration(
+                        labelText: '模板名称搜索',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _templateKeyword = value.trim();
+                        });
+                      },
                     ),
-                    DropdownMenuItem<String?>(
-                      value: 'archived',
-                      child: Text('已归档'),
+                  ),
+                  SizedBox(
+                    width: 220,
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: _productCategoryFilter,
+                      decoration: const InputDecoration(
+                        labelText: '产品分类筛选',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('全部分类'),
+                        ),
+                        ..._productCategoryOptions.map(
+                          (category) => DropdownMenuItem<String?>(
+                            value: category,
+                            child: Text(category),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _productCategoryFilter = value;
+                        });
+                      },
                     ),
-                  ],
-                  onChanged: (value) async {
-                    setState(() {
-                      _lifecycleFilter = value;
-                    });
-                    await _loadData();
-                  },
-                ),
+                  ),
+                  SizedBox(
+                    width: 200,
+                    child: DropdownButtonFormField<bool?>(
+                      initialValue: _defaultTemplateFilter,
+                      decoration: const InputDecoration(
+                        labelText: '默认模板筛选',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem<bool?>(
+                          value: null,
+                          child: Text('全部默认状态'),
+                        ),
+                        DropdownMenuItem<bool?>(
+                          value: true,
+                          child: Text('默认模板'),
+                        ),
+                        DropdownMenuItem<bool?>(
+                          value: false,
+                          child: Text('非默认模板'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _defaultTemplateFilter = value;
+                        });
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 180,
+                    child: DropdownButtonFormField<bool?>(
+                      initialValue: _templateEnabledFilter,
+                      decoration: const InputDecoration(
+                        labelText: '启用状态筛选',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem<bool?>(
+                          value: null,
+                          child: Text('全部状态'),
+                        ),
+                        DropdownMenuItem<bool?>(
+                          value: true,
+                          child: Text('启用'),
+                        ),
+                        DropdownMenuItem<bool?>(
+                          value: false,
+                          child: Text('停用'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _templateEnabledFilter = value;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _pickUpdatedDate(isFrom: true),
+                    icon: const Icon(Icons.event),
+                    label: Text('起始更新日：${_formatDateLabel(_updatedFromDate)}'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _pickUpdatedDate(isFrom: false),
+                    icon: const Icon(Icons.event_available),
+                    label: Text('结束更新日：${_formatDateLabel(_updatedToDate)}'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _updatedFromDate = null;
+                        _updatedToDate = null;
+                        _templateKeyword = '';
+                        _templateKeywordController.clear();
+                        _productCategoryFilter = null;
+                        _defaultTemplateFilter = null;
+                        _templateEnabledFilter = null;
+                      });
+                    },
+                    icon: const Icon(Icons.clear_all),
+                    label: const Text('清空本地筛选'),
+                  ),
+                ],
               ),
             ],
           ),
@@ -2486,6 +3025,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                           child: Text(
                                             '${_lifecycleLabel(item.lifecycleStatus)} / ${item.isEnabled ? '启用' : '停用'}',
                                           ),
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: Text(item.updatedByUsername ?? '-'),
                                         ),
                                         Expanded(
                                           flex: 2,
@@ -2566,8 +3109,29 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                                         ),
                                                       );
                                                     }
+                                                    items.add(
+                                                      PopupMenuItem(
+                                                        value: item.isEnabled
+                                                            ? _TemplateAction
+                                                                  .disable
+                                                            : _TemplateAction
+                                                                  .enable,
+                                                        child: Text(
+                                                          item.isEnabled
+                                                              ? '停用'
+                                                              : '启用',
+                                                        ),
+                                                      ),
+                                                    );
                                                   }
                                                   if (_canViewTemplates) {
+                                                    items.add(
+                                                      const PopupMenuItem(
+                                                        value: _TemplateAction
+                                                            .detail,
+                                                        child: Text('查看详情'),
+                                                      ),
+                                                    );
                                                     items.add(
                                                       const PopupMenuItem(
                                                         value: _TemplateAction
@@ -2580,6 +3144,22 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                                         value: _TemplateAction
                                                             .versions,
                                                         child: Text('版本管理'),
+                                                      ),
+                                                    );
+                                                    items.add(
+                                                      const PopupMenuItem(
+                                                        value: _TemplateAction
+                                                            .compare,
+                                                        child: Text('版本对比'),
+                                                      ),
+                                                    );
+                                                  }
+                                                  if (_canManageTemplates) {
+                                                    items.add(
+                                                      const PopupMenuItem(
+                                                        value: _TemplateAction
+                                                            .rollback,
+                                                        child: Text('回滚模板'),
                                                       ),
                                                     );
                                                   }

@@ -60,6 +60,7 @@ class ProductProcessTemplate(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    remark: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default=text("''"))
 
     product = relationship("Product")
     created_by = relationship("User", foreign_keys=[created_by_user_id])

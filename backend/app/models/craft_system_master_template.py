@@ -43,3 +43,10 @@ class CraftSystemMasterTemplate(Base, TimestampMixin):
         passive_deletes=True,
         order_by="CraftSystemMasterTemplateStep.step_order.asc()",
     )
+    revisions = relationship(
+        "CraftSystemMasterTemplateRevision",
+        back_populates="template",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="CraftSystemMasterTemplateRevision.version.desc()",
+    )

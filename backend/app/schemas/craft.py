@@ -16,6 +16,7 @@ class ProcessStageCreate(BaseModel):
     code: str = Field(min_length=2, max_length=64)
     name: str = Field(min_length=1, max_length=128)
     sort_order: int = Field(default=0)
+    remark: str = Field(default="", max_length=500)
 
 
 class ProcessStageUpdate(BaseModel):
@@ -23,6 +24,7 @@ class ProcessStageUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     sort_order: int = Field(default=0)
     is_enabled: bool = True
+    remark: str | None = Field(default=None, max_length=500)
 
 
 class ProcessStageItem(BaseModel):
@@ -31,6 +33,7 @@ class ProcessStageItem(BaseModel):
     name: str
     sort_order: int
     is_enabled: bool
+    remark: str = ""
     process_count: int = 0
     created_at: datetime
     updated_at: datetime
@@ -45,6 +48,7 @@ class CraftProcessCreate(BaseModel):
     code: str = Field(min_length=2, max_length=64)
     name: str = Field(min_length=1, max_length=128)
     stage_id: int = Field(gt=0)
+    remark: str = Field(default="", max_length=500)
 
 
 class CraftProcessUpdate(BaseModel):
@@ -52,6 +56,7 @@ class CraftProcessUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     stage_id: int = Field(gt=0)
     is_enabled: bool = True
+    remark: str | None = Field(default=None, max_length=500)
 
 
 class CraftProcessItem(BaseModel):
@@ -62,6 +67,7 @@ class CraftProcessItem(BaseModel):
     stage_code: str | None = None
     stage_name: str | None = None
     is_enabled: bool
+    remark: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -82,6 +88,7 @@ class ProductProcessTemplateCreate(BaseModel):
     template_name: str = Field(min_length=1, max_length=128)
     is_default: bool = False
     lifecycle_status: str = Field(default=TEMPLATE_LIFECYCLE_DRAFT, min_length=1, max_length=32)
+    remark: str = Field(default="", max_length=500)
     steps: list[TemplateStepPayload] = Field(default_factory=list, min_length=1)
 
     @field_validator("steps")
@@ -105,6 +112,7 @@ class ProductProcessTemplateUpdate(BaseModel):
     template_name: str = Field(min_length=1, max_length=128)
     is_default: bool = False
     is_enabled: bool = True
+    remark: str | None = Field(default=None, max_length=500)
     steps: list[TemplateStepPayload] = Field(default_factory=list, min_length=1)
     sync_orders: bool = True
 
@@ -134,6 +142,7 @@ class ProductProcessTemplateItem(BaseModel):
     id: int
     product_id: int
     product_name: str
+    product_category: str = ""
     template_name: str
     version: int
     lifecycle_status: str
@@ -144,6 +153,7 @@ class ProductProcessTemplateItem(BaseModel):
     created_by_username: str | None = None
     updated_by_user_id: int | None = None
     updated_by_username: str | None = None
+    remark: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -233,6 +243,7 @@ class TemplateImpactAnalysisResult(BaseModel):
 class TemplatePublishRequest(BaseModel):
     apply_order_sync: bool = False
     confirmed: bool = False
+    expected_version: int | None = Field(default=None, gt=0)
     note: str | None = Field(default=None, max_length=256)
 
 
@@ -393,6 +404,9 @@ class StageReferenceItem(BaseModel):
     ref_id: int
     ref_name: str
     detail: str | None = None
+    ref_status: str | None = None
+    jump_module: str | None = None
+    jump_target: str | None = None
     risk_level: str | None = None
     risk_note: str | None = None
 
@@ -410,6 +424,9 @@ class ProcessReferenceItem(BaseModel):
     ref_id: int
     ref_name: str
     detail: str | None = None
+    ref_status: str | None = None
+    jump_module: str | None = None
+    jump_target: str | None = None
     risk_level: str | None = None
     risk_note: str | None = None
 
@@ -427,6 +444,9 @@ class TemplateReferenceItem(BaseModel):
     ref_id: int
     ref_name: str
     detail: str | None = None
+    ref_status: str | None = None
+    jump_module: str | None = None
+    jump_target: str | None = None
     risk_level: str | None = None
     risk_note: str | None = None
 
@@ -438,6 +458,57 @@ class TemplateReferenceResult(BaseModel):
     product_name: str
     total: int
     items: list[TemplateReferenceItem]
+
+
+class ProductTemplateReferenceRow(BaseModel):
+    template_id: int
+    template_name: str
+    lifecycle_status: str
+    ref_type: str
+    ref_id: int
+    ref_name: str
+    detail: str | None = None
+    ref_status: str | None = None
+    jump_module: str | None = None
+    jump_target: str | None = None
+    risk_level: str | None = None
+    risk_note: str | None = None
+
+
+class ProductTemplateReferenceResult(BaseModel):
+    product_id: int
+    product_name: str
+    total_templates: int
+    total_references: int
+    items: list[ProductTemplateReferenceRow]
+
+
+class SystemMasterTemplateVersionStepItem(BaseModel):
+    id: int
+    step_order: int
+    stage_id: int
+    stage_code: str
+    stage_name: str
+    process_id: int
+    process_code: str
+    process_name: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SystemMasterTemplateVersionItem(BaseModel):
+    version: int
+    action: str
+    note: str | None = None
+    created_by_user_id: int | None = None
+    created_by_username: str | None = None
+    created_at: datetime
+    steps: list[SystemMasterTemplateVersionStepItem]
+
+
+class SystemMasterTemplateVersionListResult(BaseModel):
+    total: int
+    items: list[SystemMasterTemplateVersionItem]
 
 
 class CraftExportResult(BaseModel):

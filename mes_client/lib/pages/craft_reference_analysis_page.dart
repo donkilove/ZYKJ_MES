@@ -5,7 +5,14 @@ import '../models/craft_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 
-enum _QueryMode { stage, process, template }
+enum _QueryMode { stage, process, template, product }
+
+class _ProductOption {
+  const _ProductOption({required this.id, required this.name});
+
+  final int id;
+  final String name;
+}
 
 class CraftReferenceAnalysisPage extends StatefulWidget {
   const CraftReferenceAnalysisPage({
@@ -32,24 +39,29 @@ class _CraftReferenceAnalysisPageState
   List<CraftStageItem> _stages = const [];
   List<CraftProcessItem> _processes = const [];
   List<CraftTemplateItem> _templates = const [];
+  List<_ProductOption> _productOptions = const [];
 
   _QueryMode _queryMode = _QueryMode.stage;
 
   CraftStageItem? _selectedStage;
   CraftProcessItem? _selectedProcess;
   CraftTemplateItem? _selectedTemplate;
+  _ProductOption? _selectedProduct;
 
   bool _loadingRef = false;
   CraftStageReferenceResult? _stageRefResult;
   CraftProcessReferenceResult? _processRefResult;
   CraftTemplateReferenceResult? _templateRefResult;
+  CraftProductTemplateReferenceResult? _productRefResult;
 
   final _stageSearchController = TextEditingController();
   final _processSearchController = TextEditingController();
   final _templateSearchController = TextEditingController();
+  final _productSearchController = TextEditingController();
   String _stageKeyword = '';
   String _processKeyword = '';
   String _templateKeyword = '';
+  String _productKeyword = '';
 
   @override
   void initState() {
@@ -63,6 +75,7 @@ class _CraftReferenceAnalysisPageState
     _stageSearchController.dispose();
     _processSearchController.dispose();
     _templateSearchController.dispose();
+    _productSearchController.dispose();
     super.dispose();
   }
 
@@ -91,6 +104,15 @@ class _CraftReferenceAnalysisPageState
         _processes = [...processResult.items];
         _templates = [...templateResult.items]
           ..sort((a, b) => a.templateName.compareTo(b.templateName));
+        final products = <int, String>{};
+        for (final item in _templates) {
+          products[item.productId] = item.productName;
+        }
+        final productRows = products.entries
+            .map((entry) => _ProductOption(id: entry.key, name: entry.value))
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+        _productOptions = productRows;
       });
     } catch (error) {
       if (!mounted) return;
@@ -111,9 +133,11 @@ class _CraftReferenceAnalysisPageState
       _selectedStage = stage;
       _selectedProcess = null;
       _selectedTemplate = null;
+      _selectedProduct = null;
       _stageRefResult = null;
       _processRefResult = null;
       _templateRefResult = null;
+      _productRefResult = null;
       _loadingRef = true;
     });
     try {
@@ -141,9 +165,11 @@ class _CraftReferenceAnalysisPageState
       _selectedProcess = process;
       _selectedStage = null;
       _selectedTemplate = null;
+      _selectedProduct = null;
       _stageRefResult = null;
       _processRefResult = null;
       _templateRefResult = null;
+      _productRefResult = null;
       _loadingRef = true;
     });
     try {
@@ -171,15 +197,51 @@ class _CraftReferenceAnalysisPageState
       _selectedTemplate = template;
       _selectedStage = null;
       _selectedProcess = null;
+      _selectedProduct = null;
       _stageRefResult = null;
       _processRefResult = null;
       _templateRefResult = null;
+      _productRefResult = null;
       _loadingRef = true;
     });
     try {
       final result = await _service.getTemplateReferences(templateId: template.id);
       if (!mounted) return;
       setState(() => _templateRefResult = result);
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('查询引用失败：${_errorMessage(error)}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingRef = false);
+    }
+  }
+
+  Future<void> _loadProductTemplateReferences(_ProductOption product) async {
+    setState(() {
+      _selectedProduct = product;
+      _selectedTemplate = null;
+      _selectedStage = null;
+      _selectedProcess = null;
+      _stageRefResult = null;
+      _processRefResult = null;
+      _templateRefResult = null;
+      _productRefResult = null;
+      _loadingRef = true;
+    });
+    try {
+      final result = await _service.getProductTemplateReferences(
+        productId: product.id,
+      );
+      if (!mounted) return;
+      setState(() => _productRefResult = result);
     } catch (error) {
       if (!mounted) return;
       if (_isUnauthorized(error)) {
@@ -229,6 +291,14 @@ class _CraftReferenceAnalysisPageState
         .toList();
   }
 
+  List<_ProductOption> get _filteredProducts {
+    if (_productKeyword.isEmpty) return _productOptions;
+    final kw = _productKeyword.toLowerCase();
+    return _productOptions
+        .where((item) => item.name.toLowerCase().contains(kw))
+        .toList();
+  }
+
   Widget _buildRefTypeChip(String refType) {
     final (label, color) = switch (refType) {
       'process' => ('工序', Colors.blue),
@@ -263,6 +333,41 @@ class _CraftReferenceAnalysisPageState
     );
   }
 
+  Widget _buildStatusChip(String? refStatus) {
+    if (refStatus == null || refStatus.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final status = refStatus.trim();
+    final color = switch (status) {
+      '正在使用' => Colors.blue,
+      '可同步' => Colors.green,
+      '不可同步' => Colors.red,
+      '历史引用' => Colors.grey,
+      _ => Colors.grey,
+    };
+    return Chip(
+      label: Text(status, style: const TextStyle(fontSize: 10)),
+      backgroundColor: color.withValues(alpha: 0.12),
+      side: BorderSide(color: color.withValues(alpha: 0.45)),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  String _jumpLabel(CraftReferenceItem item) {
+    final module = (item.jumpModule ?? '').trim();
+    if (module.isEmpty) return '查看来源';
+    return switch (module) {
+      'production' => '跳转生产模块',
+      'user' => '跳转用户模块',
+      'product' => '跳转产品模块',
+      'equipment' => '跳转设备模块',
+      'quality' => '跳转品质模块',
+      'craft' => '跳转工艺模块',
+      _ => '查看来源',
+    };
+  }
+
   Widget _buildReferenceList(List<CraftReferenceItem> items) {
     if (items.isEmpty) {
       return const Center(child: Text('无引用记录，可安全删除'));
@@ -279,6 +384,8 @@ class _CraftReferenceAnalysisPageState
             children: [
               Expanded(child: Text(item.refName)),
               const SizedBox(width: 4),
+              _buildStatusChip(item.refStatus),
+              const SizedBox(width: 4),
               _buildRiskChip(item.riskLevel),
             ],
           ),
@@ -286,6 +393,11 @@ class _CraftReferenceAnalysisPageState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (item.detail != null) Text(item.detail!),
+              if (item.jumpTarget != null && item.jumpTarget!.trim().isNotEmpty)
+                Text(
+                  '来源：${item.jumpTarget}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               if (item.riskNote != null)
                 Text(
                   item.riskNote!,
@@ -296,9 +408,31 @@ class _CraftReferenceAnalysisPageState
                 ),
             ],
           ),
-          trailing: Text(
-            '#${item.refId}',
-            style: Theme.of(context).textTheme.bodySmall,
+          trailing: SizedBox(
+            width: 150,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  '#${item.refId}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(width: 4),
+                TextButton(
+                  onPressed: () {
+                    final target = (item.jumpTarget ?? '').trim();
+                    final module = (item.jumpModule ?? '').trim();
+                    final message = target.isEmpty
+                        ? '暂无可跳转来源'
+                        : '来源模块：${module.isEmpty ? '-': module}，目标：$target';
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(message)),
+                    );
+                  },
+                  child: Text(_jumpLabel(item)),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -306,7 +440,10 @@ class _CraftReferenceAnalysisPageState
   }
 
   Widget _buildResultPanel(ThemeData theme) {
-    if (_selectedStage == null && _selectedProcess == null && _selectedTemplate == null) {
+    if (_selectedStage == null &&
+        _selectedProcess == null &&
+        _selectedTemplate == null &&
+        _selectedProduct == null) {
       return const Center(child: Text('请在左侧选择工段、工序或模板以查看引用情况'));
     }
     if (_loadingRef) {
@@ -384,6 +521,72 @@ class _CraftReferenceAnalysisPageState
       );
     }
 
+    if (_productRefResult != null) {
+      final r = _productRefResult!;
+      final grouped = <int, List<CraftProductTemplateReferenceRow>>{};
+      for (final row in r.items) {
+        grouped.putIfAbsent(row.templateId, () => []).add(row);
+      }
+      final templateIds = grouped.keys.toList()..sort();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('按产品查询：${r.productName}', style: theme.textTheme.titleMedium),
+              const SizedBox(width: 12),
+              Chip(
+                label: Text('模板 ${r.totalTemplates} 个 / 引用 ${r.totalReferences} 条'),
+                backgroundColor: Colors.blue.withValues(alpha: 0.12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: templateIds.isEmpty
+                ? const Center(child: Text('该产品下暂无模板引用'))
+                : ListView.separated(
+                    itemCount: templateIds.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final templateId = templateIds[index];
+                      final rows = grouped[templateId] ?? const [];
+                      final first = rows.first;
+                      return ExpansionTile(
+                        title: Text('${first.templateName} (${first.lifecycleStatus})'),
+                        subtitle: Text('引用 ${rows.length} 条'),
+                        children: rows
+                            .map(
+                              (row) => ListTile(
+                                dense: true,
+                                leading: _buildRefTypeChip(row.refType),
+                                title: Row(
+                                  children: [
+                                    Expanded(child: Text(row.refName)),
+                                    _buildStatusChip(row.refStatus),
+                                    const SizedBox(width: 4),
+                                    _buildRiskChip(row.riskLevel),
+                                  ],
+                                ),
+                                subtitle: Text(
+                                  [
+                                    if ((row.detail ?? '').trim().isNotEmpty) row.detail!.trim(),
+                                    if ((row.jumpTarget ?? '').trim().isNotEmpty) row.jumpTarget!.trim(),
+                                    if ((row.riskNote ?? '').trim().isNotEmpty) row.riskNote!.trim(),
+                                  ].join(' · '),
+                                ),
+                                trailing: Text('#${row.refId}'),
+                              ),
+                            )
+                            .toList(),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      );
+    }
+
     return const SizedBox.shrink();
   }
 
@@ -393,6 +596,7 @@ class _CraftReferenceAnalysisPageState
         ButtonSegment(value: _QueryMode.stage, label: Text('工段')),
         ButtonSegment(value: _QueryMode.process, label: Text('工序')),
         ButtonSegment(value: _QueryMode.template, label: Text('模板')),
+        ButtonSegment(value: _QueryMode.product, label: Text('按产品')),
       ],
       selected: {_queryMode},
       onSelectionChanged: (s) {
@@ -401,9 +605,11 @@ class _CraftReferenceAnalysisPageState
           _selectedStage = null;
           _selectedProcess = null;
           _selectedTemplate = null;
+          _selectedProduct = null;
           _stageRefResult = null;
           _processRefResult = null;
           _templateRefResult = null;
+          _productRefResult = null;
         });
       },
     );
@@ -540,6 +746,52 @@ class _CraftReferenceAnalysisPageState
                           title: Text(template.templateName),
                           subtitle: Text('${template.productName} · ${template.lifecycleStatus}'),
                           onTap: () => _loadTemplateReferences(template),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      case _QueryMode.product:
+        return SizedBox(
+          width: 280,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('按产品查询模板引用', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _productSearchController,
+                    decoration: const InputDecoration(
+                      hintText: '搜索产品',
+                      prefixIcon: Icon(Icons.search, size: 18),
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    ),
+                    onChanged: (v) => setState(() => _productKeyword = v.trim()),
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _filteredProducts.length,
+                      itemBuilder: (context, index) {
+                        final product = _filteredProducts[index];
+                        final selected = _selectedProduct?.id == product.id;
+                        return ListTile(
+                          dense: true,
+                          selected: selected,
+                          selectedTileColor:
+                              theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          title: Text(product.name),
+                          subtitle: Text('#${product.id}'),
+                          onTap: () => _loadProductTemplateReferences(product),
                         );
                       },
                     ),

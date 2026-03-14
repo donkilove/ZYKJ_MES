@@ -38,6 +38,8 @@ from app.models.product_process_template_revision import ProductProcessTemplateR
 from app.models.product_process_template_revision_step import ProductProcessTemplateRevisionStep
 from app.models.craft_system_master_template import CraftSystemMasterTemplate
 from app.models.craft_system_master_template_step import CraftSystemMasterTemplateStep
+from app.models.craft_system_master_template_revision import CraftSystemMasterTemplateRevision
+from app.models.craft_system_master_template_revision_step import CraftSystemMasterTemplateRevisionStep
 from app.models.registration_request import RegistrationRequest
 from app.models.role import Role
 from app.models.role_permission_grant import RolePermissionGrant
@@ -59,6 +61,8 @@ __all__ = [
     "ProductProcessTemplateRevisionStep",
     "CraftSystemMasterTemplate",
     "CraftSystemMasterTemplateStep",
+    "CraftSystemMasterTemplateRevision",
+    "CraftSystemMasterTemplateRevisionStep",
     "RegistrationRequest",
     "PermissionCatalog",
     "RolePermissionGrant",

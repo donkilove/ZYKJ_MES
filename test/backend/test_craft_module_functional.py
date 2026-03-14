@@ -211,6 +211,8 @@ def test_craft_system_master_and_template_lifecycle_flow(db, factory) -> None:
     )
     assert master_updated.data.version == 2
     assert len(master_updated.data.steps) == 2
+    master_versions = craft.list_system_master_template_versions_api(db=db, _=admin)
+    assert master_versions.data.total >= 2
 
     created_template = craft.create_template_api(
         payload=ProductProcessTemplateCreate(
@@ -239,9 +241,24 @@ def test_craft_system_master_and_template_lifecycle_flow(db, factory) -> None:
         _=admin,
     )
     assert listed_templates.data.total == 1
+    product_refs = craft.get_product_template_references_api(
+        product_id=product_a.id,
+        db=db,
+        _=admin,
+    )
+    assert product_refs.data.product_id == product_a.id
+    assert product_refs.data.total_templates >= 1
 
     detail = craft.get_template_detail_api(template_id=template_id, db=db, _=admin)
     assert len(detail.data.steps) == 1
+
+    disabled = craft.disable_template_api(template_id=template_id, db=db, current_user=admin)
+    assert disabled.data.template.is_enabled is False
+    assert disabled.data.template.lifecycle_status == "draft"
+
+    enabled = craft.enable_template_api(template_id=template_id, db=db, current_user=admin)
+    assert enabled.data.template.is_enabled is True
+    assert enabled.data.template.lifecycle_status == "draft"
 
     published_v1 = craft.publish_template_api(
         template_id=template_id,

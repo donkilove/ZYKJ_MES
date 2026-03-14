@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.craft_system_master_template import CraftSystemMasterTemplate
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
+from app.models.product import Product
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
@@ -49,6 +50,9 @@ from app.schemas.craft import (
     ProductProcessTemplateUpdate,
     ProductProcessTemplateUpdateResult,
     SystemMasterTemplateItem,
+    SystemMasterTemplateVersionItem,
+    SystemMasterTemplateVersionListResult,
+    SystemMasterTemplateVersionStepItem,
     SystemMasterTemplateStepItem,
     SystemMasterTemplateUpsertRequest,
     TemplateStepItem,
@@ -63,6 +67,8 @@ from app.schemas.craft import (
     ProcessReferenceResult,
     TemplateReferenceItem,
     TemplateReferenceResult,
+    ProductTemplateReferenceResult,
+    ProductTemplateReferenceRow,
     CraftExportResult,
 )
 from app.services.craft_service import (
@@ -70,6 +76,7 @@ from app.services.craft_service import (
     analyze_template_impact,
     compare_template_versions,
     create_process,
+    export_craft_kanban_process_metrics_csv,
     export_templates,
     get_craft_kanban_process_metrics,
     import_templates,
@@ -89,12 +96,14 @@ from app.services.craft_service import (
     delete_template,
     get_system_master_template,
     get_stage_by_id,
+    get_product_template_references,
     get_template_by_id,
     get_stage_references,
     get_process_references,
     get_template_references,
     list_craft_processes,
     list_stages,
+    list_system_master_template_versions,
     list_templates,
     export_stages_csv,
     export_processes_csv,
@@ -102,6 +111,7 @@ from app.services.craft_service import (
     update_system_master_template,
     update_stage,
     update_template,
+    set_template_enabled,
 )
 
 
@@ -115,6 +125,7 @@ def _to_stage_item(row: ProcessStage) -> ProcessStageItem:
         name=row.name,
         sort_order=row.sort_order,
         is_enabled=row.is_enabled,
+        remark=row.remark,
         process_count=len(row.processes) if row.processes is not None else 0,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -131,6 +142,7 @@ def _to_process_item(row: Process) -> CraftProcessItem:
         stage_code=stage.code if stage else None,
         stage_name=stage.name if stage else None,
         is_enabled=row.is_enabled,
+        remark=row.remark,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -141,6 +153,7 @@ def _to_template_item(row: ProductProcessTemplate) -> ProductProcessTemplateItem
         id=row.id,
         product_id=row.product_id,
         product_name=row.product.name if row.product else "",
+        product_category=row.product.category if row.product else "",
         template_name=row.template_name,
         version=row.version,
         lifecycle_status=row.lifecycle_status,
@@ -151,6 +164,7 @@ def _to_template_item(row: ProductProcessTemplate) -> ProductProcessTemplateItem
         created_by_username=row.created_by.username if row.created_by else None,
         updated_by_user_id=row.updated_by_user_id,
         updated_by_username=row.updated_by.username if row.updated_by else None,
+        remark=row.remark,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -276,6 +290,9 @@ def _to_stage_reference_result(result) -> StageReferenceResult:
                 ref_id=item.ref_id,
                 ref_name=item.ref_name,
                 detail=item.detail,
+                ref_status=item.ref_status,
+                jump_module=item.jump_module,
+                jump_target=item.jump_target,
                 risk_level=item.risk_level,
                 risk_note=item.risk_note,
             )
@@ -296,6 +313,67 @@ def _to_process_reference_result(result) -> ProcessReferenceResult:
                 ref_id=item.ref_id,
                 ref_name=item.ref_name,
                 detail=item.detail,
+                ref_status=item.ref_status,
+                jump_module=item.jump_module,
+                jump_target=item.jump_target,
+                risk_level=item.risk_level,
+                risk_note=item.risk_note,
+            )
+            for item in result.items
+        ],
+    )
+
+
+def _to_system_master_template_version_list_result(result) -> SystemMasterTemplateVersionListResult:
+    return SystemMasterTemplateVersionListResult(
+        total=result.total,
+        items=[
+            SystemMasterTemplateVersionItem(
+                version=item.version,
+                action=item.action,
+                note=item.note,
+                created_by_user_id=item.created_by_user_id,
+                created_by_username=item.created_by.username if item.created_by else None,
+                created_at=item.created_at,
+                steps=[
+                    SystemMasterTemplateVersionStepItem(
+                        id=step.id,
+                        step_order=step.step_order,
+                        stage_id=step.stage_id,
+                        stage_code=step.stage_code,
+                        stage_name=step.stage_name,
+                        process_id=step.process_id,
+                        process_code=step.process_code,
+                        process_name=step.process_name,
+                        created_at=step.created_at,
+                        updated_at=step.updated_at,
+                    )
+                    for step in sorted(item.steps, key=lambda row: (row.step_order, row.id))
+                ],
+            )
+            for item in result.items
+        ],
+    )
+
+
+def _to_product_template_reference_result(result) -> ProductTemplateReferenceResult:
+    return ProductTemplateReferenceResult(
+        product_id=result.product_id,
+        product_name=result.product_name,
+        total_templates=result.total_templates,
+        total_references=result.total_references,
+        items=[
+            ProductTemplateReferenceRow(
+                template_id=item.template_id,
+                template_name=item.template_name,
+                lifecycle_status=item.lifecycle_status,
+                ref_type=item.ref_type,
+                ref_id=item.ref_id,
+                ref_name=item.ref_name,
+                detail=item.detail,
+                ref_status=item.ref_status,
+                jump_module=item.jump_module,
+                jump_target=item.jump_target,
                 risk_level=item.risk_level,
                 risk_note=item.risk_note,
             )
@@ -335,6 +413,7 @@ def create_stage_api(
             code=payload.code,
             name=payload.name,
             sort_order=payload.sort_order,
+            remark=payload.remark,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -359,6 +438,7 @@ def update_stage_api(
             sort_order=payload.sort_order,
             is_enabled=payload.is_enabled,
             code=payload.code,
+            remark=payload.remark,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -437,6 +517,7 @@ def create_process_api(
             code=payload.code,
             name=payload.name,
             stage_id=payload.stage_id,
+            remark=payload.remark,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -461,6 +542,7 @@ def update_process_api(
             stage_id=payload.stage_id,
             is_enabled=payload.is_enabled,
             code=payload.code,
+            remark=payload.remark,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -531,6 +613,15 @@ def update_system_master_template_api(
     return success_response(_to_system_master_template_item(row), message="updated")
 
 
+@router.get("/system-master-template/versions", response_model=ApiResponse[SystemMasterTemplateVersionListResult])
+def list_system_master_template_versions_api(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.system_master_template.view")),
+) -> ApiResponse[SystemMasterTemplateVersionListResult]:
+    result = list_system_master_template_versions(db)
+    return success_response(_to_system_master_template_version_list_result(result))
+
+
 @router.get("/kanban/process-metrics", response_model=ApiResponse[CraftKanbanProcessMetricsResult])
 def get_craft_kanban_process_metrics_api(
     product_id: int = Query(ge=1),
@@ -558,6 +649,35 @@ def get_craft_kanban_process_metrics_api(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
     return success_response(_to_kanban_result_item(result))
+
+
+@router.get("/kanban/process-metrics/export", response_model=ApiResponse[CraftExportResult])
+def export_craft_kanban_process_metrics_api(
+    product_id: int = Query(ge=1),
+    stage_id: int | None = Query(default=None, ge=1),
+    process_id: int | None = Query(default=None, ge=1),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+    limit: int = Query(default=5, ge=1, le=20),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.kanban.process_metrics.view")),
+) -> ApiResponse[CraftExportResult]:
+    try:
+        result = export_craft_kanban_process_metrics_csv(
+            db,
+            product_id=product_id,
+            stage_id=stage_id if isinstance(stage_id, int) else None,
+            process_id=process_id if isinstance(process_id, int) else None,
+            start_date=start_date if isinstance(start_date, datetime) else None,
+            end_date=end_date if isinstance(end_date, datetime) else None,
+            limit=limit,
+        )
+    except ValueError as error:
+        message = str(error)
+        if message == "Product not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    return success_response(CraftExportResult(**result))
 
 
 @router.get("/templates", response_model=ApiResponse[ProductProcessTemplateListResult])
@@ -596,6 +716,7 @@ def create_template_api(
             template_name=payload.template_name,
             is_default=payload.is_default,
             lifecycle_status=payload.lifecycle_status,
+            remark=payload.remark,
             steps=[item.model_dump() for item in payload.steps],
             operator=current_user,
         )
@@ -607,17 +728,30 @@ def create_template_api(
 @router.get("/templates/export", response_model=ApiResponse[TemplateBatchExportResult])
 def export_templates_api(
     product_id: int | None = Query(default=None, ge=1),
+    keyword: str | None = Query(default=None),
+    product_category: str | None = Query(default=None),
+    is_default: bool | None = Query(default=None),
     enabled: bool | None = Query(default=None),
     lifecycle_status: str | None = Query(default=None),
+    updated_from: datetime | None = Query(default=None),
+    updated_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.templates.export")),
 ) -> ApiResponse[TemplateBatchExportResult]:
+    normalized_keyword = keyword if isinstance(keyword, str) else None
+    normalized_product_category = product_category if isinstance(product_category, str) else None
+    normalized_is_default = is_default if isinstance(is_default, bool) else None
     try:
         rows = export_templates(
             db,
             product_id=product_id,
+            keyword=normalized_keyword,
+            product_category=normalized_product_category,
+            is_default=normalized_is_default,
             enabled=enabled,
             lifecycle_status=lifecycle_status,
+            updated_from=updated_from if isinstance(updated_from, datetime) else None,
+            updated_to=updated_to if isinstance(updated_to, datetime) else None,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -754,6 +888,7 @@ def publish_template_api(
             operator=current_user,
             apply_order_sync=payload.apply_order_sync,
             confirmed=payload.confirmed,
+            expected_version=payload.expected_version,
             note=payload.note,
         )
     except ValueError as error:
@@ -929,6 +1064,7 @@ def update_template_api(
             template_name=payload.template_name,
             is_default=payload.is_default,
             is_enabled=payload.is_enabled,
+            remark=payload.remark,
             steps=[item.model_dump() for item in payload.steps],
             sync_orders=payload.sync_orders,
             operator=current_user,
@@ -976,6 +1112,74 @@ def update_template_api(
         ),
         message="updated",
     )
+
+
+@router.post(
+    "/templates/{template_id}/enable",
+    response_model=ApiResponse[ProductProcessTemplateDetail],
+)
+def enable_template_api(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("craft.templates.update")),
+) -> ApiResponse[ProductProcessTemplateDetail]:
+    row = get_template_by_id(db, template_id)
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Template not found",
+        )
+    updated = set_template_enabled(
+        db,
+        template=row,
+        is_enabled=True,
+        operator=current_user,
+    )
+    write_audit_log(
+        db,
+        action_code="craft.template.enable",
+        action_name="启用工艺模板",
+        target_type="craft_template",
+        target_id=str(row.id),
+        target_name=row.template_name,
+        operator=current_user,
+    )
+    db.commit()
+    return success_response(_to_template_detail(updated), message="enabled")
+
+
+@router.post(
+    "/templates/{template_id}/disable",
+    response_model=ApiResponse[ProductProcessTemplateDetail],
+)
+def disable_template_api(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("craft.templates.update")),
+) -> ApiResponse[ProductProcessTemplateDetail]:
+    row = get_template_by_id(db, template_id)
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Template not found",
+        )
+    updated = set_template_enabled(
+        db,
+        template=row,
+        is_enabled=False,
+        operator=current_user,
+    )
+    write_audit_log(
+        db,
+        action_code="craft.template.disable",
+        action_name="停用工艺模板",
+        target_type="craft_template",
+        target_id=str(row.id),
+        target_name=row.template_name,
+        operator=current_user,
+    )
+    db.commit()
+    return success_response(_to_template_detail(updated), message="disabled")
 
 
 @router.delete("/templates/{template_id}", response_model=ApiResponse[dict[str, bool]])
@@ -1190,6 +1394,9 @@ def get_template_references_api(
                     ref_id=item.ref_id,
                     ref_name=item.ref_name,
                     detail=item.detail,
+                    ref_status=item.ref_status,
+                    jump_module=item.jump_module,
+                    jump_target=item.jump_target,
                     risk_level=item.risk_level,
                     risk_note=item.risk_note,
                 )
@@ -1197,3 +1404,16 @@ def get_template_references_api(
             ],
         )
     )
+
+
+@router.get("/products/{product_id}/template-references", response_model=ApiResponse[ProductTemplateReferenceResult])
+def get_product_template_references_api(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.templates.list")),
+) -> ApiResponse[ProductTemplateReferenceResult]:
+    product_row = db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    if product_row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    result = get_product_template_references(db, product=product_row)
+    return success_response(_to_product_template_reference_result(result))

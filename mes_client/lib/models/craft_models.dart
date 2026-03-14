@@ -5,6 +5,7 @@ class CraftStageItem {
     required this.name,
     required this.sortOrder,
     required this.isEnabled,
+    this.remark = '',
     required this.processCount,
     required this.createdAt,
     required this.updatedAt,
@@ -15,6 +16,7 @@ class CraftStageItem {
   final String name;
   final int sortOrder;
   final bool isEnabled;
+  final String remark;
   final int processCount;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -26,6 +28,7 @@ class CraftStageItem {
       name: (json['name'] as String?) ?? '',
       sortOrder: (json['sort_order'] as int?) ?? 0,
       isEnabled: (json['is_enabled'] as bool?) ?? true,
+      remark: (json['remark'] as String?) ?? '',
       processCount: (json['process_count'] as int?) ?? 0,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -49,6 +52,7 @@ class CraftProcessItem {
     required this.stageCode,
     required this.stageName,
     required this.isEnabled,
+    this.remark = '',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -60,6 +64,7 @@ class CraftProcessItem {
   final String? stageCode;
   final String? stageName;
   final bool isEnabled;
+  final String remark;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -72,6 +77,7 @@ class CraftProcessItem {
       stageCode: json['stage_code'] as String?,
       stageName: json['stage_name'] as String?,
       isEnabled: (json['is_enabled'] as bool?) ?? true,
+      remark: (json['remark'] as String?) ?? '',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -151,6 +157,7 @@ class CraftTemplateItem {
     required this.id,
     required this.productId,
     required this.productName,
+    this.productCategory = '',
     required this.templateName,
     required this.version,
     required this.lifecycleStatus,
@@ -161,6 +168,7 @@ class CraftTemplateItem {
     required this.createdByUsername,
     required this.updatedByUserId,
     required this.updatedByUsername,
+    this.remark = '',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -168,6 +176,7 @@ class CraftTemplateItem {
   final int id;
   final int productId;
   final String productName;
+  final String productCategory;
   final String templateName;
   final int version;
   final String lifecycleStatus;
@@ -178,6 +187,7 @@ class CraftTemplateItem {
   final String? createdByUsername;
   final int? updatedByUserId;
   final String? updatedByUsername;
+  final String remark;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -186,6 +196,7 @@ class CraftTemplateItem {
       id: json['id'] as int,
       productId: (json['product_id'] as int?) ?? 0,
       productName: (json['product_name'] as String?) ?? '',
+      productCategory: (json['product_category'] as String?) ?? '',
       templateName: (json['template_name'] as String?) ?? '',
       version: (json['version'] as int?) ?? 0,
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
@@ -196,6 +207,7 @@ class CraftTemplateItem {
       createdByUsername: json['created_by_username'] as String?,
       updatedByUserId: json['updated_by_user_id'] as int?,
       updatedByUsername: json['updated_by_username'] as String?,
+      remark: (json['remark'] as String?) ?? '',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -288,6 +300,114 @@ class CraftSystemMasterTemplateItem {
       steps: (json['steps'] as List<dynamic>? ?? const [])
           .map(
             (entry) => CraftSystemMasterTemplateStepItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class CraftSystemMasterTemplateVersionStepItem {
+  CraftSystemMasterTemplateVersionStepItem({
+    required this.id,
+    required this.stepOrder,
+    required this.stageId,
+    required this.stageCode,
+    required this.stageName,
+    required this.processId,
+    required this.processCode,
+    required this.processName,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final int id;
+  final int stepOrder;
+  final int stageId;
+  final String stageCode;
+  final String stageName;
+  final int processId;
+  final String processCode;
+  final String processName;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory CraftSystemMasterTemplateVersionStepItem.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return CraftSystemMasterTemplateVersionStepItem(
+      id: (json['id'] as int?) ?? 0,
+      stepOrder: (json['step_order'] as int?) ?? 0,
+      stageId: (json['stage_id'] as int?) ?? 0,
+      stageCode: (json['stage_code'] as String?) ?? '',
+      stageName: (json['stage_name'] as String?) ?? '',
+      processId: (json['process_id'] as int?) ?? 0,
+      processCode: (json['process_code'] as String?) ?? '',
+      processName: (json['process_name'] as String?) ?? '',
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+  }
+}
+
+class CraftSystemMasterTemplateVersionItem {
+  CraftSystemMasterTemplateVersionItem({
+    required this.version,
+    required this.action,
+    required this.note,
+    required this.createdByUserId,
+    required this.createdByUsername,
+    required this.createdAt,
+    required this.steps,
+  });
+
+  final int version;
+  final String action;
+  final String? note;
+  final int? createdByUserId;
+  final String? createdByUsername;
+  final DateTime createdAt;
+  final List<CraftSystemMasterTemplateVersionStepItem> steps;
+
+  factory CraftSystemMasterTemplateVersionItem.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return CraftSystemMasterTemplateVersionItem(
+      version: (json['version'] as int?) ?? 0,
+      action: (json['action'] as String?) ?? '',
+      note: json['note'] as String?,
+      createdByUserId: json['created_by_user_id'] as int?,
+      createdByUsername: json['created_by_username'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      steps: (json['steps'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => CraftSystemMasterTemplateVersionStepItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class CraftSystemMasterTemplateVersionListResult {
+  CraftSystemMasterTemplateVersionListResult({
+    required this.total,
+    required this.items,
+  });
+
+  final int total;
+  final List<CraftSystemMasterTemplateVersionItem> items;
+
+  factory CraftSystemMasterTemplateVersionListResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return CraftSystemMasterTemplateVersionListResult(
+      total: (json['total'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => CraftSystemMasterTemplateVersionItem.fromJson(
               entry as Map<String, dynamic>,
             ),
           )
@@ -834,6 +954,9 @@ class CraftReferenceItem {
     required this.refId,
     required this.refName,
     required this.detail,
+    this.refStatus,
+    this.jumpModule,
+    this.jumpTarget,
     this.riskLevel,
     this.riskNote,
   });
@@ -842,6 +965,9 @@ class CraftReferenceItem {
   final int refId;
   final String refName;
   final String? detail;
+  final String? refStatus;
+  final String? jumpModule;
+  final String? jumpTarget;
   final String? riskLevel;
   final String? riskNote;
 
@@ -851,6 +977,9 @@ class CraftReferenceItem {
       refId: (json['ref_id'] as int?) ?? 0,
       refName: (json['ref_name'] as String?) ?? '',
       detail: json['detail'] as String?,
+      refStatus: json['ref_status'] as String?,
+      jumpModule: json['jump_module'] as String?,
+      jumpTarget: json['jump_target'] as String?,
       riskLevel: json['risk_level'] as String?,
       riskNote: json['risk_note'] as String?,
     );
@@ -939,6 +1068,89 @@ class CraftTemplateReferenceResult {
       total: (json['total'] as int?) ?? 0,
       items: (json['items'] as List<dynamic>? ?? const [])
           .map((e) => CraftReferenceItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class CraftProductTemplateReferenceRow {
+  CraftProductTemplateReferenceRow({
+    required this.templateId,
+    required this.templateName,
+    required this.lifecycleStatus,
+    required this.refType,
+    required this.refId,
+    required this.refName,
+    required this.detail,
+    required this.refStatus,
+    required this.jumpModule,
+    required this.jumpTarget,
+    required this.riskLevel,
+    required this.riskNote,
+  });
+
+  final int templateId;
+  final String templateName;
+  final String lifecycleStatus;
+  final String refType;
+  final int refId;
+  final String refName;
+  final String? detail;
+  final String? refStatus;
+  final String? jumpModule;
+  final String? jumpTarget;
+  final String? riskLevel;
+  final String? riskNote;
+
+  factory CraftProductTemplateReferenceRow.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return CraftProductTemplateReferenceRow(
+      templateId: (json['template_id'] as int?) ?? 0,
+      templateName: (json['template_name'] as String?) ?? '',
+      lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
+      refType: (json['ref_type'] as String?) ?? '',
+      refId: (json['ref_id'] as int?) ?? 0,
+      refName: (json['ref_name'] as String?) ?? '',
+      detail: json['detail'] as String?,
+      refStatus: json['ref_status'] as String?,
+      jumpModule: json['jump_module'] as String?,
+      jumpTarget: json['jump_target'] as String?,
+      riskLevel: json['risk_level'] as String?,
+      riskNote: json['risk_note'] as String?,
+    );
+  }
+}
+
+class CraftProductTemplateReferenceResult {
+  CraftProductTemplateReferenceResult({
+    required this.productId,
+    required this.productName,
+    required this.totalTemplates,
+    required this.totalReferences,
+    required this.items,
+  });
+
+  final int productId;
+  final String productName;
+  final int totalTemplates;
+  final int totalReferences;
+  final List<CraftProductTemplateReferenceRow> items;
+
+  factory CraftProductTemplateReferenceResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return CraftProductTemplateReferenceResult(
+      productId: (json['product_id'] as int?) ?? 0,
+      productName: (json['product_name'] as String?) ?? '',
+      totalTemplates: (json['total_templates'] as int?) ?? 0,
+      totalReferences: (json['total_references'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => CraftProductTemplateReferenceRow.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
           .toList(),
     );
   }
