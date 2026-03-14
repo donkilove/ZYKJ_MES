@@ -16,7 +16,7 @@ class LoginResult(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    account: str = Field(min_length=2, max_length=64)
+    account: str = Field(min_length=2, max_length=10)
     password: str = Field(min_length=6, max_length=128)
 
 
@@ -62,8 +62,8 @@ class RegistrationRequestListResult(BaseModel):
 
 
 class ApproveRegistrationRequest(BaseModel):
-    account: str = Field(min_length=2, max_length=64)
-    password: str | None = Field(default=None, min_length=6, max_length=128)
+    account: str = Field(min_length=2, max_length=10)
+    password: str = Field(min_length=6, max_length=128)
     role_codes: list[str] = Field(default_factory=list)
     process_codes: list[str] = Field(default_factory=list)
     stage_id: int | None = Field(default=None, gt=0)

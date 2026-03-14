@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models/app_session.dart';
+import 'pages/force_change_password_page.dart';
 import 'pages/login_page.dart';
 import 'pages/main_shell_page.dart';
 import 'services/auth_service.dart';
@@ -108,6 +109,20 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
 
     if (_session == null) {
       return LoginPage(onLoginSuccess: _handleLoginSuccess);
+    }
+
+    if (_session!.mustChangePassword) {
+      return ForceChangePasswordPage(
+        session: _session!,
+        onPasswordChanged: () {
+          setState(() {
+            _session = AppSession(
+              baseUrl: _session!.baseUrl,
+              accessToken: _session!.accessToken,
+            );
+          });
+        },
+      );
     }
 
     return MainShellPage(session: _session!, onLogout: _handleLogout);

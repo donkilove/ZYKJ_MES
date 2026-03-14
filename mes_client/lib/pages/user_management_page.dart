@@ -1265,7 +1265,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                   DataCell(
                                     Text(
                                       user.stageNames.isEmpty
-                                          ? '-'
+                                          ? '/'
                                           : user.stageNames.join('、'),
                                     ),
                                   ),

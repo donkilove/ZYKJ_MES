@@ -345,7 +345,10 @@ def approve_registration(
             process_codes=sorted(process.code for process in user.processes),
         ),
         message="approved",
-    ), response_model=ApiResponse[RegistrationActionResult])
+    )
+
+
+@router.post("/register-requests/{request_id}/reject", response_model=ApiResponse[RegistrationActionResult])
 def reject_registration(
     request_id: int,
     payload: RejectRegistrationRequest,

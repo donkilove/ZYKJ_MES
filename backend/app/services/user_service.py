@@ -574,7 +574,7 @@ def approve_registration_request(
     if processes_error:
         return None, processes_error
 
-    password_hash = get_password_hash(password) if password else request.password_hash
+    password_hash = get_password_hash(password)
     user = User(
         username=account_name,
         full_name=account_name,

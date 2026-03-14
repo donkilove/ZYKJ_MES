@@ -6,7 +6,7 @@ import '../models/current_user.dart';
 import 'api_exception.dart';
 
 class AuthService {
-  Future<String> login({
+  Future<({String token, bool mustChangePassword})> login({
     required String baseUrl,
     required String username,
     required String password,
@@ -31,7 +31,8 @@ class AuthService {
     if (token == null || token.isEmpty) {
       throw ApiException('登录失败：缺少访问令牌', response.statusCode);
     }
-    return token;
+    final mustChangePassword = (data?['must_change_password'] as bool?) ?? false;
+    return (token: token, mustChangePassword: mustChangePassword);
   }
 
   Future<void> register({

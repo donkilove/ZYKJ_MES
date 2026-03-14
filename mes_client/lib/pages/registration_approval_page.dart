@@ -324,10 +324,12 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                           decoration: const InputDecoration(
                             labelText: '初始密码',
                             border: OutlineInputBorder(),
-                            helperText: '留空则使用系统默认密码',
                           ),
                           validator: (value) {
-                            if (value != null && value.isNotEmpty && value.length < 6) {
+                            if (value == null || value.trim().isEmpty) {
+                              return '请输入初始密码';
+                            }
+                            if (value.trim().length < 6) {
                               return '密码至少 6 个字符';
                             }
                             return null;
@@ -451,9 +453,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                       account: accountController.text.trim(),
                       roleCode: selectedRoleCode!,
                       processCodes: orderedProcessCodes,
-                      password: passwordController.text.trim().isEmpty
-                          ? null
-                          : passwordController.text.trim(),
+                      password: passwordController.text.trim(),
                     );
                     if (success && context.mounted) {
                       Navigator.of(context).pop(true);

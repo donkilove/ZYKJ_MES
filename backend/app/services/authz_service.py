@@ -67,6 +67,11 @@ def _guard_role_permission_codes(
     effective_codes = set(permission_codes)
     if allowed_codes is not None:
         effective_codes.intersection_update(allowed_codes)
+    # 非系统管理员不得持有 system 模块功能权限
+    if role_code != ROLE_SYSTEM_ADMIN:
+        effective_codes = {
+            code for code in effective_codes if not code.startswith("feature.system.")
+        }
     return effective_codes
 
 
@@ -1842,7 +1847,9 @@ def get_capability_pack_role_config(
     return {
         "role_code": config["role_code"],
         "role_name": config["role_name"],
-        "readonly": config["readonly"],
+        "readonly": config["readonly"] or (
+            str(config["module_code"]) == "system" and config["role_code"] != ROLE_SYSTEM_ADMIN
+        ),
         "module_code": config["module_code"],
         "module_enabled": config["module_enabled"],
         "granted_capability_codes": granted_capability_codes,
@@ -1909,6 +1916,44 @@ def _calculate_capability_pack_role_update(
         raise ValueError(f"Role not found: {role_code}")
 
     normalized_module = _normalize_module_code(module_code)
+    # 非系统管理员不可配置 system 模块能力包
+    if normalized_module == "system" and role_code != ROLE_SYSTEM_ADMIN:
+        before_granted_codes = _role_granted_codes_for_hierarchy(
+            db,
+            role_code=role_code,
+            valid_codes=_all_hierarchy_permission_codes(),
+        )
+        module_capability_codes = _capability_permission_codes_for_module(normalized_module)
+        hierarchy_codes = _hierarchy_permission_codes_for_module(normalized_module)
+        page_codes_in_module = set(hierarchy_codes["page_permission_codes"])
+        row_by_code = _catalog_rows_by_code(db)
+        before_effective_codes = _effective_permission_codes_from_granted(
+            granted_codes=before_granted_codes,
+            row_by_code=row_by_code,
+        )
+        before_capabilities = sorted(before_granted_codes.intersection(module_capability_codes))
+        return {
+            "role_code": role_row.code,
+            "role_name": role_row.name,
+            "readonly": True,
+            "ignored_input": True,
+            "module_code": normalized_module,
+            "before_capability_codes": before_capabilities,
+            "after_capability_codes": before_capabilities,
+            "added_capability_codes": [],
+            "removed_capability_codes": [],
+            "auto_linked_dependencies": [],
+            "effective_capability_codes": sorted(
+                before_effective_codes.intersection(module_capability_codes)
+            ),
+            "effective_page_permission_codes": sorted(
+                before_effective_codes.intersection(page_codes_in_module)
+            ),
+            "updated_count": 0,
+            "before_granted_codes": before_granted_codes,
+            "after_granted_codes": before_granted_codes,
+            "changed_codes": [],
+        }
     module_capability_codes = _capability_permission_codes_for_module(normalized_module)
     requested_capability_codes = {code.strip() for code in capability_codes if code and code.strip()}
     invalid_codes = sorted(requested_capability_codes.difference(module_capability_codes))

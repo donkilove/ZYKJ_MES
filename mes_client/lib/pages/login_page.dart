@@ -104,12 +104,16 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      final token = await _authService.login(
+      final result = await _authService.login(
         baseUrl: baseUrl,
         username: account,
         password: _passwordController.text,
       );
-      widget.onLoginSuccess(AppSession(baseUrl: baseUrl, accessToken: token));
+      widget.onLoginSuccess(AppSession(
+        baseUrl: baseUrl,
+        accessToken: result.token,
+        mustChangePassword: result.mustChangePassword,
+      ));
     } catch (error) {
       if (!mounted) {
         return;
