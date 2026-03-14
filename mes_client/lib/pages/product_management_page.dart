@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -1153,6 +1156,43 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     }
   }
 
+  Future<void> _exportProducts() async {
+    try {
+      final bytes = await _productService.exportProducts(
+        keyword: _keywordController.text.trim(),
+        category: _selectedCategoryFilter,
+        lifecycleStatus: _selectedStatusFilter,
+        hasEffectiveVersion: _selectedEffectiveVersionFilter == 'yes'
+            ? true
+            : _selectedEffectiveVersionFilter == 'no'
+            ? false
+            : null,
+      );
+      final savePath = await getSavePath(
+        suggestedName: 'products.csv',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
+      );
+      if (savePath == null) return;
+      await File(savePath).writeAsBytes(bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出成功：$savePath')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出失败：${_errorMessage(error)}')),
+      );
+    }
+  }
+
   Future<void> _showEditProductDialog(ProductItem product) async {
     if (!widget.canCreateProduct) {
       _showPermissionDenied('编辑产品');
@@ -1786,6 +1826,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                 onPressed: _loading ? null : _loadProducts,
                 icon: const Icon(Icons.search),
                 label: const Text('搜索'),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _exportProducts,
+                icon: const Icon(Icons.download),
+                label: const Text('导出'),
               ),
               const SizedBox(width: 12),
               FilledButton.icon(

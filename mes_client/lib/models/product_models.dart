@@ -138,6 +138,7 @@ class ProductParameterHistoryItem {
   ProductParameterHistoryItem({
     required this.id,
     required this.remark,
+    required this.changeType,
     required this.changedKeys,
     required this.operatorUsername,
     required this.beforeSnapshot,
@@ -147,6 +148,7 @@ class ProductParameterHistoryItem {
 
   final int id;
   final String remark;
+  final String changeType;
   final List<String> changedKeys;
   final String operatorUsername;
   final String beforeSnapshot;
@@ -157,6 +159,7 @@ class ProductParameterHistoryItem {
     return ProductParameterHistoryItem(
       id: json['id'] as int,
       remark: json['remark'] as String,
+      changeType: (json['change_type'] as String?) ?? 'edit',
       changedKeys: (json['changed_keys'] as List<dynamic>? ?? const [])
           .cast<String>(),
       operatorUsername: json['operator_username'] as String? ?? '-',

@@ -481,4 +481,80 @@ class ProductService {
     }
     return '请求失败，状态码 $statusCode';
   }
+
+  Future<List<int>> exportProducts({
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+  }) async {
+    final query = <String, String>{};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (category != null && category.trim().isNotEmpty) {
+      query['category'] = category.trim();
+    }
+    if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
+      query['lifecycle_status'] = lifecycleStatus.trim();
+    }
+    if (hasEffectiveVersion != null) {
+      query['has_effective_version'] = hasEffectiveVersion ? 'true' : 'false';
+    }
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/export',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    if (response.statusCode != 200) {
+      final json = _decodeBody(response);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return response.bodyBytes;
+  }
+
+  Future<List<int>> exportProductVersionParameters({
+    required int productId,
+    required int version,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/$productId/versions/$version/export',
+    );
+    final response = await http.get(uri, headers: _authHeaders);
+    if (response.statusCode != 200) {
+      final json = _decodeBody(response);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return response.bodyBytes;
+  }
+
+  Future<List<int>> exportProductParameters({
+    String? keyword,
+    String? category,
+  }) async {
+    final query = <String, String>{};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (category != null && category.trim().isNotEmpty) {
+      query['category'] = category.trim();
+    }
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/parameters/export',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    if (response.statusCode != 200) {
+      final json = _decodeBody(response);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return response.bodyBytes;
+  }
 }

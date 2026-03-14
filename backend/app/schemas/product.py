@@ -86,6 +86,7 @@ class ProductParameterUpdateResult(BaseModel):
 class ProductParameterHistoryItem(BaseModel):
     id: int
     remark: str
+    change_type: str = "edit"
     changed_keys: list[str]
     operator_username: str
     before_snapshot: str = "{}"

@@ -1,6 +1,9 @@
 from datetime import datetime
+import csv
+import io
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -630,6 +633,7 @@ def get_parameter_history(
         ProductParameterHistoryItem(
             id=row.id,
             remark=row.remark,
+            change_type=row.change_type or "edit",
             changed_keys=[str(value) for value in (row.changed_keys or [])],
             operator_username=row.operator_username,
             before_snapshot=row.before_snapshot or "{}",
@@ -639,3 +643,107 @@ def get_parameter_history(
         for row in rows
     ]
     return success_response(ProductParameterHistoryListResult(total=total, items=items))
+
+
+def _make_csv_response(rows: list[list[str]], filename: str) -> StreamingResponse:
+    buf = io.StringIO()
+    buf.write("\ufeff")  # UTF-8 BOM for Excel compatibility
+    writer = csv.writer(buf)
+    for row in rows:
+        writer.writerow(row)
+    buf.seek(0)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Type": "text/csv; charset=utf-8-sig",
+    }
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers=headers)
+
+
+@router.get("/export", response_class=StreamingResponse)
+def export_products(
+    keyword: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    lifecycle_status: str | None = Query(default=None),
+    has_effective_version: bool | None = Query(default=None),
+    updated_after: datetime | None = Query(default=None),
+    updated_before: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("product.products.list")),
+) -> StreamingResponse:
+    _, products, latest_map = list_products(
+        db, 1, 10000, keyword, category, lifecycle_status,
+        has_effective_version=has_effective_version,
+        updated_after=updated_after,
+        updated_before=updated_before,
+    )
+    header = ["产品名称", "分类", "状态", "当前版本", "生效版本", "备注", "创建时间", "更新时间"]
+    rows: list[list[str]] = [header]
+    for p in products:
+        rows.append([
+            p.name,
+            p.category or "",
+            p.lifecycle_status,
+            f"V1.{p.current_version}" if p.current_version else "",
+            f"V1.{p.effective_version}" if p.effective_version else "无",
+            p.remark or "",
+            p.created_at.strftime("%Y-%m-%d %H:%M:%S") if p.created_at else "",
+            p.updated_at.strftime("%Y-%m-%d %H:%M:%S") if p.updated_at else "",
+        ])
+    return _make_csv_response(rows, "products.csv")
+
+
+@router.get("/{product_id}/versions/{version}/export", response_class=StreamingResponse)
+def export_product_version_parameters(
+    product_id: int,
+    version: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("product.parameters.view")),
+) -> StreamingResponse:
+    import json as _json
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    revision = get_product_version(db, product_id=product.id, version=version)
+    if not revision:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found")
+    try:
+        snapshot = _json.loads(revision.snapshot_json or "{}")
+        parameters = snapshot.get("parameters", [])
+    except (TypeError, ValueError):
+        parameters = []
+    header = ["参数名称", "参数分组", "类型", "参数值", "排序"]
+    rows: list[list[str]] = [header]
+    for param in parameters:
+        rows.append([
+            str(param.get("name", "")),
+            str(param.get("category", "")),
+            str(param.get("type", "")),
+            str(param.get("value", "")),
+            str(param.get("sort_order", "")),
+        ])
+    filename = f"product_{product.name}_v1.{version}_params.csv"
+    return _make_csv_response(rows, filename)
+
+
+@router.get("/parameters/export", response_class=StreamingResponse)
+def export_product_parameters(
+    keyword: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("product.parameters.view")),
+) -> StreamingResponse:
+    _, products, _ = list_products(db, 1, 10000, keyword, category, None)
+    header = ["产品名称", "参数名称", "参数分组", "类型", "参数值", "参数说明"]
+    rows: list[list[str]] = [header]
+    for product in products:
+        params = list_product_parameters(db, product.id)
+        for param in params:
+            rows.append([
+                product.name,
+                param.param_key,
+                param.param_category or "",
+                param.param_type,
+                param.param_value,
+                param.param_description or "",
+            ])
+    return _make_csv_response(rows, "product_parameters.csv")

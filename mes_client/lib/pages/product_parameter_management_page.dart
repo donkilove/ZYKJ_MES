@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -74,6 +75,7 @@ class _ProductParameterManagementPageState
   List<_ParameterEditorRow> _editorRows = const [];
   bool _hasUnsavedChanges = false;
   int _editorRowIdSeed = 1;
+  String _editorGroupFilter = '';
 
   @override
   void initState() {
@@ -303,6 +305,37 @@ class _ProductParameterManagementPageState
     }
   }
 
+  Future<void> _exportParameters() async {
+    try {
+      final bytes = await _productService.exportProductParameters(
+        keyword: _keywordController.text.trim(),
+        category: _selectedCategoryFilter,
+      );
+      final location = await getSaveLocation(
+        suggestedName: 'product_parameters.csv',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
+      );
+      if (location == null || !mounted) return;
+      await XFile.fromData(
+        Uint8List.fromList(bytes),
+        mimeType: 'text/csv',
+        name: 'product_parameters.csv',
+      ).saveTo(location.path);
+      if (mounted) {
+        _showSnackBar('导出成功：${location.path}');
+      }
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      _showSnackBar('导出失败：${_errorMessage(error)}');
+    }
+  }
+
   Future<void> _showHistoryDialog(ProductItem product) async {
     ProductParameterHistoryListResult? historyResult;
     try {
@@ -343,11 +376,16 @@ class _ProductParameterManagementPageState
                       final keySummary = item.changedKeys.isEmpty
                           ? '-'
                           : item.changedKeys.join(', ');
+                      final changeTypeLabel = switch (item.changeType) {
+                        'rollback' => '回滚',
+                        'create' => '创建',
+                        _ => '编辑',
+                      };
                       return ListTile(
                         title: Text(item.remark),
                         subtitle: Text(
                           '时间：${_formatTime(item.createdAt)}\n'
-                          '操作人：${item.operatorUsername}   修改参数：$keySummary',
+                          '操作人：${item.operatorUsername}   类型：$changeTypeLabel   修改参数：$keySummary',
                         ),
                         isThreeLine: true,
                         trailing: item.beforeSnapshot != '{}' || item.afterSnapshot != '{}'
@@ -912,6 +950,16 @@ class _ProductParameterManagementPageState
       return const Center(child: CircularProgressIndicator());
     }
 
+    final visibleRows = _editorGroupFilter.isEmpty
+        ? _editorRows
+        : _editorRows
+            .where(
+              (r) =>
+                  r.categoryController.text.trim() == _editorGroupFilter,
+            )
+            .toList();
+    final isFiltered = _editorGroupFilter.isNotEmpty;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final contentWidth = constraints.maxWidth < _editorMinContentWidth
@@ -932,8 +980,29 @@ class _ProductParameterManagementPageState
                   _buildEditorTableHeader(),
                   const SizedBox(height: 8),
                   Expanded(
-                    child: _editorRows.isEmpty
+                    child: visibleRows.isEmpty
                         ? const Center(child: Text('暂无参数，请新增'))
+                        : isFiltered
+                        ? Scrollbar(
+                            controller: _editorVerticalController,
+                            thumbVisibility: true,
+                            child: ListView.builder(
+                              controller: _editorVerticalController,
+                              itemCount: visibleRows.length,
+                              itemBuilder: (context, index) {
+                                final row = visibleRows[index];
+                                final realIndex = _editorRows.indexOf(row);
+                                return Padding(
+                                  key: ValueKey(row.rowId),
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: _buildEditorTableRow(
+                                    index: realIndex,
+                                    row: row,
+                                  ),
+                                );
+                              },
+                            ),
+                          )
                         : Scrollbar(
                             controller: _editorVerticalController,
                             thumbVisibility: true,
@@ -1027,6 +1096,44 @@ class _ProductParameterManagementPageState
                 visualDensity: VisualDensity.compact,
               ),
             const Spacer(),
+            SizedBox(
+              width: 180,
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: '参数分组筛选',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _editorGroupFilter,
+                    isDense: true,
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: '',
+                        child: Text('全部分组'),
+                      ),
+                      ..._buildCategorySuggestions().map(
+                        (c) => DropdownMenuItem<String>(
+                          value: c,
+                          child: Text(c),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _editorGroupFilter = value ?? '';
+                      });
+                    },
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
             IconButton(
               tooltip: '刷新参数',
               onPressed: _editorSubmitting ? null : () => _enterEditor(product),
@@ -1157,6 +1264,12 @@ class _ProductParameterManagementPageState
               onPressed: _loading ? null : _loadProducts,
               icon: const Icon(Icons.search),
               label: const Text('搜索'),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: _loading ? null : _exportParameters,
+              icon: const Icon(Icons.download),
+              label: const Text('导出'),
             ),
           ],
         ),
