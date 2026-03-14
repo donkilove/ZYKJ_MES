@@ -41,10 +41,15 @@ PAGE_PRODUCTION_REPAIR_ORDERS = "production_repair_orders"
 PAGE_QUALITY = "quality"
 PAGE_FIRST_ARTICLE_MANAGEMENT = "first_article_management"
 PAGE_QUALITY_DATA_QUERY = "quality_data_query"
+PAGE_QUALITY_SCRAP_STATISTICS = "quality_scrap_statistics"
+PAGE_QUALITY_REPAIR_ORDERS = "quality_repair_orders"
+PAGE_QUALITY_TREND = "quality_trend"
 PAGE_CRAFT = "craft"
 PAGE_PROCESS_MANAGEMENT = "process_management"
 PAGE_PRODUCTION_PROCESS_CONFIG = "production_process_config"
 PAGE_CRAFT_KANBAN = "craft_kanban"
+PAGE_CRAFT_REFERENCE_ANALYSIS = "craft_reference_analysis"
+PAGE_PRODUCT_VERSION_MANAGEMENT = "product_version_management"
 PAGE_MESSAGE = "message"
 PAGE_MESSAGE_CENTER = "message_center"
 
@@ -139,12 +144,20 @@ PAGE_CATALOG = [
         "sort_order": 31,
     },
     {
+        "code": PAGE_PRODUCT_VERSION_MANAGEMENT,
+        "name": "版本管理",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCT,
+        "always_visible": False,
+        "sort_order": 32,
+    },
+    {
         "code": PAGE_PRODUCT_PARAMETER_MANAGEMENT,
         "name": "产品参数管理",
         "page_type": PAGE_TYPE_TAB,
         "parent_code": PAGE_PRODUCT,
         "always_visible": False,
-        "sort_order": 32,
+        "sort_order": 33,
     },
     {
         "code": PAGE_PRODUCT_PARAMETER_QUERY,
@@ -152,7 +165,7 @@ PAGE_CATALOG = [
         "page_type": PAGE_TYPE_TAB,
         "parent_code": PAGE_PRODUCT,
         "always_visible": False,
-        "sort_order": 33,
+        "sort_order": 34,
     },
     {
         "code": PAGE_EQUIPMENT,
@@ -283,6 +296,30 @@ PAGE_CATALOG = [
         "sort_order": 62,
     },
     {
+        "code": PAGE_QUALITY_SCRAP_STATISTICS,
+        "name": "报废统计",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_QUALITY,
+        "always_visible": False,
+        "sort_order": 63,
+    },
+    {
+        "code": PAGE_QUALITY_REPAIR_ORDERS,
+        "name": "维修订单",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_QUALITY,
+        "always_visible": False,
+        "sort_order": 64,
+    },
+    {
+        "code": PAGE_QUALITY_TREND,
+        "name": "质量趋势",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_QUALITY,
+        "always_visible": False,
+        "sort_order": 65,
+    },
+    {
         "code": PAGE_CRAFT,
         "name": "工艺",
         "page_type": PAGE_TYPE_SIDEBAR,
@@ -313,6 +350,14 @@ PAGE_CATALOG = [
         "parent_code": PAGE_CRAFT,
         "always_visible": False,
         "sort_order": 73,
+    },
+    {
+        "code": PAGE_CRAFT_REFERENCE_ANALYSIS,
+        "name": "引用分析",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_CRAFT,
+        "always_visible": False,
+        "sort_order": 74,
     },
     {
         "code": PAGE_MESSAGE,
@@ -355,6 +400,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_FUNCTION_PERMISSION_CONFIG,
         PAGE_PRODUCT,
         PAGE_PRODUCT_MANAGEMENT,
+        PAGE_PRODUCT_VERSION_MANAGEMENT,
         PAGE_PRODUCT_PARAMETER_MANAGEMENT,
         PAGE_PRODUCT_PARAMETER_QUERY,
         PAGE_EQUIPMENT,
@@ -373,10 +419,14 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,
+        PAGE_QUALITY_SCRAP_STATISTICS,
+        PAGE_QUALITY_REPAIR_ORDERS,
+        PAGE_QUALITY_TREND,
         PAGE_CRAFT,
         PAGE_PROCESS_MANAGEMENT,
         PAGE_PRODUCTION_PROCESS_CONFIG,
         PAGE_CRAFT_KANBAN,
+        PAGE_CRAFT_REFERENCE_ANALYSIS,
         PAGE_MESSAGE,
         PAGE_MESSAGE_CENTER,
     },
@@ -386,6 +436,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_ACCOUNT_SETTINGS,
         PAGE_PRODUCT,
         PAGE_PRODUCT_MANAGEMENT,
+        PAGE_PRODUCT_VERSION_MANAGEMENT,
         PAGE_PRODUCT_PARAMETER_MANAGEMENT,
         PAGE_PRODUCT_PARAMETER_QUERY,
         PAGE_EQUIPMENT,
@@ -404,10 +455,14 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,
+        PAGE_QUALITY_SCRAP_STATISTICS,
+        PAGE_QUALITY_REPAIR_ORDERS,
+        PAGE_QUALITY_TREND,
         PAGE_CRAFT,
         PAGE_PROCESS_MANAGEMENT,
         PAGE_PRODUCTION_PROCESS_CONFIG,
         PAGE_CRAFT_KANBAN,
+        PAGE_CRAFT_REFERENCE_ANALYSIS,
         PAGE_MESSAGE,
         PAGE_MESSAGE_CENTER,
     },
@@ -426,6 +481,9 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,
+        PAGE_QUALITY_SCRAP_STATISTICS,
+        PAGE_QUALITY_REPAIR_ORDERS,
+        PAGE_QUALITY_TREND,
         PAGE_MESSAGE,
         PAGE_MESSAGE_CENTER,
     },

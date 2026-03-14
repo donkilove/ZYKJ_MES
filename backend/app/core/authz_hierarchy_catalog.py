@@ -185,7 +185,6 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
             "product.products.create",
             "product.products.delete",
             "product.lifecycle.update",
-            "product.rollback",
         ),
         dependency_permission_codes=("feature.product.catalog.read",),
     ),
@@ -193,7 +192,7 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         permission_code="feature.product.version_analysis.view",
         permission_name="查看产品版本与影响分析",
         module_code="product",
-        page_code="product_management",
+        page_code="product_version_management",
         action_permission_codes=(
             "product.versions.list",
             "product.versions.compare",
@@ -205,9 +204,10 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         permission_code="feature.product.versions.manage",
         permission_name="管理产品版本",
         module_code="product",
-        page_code="product_management",
+        page_code="product_version_management",
         action_permission_codes=(
             "product.versions.manage",
+            "product.rollback",
         ),
         dependency_permission_codes=("feature.product.version_analysis.view",),
     ),

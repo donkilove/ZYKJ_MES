@@ -198,6 +198,20 @@ const fallbackPageCatalog = <PageCatalogItem>[
   ),
 
   PageCatalogItem(
+    code: 'product_version_management',
+
+    name: '版本管理',
+
+    pageType: 'tab',
+
+    parentCode: 'product',
+
+    alwaysVisible: false,
+
+    sortOrder: 32,
+  ),
+
+  PageCatalogItem(
     code: 'product_parameter_management',
 
     name: '产品参数管理',
@@ -208,7 +222,7 @@ const fallbackPageCatalog = <PageCatalogItem>[
 
     alwaysVisible: false,
 
-    sortOrder: 32,
+    sortOrder: 33,
   ),
 
   PageCatalogItem(
@@ -222,7 +236,7 @@ const fallbackPageCatalog = <PageCatalogItem>[
 
     alwaysVisible: false,
 
-    sortOrder: 33,
+    sortOrder: 34,
   ),
 
   PageCatalogItem(
@@ -517,6 +531,20 @@ const fallbackPageCatalog = <PageCatalogItem>[
     alwaysVisible: false,
 
     sortOrder: 73,
+  ),
+
+  PageCatalogItem(
+    code: 'craft_reference_analysis',
+
+    name: '引用分析',
+
+    pageType: 'tab',
+
+    parentCode: 'craft',
+
+    alwaysVisible: false,
+
+    sortOrder: 74,
   ),
 
   PageCatalogItem(

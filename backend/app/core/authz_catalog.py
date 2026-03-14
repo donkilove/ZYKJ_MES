@@ -105,6 +105,7 @@ PAGE_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("function_permission_config", "功能权限配置", AUTHZ_MODULE_SYSTEM, "user"),
     ("product", "产品模块", AUTHZ_MODULE_PRODUCT, None),
     ("product_management", "产品管理", AUTHZ_MODULE_PRODUCT, "product"),
+    ("product_version_management", "版本管理", AUTHZ_MODULE_PRODUCT, "product"),
     ("product_parameter_management", "产品参数管理", AUTHZ_MODULE_PRODUCT, "product"),
     ("product_parameter_query", "产品参数查询", AUTHZ_MODULE_PRODUCT, "product"),
     ("equipment", "设备模块", AUTHZ_MODULE_EQUIPMENT, None),
