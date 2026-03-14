@@ -318,7 +318,8 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-    if (!mounted || detail == null) return;    await showDialog<void>(
+    if (!mounted) return;
+    await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('设备详情 - ${detail!.name}'),

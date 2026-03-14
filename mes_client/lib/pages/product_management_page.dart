@@ -391,7 +391,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
           widget.onLogout();
           return false;
         }
-        ScaffoldMessenger.of(this.context).showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('加载版本失败：${_errorMessage(error)}')),
         );
         return false;
@@ -452,7 +452,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
           widget.onLogout();
           return;
         }
-        ScaffoldMessenger.of(this.context).showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('$errorPrefix：${_errorMessage(error)}')),
         );
       } finally {
@@ -1011,6 +1011,16 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                                   '正在回滚到 ${item.displayVersion}...',
                                               errorPrefix: '版本回滚失败',
                                               action: () async {
+                                                final nav =
+                                                    dialogContext != null
+                                                    ? Navigator.of(
+                                                        dialogContext!,
+                                                      )
+                                                    : null;
+                                                final messenger =
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    );
                                                 var confirmed = false;
                                                 if (widget
                                                     .canViewImpactAnalysis) {
@@ -1055,14 +1065,10 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                                 dialogClosed = true;
                                                 if (dialogContext?.mounted ??
                                                     false) {
-                                                  Navigator.of(
-                                                    dialogContext!,
-                                                  ).pop();
+                                                  nav?.pop();
                                                 }
                                                 if (mounted) {
-                                                  ScaffoldMessenger.of(
-                                                    this.context,
-                                                  ).showSnackBar(
+                                                  messenger.showSnackBar(
                                                     SnackBar(
                                                       content: Text(
                                                         '已回滚到 ${item.displayVersion}',

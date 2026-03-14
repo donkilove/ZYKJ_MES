@@ -397,7 +397,7 @@ class EquipmentService {
         'start_date': _formatDate(startDate),
         'next_due_date': nextDueDate == null ? null : _formatDate(nextDueDate),
         'default_executor_user_id': defaultExecutorUserId,
-        if (cycleDays != null) 'cycle_days': cycleDays,
+        'cycle_days': ?cycleDays,
       }),
     );
     final json = _decodeBody(response);
@@ -432,7 +432,7 @@ class EquipmentService {
         'start_date': _formatDate(startDate),
         'next_due_date': nextDueDate == null ? null : _formatDate(nextDueDate),
         'default_executor_user_id': defaultExecutorUserId,
-        if (cycleDays != null) 'cycle_days': cycleDays,
+        'cycle_days': ?cycleDays,
       }),
     );
     final json = _decodeBody(response);
