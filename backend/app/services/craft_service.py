@@ -1831,6 +1831,9 @@ def copy_template_to_product(
     db.commit()
     db.refresh(row)
     return get_template_by_id(db, row.id) or row
+
+
+def archive_template(
     db: Session,
     *,
     template: ProductProcessTemplate,

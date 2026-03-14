@@ -78,6 +78,9 @@ def test_product_crud_and_parameter_history_flow(db, factory) -> None:
         keyword="功能产品",
         category="贴片",
         lifecycle_status="active",
+        has_effective_version=None,
+        updated_after=None,
+        updated_before=None,
         db=db,
         _=admin,
     )

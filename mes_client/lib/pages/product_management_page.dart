@@ -1,7 +1,6 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/product_models.dart';
@@ -1168,17 +1167,21 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
             ? false
             : null,
       );
-      final savePath = await getSavePath(
+      final location = await getSaveLocation(
         suggestedName: 'products.csv',
         acceptedTypeGroups: const [
           XTypeGroup(label: 'CSV', extensions: ['csv']),
         ],
       );
-      if (savePath == null) return;
-      await File(savePath).writeAsBytes(bytes);
+      if (location == null || !mounted) return;
+      await XFile.fromData(
+        Uint8List.fromList(bytes),
+        mimeType: 'text/csv',
+        name: 'products.csv',
+      ).saveTo(location.path);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出成功：$savePath')),
+          SnackBar(content: Text('导出成功：${location.path}')),
         );
       }
     } catch (error) {

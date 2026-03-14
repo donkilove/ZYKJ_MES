@@ -14,6 +14,7 @@ from app.models.product import Product
 from app.models.product_parameter_history import ProductParameterHistory
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
+from app.services.audit_service import write_audit_log
 from app.schemas.product import (
     ProductImpactAnalysisQuery,
     ProductImpactAnalysisResult,
@@ -147,6 +148,17 @@ def create_product_api(
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
+    write_audit_log(
+        db,
+        action_code="product.create",
+        action_name="新建产品",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"name": product.name, "category": product.category, "remark": product.remark},
+    )
+    db.commit()
     return success_response(to_product_item(product, None), message="created")
 
 
@@ -189,6 +201,17 @@ def update_product_api(
     db.commit()
     db.refresh(product)
 
+    write_audit_log(
+        db,
+        action_code="product.update",
+        action_name="编辑产品",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"name": product.name, "category": product.category, "remark": product.remark},
+    )
+    db.commit()
     latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(product.id)
     return success_response(to_product_item(product, latest_history), message="updated")
 
@@ -208,6 +231,16 @@ def delete_product_api(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
     delete_product(db, product)
+    write_audit_log(
+        db,
+        action_code="product.delete",
+        action_name="删除产品",
+        target_type="product",
+        target_id=str(product_id),
+        target_name=product.name,
+        operator=current_user,
+    )
+    db.commit()
     return success_response({"deleted": True}, message="deleted")
 
 
@@ -269,6 +302,17 @@ def update_parameters(
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
+    write_audit_log(
+        db,
+        action_code="product.parameters.update",
+        action_name="更新产品参数",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"remark": payload.remark, "changed_keys": changed_keys},
+    )
+    db.commit()
     return success_response(
         ProductParameterUpdateResult(
             updated_count=len(changed_keys),
@@ -352,6 +396,17 @@ def update_product_lifecycle(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="product.lifecycle",
+        action_name="变更产品状态",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"lifecycle_status": payload.target_status},
+    )
+    db.commit()
     return success_response(to_product_item(updated, None), message="updated")
 
 
@@ -401,6 +456,17 @@ def create_product_version_api(
         revision = create_product_version(db, product=product, operator=current_user)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="product.version.create",
+        action_name="新建产品版本",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"version": revision.version, "version_label": revision.version_label},
+    )
+    db.commit()
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
@@ -433,6 +499,17 @@ def copy_product_version_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="product.version.copy",
+        action_name="复制产品版本",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"version": revision.version, "version_label": revision.version_label, "source_version": version},
+    )
+    db.commit()
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
@@ -460,6 +537,17 @@ def activate_product_version_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="product.version.activate",
+        action_name="生效产品版本",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"version": version},
+    )
+    db.commit()
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
@@ -486,6 +574,17 @@ def disable_product_version_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="product.version.disable",
+        action_name="停用产品版本",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"version": version},
+    )
+    db.commit()
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
@@ -510,6 +609,17 @@ def delete_product_version_api(
         delete_product_version(db, product=product, version=version, operator=current_user)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="product.version.delete",
+        action_name="删除产品版本",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"version": version},
+    )
+    db.commit()
     return success_response({"deleted": True}, message="deleted")
 
 
@@ -598,6 +708,17 @@ def rollback_product_api(
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
+    write_audit_log(
+        db,
+        action_code="product.rollback",
+        action_name="回滚产品版本",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"target_version": payload.target_version, "changed_keys": changed_keys},
+    )
+    db.commit()
     refreshed = get_product_by_id(db, product.id) or product
     return success_response(
         ProductRollbackResult(
