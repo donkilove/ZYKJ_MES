@@ -53,6 +53,11 @@ from app.schemas.craft import (
     TemplateStepItem,
     TemplateSyncOrderConflict,
     TemplateSyncResult,
+    TemplateCopyRequest,
+    StageReferenceItem,
+    StageReferenceResult,
+    ProcessReferenceItem,
+    ProcessReferenceResult,
 )
 from app.services.craft_service import (
     TemplateSyncConflictError,
@@ -68,12 +73,17 @@ from app.services.craft_service import (
     create_system_master_template,
     create_stage,
     create_template,
+    copy_template,
+    archive_template,
+    unarchive_template,
     delete_process,
     delete_stage,
     delete_template,
     get_system_master_template,
     get_stage_by_id,
     get_template_by_id,
+    get_stage_references,
+    get_process_references,
     list_craft_processes,
     list_stages,
     list_templates,
@@ -94,6 +104,7 @@ def _to_stage_item(row: ProcessStage) -> ProcessStageItem:
         name=row.name,
         sort_order=row.sort_order,
         is_enabled=row.is_enabled,
+        process_count=len(row.processes) if row.processes is not None else 0,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -232,6 +243,49 @@ def _to_impact_result_item(
         syncable_orders=syncable_orders,
         blocked_orders=blocked_orders,
         items=items,
+    )
+
+
+def _to_template_update_result(row: ProductProcessTemplate) -> ProductProcessTemplateUpdateResult:
+    return ProductProcessTemplateUpdateResult(
+        detail=_to_template_detail(row),
+        sync_result=TemplateSyncResult(total=0, synced=0, skipped=0, reasons=[]),
+    )
+
+
+def _to_stage_reference_result(result) -> StageReferenceResult:
+    return StageReferenceResult(
+        stage_id=result.stage_id,
+        stage_code=result.stage_code,
+        stage_name=result.stage_name,
+        total=result.total,
+        items=[
+            StageReferenceItem(
+                ref_type=item.ref_type,
+                ref_id=item.ref_id,
+                ref_name=item.ref_name,
+                detail=item.detail,
+            )
+            for item in result.items
+        ],
+    )
+
+
+def _to_process_reference_result(result) -> ProcessReferenceResult:
+    return ProcessReferenceResult(
+        process_id=result.process_id,
+        process_code=result.process_code,
+        process_name=result.process_name,
+        total=result.total,
+        items=[
+            ProcessReferenceItem(
+                ref_type=item.ref_type,
+                ref_id=item.ref_id,
+                ref_name=item.ref_name,
+                detail=item.detail,
+            )
+            for item in result.items
+        ],
     )
 
 
@@ -443,6 +497,10 @@ def update_system_master_template_api(
 def get_craft_kanban_process_metrics_api(
     product_id: int = Query(ge=1),
     limit: int = Query(default=5, ge=1, le=20),
+    stage_id: int | None = Query(default=None, ge=1),
+    process_id: int | None = Query(default=None, ge=1),
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.kanban.process_metrics.view")),
 ) -> ApiResponse[CraftKanbanProcessMetricsResult]:
@@ -451,6 +509,10 @@ def get_craft_kanban_process_metrics_api(
             db,
             product_id=product_id,
             limit=limit,
+            stage_id=stage_id if isinstance(stage_id, int) else None,
+            process_id=process_id if isinstance(process_id, int) else None,
+            start_date=start_date if isinstance(start_date, datetime) else None,
+            end_date=end_date if isinstance(end_date, datetime) else None,
         )
     except ValueError as error:
         message = str(error)
@@ -557,16 +619,13 @@ def import_templates_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("craft.templates.import")),
 ) -> ApiResponse[TemplateBatchImportResult]:
-    try:
-        rows, created, updated, skipped = import_templates(
-            db,
-            items=[item.model_dump() for item in payload.items],
-            overwrite_existing=payload.overwrite_existing,
-            publish_after_import=payload.publish_after_import,
-            operator=current_user,
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    rows, created, updated, skipped, errors = import_templates(
+        db,
+        items=[item.model_dump() for item in payload.items],
+        overwrite_existing=payload.overwrite_existing,
+        publish_after_import=payload.publish_after_import,
+        operator=current_user,
+    )
     items = [
         TemplateBatchImportResultItem(
             template_id=row.id,
@@ -586,6 +645,7 @@ def import_templates_api(
             updated=updated,
             skipped=skipped,
             items=items,
+            errors=errors,
         ),
         message="imported",
     )
@@ -874,3 +934,78 @@ def delete_template_api(
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     return success_response({"deleted": True}, message="deleted")
+
+
+@router.post("/templates/{template_id}/copy", response_model=ApiResponse[ProductProcessTemplateDetail], status_code=status.HTTP_201_CREATED)
+def copy_template_api(
+    template_id: int,
+    body: TemplateCopyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("craft.templates.create")),
+) -> ApiResponse[ProductProcessTemplateDetail]:
+    row = get_template_by_id(db, template_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    try:
+        new_row = copy_template(db, template=row, new_name=body.new_name, operator=current_user)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(_to_template_detail(new_row), message="created")
+
+
+@router.post("/templates/{template_id}/archive", response_model=ApiResponse[ProductProcessTemplateDetail])
+def archive_template_api(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("craft.templates.update")),
+) -> ApiResponse[ProductProcessTemplateDetail]:
+    row = get_template_by_id(db, template_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    try:
+        updated = archive_template(db, template=row, operator=current_user)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(_to_template_detail(updated), message="archived")
+
+
+@router.post("/templates/{template_id}/unarchive", response_model=ApiResponse[ProductProcessTemplateDetail])
+def unarchive_template_api(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("craft.templates.update")),
+) -> ApiResponse[ProductProcessTemplateDetail]:
+    row = get_template_by_id(db, template_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    try:
+        updated = unarchive_template(db, template=row, operator=current_user)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(_to_template_detail(updated), message="unarchived")
+
+
+@router.get("/stages/{stage_id}/references", response_model=ApiResponse[StageReferenceResult])
+def get_stage_references_api(
+    stage_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.stages.list")),
+) -> ApiResponse[StageReferenceResult]:
+    row = get_stage_by_id(db, stage_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stage not found")
+    result = get_stage_references(db, stage=row)
+    return success_response(_to_stage_reference_result(result))
+
+
+@router.get("/processes/{process_id}/references", response_model=ApiResponse[ProcessReferenceResult])
+def get_process_references_api(
+    process_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.processes.list")),
+) -> ApiResponse[ProcessReferenceResult]:
+    row = db.execute(select(Process).where(Process.id == process_id)).scalars().first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Process not found")
+    result = get_process_references(db, process=row)
+    return success_response(_to_process_reference_result(result))

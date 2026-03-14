@@ -31,6 +31,7 @@ class ProcessStageItem(BaseModel):
     name: str
     sort_order: int
     is_enabled: bool
+    process_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -302,6 +303,10 @@ class TemplateRollbackRequest(BaseModel):
     note: str | None = Field(default=None, max_length=256)
 
 
+class TemplateCopyRequest(BaseModel):
+    new_name: str = Field(min_length=1, max_length=128)
+
+
 class TemplateBatchExportItem(BaseModel):
     product_id: int
     product_name: str
@@ -366,3 +371,38 @@ class TemplateBatchImportResult(BaseModel):
     updated: int
     skipped: int
     items: list[TemplateBatchImportResultItem]
+    errors: list[str] = Field(default_factory=list)
+
+
+class TemplateArchiveRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=256)
+
+
+class StageReferenceItem(BaseModel):
+    ref_type: str
+    ref_id: int
+    ref_name: str
+    detail: str | None = None
+
+
+class StageReferenceResult(BaseModel):
+    stage_id: int
+    stage_code: str
+    stage_name: str
+    total: int
+    items: list[StageReferenceItem]
+
+
+class ProcessReferenceItem(BaseModel):
+    ref_type: str
+    ref_id: int
+    ref_name: str
+    detail: str | None = None
+
+
+class ProcessReferenceResult(BaseModel):
+    process_id: int
+    process_code: str
+    process_name: str
+    total: int
+    items: list[ProcessReferenceItem]

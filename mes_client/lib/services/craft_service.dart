@@ -320,29 +320,6 @@ class CraftService {
     );
   }
 
-  Future<CraftKanbanProcessMetricsResult> getCraftKanbanProcessMetrics({
-    required int productId,
-    int limit = 5,
-  }) async {
-    final uri = Uri.parse('$_basePath/kanban/process-metrics').replace(
-      queryParameters: {
-        'product_id': '$productId',
-        'limit': '${limit.clamp(1, 20)}',
-      },
-    );
-    final response = await http.get(uri, headers: _authHeaders);
-    final body = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(body, response.statusCode),
-        response.statusCode,
-      );
-    }
-    return CraftKanbanProcessMetricsResult.fromJson(
-      body['data'] as Map<String, dynamic>? ?? const {},
-    );
-  }
-
   Future<CraftTemplateDetail> getTemplateDetail({
     required int templateId,
   }) async {
@@ -612,6 +589,119 @@ class CraftService {
         response.statusCode,
       );
     }
+  }
+
+  Future<CraftTemplateDetail> copyTemplate({
+    required int templateId,
+    required String newName,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/copy');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'new_name': newName}),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<CraftTemplateDetail> archiveTemplate({required int templateId}) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/archive');
+    final response = await http.post(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<CraftTemplateDetail> unarchiveTemplate({required int templateId}) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/unarchive');
+    final response = await http.post(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<CraftKanbanProcessMetricsResult> getCraftKanbanProcessMetrics({
+    required int productId,
+    int limit = 5,
+    int? stageId,
+    int? processId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final query = <String, String>{
+      'product_id': '$productId',
+      'limit': '$limit',
+    };
+    if (stageId != null) query['stage_id'] = '$stageId';
+    if (processId != null) query['process_id'] = '$processId';
+    if (startDate != null) query['start_date'] = startDate.toUtc().toIso8601String();
+    if (endDate != null) query['end_date'] = endDate.toUtc().toIso8601String();
+    final uri = Uri.parse(
+      '$_basePath/kanban/process-metrics',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftKanbanProcessMetricsResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+
+  Future<CraftStageReferenceResult> getStageReferences({
+    required int stageId,
+  }) async {
+    final uri = Uri.parse('$_basePath/stages/$stageId/references');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftStageReferenceResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  Future<CraftProcessReferenceResult> getProcessReferences({
+    required int processId,
+  }) async {
+    final uri = Uri.parse('$_basePath/processes/$processId/references');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftProcessReferenceResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
   }
 
   Map<String, dynamic> _decodeBody(http.Response response) {

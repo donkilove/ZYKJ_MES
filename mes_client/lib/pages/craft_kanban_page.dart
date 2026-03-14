@@ -31,7 +31,13 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
   String _message = '';
 
   List<ProductionProductOption> _products = const [];
+  List<CraftStageItem> _stages = const [];
+  List<CraftProcessItem> _processes = const [];
   int? _selectedProductId;
+  int? _selectedStageId;
+  int? _selectedProcessId;
+  DateTime? _startDate;
+  DateTime? _endDate;
   CraftKanbanProcessMetricsResult? _metrics;
 
   @override
@@ -60,6 +66,14 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     });
     try {
       final products = await _productionService.listProductOptions();
+      final stageResult = await _craftService.listStages(
+        pageSize: 500,
+        enabled: true,
+      );
+      final processResult = await _craftService.listProcesses(
+        pageSize: 500,
+        enabled: true,
+      );
       if (!mounted) {
         return;
       }
@@ -73,6 +87,14 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
       }
       setState(() {
         _products = sorted;
+        _stages = [...stageResult.items]
+          ..sort((a, b) {
+            final c = a.sortOrder.compareTo(b.sortOrder);
+            return c != 0 ? c : a.id.compareTo(b.id);
+          });
+        _processes = [...processResult.items]..sort(
+          (a, b) => a.id.compareTo(b.id),
+        );
         _selectedProductId = selected;
       });
       if (selected != null) {
@@ -119,6 +141,10 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
       final metrics = await _craftService.getCraftKanbanProcessMetrics(
         productId: productId,
         limit: 5,
+        stageId: _selectedStageId,
+        processId: _selectedProcessId,
+        startDate: _startDate,
+        endDate: _endDate,
       );
       if (!mounted) {
         return;
@@ -158,43 +184,188 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     return '$order\n$month-$day';
   }
 
+  List<CraftProcessItem> get _filteredProcesses {
+    if (_selectedStageId == null) {
+      return _processes;
+    }
+    return _processes.where((p) => p.stageId == _selectedStageId).toList();
+  }
+
   Widget _buildMetricHeader() {
-    return Row(
+    final bool busy = _loadingProducts || _loadingMetrics;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 320,
-          child: DropdownButtonFormField<int>(
-            initialValue: _selectedProductId,
-            decoration: const InputDecoration(
-              labelText: '选择产品',
-              border: OutlineInputBorder(),
+        Row(
+          children: [
+            SizedBox(
+              width: 280,
+              child: DropdownButtonFormField<int>(
+                initialValue: _selectedProductId,
+                decoration: const InputDecoration(
+                  labelText: '选择产品',
+                  border: OutlineInputBorder(),
+                ),
+                items: _products
+                    .map(
+                      (item) => DropdownMenuItem<int>(
+                        value: item.id,
+                        child: Text(item.name),
+                      ),
+                    )
+                    .toList(),
+                onChanged: busy
+                    ? null
+                    : (value) async {
+                        if (value == null) {
+                          return;
+                        }
+                        setState(() {
+                          _selectedProductId = value;
+                        });
+                        await _loadMetrics();
+                      },
+              ),
             ),
-            items: _products
-                .map(
-                  (item) => DropdownMenuItem<int>(
-                    value: item.id,
-                    child: Text(item.name),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 200,
+              child: DropdownButtonFormField<int?>(
+                initialValue: _selectedStageId,
+                decoration: const InputDecoration(
+                  labelText: '工段筛选',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('全部工段'),
                   ),
-                )
-                .toList(),
-            onChanged: (_loadingProducts || _loadingMetrics)
-                ? null
-                : (value) async {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() {
-                      _selectedProductId = value;
-                    });
-                    await _loadMetrics();
-                  },
-          ),
+                  ..._stages.map(
+                    (s) => DropdownMenuItem<int?>(
+                      value: s.id,
+                      child: Text(s.name),
+                    ),
+                  ),
+                ],
+                onChanged: busy
+                    ? null
+                    : (value) async {
+                        setState(() {
+                          _selectedStageId = value;
+                          _selectedProcessId = null;
+                        });
+                        await _loadMetrics();
+                      },
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 200,
+              child: DropdownButtonFormField<int?>(
+                initialValue: _selectedProcessId,
+                decoration: const InputDecoration(
+                  labelText: '工序筛选',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('全部工序'),
+                  ),
+                  ..._filteredProcesses.map(
+                    (p) => DropdownMenuItem<int?>(
+                      value: p.id,
+                      child: Text(p.name),
+                    ),
+                  ),
+                ],
+                onChanged: busy
+                    ? null
+                    : (value) async {
+                        setState(() {
+                          _selectedProcessId = value;
+                        });
+                        await _loadMetrics();
+                      },
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: busy ? null : _loadMetrics,
+              icon: const Icon(Icons.refresh),
+              label: const Text('刷新'),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        FilledButton.icon(
-          onPressed: _loadingProducts || _loadingMetrics ? null : _loadMetrics,
-          icon: const Icon(Icons.refresh),
-          label: const Text('刷新'),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _startDate ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _startDate = picked;
+                        });
+                        await _loadMetrics();
+                      }
+                    },
+              icon: const Icon(Icons.date_range),
+              label: Text(
+                _startDate == null
+                    ? '开始日期'
+                    : '${_startDate!.year}-${_startDate!.month.toString().padLeft(2, '0')}-${_startDate!.day.toString().padLeft(2, '0')}',
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _endDate ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _endDate = picked;
+                        });
+                        await _loadMetrics();
+                      }
+                    },
+              icon: const Icon(Icons.date_range),
+              label: Text(
+                _endDate == null
+                    ? '结束日期'
+                    : '${_endDate!.year}-${_endDate!.month.toString().padLeft(2, '0')}-${_endDate!.day.toString().padLeft(2, '0')}',
+              ),
+            ),
+            if (_startDate != null || _endDate != null) ...[
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        setState(() {
+                          _startDate = null;
+                          _endDate = null;
+                        });
+                        await _loadMetrics();
+                      },
+                child: const Text('清除日期'),
+              ),
+            ],
+          ],
         ),
       ],
     );
