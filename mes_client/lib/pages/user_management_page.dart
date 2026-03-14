@@ -21,12 +21,16 @@ class UserManagementPage extends StatefulWidget {
     required this.onLogout,
     required this.canWrite,
     this.onNavigateToRoleManagement,
+    this.userService,
+    this.craftService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canWrite;
   final VoidCallback? onNavigateToRoleManagement;
+  final UserService? userService;
+  final CraftService? craftService;
 
   @override
   State<UserManagementPage> createState() => _UserManagementPageState();
@@ -68,14 +72,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
   int _total = 0;
   List<String> _myRoleCodes = const [];
 
-  bool _isCurrentUserSystemAdmin() =>
-      _myRoleCodes.contains(_roleSystemAdmin);
+  bool _isCurrentUserSystemAdmin() => _myRoleCodes.contains(_roleSystemAdmin);
 
   @override
   void initState() {
     super.initState();
-    _userService = UserService(widget.session);
-    _craftService = CraftService(widget.session);
+    _userService = widget.userService ?? UserService(widget.session);
+    _craftService = widget.craftService ?? CraftService(widget.session);
     _startOnlineStatusRefresh();
     _loadInitialData();
   }
@@ -137,11 +140,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
     if (processCodes.isEmpty) {
       return null;
     }
-    final firstProcess = _processes.firstWhere(
-      (p) => processCodes.contains(p.code),
-      orElse: () => _processes.first,
-    );
-    return firstProcess.stageId;
+    for (final process in _processes) {
+      if (processCodes.contains(process.code)) {
+        return process.stageId;
+      }
+    }
+    return null;
   }
 
   void _startOnlineStatusRefresh() {
@@ -353,13 +357,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             ChoiceChip(
                               label: const Text('启用'),
                               selected: isActive,
-                              onSelected: (_) => setDialogState(() => isActive = true),
+                              onSelected: (_) =>
+                                  setDialogState(() => isActive = true),
                             ),
                             const SizedBox(width: 8),
                             ChoiceChip(
                               label: const Text('停用'),
                               selected: !isActive,
-                              onSelected: (_) => setDialogState(() => isActive = false),
+                              onSelected: (_) =>
+                                  setDialogState(() => isActive = false),
                             ),
                           ],
                         ),
@@ -484,7 +490,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         password: passwordController.text,
                         roleCodes: [selectedRoleCode!],
                         processCodes: orderedProcessCodes,
-                        remark: remarkController.text.trim().isEmpty ? null : remarkController.text.trim(),
+                        stageId: selectedStageId,
+                        remark: remarkController.text.trim().isEmpty
+                            ? null
+                            : remarkController.text.trim(),
                         isActive: isActive,
                       );
                       if (context.mounted) {
@@ -513,10 +522,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
       },
     );
 
-    accountController.dispose();
-    passwordController.dispose();
-    remarkController.dispose();
-
     if (created == true) {
       await _loadUsers();
     }
@@ -535,7 +540,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final canEditAccount = _isCurrentUserSystemAdmin();
     String? selectedRoleCode = _pickPreferredRoleCode(user.roleCodes);
     int? selectedStageId = _isOperator(selectedRoleCode)
-        ? _getStageIdFromProcessCodes(user.processCodes.toSet())
+        ? (user.stageId ??
+              _getStageIdFromProcessCodes(user.processCodes.toSet()))
         : null;
     Set<String> selectedProcessCodes = _isOperator(selectedRoleCode)
         ? user.processCodes.toSet()
@@ -736,6 +742,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             : passwordController.text.trim(),
                         roleCodes: [selectedRoleCode!],
                         processCodes: orderedProcessCodes,
+                        stageId: selectedStageId,
                         remark: remarkController.text.trim().isEmpty
                             ? null
                             : remarkController.text.trim(),
@@ -765,10 +772,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
         );
       },
     );
-
-    accountController.dispose();
-    passwordController.dispose();
-    remarkController.dispose();
 
     if (updated == true) {
       await _loadUsers();
@@ -939,7 +942,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
       },
     );
 
-    passwordController.dispose();
     if (confirmed == true && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -1250,37 +1252,75 @@ class _UserManagementPageState extends State<UserManagementPage> {
                               final createdAtStr = user.createdAt != null
                                   ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
                                   : '-';
-                            return DataRow(cells: [
-                              DataCell(Text(user.username)),
-                              DataCell(Text(
-                                user.roleNames.isEmpty ? '-' : user.roleNames.join('、'),
-                              )),
-                              DataCell(Text(
-                                user.stageNames.isEmpty ? '-' : user.stageNames.join('、'),
-                              )),
-                              DataCell(Text(
-                                statusLabel,
-                                style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
-                              )),
-                              DataCell(Text(
-                                activeLabel,
-                                style: TextStyle(color: activeColor, fontWeight: FontWeight.w600),
-                              )),
-                              DataCell(Text(createdAtStr)),
-                              DataCell(PopupMenuButton<_UserAction>(
-                                onSelected: (action) => _handleUserAction(action, user),
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(value: _UserAction.edit, child: Text('编辑')),
-                                  if (user.isActive)
-                                    const PopupMenuItem(value: _UserAction.disable, child: Text('停用'))
-                                  else
-                                    const PopupMenuItem(value: _UserAction.enable, child: Text('启用')),
-                                  const PopupMenuItem(value: _UserAction.resetPassword, child: Text('重置密码')),
-                                  const PopupMenuItem(value: _UserAction.delete, child: Text('删除')),
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(user.username)),
+                                  DataCell(
+                                    Text(
+                                      user.roleNames.isEmpty
+                                          ? '-'
+                                          : user.roleNames.join('、'),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      user.stageNames.isEmpty
+                                          ? '-'
+                                          : user.stageNames.join('、'),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      statusLabel,
+                                      style: TextStyle(
+                                        color: statusColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      activeLabel,
+                                      style: TextStyle(
+                                        color: activeColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  DataCell(Text(createdAtStr)),
+                                  DataCell(
+                                    PopupMenuButton<_UserAction>(
+                                      onSelected: (action) =>
+                                          _handleUserAction(action, user),
+                                      itemBuilder: (context) => [
+                                        const PopupMenuItem(
+                                          value: _UserAction.edit,
+                                          child: Text('编辑'),
+                                        ),
+                                        if (user.isActive)
+                                          const PopupMenuItem(
+                                            value: _UserAction.disable,
+                                            child: Text('停用'),
+                                          )
+                                        else
+                                          const PopupMenuItem(
+                                            value: _UserAction.enable,
+                                            child: Text('启用'),
+                                          ),
+                                        const PopupMenuItem(
+                                          value: _UserAction.resetPassword,
+                                          child: Text('重置密码'),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: _UserAction.delete,
+                                          child: Text('删除'),
+                                        ),
+                                      ],
+                                      child: const Text('操作'),
+                                    ),
+                                  ),
                                 ],
-                                child: const Text('操作'),
-                              )),
-                            ]);
+                              );
                             }).toList(),
                           ),
                         ),

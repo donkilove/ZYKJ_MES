@@ -109,6 +109,7 @@ void main() {
             expect(body['username'], 'created_user');
             expect(body['full_name'], 'created_user');
             expect(body['role_codes'], ['production_admin']);
+            expect(body['stage_id'], 1);
             return TestResponse.json(201, body: {'data': {}});
           },
           'PUT /users/9': (request) {
@@ -118,6 +119,16 @@ void main() {
             expect(body['password'], 'new-pass');
             expect(body['role_codes'], ['system_admin']);
             expect(body['process_codes'], ['01-02']);
+            expect(body['stage_id'], 2);
+            return TestResponse.json(200, body: {'data': {}});
+          },
+          'POST /users/9/reset-password': (request) {
+            final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+            expect(
+              request.uri.queryParameters.containsKey('password'),
+              isFalse,
+            );
+            expect(body['password'], 'reset-pass-2');
             return TestResponse.json(200, body: {'data': {}});
           },
           'DELETE /users/9': (_) => TestResponse.json(200, body: {'data': {}}),
@@ -152,6 +163,7 @@ void main() {
           password: 'pass',
           roleCodes: ['production_admin'],
           processCodes: ['01-01'],
+          stageId: 1,
         );
         await service.updateUser(
           userId: 9,
@@ -159,7 +171,9 @@ void main() {
           password: 'new-pass',
           roleCodes: ['system_admin'],
           processCodes: ['01-02'],
+          stageId: 2,
         );
+        await service.resetUserPassword(userId: 9, password: 'reset-pass-2');
         await service.deleteUser(userId: 9);
 
         expect(users.total, 1);
@@ -167,7 +181,7 @@ void main() {
         expect(roles.items.single.code, 'system_admin');
         expect(processes.items.single.code, '01-01');
         expect(requests.items.single.account, 'new_user');
-        expect(server.requests.length, 9);
+        expect(server.requests.length, 10);
       },
     );
 

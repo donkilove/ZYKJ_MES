@@ -393,10 +393,12 @@ class UserService {
     required int userId,
     required String password,
   }) async {
-    final uri = Uri.parse(
-      '${session.baseUrl}/users/$userId/reset-password',
-    ).replace(queryParameters: {'password': password});
-    final response = await http.post(uri, headers: _authHeaders);
+    final uri = Uri.parse('${session.baseUrl}/users/$userId/reset-password');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'password': password}),
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
   }

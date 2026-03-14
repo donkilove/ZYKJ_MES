@@ -29,6 +29,10 @@ class UserUpdate(BaseModel):
     must_change_password: bool | None = None
 
 
+class UserResetPasswordRequest(BaseModel):
+    password: str = Field(min_length=6, max_length=128)
+
+
 class UserItem(BaseModel):
     id: int
     username: str

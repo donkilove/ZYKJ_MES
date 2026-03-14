@@ -9,7 +9,7 @@ from app.api.deps import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.user import UserCreate, UserExportResult, UserItem, UserListResult, UserUpdate
+from app.schemas.user import UserCreate, UserExportResult, UserItem, UserListResult, UserResetPasswordRequest, UserUpdate
 from app.services.audit_service import write_audit_log
 from app.services.session_service import list_online_user_ids
 from app.services.user_service import (
@@ -348,14 +348,14 @@ def disable_user_api(
 def reset_password_api(
     user_id: int,
     request: Request,
-    password: str = Query(min_length=6, max_length=128),
+    payload: UserResetPasswordRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("user.users.reset_password")),
 ) -> ApiResponse[UserItem]:
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    updated, error_message = reset_user_password(db, user=user, new_password=password)
+    updated, error_message = reset_user_password(db, user=user, new_password=payload.password)
     if error_message:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
     if not updated:
