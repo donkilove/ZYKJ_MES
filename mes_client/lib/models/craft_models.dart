@@ -834,12 +834,16 @@ class CraftReferenceItem {
     required this.refId,
     required this.refName,
     required this.detail,
+    this.riskLevel,
+    this.riskNote,
   });
 
   final String refType;
   final int refId;
   final String refName;
   final String? detail;
+  final String? riskLevel;
+  final String? riskNote;
 
   factory CraftReferenceItem.fromJson(Map<String, dynamic> json) {
     return CraftReferenceItem(
@@ -847,6 +851,8 @@ class CraftReferenceItem {
       refId: (json['ref_id'] as int?) ?? 0,
       refName: (json['ref_name'] as String?) ?? '',
       detail: json['detail'] as String?,
+      riskLevel: json['risk_level'] as String?,
+      riskNote: json['risk_note'] as String?,
     );
   }
 }
@@ -899,6 +905,37 @@ class CraftProcessReferenceResult {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
+      total: (json['total'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map((e) => CraftReferenceItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class CraftTemplateReferenceResult {
+  CraftTemplateReferenceResult({
+    required this.templateId,
+    required this.templateName,
+    required this.productId,
+    required this.productName,
+    required this.total,
+    required this.items,
+  });
+
+  final int templateId;
+  final String templateName;
+  final int productId;
+  final String productName;
+  final int total;
+  final List<CraftReferenceItem> items;
+
+  factory CraftTemplateReferenceResult.fromJson(Map<String, dynamic> json) {
+    return CraftTemplateReferenceResult(
+      templateId: (json['template_id'] as int?) ?? 0,
+      templateName: (json['template_name'] as String?) ?? '',
+      productId: (json['product_id'] as int?) ?? 0,
+      productName: (json['product_name'] as String?) ?? '',
       total: (json['total'] as int?) ?? 0,
       items: (json['items'] as List<dynamic>? ?? const [])
           .map((e) => CraftReferenceItem.fromJson(e as Map<String, dynamic>))

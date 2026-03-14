@@ -23,6 +23,8 @@ enum _TemplateAction {
   edit,
   publish,
   copy,
+  copyToProduct,
+  copyFromMaster,
   archive,
   unarchive,
   impact,
@@ -919,6 +921,193 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     if (saved == true) {
       await _loadData();
     }
+  }
+
+  Future<void> _copyTemplateToProduct(CraftTemplateItem item) async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
+    if (_products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('暂无可用产品')),
+      );
+      return;
+    }
+    final nameController = TextEditingController(text: '${item.templateName} 副本');
+    int selectedProductId = _products.first.id;
+    final saved = await showLockedFormDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text('跨产品复制模板'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      value: selectedProductId,
+                      decoration: const InputDecoration(
+                        labelText: '目标产品',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _products
+                          .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setDialogState(() => selectedProductId = v);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: '新模板名称',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final newName = nameController.text.trim();
+                    if (newName.isEmpty) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(content: Text('请输入新模板名称')),
+                      );
+                      return;
+                    }
+                    try {
+                      await _craftService.copyTemplateToProduct(
+                        templateId: item.id,
+                        targetProductId: selectedProductId,
+                        newName: newName,
+                      );
+                      if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+                    } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
+                      if (dialogContext.mounted) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(content: Text(_errorMessage(error))),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('复制'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    nameController.dispose();
+    if (saved == true) await _loadData();
+  }
+
+  Future<void> _copyFromSystemMaster(CraftTemplateItem item) async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
+    if (_products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('暂无可用产品')),
+      );
+      return;
+    }
+    final nameController = TextEditingController(text: '系统母版套版');
+    int selectedProductId = item.productId;
+    final saved = await showLockedFormDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text('从系统母版套版'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      value: selectedProductId,
+                      decoration: const InputDecoration(
+                        labelText: '目标产品',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _products
+                          .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setDialogState(() => selectedProductId = v);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: '新模板名称',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final newName = nameController.text.trim();
+                    if (newName.isEmpty) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(content: Text('请输入新模板名称')),
+                      );
+                      return;
+                    }
+                    try {
+                      await _craftService.copySystemMasterToProduct(
+                        productId: selectedProductId,
+                        newName: newName,
+                      );
+                      if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+                    } catch (error) {
+                      if (_isUnauthorized(error)) {
+                        widget.onLogout();
+                        return;
+                      }
+                      if (dialogContext.mounted) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(content: Text(_errorMessage(error))),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('套版'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    nameController.dispose();
+    if (saved == true) await _loadData();
   }
 
   Future<void> _archiveTemplate(CraftTemplateItem item) async {
@@ -1989,6 +2178,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         }
         await _copyTemplate(item);
         return;
+      case _TemplateAction.copyToProduct:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _copyTemplateToProduct(item);
+        return;
+      case _TemplateAction.copyFromMaster:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _copyFromSystemMaster(item);
+        return;
       case _TemplateAction.archive:
         if (!_canManageTemplates) {
           _showNoPermission();
@@ -2327,9 +2530,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                                     );
                                                     items.add(
                                                       const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .copy,
-                                                        child: Text('复制'),
+                                                        value: _TemplateAction.copy,
+                                                        child: Text('复制（同产品）'),
+                                                      ),
+                                                    );
+                                                    items.add(
+                                                      const PopupMenuItem(
+                                                        value: _TemplateAction.copyToProduct,
+                                                        child: Text('跨产品复制'),
+                                                      ),
+                                                    );
+                                                    items.add(
+                                                      const PopupMenuItem(
+                                                        value: _TemplateAction.copyFromMaster,
+                                                        child: Text('从系统母版套版'),
                                                       ),
                                                     );
                                                     if (item.lifecycleStatus ==

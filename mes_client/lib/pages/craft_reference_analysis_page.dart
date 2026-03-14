@@ -5,6 +5,8 @@ import '../models/craft_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 
+enum _QueryMode { stage, process, template }
+
 class CraftReferenceAnalysisPage extends StatefulWidget {
   const CraftReferenceAnalysisPage({
     super.key,
@@ -29,21 +31,25 @@ class _CraftReferenceAnalysisPageState
 
   List<CraftStageItem> _stages = const [];
   List<CraftProcessItem> _processes = const [];
+  List<CraftTemplateItem> _templates = const [];
 
-  // 当前选中的工段/工序
+  _QueryMode _queryMode = _QueryMode.stage;
+
   CraftStageItem? _selectedStage;
   CraftProcessItem? _selectedProcess;
+  CraftTemplateItem? _selectedTemplate;
 
-  // 引用结果
   bool _loadingRef = false;
   CraftStageReferenceResult? _stageRefResult;
   CraftProcessReferenceResult? _processRefResult;
+  CraftTemplateReferenceResult? _templateRefResult;
 
-  // 搜索关键词
   final _stageSearchController = TextEditingController();
   final _processSearchController = TextEditingController();
+  final _templateSearchController = TextEditingController();
   String _stageKeyword = '';
   String _processKeyword = '';
+  String _templateKeyword = '';
 
   @override
   void initState() {
@@ -56,6 +62,7 @@ class _CraftReferenceAnalysisPageState
   void dispose() {
     _stageSearchController.dispose();
     _processSearchController.dispose();
+    _templateSearchController.dispose();
     super.dispose();
   }
 
@@ -73,6 +80,7 @@ class _CraftReferenceAnalysisPageState
     try {
       final stageResult = await _service.listStages(pageSize: 500, enabled: null);
       final processResult = await _service.listProcesses(pageSize: 500, enabled: null);
+      final templateResult = await _service.listTemplates(pageSize: 500, enabled: null);
       if (!mounted) return;
       setState(() {
         _stages = [...stageResult.items]
@@ -81,6 +89,8 @@ class _CraftReferenceAnalysisPageState
             return c != 0 ? c : a.id.compareTo(b.id);
           });
         _processes = [...processResult.items];
+        _templates = [...templateResult.items]
+          ..sort((a, b) => a.templateName.compareTo(b.templateName));
       });
     } catch (error) {
       if (!mounted) return;
@@ -100,8 +110,10 @@ class _CraftReferenceAnalysisPageState
     setState(() {
       _selectedStage = stage;
       _selectedProcess = null;
+      _selectedTemplate = null;
       _stageRefResult = null;
       _processRefResult = null;
+      _templateRefResult = null;
       _loadingRef = true;
     });
     try {
@@ -128,8 +140,10 @@ class _CraftReferenceAnalysisPageState
     setState(() {
       _selectedProcess = process;
       _selectedStage = null;
+      _selectedTemplate = null;
       _stageRefResult = null;
       _processRefResult = null;
+      _templateRefResult = null;
       _loadingRef = true;
     });
     try {
@@ -152,15 +166,41 @@ class _CraftReferenceAnalysisPageState
     }
   }
 
+  Future<void> _loadTemplateReferences(CraftTemplateItem template) async {
+    setState(() {
+      _selectedTemplate = template;
+      _selectedStage = null;
+      _selectedProcess = null;
+      _stageRefResult = null;
+      _processRefResult = null;
+      _templateRefResult = null;
+      _loadingRef = true;
+    });
+    try {
+      final result = await _service.getTemplateReferences(templateId: template.id);
+      if (!mounted) return;
+      setState(() => _templateRefResult = result);
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('查询引用失败：${_errorMessage(error)}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingRef = false);
+    }
+  }
+
   List<CraftStageItem> get _filteredStages {
     if (_stageKeyword.isEmpty) return _stages;
     final kw = _stageKeyword.toLowerCase();
     return _stages
-        .where(
-          (s) =>
-              s.code.toLowerCase().contains(kw) ||
-              s.name.toLowerCase().contains(kw),
-        )
+        .where((s) => s.code.toLowerCase().contains(kw) || s.name.toLowerCase().contains(kw))
         .toList();
   }
 
@@ -177,11 +217,24 @@ class _CraftReferenceAnalysisPageState
         .toList();
   }
 
+  List<CraftTemplateItem> get _filteredTemplates {
+    if (_templateKeyword.isEmpty) return _templates;
+    final kw = _templateKeyword.toLowerCase();
+    return _templates
+        .where(
+          (t) =>
+              t.templateName.toLowerCase().contains(kw) ||
+              t.productName.toLowerCase().contains(kw),
+        )
+        .toList();
+  }
+
   Widget _buildRefTypeChip(String refType) {
     final (label, color) = switch (refType) {
       'process' => ('工序', Colors.blue),
       'user' => ('用户', Colors.purple),
       'template' => ('工艺模板', Colors.teal),
+      'system_master_template' => ('系统母版', Colors.indigo),
       'order' => ('生产工单', Colors.orange),
       _ => (refType, Colors.grey),
     };
@@ -190,6 +243,21 @@ class _CraftReferenceAnalysisPageState
       backgroundColor: color.withValues(alpha: 0.12),
       side: BorderSide(color: color.withValues(alpha: 0.4)),
       padding: const EdgeInsets.symmetric(horizontal: 4),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _buildRiskChip(String? riskLevel) {
+    if (riskLevel == null || riskLevel == 'none') return const SizedBox.shrink();
+    final (label, color) = riskLevel == 'high'
+        ? ('高风险', Colors.red)
+        : ('低风险', Colors.amber);
+    return Chip(
+      label: Text(label, style: const TextStyle(fontSize: 10)),
+      backgroundColor: color.withValues(alpha: 0.12),
+      side: BorderSide(color: color.withValues(alpha: 0.5)),
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
     );
@@ -207,8 +275,27 @@ class _CraftReferenceAnalysisPageState
         return ListTile(
           dense: true,
           leading: _buildRefTypeChip(item.refType),
-          title: Text(item.refName),
-          subtitle: item.detail != null ? Text(item.detail!) : null,
+          title: Row(
+            children: [
+              Expanded(child: Text(item.refName)),
+              const SizedBox(width: 4),
+              _buildRiskChip(item.riskLevel),
+            ],
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (item.detail != null) Text(item.detail!),
+              if (item.riskNote != null)
+                Text(
+                  item.riskNote!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: item.riskLevel == 'high' ? Colors.red : Colors.amber.shade800,
+                  ),
+                ),
+            ],
+          ),
           trailing: Text(
             '#${item.refId}',
             style: Theme.of(context).textTheme.bodySmall,
@@ -219,10 +306,8 @@ class _CraftReferenceAnalysisPageState
   }
 
   Widget _buildResultPanel(ThemeData theme) {
-    if (_selectedStage == null && _selectedProcess == null) {
-      return const Center(
-        child: Text('请在左侧选择工段或工序以查看引用情况'),
-      );
+    if (_selectedStage == null && _selectedProcess == null && _selectedTemplate == null) {
+      return const Center(child: Text('请在左侧选择工段、工序或模板以查看引用情况'));
     }
     if (_loadingRef) {
       return const Center(child: CircularProgressIndicator());
@@ -235,10 +320,7 @@ class _CraftReferenceAnalysisPageState
         children: [
           Row(
             children: [
-              Text(
-                '工段引用分析：${r.stageName} (${r.stageCode})',
-                style: theme.textTheme.titleMedium,
-              ),
+              Text('工段引用分析：${r.stageName} (${r.stageCode})', style: theme.textTheme.titleMedium),
               const SizedBox(width: 12),
               Chip(
                 label: Text('共 ${r.total} 处引用'),
@@ -261,10 +343,32 @@ class _CraftReferenceAnalysisPageState
         children: [
           Row(
             children: [
-              Text(
-                '工序引用分析：${r.processName} (${r.processCode})',
-                style: theme.textTheme.titleMedium,
+              Text('工序引用分析：${r.processName} (${r.processCode})', style: theme.textTheme.titleMedium),
+              const SizedBox(width: 12),
+              Chip(
+                label: Text('共 ${r.total} 处引用'),
+                backgroundColor: r.total == 0
+                    ? Colors.green.withValues(alpha: 0.12)
+                    : Colors.orange.withValues(alpha: 0.12),
               ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(child: _buildReferenceList(r.items)),
+        ],
+      );
+    }
+
+    if (_templateRefResult != null) {
+      final r = _templateRefResult!;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('模板引用分析：${r.templateName}', style: theme.textTheme.titleMedium),
+              const SizedBox(width: 8),
+              Text('(${r.productName})', style: theme.textTheme.bodySmall),
               const SizedBox(width: 12),
               Chip(
                 label: Text('共 ${r.total} 处引用'),
@@ -283,6 +387,171 @@ class _CraftReferenceAnalysisPageState
     return const SizedBox.shrink();
   }
 
+  Widget _buildModeTab(ThemeData theme) {
+    return SegmentedButton<_QueryMode>(
+      segments: const [
+        ButtonSegment(value: _QueryMode.stage, label: Text('工段')),
+        ButtonSegment(value: _QueryMode.process, label: Text('工序')),
+        ButtonSegment(value: _QueryMode.template, label: Text('模板')),
+      ],
+      selected: {_queryMode},
+      onSelectionChanged: (s) {
+        setState(() {
+          _queryMode = s.first;
+          _selectedStage = null;
+          _selectedProcess = null;
+          _selectedTemplate = null;
+          _stageRefResult = null;
+          _processRefResult = null;
+          _templateRefResult = null;
+        });
+      },
+    );
+  }
+
+  Widget _buildSelectorPanel(ThemeData theme) {
+    switch (_queryMode) {
+      case _QueryMode.stage:
+        return SizedBox(
+          width: 240,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('工段', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _stageSearchController,
+                    decoration: const InputDecoration(
+                      hintText: '搜索工段',
+                      prefixIcon: Icon(Icons.search, size: 18),
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    ),
+                    onChanged: (v) => setState(() => _stageKeyword = v.trim()),
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _filteredStages.length,
+                      itemBuilder: (context, index) {
+                        final stage = _filteredStages[index];
+                        final selected = _selectedStage?.id == stage.id;
+                        return ListTile(
+                          dense: true,
+                          selected: selected,
+                          selectedTileColor:
+                              theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          title: Text(stage.name),
+                          subtitle: Text(stage.code),
+                          onTap: () => _loadStageReferences(stage),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      case _QueryMode.process:
+        return SizedBox(
+          width: 260,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('工序', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _processSearchController,
+                    decoration: const InputDecoration(
+                      hintText: '搜索工序',
+                      prefixIcon: Icon(Icons.search, size: 18),
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    ),
+                    onChanged: (v) => setState(() => _processKeyword = v.trim()),
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _filteredProcesses.length,
+                      itemBuilder: (context, index) {
+                        final process = _filteredProcesses[index];
+                        final selected = _selectedProcess?.id == process.id;
+                        return ListTile(
+                          dense: true,
+                          selected: selected,
+                          selectedTileColor:
+                              theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          title: Text(process.name),
+                          subtitle: Text('${process.stageName ?? '-'} · ${process.code}'),
+                          onTap: () => _loadProcessReferences(process),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      case _QueryMode.template:
+        return SizedBox(
+          width: 280,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('工艺模板', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _templateSearchController,
+                    decoration: const InputDecoration(
+                      hintText: '搜索模板/产品',
+                      prefixIcon: Icon(Icons.search, size: 18),
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    ),
+                    onChanged: (v) => setState(() => _templateKeyword = v.trim()),
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _filteredTemplates.length,
+                      itemBuilder: (context, index) {
+                        final template = _filteredTemplates[index];
+                        final selected = _selectedTemplate?.id == template.id;
+                        return ListTile(
+                          dense: true,
+                          selected: selected,
+                          selectedTileColor:
+                              theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          title: Text(template.templateName),
+                          subtitle: Text('${template.productName} · ${template.lifecycleStatus}'),
+                          onTap: () => _loadTemplateReferences(template),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -296,8 +565,7 @@ class _CraftReferenceAnalysisPageState
             children: [
               Text(
                 '工艺引用分析',
-                style: theme.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
               ),
               const Spacer(),
               IconButton(
@@ -307,13 +575,14 @@ class _CraftReferenceAnalysisPageState
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          _buildModeTab(theme),
           if (_message.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8, bottom: 4),
               child: Text(
                 _message,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.error),
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
               ),
             ),
           const SizedBox(height: 12),
@@ -323,117 +592,8 @@ class _CraftReferenceAnalysisPageState
                 : Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 左侧：工段列表
-                      SizedBox(
-                        width: 220,
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('工段', style: theme.textTheme.titleSmall),
-                                const SizedBox(height: 6),
-                                TextField(
-                                  controller: _stageSearchController,
-                                  decoration: const InputDecoration(
-                                    hintText: '搜索工段',
-                                    prefixIcon: Icon(Icons.search, size: 18),
-                                    isDense: true,
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(
-                                      vertical: 6,
-                                      horizontal: 8,
-                                    ),
-                                  ),
-                                  onChanged: (v) =>
-                                      setState(() => _stageKeyword = v.trim()),
-                                ),
-                                const SizedBox(height: 6),
-                                Expanded(
-                                  child: ListView.builder(
-                                    itemCount: _filteredStages.length,
-                                    itemBuilder: (context, index) {
-                                      final stage = _filteredStages[index];
-                                      final selected =
-                                          _selectedStage?.id == stage.id;
-                                      return ListTile(
-                                        dense: true,
-                                        selected: selected,
-                                        selectedTileColor: theme
-                                            .colorScheme.primaryContainer
-                                            .withValues(alpha: 0.4),
-                                        title: Text(stage.name),
-                                        subtitle: Text(stage.code),
-                                        onTap: () =>
-                                            _loadStageReferences(stage),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                      _buildSelectorPanel(theme),
                       const SizedBox(width: 8),
-                      // 中间：工序列表
-                      SizedBox(
-                        width: 240,
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('工序', style: theme.textTheme.titleSmall),
-                                const SizedBox(height: 6),
-                                TextField(
-                                  controller: _processSearchController,
-                                  decoration: const InputDecoration(
-                                    hintText: '搜索工序',
-                                    prefixIcon: Icon(Icons.search, size: 18),
-                                    isDense: true,
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(
-                                      vertical: 6,
-                                      horizontal: 8,
-                                    ),
-                                  ),
-                                  onChanged: (v) =>
-                                      setState(() => _processKeyword = v.trim()),
-                                ),
-                                const SizedBox(height: 6),
-                                Expanded(
-                                  child: ListView.builder(
-                                    itemCount: _filteredProcesses.length,
-                                    itemBuilder: (context, index) {
-                                      final process = _filteredProcesses[index];
-                                      final selected =
-                                          _selectedProcess?.id == process.id;
-                                      return ListTile(
-                                        dense: true,
-                                        selected: selected,
-                                        selectedTileColor: theme
-                                            .colorScheme.primaryContainer
-                                            .withValues(alpha: 0.4),
-                                        title: Text(process.name),
-                                        subtitle: Text(
-                                          '${process.stageName ?? '-'} · ${process.code}',
-                                        ),
-                                        onTap: () =>
-                                            _loadProcessReferences(process),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // 右侧：引用结果
                       Expanded(
                         child: Card(
                           child: Padding(

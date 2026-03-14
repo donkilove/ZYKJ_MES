@@ -317,6 +317,21 @@ def list_craft_processes(
     return int(total), rows
 
 
+def _ensure_process_name_unique_in_stage(
+    db: Session,
+    *,
+    stage_id: int,
+    name: str,
+    exclude_process_id: int | None = None,
+) -> None:
+    stmt = select(Process.id).where(Process.stage_id == stage_id, Process.name == name)
+    if exclude_process_id is not None:
+        stmt = stmt.where(Process.id != exclude_process_id)
+    existing = db.execute(stmt).scalars().first()
+    if existing is not None:
+        raise ValueError("Process name already exists in this stage")
+
+
 def create_process(
     db: Session,
     *,
@@ -328,6 +343,7 @@ def create_process(
     normalized_code = validate_process_code_matches_stage(code=code, stage=stage)
     normalized_name = _normalize_text(name, field_name="Process name")
     ensure_process_code_unique(db, code=normalized_code)
+    _ensure_process_name_unique_in_stage(db, stage_id=stage.id, name=normalized_name)
 
     row = Process(
         code=normalized_code,
@@ -356,7 +372,12 @@ def update_process(
     if normalized_code != row.code:
         ensure_process_code_unique(db, code=normalized_code, exclude_process_id=row.id)
     row.code = normalized_code
-    row.name = _normalize_text(name, field_name="Process name")
+    normalized_name = _normalize_text(name, field_name="Process name")
+    if normalized_name != row.name or stage.id != row.stage_id:
+        _ensure_process_name_unique_in_stage(
+            db, stage_id=stage.id, name=normalized_name, exclude_process_id=row.id
+        )
+    row.name = normalized_name
     row.stage_id = stage.id
     row.is_enabled = is_enabled
     db.commit()
@@ -1698,7 +1719,118 @@ def copy_template(
     return get_template_by_id(db, row.id) or row
 
 
-def archive_template(
+def copy_template_from_system_master(
+    db: Session,
+    *,
+    system_master: CraftSystemMasterTemplate,
+    product_id: int,
+    new_name: str,
+    operator: User,
+) -> ProductProcessTemplate:
+    """从系统母版套版，创建指定产品的工艺模板草稿。"""
+    normalized_name = _normalize_text(new_name, field_name="Template name")
+    existing_name = (
+        db.execute(
+            select(ProductProcessTemplate).where(
+                ProductProcessTemplate.product_id == product_id,
+                ProductProcessTemplate.template_name == normalized_name,
+                ProductProcessTemplate.is_enabled.is_(True),
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if existing_name:
+        raise ValueError("Template name already exists under this product")
+
+    row = ProductProcessTemplate(
+        product_id=product_id,
+        template_name=normalized_name,
+        version=1,
+        lifecycle_status=TEMPLATE_LIFECYCLE_DRAFT,
+        published_version=0,
+        is_default=False,
+        is_enabled=True,
+        created_by_user_id=operator.id,
+        updated_by_user_id=operator.id,
+    )
+    db.add(row)
+    db.flush()
+
+    sorted_steps = sorted(system_master.steps, key=lambda s: (s.step_order, s.id))
+    for step in sorted_steps:
+        row.steps.append(
+            ProductProcessTemplateStep(
+                step_order=step.step_order,
+                stage_id=step.stage_id,
+                stage_code=step.stage_code,
+                stage_name=step.stage_name,
+                process_id=step.process_id,
+                process_code=step.process_code,
+                process_name=step.process_name,
+            )
+        )
+    db.flush()
+    db.commit()
+    db.refresh(row)
+    return get_template_by_id(db, row.id) or row
+
+
+def copy_template_to_product(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+    target_product_id: int,
+    new_name: str,
+    operator: User,
+) -> ProductProcessTemplate:
+    """跨产品复制模板，来源记录保留在 template_name 中。"""
+    normalized_name = _normalize_text(new_name, field_name="Template name")
+    existing_name = (
+        db.execute(
+            select(ProductProcessTemplate).where(
+                ProductProcessTemplate.product_id == target_product_id,
+                ProductProcessTemplate.template_name == normalized_name,
+                ProductProcessTemplate.is_enabled.is_(True),
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if existing_name:
+        raise ValueError("Template name already exists under target product")
+
+    row = ProductProcessTemplate(
+        product_id=target_product_id,
+        template_name=normalized_name,
+        version=1,
+        lifecycle_status=TEMPLATE_LIFECYCLE_DRAFT,
+        published_version=0,
+        is_default=False,
+        is_enabled=True,
+        created_by_user_id=operator.id,
+        updated_by_user_id=operator.id,
+    )
+    db.add(row)
+    db.flush()
+
+    sorted_steps = sorted(template.steps, key=lambda s: (s.step_order, s.id))
+    for step in sorted_steps:
+        row.steps.append(
+            ProductProcessTemplateStep(
+                step_order=step.step_order,
+                stage_id=step.stage_id,
+                stage_code=step.stage_code,
+                stage_name=step.stage_name,
+                process_id=step.process_id,
+                process_code=step.process_code,
+                process_name=step.process_name,
+            )
+        )
+    db.flush()
+    db.commit()
+    db.refresh(row)
+    return get_template_by_id(db, row.id) or row
     db: Session,
     *,
     template: ProductProcessTemplate,
@@ -1778,6 +1910,8 @@ class ReferenceItem:
     ref_id: int
     ref_name: str
     detail: str | None = None
+    risk_level: str | None = None  # none / low / high
+    risk_note: str | None = None
 
 
 @dataclass(slots=True)
@@ -1833,8 +1967,10 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 ReferenceItem(
                     ref_type="system_master_template",
                     ref_id=template.id,
-                    ref_name="system_master_template",
+                    ref_name=template.name if hasattr(template, "name") and template.name else "系统母版",
                     detail=f"v{template.version}",
+                    risk_level="low",
+                    risk_note="工段被系统母版引用，删除前请先从母版中移除该工段",
                 )
             )
 
@@ -1854,7 +1990,22 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
             .order_by(ProductProcessTemplate.id.asc())
         ).scalars().all()
         for t in templates:
-            items.append(ReferenceItem(ref_type="template", ref_id=t.id, ref_name=t.template_name, detail=t.lifecycle_status))
+            risk_level = "high" if t.lifecycle_status == "published" else "low"
+            risk_note = (
+                "工段被已发布模板引用，停用或删除将影响生产工单"
+                if risk_level == "high"
+                else "工段被草稿/归档模板引用"
+            )
+            items.append(
+                ReferenceItem(
+                    ref_type="template",
+                    ref_id=t.id,
+                    ref_name=t.template_name,
+                    detail=t.lifecycle_status,
+                    risk_level=risk_level,
+                    risk_note=risk_note,
+                )
+            )
 
     order_process_ids = (
         db.execute(
@@ -1872,7 +2023,17 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
             .order_by(ProductionOrder.id.asc())
         ).scalars().all()
         for o in orders:
-            items.append(ReferenceItem(ref_type="order", ref_id=o.id, ref_name=o.order_code, detail=o.status))
+            active = o.status in (ORDER_STATUS_PENDING, ORDER_STATUS_IN_PROGRESS)
+            items.append(
+                ReferenceItem(
+                    ref_type="order",
+                    ref_id=o.id,
+                    ref_name=o.order_code,
+                    detail=o.status,
+                    risk_level="high" if active else "none",
+                    risk_note="工段被进行中工单引用，停用将影响生产进度" if active else None,
+                )
+            )
 
     return StageReferenceResult(
         stage_id=stage.id,
@@ -1906,8 +2067,10 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                 ReferenceItem(
                     ref_type="system_master_template",
                     ref_id=template.id,
-                    ref_name="system_master_template",
+                    ref_name=template.name if hasattr(template, "name") and template.name else "系统母版",
                     detail=f"v{template.version}",
+                    risk_level="low",
+                    risk_note="工序被系统母版引用，删除前请先从母版中移除该工序",
                 )
             )
 
@@ -1927,7 +2090,22 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
             .order_by(ProductProcessTemplate.id.asc())
         ).scalars().all()
         for t in templates:
-            items.append(ReferenceItem(ref_type="template", ref_id=t.id, ref_name=t.template_name, detail=t.lifecycle_status))
+            risk_level = "high" if t.lifecycle_status == "published" else "low"
+            risk_note = (
+                "工序被已发布模板引用，停用或删除将影响生产工单"
+                if risk_level == "high"
+                else "工序被草稿/归档模板引用"
+            )
+            items.append(
+                ReferenceItem(
+                    ref_type="template",
+                    ref_id=t.id,
+                    ref_name=t.template_name,
+                    detail=t.lifecycle_status,
+                    risk_level=risk_level,
+                    risk_note=risk_note,
+                )
+            )
 
     order_process_ids = (
         db.execute(
@@ -1945,12 +2123,79 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
             .order_by(ProductionOrder.id.asc())
         ).scalars().all()
         for o in orders:
-            items.append(ReferenceItem(ref_type="order", ref_id=o.id, ref_name=o.order_code, detail=o.status))
+            active = o.status in (ORDER_STATUS_PENDING, ORDER_STATUS_IN_PROGRESS)
+            items.append(
+                ReferenceItem(
+                    ref_type="order",
+                    ref_id=o.id,
+                    ref_name=o.order_code,
+                    detail=o.status,
+                    risk_level="high" if active else "none",
+                    risk_note="工序被进行中工单引用，停用将影响生产进度" if active else None,
+                )
+            )
 
     return ProcessReferenceResult(
         process_id=process.id,
         process_code=process.code,
         process_name=process.name,
+        total=len(items),
+        items=items,
+    )
+
+
+@dataclass(slots=True)
+class TemplateReferenceItem:
+    ref_type: str
+    ref_id: int
+    ref_name: str
+    detail: str | None = None
+    risk_level: str | None = None
+    risk_note: str | None = None
+
+
+@dataclass(slots=True)
+class TemplateReferenceResult:
+    template_id: int
+    template_name: str
+    product_id: int
+    product_name: str
+    total: int
+    items: list[TemplateReferenceItem]
+
+
+def get_template_references(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+) -> TemplateReferenceResult:
+    items: list[TemplateReferenceItem] = []
+
+    product_name = template.product.name if template.product else ""
+
+    active_orders = db.execute(
+        select(ProductionOrder.id, ProductionOrder.order_code, ProductionOrder.status).where(
+            ProductionOrder.process_template_id == template.id,
+        )
+    ).all()
+    for order_id, order_code, order_status in active_orders:
+        active = order_status in (ORDER_STATUS_PENDING, ORDER_STATUS_IN_PROGRESS)
+        items.append(
+            TemplateReferenceItem(
+                ref_type="order",
+                ref_id=order_id,
+                ref_name=order_code,
+                detail=order_status,
+                risk_level="high" if active else "none",
+                risk_note="模板被进行中工单引用，归档或停用将影响生产进度" if active else None,
+            )
+        )
+
+    return TemplateReferenceResult(
+        template_id=template.id,
+        template_name=template.template_name,
+        product_id=template.product_id,
+        product_name=product_name,
         total=len(items),
         items=items,
     )

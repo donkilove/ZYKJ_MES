@@ -35,11 +35,57 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   List<CraftStageItem> _stages = const [];
   List<CraftProcessItem> _processes = const [];
 
+  // 搜索/筛选
+  final _stageSearchController = TextEditingController();
+  final _processSearchController = TextEditingController();
+  String _stageKeyword = '';
+  String _processKeyword = '';
+  bool? _stageEnabledFilter;
+  bool? _processEnabledFilter;
+
   @override
   void initState() {
     super.initState();
     _service = CraftService(widget.session);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _stageSearchController.dispose();
+    _processSearchController.dispose();
+    super.dispose();
+  }
+
+  List<CraftStageItem> get _filteredStages {
+    var list = _stages;
+    if (_stageKeyword.isNotEmpty) {
+      final kw = _stageKeyword.toLowerCase();
+      list = list.where((s) => s.code.toLowerCase().contains(kw) || s.name.toLowerCase().contains(kw)).toList();
+    }
+    if (_stageEnabledFilter != null) {
+      list = list.where((s) => s.isEnabled == _stageEnabledFilter).toList();
+    }
+    return list;
+  }
+
+  List<CraftProcessItem> get _filteredProcesses {
+    var list = _processes;
+    if (_processKeyword.isNotEmpty) {
+      final kw = _processKeyword.toLowerCase();
+      list = list
+          .where(
+            (p) =>
+                p.code.toLowerCase().contains(kw) ||
+                p.name.toLowerCase().contains(kw) ||
+                (p.stageName?.toLowerCase().contains(kw) ?? false),
+          )
+          .toList();
+    }
+    if (_processEnabledFilter != null) {
+      list = list.where((p) => p.isEnabled == _processEnabledFilter).toList();
+    }
+    return list;
   }
 
   bool _isUnauthorized(Object error) {
@@ -764,6 +810,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         Expanded(flex: 2, child: _buildHeaderLabel(theme, '工段名称')),
         Expanded(flex: 1, child: _buildHeaderLabel(theme, '排序')),
         Expanded(flex: 1, child: _buildHeaderLabel(theme, '状态')),
+        Expanded(flex: 2, child: _buildHeaderLabel(theme, '创建时间')),
         SizedBox(
           width: 64,
           child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
@@ -780,6 +827,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         Expanded(flex: 1, child: _buildHeaderLabel(theme, '工序编码')),
         Expanded(flex: 2, child: _buildHeaderLabel(theme, '工序名称')),
         Expanded(flex: 1, child: _buildHeaderLabel(theme, '状态')),
+        Expanded(flex: 2, child: _buildHeaderLabel(theme, '创建时间')),
         SizedBox(
           width: 64,
           child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
@@ -856,54 +904,66 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      '工段列表',
-                                      style: theme.textTheme.titleMedium,
+                                    Row(
+                                      children: [
+                                        Text('工段列表', style: theme.textTheme.titleMedium),
+                                        const SizedBox(width: 12),
+                                        SizedBox(
+                                          width: 180,
+                                          child: TextField(
+                                            controller: _stageSearchController,
+                                            decoration: const InputDecoration(
+                                              hintText: '搜索工段',
+                                              prefixIcon: Icon(Icons.search, size: 16),
+                                              isDense: true,
+                                              border: OutlineInputBorder(),
+                                              contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                            ),
+                                            onChanged: (v) => setState(() => _stageKeyword = v.trim()),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        DropdownButton<bool?>(
+                                          value: _stageEnabledFilter,
+                                          isDense: true,
+                                          hint: const Text('全部状态'),
+                                          items: const [
+                                            DropdownMenuItem(value: null, child: Text('全部状态')),
+                                            DropdownMenuItem(value: true, child: Text('启用')),
+                                            DropdownMenuItem(value: false, child: Text('停用')),
+                                          ],
+                                          onChanged: (v) => setState(() => _stageEnabledFilter = v),
+                                        ),
+                                      ],
                                     ),
                                     const SizedBox(height: 8),
                                     _buildStageHeaderRow(theme),
                                     const SizedBox(height: 8),
                                     Expanded(
-                                      child: _stages.isEmpty
+                                      child: _filteredStages.isEmpty
                                           ? const Center(child: Text('暂无工段'))
                                           : ListView.separated(
-                                              itemCount: _stages.length,
-                                              separatorBuilder:
-                                                  (context, index) =>
-                                                      const Divider(height: 1),
+                                              itemCount: _filteredStages.length,
+                                              separatorBuilder: (context, index) => const Divider(height: 1),
                                               itemBuilder: (context, index) {
-                                                final item = _stages[index];
+                                                final item = _filteredStages[index];
                                                 return Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        vertical: 8,
-                                                        horizontal: 12,
-                                                      ),
+                                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                                                   child: Row(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
+                                                    crossAxisAlignment: CrossAxisAlignment.center,
                                                     children: [
+                                                      Expanded(flex: 1, child: Text(item.code)),
+                                                      Expanded(flex: 2, child: Text(item.name)),
+                                                      Expanded(flex: 1, child: Text('${item.sortOrder}')),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Text(item.code),
+                                                        child: Text(item.isEnabled ? '启用' : '停用'),
                                                       ),
                                                       Expanded(
                                                         flex: 2,
-                                                        child: Text(item.name),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
                                                         child: Text(
-                                                          '${item.sortOrder}',
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(
-                                                          item.isEnabled
-                                                              ? '启用'
-                                                              : '停用',
+                                                          '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
+                                                          style: theme.textTheme.bodySmall,
                                                         ),
                                                       ),
                                                       SizedBox(
@@ -986,54 +1046,66 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      '工序列表',
-                                      style: theme.textTheme.titleMedium,
+                                    Row(
+                                      children: [
+                                        Text('工序列表', style: theme.textTheme.titleMedium),
+                                        const SizedBox(width: 12),
+                                        SizedBox(
+                                          width: 180,
+                                          child: TextField(
+                                            controller: _processSearchController,
+                                            decoration: const InputDecoration(
+                                              hintText: '搜索工序',
+                                              prefixIcon: Icon(Icons.search, size: 16),
+                                              isDense: true,
+                                              border: OutlineInputBorder(),
+                                              contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                            ),
+                                            onChanged: (v) => setState(() => _processKeyword = v.trim()),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        DropdownButton<bool?>(
+                                          value: _processEnabledFilter,
+                                          isDense: true,
+                                          hint: const Text('全部状态'),
+                                          items: const [
+                                            DropdownMenuItem(value: null, child: Text('全部状态')),
+                                            DropdownMenuItem(value: true, child: Text('启用')),
+                                            DropdownMenuItem(value: false, child: Text('停用')),
+                                          ],
+                                          onChanged: (v) => setState(() => _processEnabledFilter = v),
+                                        ),
+                                      ],
                                     ),
                                     const SizedBox(height: 8),
                                     _buildProcessHeaderRow(theme),
                                     const SizedBox(height: 8),
                                     Expanded(
-                                      child: _processes.isEmpty
+                                      child: _filteredProcesses.isEmpty
                                           ? const Center(child: Text('暂无小工序'))
                                           : ListView.separated(
-                                              itemCount: _processes.length,
-                                              separatorBuilder:
-                                                  (context, index) =>
-                                                      const Divider(height: 1),
+                                              itemCount: _filteredProcesses.length,
+                                              separatorBuilder: (context, index) => const Divider(height: 1),
                                               itemBuilder: (context, index) {
-                                                final item = _processes[index];
+                                                final item = _filteredProcesses[index];
                                                 return Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        vertical: 8,
-                                                        horizontal: 12,
-                                                      ),
+                                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                                                   child: Row(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
+                                                    crossAxisAlignment: CrossAxisAlignment.center,
                                                     children: [
+                                                      Expanded(flex: 2, child: Text(item.stageName ?? '-')),
+                                                      Expanded(flex: 1, child: Text(item.code)),
+                                                      Expanded(flex: 2, child: Text(item.name)),
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: Text(item.isEnabled ? '启用' : '停用'),
+                                                      ),
                                                       Expanded(
                                                         flex: 2,
                                                         child: Text(
-                                                          item.stageName ?? '-',
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(item.code),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Text(item.name),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(
-                                                          item.isEnabled
-                                                              ? '启用'
-                                                              : '停用',
+                                                          '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
+                                                          style: theme.textTheme.bodySmall,
                                                         ),
                                                       ),
                                                       SizedBox(

@@ -307,6 +307,16 @@ class TemplateCopyRequest(BaseModel):
     new_name: str = Field(min_length=1, max_length=128)
 
 
+class TemplateCopyFromMasterRequest(BaseModel):
+    product_id: int = Field(ge=1)
+    new_name: str = Field(min_length=1, max_length=128)
+
+
+class TemplateCopyToProductRequest(BaseModel):
+    target_product_id: int = Field(ge=1)
+    new_name: str = Field(min_length=1, max_length=128)
+
+
 class TemplateBatchExportItem(BaseModel):
     product_id: int
     product_name: str
@@ -383,6 +393,8 @@ class StageReferenceItem(BaseModel):
     ref_id: int
     ref_name: str
     detail: str | None = None
+    risk_level: str | None = None
+    risk_note: str | None = None
 
 
 class StageReferenceResult(BaseModel):
@@ -398,6 +410,8 @@ class ProcessReferenceItem(BaseModel):
     ref_id: int
     ref_name: str
     detail: str | None = None
+    risk_level: str | None = None
+    risk_note: str | None = None
 
 
 class ProcessReferenceResult(BaseModel):
@@ -406,3 +420,21 @@ class ProcessReferenceResult(BaseModel):
     process_name: str
     total: int
     items: list[ProcessReferenceItem]
+
+
+class TemplateReferenceItem(BaseModel):
+    ref_type: str
+    ref_id: int
+    ref_name: str
+    detail: str | None = None
+    risk_level: str | None = None
+    risk_note: str | None = None
+
+
+class TemplateReferenceResult(BaseModel):
+    template_id: int
+    template_name: str
+    product_id: int
+    product_name: str
+    total: int
+    items: list[TemplateReferenceItem]

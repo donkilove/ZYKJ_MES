@@ -54,10 +54,14 @@ from app.schemas.craft import (
     TemplateSyncOrderConflict,
     TemplateSyncResult,
     TemplateCopyRequest,
+    TemplateCopyFromMasterRequest,
+    TemplateCopyToProductRequest,
     StageReferenceItem,
     StageReferenceResult,
     ProcessReferenceItem,
     ProcessReferenceResult,
+    TemplateReferenceItem,
+    TemplateReferenceResult,
 )
 from app.services.craft_service import (
     TemplateSyncConflictError,
@@ -74,6 +78,8 @@ from app.services.craft_service import (
     create_stage,
     create_template,
     copy_template,
+    copy_template_from_system_master,
+    copy_template_to_product,
     archive_template,
     unarchive_template,
     delete_process,
@@ -84,6 +90,7 @@ from app.services.craft_service import (
     get_template_by_id,
     get_stage_references,
     get_process_references,
+    get_template_references,
     list_craft_processes,
     list_stages,
     list_templates,
@@ -265,6 +272,8 @@ def _to_stage_reference_result(result) -> StageReferenceResult:
                 ref_id=item.ref_id,
                 ref_name=item.ref_name,
                 detail=item.detail,
+                risk_level=item.risk_level,
+                risk_note=item.risk_note,
             )
             for item in result.items
         ],
@@ -283,6 +292,8 @@ def _to_process_reference_result(result) -> ProcessReferenceResult:
                 ref_id=item.ref_id,
                 ref_name=item.ref_name,
                 detail=item.detail,
+                risk_level=item.risk_level,
+                risk_note=item.risk_note,
             )
             for item in result.items
         ],
@@ -953,6 +964,51 @@ def copy_template_api(
     return success_response(_to_template_detail(new_row), message="created")
 
 
+@router.post("/templates/{template_id}/copy-to-product", response_model=ApiResponse[ProductProcessTemplateDetail], status_code=status.HTTP_201_CREATED)
+def copy_template_to_product_api(
+    template_id: int,
+    body: TemplateCopyToProductRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("craft.templates.create")),
+) -> ApiResponse[ProductProcessTemplateDetail]:
+    row = get_template_by_id(db, template_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    try:
+        new_row = copy_template_to_product(
+            db,
+            template=row,
+            target_product_id=body.target_product_id,
+            new_name=body.new_name,
+            operator=current_user,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(_to_template_detail(new_row), message="created")
+
+
+@router.post("/system-master-template/copy-to-product", response_model=ApiResponse[ProductProcessTemplateDetail], status_code=status.HTTP_201_CREATED)
+def copy_system_master_to_product_api(
+    body: TemplateCopyFromMasterRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("craft.templates.create")),
+) -> ApiResponse[ProductProcessTemplateDetail]:
+    master = get_system_master_template(db)
+    if not master:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System master template not found")
+    try:
+        new_row = copy_template_from_system_master(
+            db,
+            system_master=master,
+            product_id=body.product_id,
+            new_name=body.new_name,
+            operator=current_user,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(_to_template_detail(new_row), message="created")
+
+
 @router.post("/templates/{template_id}/archive", response_model=ApiResponse[ProductProcessTemplateDetail])
 def archive_template_api(
     template_id: int,
@@ -1009,3 +1065,35 @@ def get_process_references_api(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Process not found")
     result = get_process_references(db, process=row)
     return success_response(_to_process_reference_result(result))
+
+
+@router.get("/templates/{template_id}/references", response_model=ApiResponse[TemplateReferenceResult])
+def get_template_references_api(
+    template_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.templates.list")),
+) -> ApiResponse[TemplateReferenceResult]:
+    row = get_template_by_id(db, template_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    result = get_template_references(db, template=row)
+    return success_response(
+        TemplateReferenceResult(
+            template_id=result.template_id,
+            template_name=result.template_name,
+            product_id=result.product_id,
+            product_name=result.product_name,
+            total=result.total,
+            items=[
+                TemplateReferenceItem(
+                    ref_type=item.ref_type,
+                    ref_id=item.ref_id,
+                    ref_name=item.ref_name,
+                    detail=item.detail,
+                    risk_level=item.risk_level,
+                    risk_note=item.risk_note,
+                )
+                for item in result.items
+            ],
+        )
+    )

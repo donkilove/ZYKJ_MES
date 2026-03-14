@@ -611,6 +611,47 @@ class CraftService {
     return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
   }
 
+  Future<CraftTemplateDetail> copyTemplateToProduct({
+    required int templateId,
+    required int targetProductId,
+    required String newName,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/copy-to-product');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'target_product_id': targetProductId, 'new_name': newName}),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<CraftTemplateDetail> copySystemMasterToProduct({
+    required int productId,
+    required String newName,
+  }) async {
+    final uri = Uri.parse('$_basePath/system-master-template/copy-to-product');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'product_id': productId, 'new_name': newName}),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
   Future<CraftTemplateDetail> archiveTemplate({required int templateId}) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/archive');
     final response = await http.post(uri, headers: _authHeaders);
@@ -700,6 +741,23 @@ class CraftService {
       );
     }
     return CraftProcessReferenceResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  Future<CraftTemplateReferenceResult> getTemplateReferences({
+    required int templateId,
+  }) async {
+    final uri = Uri.parse('$_basePath/templates/$templateId/references');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftTemplateReferenceResult.fromJson(
       body['data'] as Map<String, dynamic>? ?? const {},
     );
   }
