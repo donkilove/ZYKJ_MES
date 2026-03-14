@@ -800,7 +800,7 @@ def generate_work_order_for_plan(
     return get_work_order_by_id(db, work_order.id) or work_order, True
 
 
-def generate_due_work_orders_for_today(db: Session) -> tuple[int, int, int]:
+def generate_due_work_orders_for_today(db: Session) -> tuple[int, int, int, list[MaintenanceWorkOrder]]:
     refresh_overdue_work_orders(db)
     today = date.today()
 
@@ -819,13 +819,15 @@ def generate_due_work_orders_for_today(db: Session) -> tuple[int, int, int]:
 
     created_count = 0
     existing_count = 0
+    newly_created: list[MaintenanceWorkOrder] = []
     for plan in plans:
-        _, created = generate_work_order_for_plan(db, row=plan)
+        work_order, created = generate_work_order_for_plan(db, row=plan)
         if created:
             created_count += 1
+            newly_created.append(work_order)
         else:
             existing_count += 1
-    return len(plans), created_count, existing_count
+    return len(plans), created_count, existing_count, newly_created
 
 
 def list_work_orders(

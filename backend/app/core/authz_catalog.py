@@ -17,6 +17,7 @@ AUTHZ_MODULE_EQUIPMENT = "equipment"
 AUTHZ_MODULE_CRAFT = "craft"
 AUTHZ_MODULE_QUALITY = "quality"
 AUTHZ_MODULE_PRODUCTION = "production"
+AUTHZ_MODULE_MESSAGE = "message"
 
 AUTHZ_RESOURCE_PAGE = "page"
 AUTHZ_RESOURCE_ACTION = "action"
@@ -130,6 +131,8 @@ PAGE_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("production_process_config", "生产工序配置", AUTHZ_MODULE_CRAFT, "craft"),
     ("craft_reference_analysis", "工艺引用分析", AUTHZ_MODULE_CRAFT, "craft"),
     ("craft_kanban", "工艺看板", AUTHZ_MODULE_CRAFT, "craft"),
+    ("message", "消息模块", AUTHZ_MODULE_MESSAGE, None),
+    ("message_center", "消息中心", AUTHZ_MODULE_MESSAGE, "message"),
 ]
 
 PAGE_PERMISSION_BY_PAGE_CODE: dict[str, str] = {
@@ -338,6 +341,10 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     (PERM_PROD_PIPELINE_INSTANCES_LIST, "查看并行实例", AUTHZ_MODULE_PRODUCTION, "production_order_management"),
     (PERM_PROD_SCRAP_STATISTICS_DETAIL, "查看报废详情", AUTHZ_MODULE_PRODUCTION, "production_scrap_statistics"),
     (PERM_PROD_REPAIR_ORDERS_DETAIL, "查看维修订单详情", AUTHZ_MODULE_PRODUCTION, "production_repair_orders"),
+    ("message.messages.list", "查看消息列表", AUTHZ_MODULE_MESSAGE, "message_center"),
+    ("message.messages.unread_count", "查看未读消息数", AUTHZ_MODULE_MESSAGE, "message_center"),
+    ("message.messages.read", "标记消息已读", AUTHZ_MODULE_MESSAGE, "message_center"),
+    ("message.messages.read_all", "全部标记已读", AUTHZ_MODULE_MESSAGE, "message_center"),
 ]
 
 ACTION_PERMISSION_CATALOG = [

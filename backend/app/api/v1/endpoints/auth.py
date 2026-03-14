@@ -23,6 +23,7 @@ from app.schemas.auth import (
 )
 from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
+from app.services.message_service import create_message_for_users
 from app.services.online_status_service import clear_user, touch_user
 from app.services.session_service import (
     create_login_log,
@@ -317,6 +318,20 @@ def approve_registration(
         terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
+    # 通知申请人：注册审批通过
+    create_message_for_users(
+        db,
+        message_type="notice",
+        priority="important",
+        title="您的注册申请已通过审批",
+        summary=f"账号 {user.username} 已创建，您现在可以登录系统。",
+        source_module="user",
+        source_type="registration_request",
+        source_id=str(request_id),
+        source_code=account,
+        recipient_user_ids=[user.id],
+        dedupe_key=f"reg_approved_{request_id}",
+    )
     return success_response(
         RegistrationActionResult(
             request_id=request_id,
@@ -330,10 +345,7 @@ def approve_registration(
             process_codes=sorted(process.code for process in user.processes),
         ),
         message="approved",
-    )
-
-
-@router.post("/register-requests/{request_id}/reject", response_model=ApiResponse[RegistrationActionResult])
+    ), response_model=ApiResponse[RegistrationActionResult])
 def reject_registration(
     request_id: int,
     payload: RejectRegistrationRequest,

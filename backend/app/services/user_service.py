@@ -123,6 +123,20 @@ def get_user_by_id(db: Session, user_id: int, *, include_deleted: bool = False) 
     return db.execute(stmt).scalars().first()
 
 
+def get_active_user_ids_by_role(db: Session, role_code: str) -> list[int]:
+    """返回拥有指定角色且处于激活状态的用户 ID 列表"""
+    rows = db.execute(
+        select(User.id)
+        .join(User.roles)
+        .where(
+            Role.code == role_code,
+            User.is_active.is_(True),
+            User.is_deleted.is_(False),
+        )
+    ).scalars().all()
+    return list(rows)
+
+
 def get_user_by_username(
     db: Session,
     username: str,

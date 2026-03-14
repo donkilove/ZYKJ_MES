@@ -7,6 +7,7 @@ from app.api.v1.endpoints import (
     craft,
     equipment,
     me,
+    messages,
     processes,
     production,
     products,
@@ -33,3 +34,4 @@ api_router.include_router(production.router, prefix="/production", tags=["Produc
 api_router.include_router(quality.router, prefix="/quality", tags=["Quality"])
 api_router.include_router(equipment.router, prefix="/equipment", tags=["Equipment"])
 api_router.include_router(ui.router, prefix="/ui", tags=["UI"])
+api_router.include_router(messages.router, prefix="/messages", tags=["Messages"])

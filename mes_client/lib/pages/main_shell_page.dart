@@ -8,6 +8,8 @@ import '../models/authz_models.dart';
 
 import '../models/current_user.dart';
 
+import '../models/message_models.dart';
+
 import '../models/page_catalog_models.dart';
 
 import '../services/api_exception.dart';
@@ -16,6 +18,10 @@ import '../services/authz_service.dart';
 
 import '../services/auth_service.dart';
 
+import '../services/message_service.dart';
+
+import '../services/message_ws_service.dart';
+
 import '../services/page_catalog_service.dart';
 
 import 'craft_page.dart';
@@ -23,6 +29,8 @@ import 'craft_page.dart';
 import 'equipment_page.dart';
 
 import 'home_page.dart';
+
+import 'message_center_page.dart';
 
 import 'product_page.dart';
 
@@ -46,7 +54,11 @@ const String _qualityPageCode = 'quality';
 
 const String _craftPageCode = 'craft';
 
+const String _messagePageCode = 'message';
+
 const Duration _visibilityRefreshInterval = Duration(seconds: 15);
+
+const Duration _unreadPollInterval = Duration(seconds: 30);
 
 class _ShellMenuItem {
   const _ShellMenuItem({
@@ -88,7 +100,13 @@ class _MainShellPageState extends State<MainShellPage>
 
   late final PageCatalogService _pageCatalogService;
 
+  late final MessageService _messageService;
+
+  MessageWsService? _wsService;
+
   Timer? _visibilityTimer;
+
+  Timer? _unreadPollTimer;
 
   bool _refreshingVisibility = false;
 
@@ -108,6 +126,8 @@ class _MainShellPageState extends State<MainShellPage>
 
   String _selectedPageCode = _homePageCode;
 
+  int _unreadCount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -116,15 +136,20 @@ class _MainShellPageState extends State<MainShellPage>
 
     _authzService = AuthzService(widget.session);
     _pageCatalogService = PageCatalogService(widget.session);
+    _messageService = MessageService(widget.session);
 
     _loadCurrentUserAndVisibility();
 
     _startVisibilityPolling();
+    _startUnreadPolling();
+    _initWs();
   }
 
   @override
   void dispose() {
     _visibilityTimer?.cancel();
+    _unreadPollTimer?.cancel();
+    _wsService?.disconnect();
 
     WidgetsBinding.instance.removeObserver(this);
 
@@ -135,11 +160,49 @@ class _MainShellPageState extends State<MainShellPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _refreshVisibility(silent: true);
+      _wsService?.reconnect();
+      _refreshUnreadCount();
     }
   }
 
   bool _isUnauthorized(Object error) {
     return error is ApiException && error.statusCode == 401;
+  }
+
+  void _initWs() {
+    _wsService = MessageWsService(
+      baseUrl: widget.session.baseUrl,
+      accessToken: widget.session.accessToken,
+      onEvent: _onWsEvent,
+      onDisconnected: () {},
+    );
+    _wsService!.connect();
+  }
+
+  void _onWsEvent(WsEvent event) {
+    if (!mounted) return;
+    if (event.event == 'connected' || event.event == 'unread_count_changed') {
+      final count = event.unreadCount;
+      if (count != null) {
+        setState(() => _unreadCount = count);
+      }
+    } else if (event.event == 'new_message') {
+      _refreshUnreadCount();
+    }
+  }
+
+  void _startUnreadPolling() {
+    _unreadPollTimer?.cancel();
+    _unreadPollTimer = Timer.periodic(_unreadPollInterval, (_) {
+      _refreshUnreadCount();
+    });
+  }
+
+  Future<void> _refreshUnreadCount() async {
+    try {
+      final count = await _messageService.getUnreadCount();
+      if (mounted) setState(() => _unreadCount = count);
+    } catch (_) {}
   }
 
   String _errorMessage(Object error) {
@@ -172,6 +235,9 @@ class _MainShellPageState extends State<MainShellPage>
 
       case _craftPageCode:
         return Icons.route_rounded;
+
+      case _messagePageCode:
+        return Icons.notifications_rounded;
 
       default:
         return Icons.article_outlined;
@@ -536,6 +602,19 @@ class _MainShellPageState extends State<MainShellPage>
           capabilityCodes: _capabilityCodesForModule('craft'),
         );
 
+      case _messagePageCode:
+        return MessageCenterPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          onUnreadCountChanged: (count) {
+            if (mounted) setState(() => _unreadCount = count);
+          },
+          onNavigateToPage: (pageCode, {tabCode}) {
+            if (!mounted) return;
+            setState(() => _selectedPageCode = pageCode);
+          },
+        );
+
       default:
         return Center(child: Text('页面暂未实现：$pageCode'));
     }
@@ -719,10 +798,19 @@ class _MainShellPageState extends State<MainShellPage>
 
                         final selected = menu.code == selectedMenuCode;
 
+                        final isMessage = menu.code == _messagePageCode;
+
                         return ListTile(
                           selected: selected,
 
-                          leading: Icon(menu.icon),
+                          leading: isMessage && _unreadCount > 0
+                              ? Badge(
+                                  label: Text(
+                                    _unreadCount > 99 ? '99+' : '$_unreadCount',
+                                  ),
+                                  child: Icon(menu.icon),
+                                )
+                              : Icon(menu.icon),
 
                           title: Text(menu.title),
 

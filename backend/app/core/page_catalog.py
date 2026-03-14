@@ -45,6 +45,8 @@ PAGE_CRAFT = "craft"
 PAGE_PROCESS_MANAGEMENT = "process_management"
 PAGE_PRODUCTION_PROCESS_CONFIG = "production_process_config"
 PAGE_CRAFT_KANBAN = "craft_kanban"
+PAGE_MESSAGE = "message"
+PAGE_MESSAGE_CENTER = "message_center"
 
 
 PAGE_CATALOG = [
@@ -312,6 +314,22 @@ PAGE_CATALOG = [
         "always_visible": False,
         "sort_order": 73,
     },
+    {
+        "code": PAGE_MESSAGE,
+        "name": "消息",
+        "page_type": PAGE_TYPE_SIDEBAR,
+        "parent_code": None,
+        "always_visible": False,
+        "sort_order": 80,
+    },
+    {
+        "code": PAGE_MESSAGE_CENTER,
+        "name": "消息中心",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_MESSAGE,
+        "always_visible": False,
+        "sort_order": 81,
+    },
 ]
 
 
@@ -359,6 +377,8 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PROCESS_MANAGEMENT,
         PAGE_PRODUCTION_PROCESS_CONFIG,
         PAGE_CRAFT_KANBAN,
+        PAGE_MESSAGE,
+        PAGE_MESSAGE_CENTER,
     },
     ROLE_PRODUCTION_ADMIN: {
         PAGE_HOME,
@@ -388,6 +408,8 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PROCESS_MANAGEMENT,
         PAGE_PRODUCTION_PROCESS_CONFIG,
         PAGE_CRAFT_KANBAN,
+        PAGE_MESSAGE,
+        PAGE_MESSAGE_CENTER,
     },
     ROLE_QUALITY_ADMIN: {
         PAGE_HOME,
@@ -404,6 +426,8 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,
+        PAGE_MESSAGE,
+        PAGE_MESSAGE_CENTER,
     },
     ROLE_OPERATOR: {
         PAGE_HOME,
@@ -414,6 +438,8 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_MAINTENANCE_RECORD,
         PAGE_PRODUCTION,
         PAGE_PRODUCTION_ORDER_QUERY,
+        PAGE_MESSAGE,
+        PAGE_MESSAGE_CENTER,
     },
     ROLE_MAINTENANCE_STAFF: {
         PAGE_HOME,
@@ -422,6 +448,8 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_EQUIPMENT,
         PAGE_MAINTENANCE_EXECUTION,
         PAGE_MAINTENANCE_RECORD,
+        PAGE_MESSAGE,
+        PAGE_MESSAGE_CENTER,
     },
 }
 

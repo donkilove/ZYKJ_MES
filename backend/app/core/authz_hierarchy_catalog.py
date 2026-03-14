@@ -31,6 +31,7 @@ MODULE_DEFINITIONS: tuple[ModuleDefinition, ...] = (
     ModuleDefinition(module_code="craft", module_name="工艺管理"),
     ModuleDefinition(module_code="quality", module_name="质量管理"),
     ModuleDefinition(module_code="production", module_name="生产管理"),
+    ModuleDefinition(module_code="message", module_name="消息中心"),
 )
 
 
@@ -278,6 +279,7 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
             "equipment.executions.list",
             "equipment.executions.start",
             "equipment.executions.complete",
+            "equipment.executions.cancel",
         ),
     ),
     FeatureDefinition(
@@ -354,6 +356,17 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         module_code="craft",
         page_code="craft_kanban",
         action_permission_codes=("craft.kanban.process_metrics.view",),
+    ),
+    FeatureDefinition(
+        permission_code="feature.craft.reference_analysis.view",
+        permission_name="查看工艺引用分析",
+        module_code="craft",
+        page_code="craft_reference_analysis",
+        action_permission_codes=(
+            "craft.stages.list",
+            "craft.processes.list",
+        ),
+        dependency_permission_codes=("feature.craft.process_basics.view",),
     ),
     FeatureDefinition(
         permission_code="feature.quality.first_articles.view",
@@ -509,6 +522,27 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         page_code="production_order_query",
         action_permission_codes=("production.repair_orders.create_manual",),
         dependency_permission_codes=("feature.production.order_query.execute",),
+    ),
+    FeatureDefinition(
+        permission_code="feature.message.center.view",
+        permission_name="查看消息中心",
+        module_code="message",
+        page_code="message_center",
+        action_permission_codes=(
+            "message.messages.list",
+            "message.messages.unread_count",
+        ),
+    ),
+    FeatureDefinition(
+        permission_code="feature.message.read.manage",
+        permission_name="管理消息已读状态",
+        module_code="message",
+        page_code="message_center",
+        action_permission_codes=(
+            "message.messages.read",
+            "message.messages.read_all",
+        ),
+        dependency_permission_codes=("feature.message.center.view",),
     ),
 )
 

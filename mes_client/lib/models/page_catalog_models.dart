@@ -518,4 +518,32 @@ const fallbackPageCatalog = <PageCatalogItem>[
 
     sortOrder: 73,
   ),
+
+  PageCatalogItem(
+    code: 'message',
+
+    name: '消息',
+
+    pageType: 'sidebar',
+
+    parentCode: null,
+
+    alwaysVisible: false,
+
+    sortOrder: 80,
+  ),
+
+  PageCatalogItem(
+    code: 'message_center',
+
+    name: '消息中心',
+
+    pageType: 'tab',
+
+    parentCode: 'message',
+
+    alwaysVisible: false,
+
+    sortOrder: 81,
+  ),
 ];

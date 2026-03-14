@@ -15,6 +15,7 @@ const Map<String, String> _moduleNameFallbackZh = {
   'craft': '工艺管理',
   'quality': '质量管理',
   'production': '生产管理',
+  'message': '消息中心',
 };
 
 class _RoleDraft {

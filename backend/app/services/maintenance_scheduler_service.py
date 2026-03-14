@@ -6,8 +6,12 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.config import settings
+from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.db.session import SessionLocal
 from app.services.equipment_service import generate_due_work_orders_for_today
+from app.services.message_service import create_message_for_users, get_unread_count
+from app.services.message_push_service import push_unread_count_changed
+from app.services.user_service import get_active_user_ids_by_role
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +73,44 @@ async def run_maintenance_auto_generate_loop() -> None:
 
         db = SessionLocal()
         try:
-            total, created, existing = generate_due_work_orders_for_today(db)
+            total, created, existing, new_orders = generate_due_work_orders_for_today(db)
             logger.info(
                 "[MAINT_SCHED] Scan done. plans=%s created=%s existing=%s.",
                 total,
                 created,
                 existing,
             )
+            # 为每条新建工单推送消息给执行人和管理员
+            if new_orders:
+                admin_ids = (
+                    get_active_user_ids_by_role(db, ROLE_SYSTEM_ADMIN)
+                    + get_active_user_ids_by_role(db, ROLE_PRODUCTION_ADMIN)
+                )
+                for wo in new_orders:
+                    recipient_ids: list[int] = list({
+                        *(([wo.executor_user_id] if wo.executor_user_id else [])),
+                        *admin_ids,
+                    })
+                    if not recipient_ids:
+                        continue
+                    create_message_for_users(
+                        db,
+                        message_type="todo",
+                        priority="important",
+                        title=f"保养工单已生成：{wo.source_equipment_name} - {wo.source_item_name}",
+                        summary=f"到期日：{wo.due_date}，请及时安排保养执行。",
+                        source_module="equipment",
+                        source_type="maintenance_work_order",
+                        source_id=str(wo.id),
+                        source_code=str(wo.id),
+                        target_page_code="equipment",
+                        target_tab_code="maintenance_execution",
+                        recipient_user_ids=recipient_ids,
+                        dedupe_key=f"maint_wo_created_{wo.id}",
+                    )
+                    for uid in recipient_ids:
+                        unread = get_unread_count(db, user_id=uid)
+                        await push_unread_count_changed(uid, unread)
         except Exception:
             logger.exception("[MAINT_SCHED] Auto generation failed.")
         finally:
