@@ -552,6 +552,10 @@ def approve_registration_request(
     if not password or len(password.strip()) < 6:
         return None, "Initial password is required and must be at least 6 characters"
 
+    password_error = validate_password(password, db=db)
+    if password_error:
+        return None, password_error
+
     account_name = normalize_username(account)
     if not account_name:
         return None, "Account is required"
