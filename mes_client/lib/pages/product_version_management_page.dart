@@ -30,6 +30,7 @@ class ProductVersionManagementPage extends StatefulWidget {
     this.jumpCommand,
     this.onJumpHandled,
     required this.canManageVersions,
+    this.service,
   });
 
   final AppSession session;
@@ -38,6 +39,7 @@ class ProductVersionManagementPage extends StatefulWidget {
   final ProductJumpCommand? jumpCommand;
   final void Function(int seq)? onJumpHandled;
   final bool canManageVersions;
+  final ProductService? service;
 
   @override
   State<ProductVersionManagementPage> createState() =>
@@ -63,7 +65,7 @@ class _ProductVersionManagementPageState
   @override
   void initState() {
     super.initState();
-    _service = ProductService(widget.session);
+    _service = widget.service ?? ProductService(widget.session);
     _loadProducts();
   }
 
@@ -136,16 +138,16 @@ class _ProductVersionManagementPageState
 
   void _showError(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
   void _showSuccess(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.green),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
   }
 
   Future<void> _createVersion() async {
@@ -333,7 +335,9 @@ class _ProductVersionManagementPageState
                       final selected = _selectedProduct?.id == p.id;
                       return ListTile(
                         selected: selected,
-                        selectedTileColor: Theme.of(ctx).colorScheme.primaryContainer,
+                        selectedTileColor: Theme.of(
+                          ctx,
+                        ).colorScheme.primaryContainer,
                         title: Text(p.name, overflow: TextOverflow.ellipsis),
                         subtitle: Text(
                           p.category.isEmpty ? '无分类' : p.category,
@@ -341,7 +345,10 @@ class _ProductVersionManagementPageState
                         ),
                         trailing: p.lifecycleStatus == 'inactive'
                             ? const Chip(
-                                label: Text('停用', style: TextStyle(fontSize: 11)),
+                                label: Text(
+                                  '停用',
+                                  style: TextStyle(fontSize: 11),
+                                ),
                                 padding: EdgeInsets.zero,
                               )
                             : null,
@@ -363,7 +370,9 @@ class _ProductVersionManagementPageState
                       }
                     : null,
               ),
-              Text('$_productPage / ${(_productTotal / _productPageSize).ceil()}'),
+              Text(
+                '$_productPage / ${(_productTotal / _productPageSize).ceil()}',
+              ),
               IconButton(
                 icon: const Icon(Icons.chevron_right),
                 onPressed: _productPage * _productPageSize < _productTotal
@@ -443,7 +452,9 @@ class _ProductVersionManagementPageState
                         DataColumn(label: Text('创建时间')),
                         DataColumn(label: Text('操作')),
                       ],
-                      rows: _versions.map((rev) => _buildVersionRow(rev)).toList(),
+                      rows: _versions
+                          .map((rev) => _buildVersionRow(rev))
+                          .toList(),
                     ),
                   ),
           ),
@@ -452,7 +463,8 @@ class _ProductVersionManagementPageState
   }
 
   DataRow _buildVersionRow(ProductVersionItem rev) {
-    final statusLabel = _statusLabels[rev.lifecycleStatus] ?? rev.lifecycleStatus;
+    final statusLabel =
+        _statusLabels[rev.lifecycleStatus] ?? rev.lifecycleStatus;
     final statusColor = _statusColors[rev.lifecycleStatus] ?? Colors.grey;
     final isDraft = rev.lifecycleStatus == 'draft';
     final isEffective = rev.lifecycleStatus == 'effective';
@@ -464,7 +476,10 @@ class _ProductVersionManagementPageState
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(rev.versionLabel, style: const TextStyle(fontWeight: FontWeight.w500)),
+              Text(
+                rev.versionLabel,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
               if (isEffective) ...[
                 const SizedBox(width: 4),
                 const Icon(Icons.check_circle, size: 14, color: Colors.green),
@@ -494,15 +509,24 @@ class _ProductVersionManagementPageState
                   icon: const Icon(Icons.more_vert, size: 18),
                   itemBuilder: (ctx) => [
                     if (isDraft)
-                      const PopupMenuItem(value: 'activate', child: Text('立即生效')),
+                      const PopupMenuItem(
+                        value: 'activate',
+                        child: Text('立即生效'),
+                      ),
                     if (isDraft || isEffective || isObsolete)
                       const PopupMenuItem(value: 'copy', child: Text('复制版本')),
                     if (isEffective || isObsolete)
-                      const PopupMenuItem(value: 'disable', child: Text('停用版本')),
+                      const PopupMenuItem(
+                        value: 'disable',
+                        child: Text('停用版本'),
+                      ),
                     if (isDraft)
                       const PopupMenuItem(
                         value: 'delete',
-                        child: Text('删除版本', style: TextStyle(color: Colors.red)),
+                        child: Text(
+                          '删除版本',
+                          style: TextStyle(color: Colors.red),
+                        ),
                       ),
                   ],
                   onSelected: (action) {

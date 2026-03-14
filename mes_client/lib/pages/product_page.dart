@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/app_session.dart';
 import '../models/authz_models.dart';
 import '../models/product_models.dart';
+import '../services/product_service.dart';
 import 'product_management_page.dart';
 import 'product_parameter_management_page.dart';
 import 'product_parameter_query_page.dart';
@@ -28,12 +29,14 @@ class ProductPage extends StatefulWidget {
     required this.onLogout,
     required this.visibleTabCodes,
     required this.capabilityCodes,
+    this.productVersionService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
+  final ProductService? productVersionService;
 
   @override
   State<ProductPage> createState() => _ProductPageState();
@@ -221,8 +224,9 @@ class _ProductPageState extends State<ProductPage>
           jumpCommand: _jumpCommand,
           onJumpHandled: _handleJumpConsumed,
           canManageVersions: _hasPermission(
-            ProductFeaturePermissionCodes.versionAnalysisView,
+            ProductFeaturePermissionCodes.versionsManage,
           ),
+          service: widget.productVersionService,
         );
       case productParameterManagementTabCode:
         return ProductParameterManagementPage(

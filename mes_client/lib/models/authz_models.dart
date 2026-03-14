@@ -1202,8 +1202,7 @@ class UserFeaturePermissionCodes {
   static const String accountSettingsManage =
       'feature.user.account_settings.manage';
   static const String loginSessionView = 'feature.user.login_session.view';
-  static const String loginSessionManage =
-      'feature.user.login_session.manage';
+  static const String loginSessionManage = 'feature.user.login_session.manage';
 }
 
 class ProductFeaturePermissionCodes {
@@ -1212,6 +1211,7 @@ class ProductFeaturePermissionCodes {
       'feature.product.product_management.manage';
   static const String versionAnalysisView =
       'feature.product.version_analysis.view';
+  static const String versionsManage = 'feature.product.versions.manage';
   static const String parametersView = 'feature.product.parameters.view';
   static const String parametersEdit = 'feature.product.parameters.edit';
 }

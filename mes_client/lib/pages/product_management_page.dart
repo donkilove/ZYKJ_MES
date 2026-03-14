@@ -36,6 +36,7 @@ class ProductManagementPage extends StatefulWidget {
     required this.canEditParameters,
     required this.onViewParameters,
     required this.onEditParameters,
+    this.service,
   });
 
   final AppSession session;
@@ -51,6 +52,7 @@ class ProductManagementPage extends StatefulWidget {
   final bool canEditParameters;
   final ValueChanged<ProductItem> onViewParameters;
   final ValueChanged<ProductItem> onEditParameters;
+  final ProductService? service;
 
   @override
   State<ProductManagementPage> createState() => _ProductManagementPageState();
@@ -70,7 +72,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   @override
   void initState() {
     super.initState();
-    _productService = ProductService(widget.session);
+    _productService = widget.service ?? ProductService(widget.session);
     _loadProducts();
   }
 
@@ -130,7 +132,10 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   }
 
   String _formatDisplayVersion(int version) {
-    return 'V1.$version';
+    if (version <= 0) {
+      return '-';
+    }
+    return 'V1.${version - 1}';
   }
 
   Future<bool> _confirmImpact(
@@ -353,9 +358,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
           final versionItems = result.items;
           final previousFrom = fromVersion;
           final previousTo = toVersion;
-          final hasFrom = previousFrom != null &&
+          final hasFrom =
+              previousFrom != null &&
               versionItems.any((item) => item.version == previousFrom);
-          final hasTo = previousTo != null &&
+          final hasTo =
+              previousTo != null &&
               versionItems.any((item) => item.version == previousTo);
           final nextFrom = hasFrom
               ? previousFrom
@@ -677,7 +684,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                               [
                                 _formatTime(item.createdAt),
                                 item.createdByUsername ?? '-',
-                                if (item.note != null && item.note!.isNotEmpty) item.note!,
+                                if (item.note != null && item.note!.isNotEmpty)
+                                  item.note!,
                                 if (isEffective && product.effectiveAt != null)
                                   '生效时间：${_formatTime(product.effectiveAt!)}',
                               ].join('  '),
@@ -688,7 +696,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                 if (widget.canEditParameters && isDraft)
                                   buildActionButton(
                                     label: '维护参数',
-                                    onPressed: operationLoading || loadingVersions
+                                    onPressed:
+                                        operationLoading || loadingVersions
                                         ? null
                                         : () {
                                             dialogClosed = true;
@@ -699,7 +708,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                 if (isDraft)
                                   buildActionButton(
                                     label: '编辑备注',
-                                    onPressed: operationLoading || loadingVersions
+                                    onPressed:
+                                        operationLoading || loadingVersions
                                         ? null
                                         : () async {
                                             final noteController =
@@ -707,42 +717,49 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                                   text: item.note ?? '',
                                                 );
                                             final newNote =
-                                                await showLockedFormDialog<String?>(
-                                              context: context,
-                                              builder: (ctx) => AlertDialog(
-                                                title: Text(
-                                                  '编辑 ${item.displayVersion} 备注',
-                                                ),
-                                                content: SizedBox(
-                                                  width: 360,
-                                                  child: TextField(
-                                                    controller: noteController,
-                                                    maxLength: 256,
-                                                    decoration:
-                                                        const InputDecoration(
-                                                      labelText: '版本备注',
-                                                      border:
-                                                          OutlineInputBorder(),
+                                                await showLockedFormDialog<
+                                                  String?
+                                                >(
+                                                  context: context,
+                                                  builder: (ctx) => AlertDialog(
+                                                    title: Text(
+                                                      '编辑 ${item.displayVersion} 备注',
                                                     ),
+                                                    content: SizedBox(
+                                                      width: 360,
+                                                      child: TextField(
+                                                        controller:
+                                                            noteController,
+                                                        maxLength: 256,
+                                                        decoration:
+                                                            const InputDecoration(
+                                                              labelText: '版本备注',
+                                                              border:
+                                                                  OutlineInputBorder(),
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.of(
+                                                              ctx,
+                                                            ).pop(null),
+                                                        child: const Text('取消'),
+                                                      ),
+                                                      FilledButton(
+                                                        onPressed: () =>
+                                                            Navigator.of(
+                                                              ctx,
+                                                            ).pop(
+                                                              noteController
+                                                                  .text,
+                                                            ),
+                                                        child: const Text('保存'),
+                                                      ),
+                                                    ],
                                                   ),
-                                                ),
-                                                actions: [
-                                                  TextButton(
-                                                    onPressed: () =>
-                                                        Navigator.of(ctx)
-                                                            .pop(null),
-                                                    child: const Text('取消'),
-                                                  ),
-                                                  FilledButton(
-                                                    onPressed: () =>
-                                                        Navigator.of(ctx).pop(
-                                                          noteController.text,
-                                                        ),
-                                                    child: const Text('保存'),
-                                                  ),
-                                                ],
-                                              ),
-                                            );
+                                                );
                                             noteController.dispose();
                                             if (newNote == null) return;
                                             await runVersionOperation(
@@ -829,10 +846,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                                       );
                                                 } catch (error) {
                                                   if (_isUnauthorized(error) ||
-                                                      !_errorMessage(error)
-                                                          .contains(
-                                                            'Impact confirmation required',
-                                                          )) {
+                                                      !_errorMessage(
+                                                        error,
+                                                      ).contains(
+                                                        'Impact confirmation required',
+                                                      )) {
                                                     rethrow;
                                                   }
                                                   final impact =
@@ -841,7 +859,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                                             productId:
                                                                 product.id,
                                                             operation:
-                                                                'activate_version',
+                                                                'lifecycle',
+                                                            targetStatus:
+                                                                'active',
                                                             targetVersion:
                                                                 item.version,
                                                           );
@@ -930,8 +950,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                 if (isDraft)
                                   buildActionButton(
                                     label: '删除',
-                                    foregroundColor:
-                                        Theme.of(context).colorScheme.error,
+                                    foregroundColor: Theme.of(
+                                      context,
+                                    ).colorScheme.error,
                                     onPressed:
                                         operationLoading || loadingVersions
                                         ? null
@@ -1636,8 +1657,14 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                   ),
                   items: const [
                     DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    DropdownMenuItem<String>(value: 'active', child: Text('启用')),
-                    DropdownMenuItem<String>(value: 'inactive', child: Text('停用')),
+                    DropdownMenuItem<String>(
+                      value: 'active',
+                      child: Text('启用'),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'inactive',
+                      child: Text('停用'),
+                    ),
                   ],
                   onChanged: _loading
                       ? null

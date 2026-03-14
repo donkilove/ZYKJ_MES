@@ -409,9 +409,14 @@ def copy_product_version_api(
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    if payload.source_version != version:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Path version and source_version must match",
+        )
     try:
         revision = copy_product_version(
-            db, product=product, source_version=payload.source_version, operator=current_user
+            db, product=product, source_version=version, operator=current_user
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
