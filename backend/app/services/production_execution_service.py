@@ -109,6 +109,29 @@ def _lock_sub_order(
     return row
 
 
+def _activate_visible_sub_orders(
+    db: Session,
+    *,
+    order_process_id: int,
+) -> None:
+    rows = (
+        db.execute(
+            select(ProductionSubOrder)
+            .where(
+                ProductionSubOrder.order_process_id == order_process_id,
+                ProductionSubOrder.is_visible.is_(True),
+                ProductionSubOrder.status == SUB_ORDER_STATUS_PENDING,
+            )
+            .with_for_update()
+        )
+        .scalars()
+        .all()
+    )
+    for row in rows:
+        if row.assigned_quantity > row.completed_quantity:
+            row.status = SUB_ORDER_STATUS_IN_PROGRESS
+
+
 def _lock_previous_process(
     db: Session,
     *,
@@ -251,6 +274,7 @@ def submit_first_article(
         raise ValueError("Invalid verification code")
 
     process_row.status = PROCESS_STATUS_IN_PROGRESS
+    _activate_visible_sub_orders(db, order_process_id=process_row.id)
     sub_order.status = SUB_ORDER_STATUS_IN_PROGRESS
     sub_order.is_visible = True
     order.status = ORDER_STATUS_IN_PROGRESS

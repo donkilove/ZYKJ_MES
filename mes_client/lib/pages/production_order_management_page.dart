@@ -23,6 +23,8 @@ class ProductionOrderManagementPage extends StatefulWidget {
     required this.canDeleteOrder,
     required this.canCompleteOrder,
     required this.canUpdatePipelineMode,
+    this.service,
+    this.craftService,
   });
 
   final AppSession session;
@@ -32,6 +34,8 @@ class ProductionOrderManagementPage extends StatefulWidget {
   final bool canDeleteOrder;
   final bool canCompleteOrder;
   final bool canUpdatePipelineMode;
+  final ProductionService? service;
+  final CraftService? craftService;
 
   @override
   State<ProductionOrderManagementPage> createState() =>
@@ -58,8 +62,8 @@ class _ProductionOrderManagementPageState
   @override
   void initState() {
     super.initState();
-    _service = ProductionService(widget.session);
-    _craftService = CraftService(widget.session);
+    _service = widget.service ?? ProductionService(widget.session);
+    _craftService = widget.craftService ?? CraftService(widget.session);
     _loadReferenceData();
     _loadOrders();
   }
@@ -146,8 +150,14 @@ class _ProductionOrderManagementPageState
         pipelineEnabled: _pipelineEnabledFilter,
       );
       if (!mounted) return;
-      final filename = result['filename'] as String? ?? 'orders.csv';
-      final base64Data = result['data'] as String? ?? '';
+      final filename =
+          (result['file_name'] as String?) ??
+          (result['filename'] as String?) ??
+          'orders.csv';
+      final base64Data =
+          (result['content_base64'] as String?) ??
+          (result['data'] as String?) ??
+          '';
       final bytes = base64Decode(base64Data);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('导出成功：$filename（${bytes.length} 字节）')),
@@ -759,14 +769,19 @@ class _ProductionOrderManagementPageState
                                     switch (action) {
                                       case 'detail':
                                         await _openOrderDetailPage(item);
+                                        break;
                                       case 'edit':
                                         await _showOrderDialog(existing: item);
+                                        break;
                                       case 'delete':
                                         await _deleteOrder(item);
+                                        break;
                                       case 'complete':
                                         await _completeOrder(item);
+                                        break;
                                       case 'pipeline':
                                         await _showPipelineModeDialog(item);
+                                        break;
                                     }
                                   },
                                   itemBuilder: (context) => [

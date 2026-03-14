@@ -332,16 +332,16 @@ def test_assist_authorization_and_view_modes(db, factory) -> None:
         reason="代班服务测试",
         requester=operator,
     )
-    assert auth_row.status == "approved"
+    assert auth_row.status == "pending"
 
-    with pytest.raises(RuntimeError, match="发起即生效"):
-        assist_authorization_service.review_assist_authorization(
-            db,
-            authorization_id=auth_row.id,
-            approve=True,
-            reviewer=admin,
-            review_remark="ok",
-        )
+    reviewed = assist_authorization_service.review_assist_authorization(
+        db,
+        authorization_id=auth_row.id,
+        approve=True,
+        reviewer=admin,
+        review_remark="ok",
+    )
+    assert reviewed.status == "approved"
 
     total_assist, assist_items = production_order_service.list_my_orders(
         db,
@@ -696,6 +696,25 @@ def test_order_detail_access_and_my_order_context(db, factory) -> None:
         reason="代班上下文",
         requester=operator,
     )
+    assert auth_row.status == "pending"
+
+    context_assist_pending = production_order_service.get_my_order_context(
+        db,
+        order_id=order.id,
+        current_user=admin,
+        view_mode="assist",
+    )
+    assert context_assist_pending is None
+
+    reviewed = assist_authorization_service.review_assist_authorization(
+        db,
+        authorization_id=auth_row.id,
+        approve=True,
+        reviewer=admin,
+        review_remark="同意",
+    )
+    assert reviewed.status == "approved"
+
     context_assist = production_order_service.get_my_order_context(
         db,
         order_id=order.id,

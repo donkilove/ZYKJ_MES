@@ -12,11 +12,13 @@ class ProductionAssistApprovalPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canReview,
+    this.service,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canReview;
+  final ProductionService? service;
 
   @override
   State<ProductionAssistApprovalPage> createState() =>
@@ -36,7 +38,7 @@ class _ProductionAssistApprovalPageState
   @override
   void initState() {
     super.initState();
-    _service = ProductionService(widget.session);
+    _service = widget.service ?? ProductionService(widget.session);
     _loadRows();
   }
 
@@ -62,8 +64,8 @@ class _ProductionAssistApprovalPageState
   }
 
   Future<void> _reviewRow(AssistAuthorizationItem item, bool approve) async {
-    final remarkController = TextEditingController();
-    final confirmed = await showDialog<bool>(
+    var draftRemark = '';
+    final reviewRemark = await showDialog<String?>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(approve ? '审批通过' : '审批拒绝'),
@@ -78,37 +80,36 @@ class _ProductionAssistApprovalPageState
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: remarkController,
                 decoration: const InputDecoration(
                   labelText: '审批备注（可选）',
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 2,
+                onChanged: (value) {
+                  draftRemark = value;
+                },
               ),
             ],
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
+            onPressed: () => Navigator.of(ctx).pop(null),
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
+            onPressed: () => Navigator.of(ctx).pop(draftRemark.trim()),
             child: Text(approve ? '通过' : '拒绝'),
           ),
         ],
       ),
     );
-    remarkController.dispose();
-    if (confirmed != true || !mounted) return;
+    if (reviewRemark == null || !mounted) return;
     try {
       await _service.reviewAssistAuthorization(
         authorizationId: item.id,
         approve: approve,
-        reviewRemark: remarkController.text.trim().isEmpty
-            ? null
-            : remarkController.text.trim(),
+        reviewRemark: reviewRemark.isEmpty ? null : reviewRemark,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -226,6 +226,12 @@ def create_repair_order(
     repair_quantity = int(sum(int(item["quantity"]) for item in defects))
     if repair_quantity <= 0:
         raise ValueError("defect_items must contain at least one positive quantity")
+    normalized_production_quantity = _normalize_quantity(
+        production_quantity,
+        field_name="production_quantity",
+    )
+    if normalized_production_quantity < repair_quantity:
+        raise ValueError("production_quantity must be greater than or equal to total defect quantity")
 
     order, process_row = _load_order_with_process(
         db,
@@ -244,7 +250,7 @@ def create_repair_order(
         source_process_name=process_row.process_name,
         sender_user_id=sender.id if sender else None,
         sender_username=sender.username if sender else None,
-        production_quantity=production_quantity,
+        production_quantity=normalized_production_quantity,
         repair_quantity=repair_quantity,
         repaired_quantity=0,
         scrap_quantity=0,
