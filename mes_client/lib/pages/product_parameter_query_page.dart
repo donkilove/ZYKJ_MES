@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
@@ -263,6 +265,44 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     );
   }
 
+  Future<void> _exportParameters() async {
+    try {
+      final bytes = await _productService.exportProductParameters(
+        keyword: _keywordController.text.trim(),
+        category: _selectedCategoryFilter,
+      );
+      final fileName = '产品参数查询_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final location = await getSaveLocation(
+        suggestedName: fileName,
+        acceptedTypeGroups: [
+          const XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
+      );
+      if (location == null) return;
+      final file = XFile.fromData(
+        Uint8List.fromList(bytes),
+        mimeType: 'text/csv',
+        name: fileName,
+      );
+      await file.saveTo(location.path);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('导出成功')),
+        );
+      }
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败：${_errorMessage(error)}')),
+        );
+      }
+    }
+  }
+
   Future<void> _showParametersDialog(ProductItem product) async {
     if (product.effectiveVersion == 0) {
       await showDialog<void>(
@@ -444,6 +484,12 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                 onPressed: _loading ? null : _loadProducts,
                 icon: const Icon(Icons.search),
                 label: const Text('搜索'),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _exportParameters,
+                icon: const Icon(Icons.download),
+                label: const Text('导出'),
               ),
             ],
           ),

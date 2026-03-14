@@ -71,6 +71,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   String _selectedCategoryFilter = '';
   String _selectedStatusFilter = '';
   String _selectedEffectiveVersionFilter = '';
+  DateTime? _updatedAfter;
+  DateTime? _updatedBefore;
   int _total = 0;
   List<ProductItem> _products = const [];
 
@@ -1128,6 +1130,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
             : _selectedEffectiveVersionFilter == 'no'
             ? false
             : null,
+        updatedAfter: _updatedAfter,
+        updatedBefore: _updatedBefore,
       );
       if (!mounted) {
         return;
@@ -1646,21 +1650,68 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   }
 
   Future<void> _showDetailDrawer(ProductItem product) async {
+    List<ProductParameterItem>? parameters;
+    List<ProductParameterHistoryItem>? history;
+    String? paramError;
+    String? historyError;
+
+    try {
+      final paramResult = await _productService.listProductParameters(productId: product.id);
+      parameters = paramResult.items;
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      paramError = _errorMessage(error);
+    }
+
+    try {
+      final historyResult = await _productService.listProductParameterHistory(
+        productId: product.id,
+        page: 1,
+        pageSize: 20,
+      );
+      history = historyResult.items;
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      historyError = _errorMessage(error);
+    }
+
+    if (!mounted) return;
+
+    String paramSearch = '';
+
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filteredParams = (parameters ?? []).where((p) {
+              if (paramSearch.isEmpty) return true;
+              return p.name.toLowerCase().contains(paramSearch.toLowerCase());
+            }).toList();
+
+            return AlertDialog(
           title: Text('产品详情 - ${product.name}'),
           content: SizedBox(
-            width: 480,
+            width: 620,
+            height: 560,
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 基本信息区
+                  const Text('基本信息', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const Divider(),
                   _detailRow('产品名称', product.name),
                   _detailRow('产品分类', product.category.isEmpty ? '-' : product.category),
                   _detailRow('状态', _lifecycleLabel(product.lifecycleStatus)),
                   _detailRow('当前版本', _formatDisplayVersion(product.currentVersion)),
+                  _detailRow('当前版本状态', product.effectiveVersion == product.currentVersion ? '已生效' : '草稿'),
                   _detailRow(
                     '生效版本',
                     product.effectiveVersion > 0
@@ -1674,6 +1725,85 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                   _detailRow('备注', product.remark.isEmpty ? '-' : product.remark),
                   _detailRow('创建时间', _formatTime(product.createdAt)),
                   _detailRow('更新时间', _formatTime(product.updatedAt)),
+
+                  // 当前生效参数快照区
+                  const SizedBox(height: 16),
+                  const Text('当前生效参数快照', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const Divider(),
+                  if (paramError != null)
+                    Text('加载参数失败：$paramError', style: const TextStyle(color: Colors.red))
+                  else if (parameters == null || parameters.isEmpty)
+                    const Text('暂无参数', style: TextStyle(color: Colors.grey))
+                  else ...[
+                    SizedBox(
+                      width: 240,
+                      child: TextField(
+                        decoration: const InputDecoration(
+                          hintText: '搜索参数名称',
+                          prefixIcon: Icon(Icons.search, size: 18),
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (v) => setDialogState(() => paramSearch = v),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    DataTable(
+                      columnSpacing: 16,
+                      headingRowHeight: 36,
+                      dataRowMinHeight: 32,
+                      dataRowMaxHeight: 40,
+                      columns: const [
+                        DataColumn(label: Text('参数名')),
+                        DataColumn(label: Text('分组')),
+                        DataColumn(label: Text('类型')),
+                        DataColumn(label: Text('值')),
+                        DataColumn(label: Text('说明')),
+                      ],
+                      rows: filteredParams.map((p) => DataRow(cells: [
+                        DataCell(Text(p.name)),
+                        DataCell(Text(p.category)),
+                        DataCell(Text(p.type)),
+                        DataCell(Text(p.value, overflow: TextOverflow.ellipsis)),
+                        DataCell(Text(p.description.isEmpty ? '-' : p.description, overflow: TextOverflow.ellipsis)),
+                      ])).toList(),
+                    ),
+                  ],
+
+                  // 变更记录区
+                  const SizedBox(height: 16),
+                  const Text('变更记录', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const Divider(),
+                  if (historyError != null)
+                    Text('加载变更记录失败：$historyError', style: const TextStyle(color: Colors.red))
+                  else if (history == null || history.isEmpty)
+                    const Text('暂无变更记录', style: TextStyle(color: Colors.grey))
+                  else
+                    ...history.map((h) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 140,
+                            child: Text(
+                              _formatTime(h.createdAt),
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 80,
+                            child: Text(h.operatorUsername, style: const TextStyle(fontSize: 12)),
+                          ),
+                          Expanded(
+                            child: Text(
+                              '${h.remark}（${h.changedKeys.join(', ')}）',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
                 ],
               ),
             ),
@@ -1684,6 +1814,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
               child: const Text('关闭'),
             ),
           ],
+        );
+          },
         );
       },
     );
@@ -1845,6 +1977,71 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                 icon: const Icon(Icons.add),
                 label: const Text('添加产品'),
               ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: _loading
+                    ? null
+                    : () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _updatedAfter ?? DateTime.now().subtract(const Duration(days: 30)),
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                          helpText: '选择更新起始日期',
+                        );
+                        if (picked != null) {
+                          setState(() => _updatedAfter = picked);
+                          _loadProducts();
+                        }
+                      },
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(_updatedAfter != null
+                    ? '起始：${_formatTime(_updatedAfter!).substring(0, 10)}'
+                    : '更新起始日期'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _loading
+                    ? null
+                    : () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _updatedBefore ?? DateTime.now(),
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now().add(const Duration(days: 1)),
+                          helpText: '选择更新截止日期',
+                        );
+                        if (picked != null) {
+                          setState(() => _updatedBefore = DateTime(
+                            picked.year, picked.month, picked.day, 23, 59, 59,
+                          ));
+                          _loadProducts();
+                        }
+                      },
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(_updatedBefore != null
+                    ? '截止：${_formatTime(_updatedBefore!).substring(0, 10)}'
+                    : '更新截止日期'),
+              ),
+              if (_updatedAfter != null || _updatedBefore != null) ...[
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: _loading
+                      ? null
+                      : () {
+                          setState(() {
+                            _updatedAfter = null;
+                            _updatedBefore = null;
+                          });
+                          _loadProducts();
+                        },
+                  child: const Text('清除日期'),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 12),

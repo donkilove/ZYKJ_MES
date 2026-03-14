@@ -293,6 +293,7 @@ class ProductVersionItem {
     required this.createdByUserId,
     required this.createdByUsername,
     required this.createdAt,
+    this.updatedAt,
   });
 
   final int version;
@@ -305,6 +306,7 @@ class ProductVersionItem {
   final int? createdByUserId;
   final String? createdByUsername;
   final DateTime createdAt;
+  final DateTime? updatedAt;
 
   String get displayVersion => versionLabel;
 
@@ -320,6 +322,7 @@ class ProductVersionItem {
       createdByUserId: json['created_by_user_id'] as int?,
       createdByUsername: json['created_by_username'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : null,
     );
   }
 }

@@ -541,6 +541,9 @@ def create_product(
 
 
 def delete_product(db: Session, product: Product) -> None:
+    open_orders = _list_open_orders_for_product(db, product_id=product.id)
+    if open_orders:
+        raise ValueError("该产品存在未完成的工单，不允许删除，仅允许停用")
     product.is_deleted = True
     db.commit()
 

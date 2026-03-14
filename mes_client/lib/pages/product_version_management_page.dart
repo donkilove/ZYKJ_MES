@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -289,6 +292,146 @@ class _ProductVersionManagementPageState
     }
   }
 
+  Future<void> _showVersionDetail(ProductVersionItem rev) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('版本详情 - ${rev.versionLabel}'),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _detailRow('版本号', rev.versionLabel),
+                _detailRow('状态', _statusLabels[rev.lifecycleStatus] ?? rev.lifecycleStatus),
+                _detailRow('变更摘要', rev.note ?? '-'),
+                _detailRow('来源版本', rev.sourceVersionLabel ?? '-'),
+                _detailRow('创建人', rev.createdByUsername ?? '-'),
+                _detailRow('创建时间', _formatDate(rev.createdAt)),
+                if (rev.updatedAt != null)
+                  _detailRow('最后更新', _formatDate(rev.updatedAt!)),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          Expanded(child: SelectableText(value)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editVersionNote(ProductVersionItem rev) async {
+    final product = _selectedProduct;
+    if (product == null) return;
+    final controller = TextEditingController(text: rev.note ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('编辑备注 - ${rev.versionLabel}'),
+        content: SizedBox(
+          width: 400,
+          child: TextField(
+            controller: controller,
+            maxLength: 256,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: '版本备注',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null) return;
+    try {
+      await _service.updateProductVersionNote(
+        productId: product.id,
+        version: rev.version,
+        note: result,
+      );
+      _showSuccess('备注已更新');
+      await _loadVersions(product);
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (e) {
+      _showError('更新备注失败: $e');
+    }
+  }
+
+  void _navigateToEditParams(ProductVersionItem rev) {
+    // 提示用户通过参数管理页维护参数
+    final product = _selectedProduct;
+    if (product == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('请前往参数管理页面维护产品「${product.name}」的参数'),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _exportVersionParams(ProductVersionItem rev) async {
+    final product = _selectedProduct;
+    if (product == null) return;
+    try {
+      final bytes = await _service.exportProductVersionParameters(
+        productId: product.id,
+        version: rev.version,
+      );
+      final fileName = '${product.name}_${rev.versionLabel}_参数.csv';
+      final location = await getSaveLocation(
+        suggestedName: fileName,
+        acceptedTypeGroups: [
+          const XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
+      );
+      if (location == null) return;
+      final file = XFile.fromData(
+        Uint8List.fromList(bytes),
+        mimeType: 'text/csv',
+        name: fileName,
+      );
+      await file.saveTo(location.path);
+      _showSuccess('导出成功');
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (e) {
+      _showError('导出失败: $e');
+    }
+  }
+
   Widget _buildProductList() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -447,9 +590,11 @@ class _ProductVersionManagementPageState
                       columns: const [
                         DataColumn(label: Text('版本号')),
                         DataColumn(label: Text('状态')),
+                        DataColumn(label: Text('变更摘要')),
                         DataColumn(label: Text('来源版本')),
                         DataColumn(label: Text('创建人')),
                         DataColumn(label: Text('创建时间')),
+                        DataColumn(label: Text('生效时间')),
                         DataColumn(label: Text('操作')),
                       ],
                       rows: _versions
@@ -469,6 +614,11 @@ class _ProductVersionManagementPageState
     final isDraft = rev.lifecycleStatus == 'draft';
     final isEffective = rev.lifecycleStatus == 'effective';
     final isObsolete = rev.lifecycleStatus == 'obsolete';
+
+    // 生效时间：仅对已生效/已失效/已停用版本显示 updatedAt
+    final effectiveTimeText = (!isDraft && rev.updatedAt != null)
+        ? _formatDate(rev.updatedAt!)
+        : '-';
 
     return DataRow(
       cells: [
@@ -500,14 +650,23 @@ class _ProductVersionManagementPageState
             ),
           ),
         ),
+        DataCell(Text(
+          rev.note != null && rev.note!.isNotEmpty ? rev.note! : '-',
+          overflow: TextOverflow.ellipsis,
+        )),
         DataCell(Text(rev.sourceVersionLabel ?? '-')),
         DataCell(Text(rev.createdByUsername ?? '-')),
         DataCell(Text(_formatDate(rev.createdAt))),
+        DataCell(Text(effectiveTimeText)),
         DataCell(
           widget.canManageVersions
               ? PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, size: 18),
                   itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'detail',
+                      child: Text('查看详情'),
+                    ),
                     if (isDraft)
                       const PopupMenuItem(
                         value: 'activate',
@@ -515,6 +674,19 @@ class _ProductVersionManagementPageState
                       ),
                     if (isDraft || isEffective || isObsolete)
                       const PopupMenuItem(value: 'copy', child: Text('复制版本')),
+                    const PopupMenuItem(
+                      value: 'editNote',
+                      child: Text('编辑备注'),
+                    ),
+                    if (isDraft)
+                      const PopupMenuItem(
+                        value: 'editParams',
+                        child: Text('维护参数'),
+                      ),
+                    const PopupMenuItem(
+                      value: 'export',
+                      child: Text('导出版本参数'),
+                    ),
                     if (isEffective || isObsolete)
                       const PopupMenuItem(
                         value: 'disable',
@@ -531,10 +703,18 @@ class _ProductVersionManagementPageState
                   ],
                   onSelected: (action) {
                     switch (action) {
+                      case 'detail':
+                        _showVersionDetail(rev);
                       case 'activate':
                         _activateVersion(rev);
                       case 'copy':
                         _copyVersion(rev);
+                      case 'editNote':
+                        _editVersionNote(rev);
+                      case 'editParams':
+                        _navigateToEditParams(rev);
+                      case 'export':
+                        _exportVersionParams(rev);
                       case 'disable':
                         _disableVersion(rev);
                       case 'delete':

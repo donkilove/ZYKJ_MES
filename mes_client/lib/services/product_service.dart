@@ -25,6 +25,8 @@ class ProductService {
     String? category,
     String? lifecycleStatus,
     bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -38,6 +40,12 @@ class ProductService {
     }
     if (hasEffectiveVersion != null) {
       query['has_effective_version'] = hasEffectiveVersion ? 'true' : 'false';
+    }
+    if (updatedAfter != null) {
+      query['updated_after'] = updatedAfter.toUtc().toIso8601String();
+    }
+    if (updatedBefore != null) {
+      query['updated_before'] = updatedBefore.toUtc().toIso8601String();
     }
     final uri = Uri.parse(
       '${session.baseUrl}/products',

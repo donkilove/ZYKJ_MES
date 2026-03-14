@@ -230,7 +230,10 @@ def delete_product_api(
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    delete_product(db, product)
+    try:
+        delete_product(db, product)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     write_audit_log(
         db,
         action_code="product.delete",
@@ -422,6 +425,7 @@ def _to_version_item(row: "ProductRevision") -> ProductVersionItem:
         created_by_user_id=row.created_by_user_id,
         created_by_username=row.created_by.username if row.created_by else None,
         created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 

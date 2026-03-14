@@ -63,6 +63,8 @@ class _ProductParameterManagementPageState
   int _total = 0;
   List<ProductItem> _products = const [];
   String _selectedCategoryFilter = '';
+  DateTime? _updatedAfter;
+  DateTime? _updatedBefore;
   final TextEditingController _versionFilterController = TextEditingController();
   final TextEditingController _paramNameFilterController = TextEditingController();
 
@@ -274,7 +276,7 @@ class _ProductParameterManagementPageState
   List<ProductItem> get _filteredProducts {
     final versionFilter = _versionFilterController.text.trim().toLowerCase();
     final paramFilter = _paramNameFilterController.text.trim().toLowerCase();
-    if (versionFilter.isEmpty && paramFilter.isEmpty) return _products;
+    if (versionFilter.isEmpty && paramFilter.isEmpty && _updatedAfter == null && _updatedBefore == null) return _products;
     return _products.where((p) {
       if (versionFilter.isNotEmpty) {
         final label = p.effectiveVersion > 0 ? 'v1.${p.effectiveVersion}' : '';
@@ -284,6 +286,8 @@ class _ProductParameterManagementPageState
         final summary = (p.lastParameterSummary ?? '').toLowerCase();
         if (!summary.contains(paramFilter)) return false;
       }
+      if (_updatedAfter != null && p.updatedAt.isBefore(_updatedAfter!)) return false;
+      if (_updatedBefore != null && p.updatedAt.isAfter(_updatedBefore!)) return false;
       return true;
     }).toList();
   }
@@ -1300,6 +1304,62 @@ class _ProductParameterManagementPageState
                 onChanged: (_) => setState(() {}),
               ),
             ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: _loading
+                  ? null
+                  : () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _updatedAfter ?? DateTime.now().subtract(const Duration(days: 30)),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                        helpText: '修改起始日期',
+                      );
+                      if (picked != null) {
+                        setState(() => _updatedAfter = picked);
+                      }
+                    },
+              icon: const Icon(Icons.calendar_today, size: 16),
+              label: Text(_updatedAfter != null
+                  ? '起始：${_formatTime(_updatedAfter!).substring(0, 10)}'
+                  : '修改起始日期'),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: _loading
+                  ? null
+                  : () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _updatedBefore ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 1)),
+                        helpText: '修改截止日期',
+                      );
+                      if (picked != null) {
+                        setState(() => _updatedBefore = DateTime(
+                          picked.year, picked.month, picked.day, 23, 59, 59,
+                        ));
+                      }
+                    },
+              icon: const Icon(Icons.calendar_today, size: 16),
+              label: Text(_updatedBefore != null
+                  ? '截止：${_formatTime(_updatedBefore!).substring(0, 10)}'
+                  : '修改截止日期'),
+            ),
+            if (_updatedAfter != null || _updatedBefore != null) ...[
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _updatedAfter = null;
+                    _updatedBefore = null;
+                  });
+                },
+                child: const Text('清除日期'),
+              ),
+            ],
           ],
         ),
         const SizedBox(height: 12),
@@ -1328,6 +1388,7 @@ class _ProductParameterManagementPageState
                         columns: [
                           UnifiedListTableHeaderStyle.column(context, '产品名称'),
                           UnifiedListTableHeaderStyle.column(context, '产品分类'),
+                          UnifiedListTableHeaderStyle.column(context, '当前版本'),
                           UnifiedListTableHeaderStyle.column(context, '生效版本'),
                           UnifiedListTableHeaderStyle.column(context, '创建时间'),
                           UnifiedListTableHeaderStyle.column(context, '最后修改时间'),
@@ -1343,6 +1404,7 @@ class _ProductParameterManagementPageState
                             cells: [
                               DataCell(Text(product.name)),
                               DataCell(Text(product.category.isEmpty ? '-' : product.category)),
+                              DataCell(Text('V1.${product.currentVersion}')),
                               DataCell(Text(product.effectiveVersion > 0 ? 'V1.${product.effectiveVersion}' : '-')),
                               DataCell(Text(_formatTime(product.createdAt))),
                               DataCell(Text(_formatTime(product.updatedAt))),

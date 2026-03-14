@@ -11,16 +11,33 @@ from app.core.product_lifecycle import (
 )
 
 
+VALID_PRODUCT_CATEGORIES = {"贴片", "DTU", "套件"}
+
+
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     category: str = Field(default="", max_length=32)
     remark: str = Field(default="", max_length=500)
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, value: str) -> str:
+        if value and value not in VALID_PRODUCT_CATEGORIES:
+            raise ValueError(f"产品分类必须为以下之一：{', '.join(sorted(VALID_PRODUCT_CATEGORIES))}")
+        return value
 
 
 class ProductUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     category: str = Field(default="", max_length=32)
     remark: str = Field(default="", max_length=500)
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, value: str) -> str:
+        if value and value not in VALID_PRODUCT_CATEGORIES:
+            raise ValueError(f"产品分类必须为以下之一：{', '.join(sorted(VALID_PRODUCT_CATEGORIES))}")
+        return value
 
 
 class ProductDeleteRequest(BaseModel):
@@ -125,6 +142,7 @@ class ProductVersionItem(BaseModel):
     created_by_user_id: int | None = None
     created_by_username: str | None = None
     created_at: datetime
+    updated_at: datetime | None = None
 
 
 class ProductVersionListResult(BaseModel):
