@@ -497,6 +497,9 @@ class EquipmentService {
     String? keyword,
     String? status,
     bool mineOnly = false,
+    DateTime? dueDateStart,
+    DateTime? dueDateEnd,
+    String? stageCode,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -507,6 +510,15 @@ class EquipmentService {
     }
     if (mineOnly) {
       query['mine'] = 'true';
+    }
+    if (dueDateStart != null) {
+      query['due_date_start'] = _formatDate(dueDateStart);
+    }
+    if (dueDateEnd != null) {
+      query['due_date_end'] = _formatDate(dueDateEnd);
+    }
+    if (stageCode != null) {
+      query['stage_code'] = stageCode;
     }
     final uri = Uri.parse('$_basePath/executions').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);

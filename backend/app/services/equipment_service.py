@@ -851,6 +851,9 @@ def list_work_orders(
     executor_user_id: int | None,
     start_date: date | None,
     end_date: date | None,
+    due_date_start: date | None = None,
+    due_date_end: date | None = None,
+    stage_code_filter: str | None = None,
 ) -> tuple[int, list[MaintenanceWorkOrder]]:
     refresh_overdue_work_orders(db)
 
@@ -896,6 +899,13 @@ def list_work_orders(
                 MaintenanceWorkOrder.completed_at < end_dt,
             )
         )
+
+    if due_date_start is not None:
+        filters.append(MaintenanceWorkOrder.due_date >= due_date_start)
+    if due_date_end is not None:
+        filters.append(MaintenanceWorkOrder.due_date <= due_date_end)
+    if stage_code_filter is not None:
+        filters.append(MaintenanceWorkOrder.source_execution_process_code == stage_code_filter)
 
     stmt = select(MaintenanceWorkOrder)
     if keyword:

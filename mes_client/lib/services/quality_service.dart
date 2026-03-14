@@ -35,6 +35,9 @@ class QualityService {
     DateTime? date,
     String? keyword,
     String? result,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
     int page = 1,
     int pageSize = 20,
   }) async {
@@ -51,6 +54,15 @@ class QualityService {
     }
     if (result != null && result.isNotEmpty) {
       query['result'] = _normalizeResultCode(result);
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      query['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      query['process_code'] = processCode.trim();
+    }
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      query['operator_username'] = operatorUsername.trim();
     }
 
     final uri = Uri.parse(
@@ -86,6 +98,9 @@ class QualityService {
     DateTime? date,
     String? keyword,
     String? result,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
   }) async {
     final payload = <String, dynamic>{};
     if (date != null) payload['query_date'] = _formatDate(date);
@@ -94,6 +109,15 @@ class QualityService {
     }
     if (result != null && result.isNotEmpty) {
       payload['result'] = _normalizeResultCode(result);
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      payload['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      payload['process_code'] = processCode.trim();
+    }
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      payload['operator_username'] = operatorUsername.trim();
     }
 
     final uri = Uri.parse('$_basePath/first-articles/export');
@@ -142,10 +166,26 @@ class QualityService {
   Future<List<QualityProductStatItem>> getQualityProductStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
+    String? result,
   }) async {
     final query = <String, String>{};
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
+    if (productName != null && productName.trim().isNotEmpty) {
+      query['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      query['process_code'] = processCode.trim();
+    }
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      query['operator_username'] = operatorUsername.trim();
+    }
+    if (result != null && result.isNotEmpty) {
+      query['result'] = result;
+    }
     final uri = Uri.parse(
       '$_basePath/stats/products',
     ).replace(queryParameters: query.isEmpty ? null : query);
@@ -166,10 +206,26 @@ class QualityService {
   Future<String> exportQualityStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
+    String? result,
   }) async {
     final payload = <String, dynamic>{};
     if (startDate != null) payload['start_date'] = _formatDate(startDate);
     if (endDate != null) payload['end_date'] = _formatDate(endDate);
+    if (productName != null && productName.trim().isNotEmpty) {
+      payload['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      payload['process_code'] = processCode.trim();
+    }
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      payload['operator_username'] = operatorUsername.trim();
+    }
+    if (result != null && result.isNotEmpty) {
+      payload['result'] = result;
+    }
 
     final uri = Uri.parse('$_basePath/stats/export');
     final response = await http.post(
@@ -215,6 +271,10 @@ class QualityService {
   Future<QualityStatsOverview> getQualityOverview({
     DateTime? startDate,
     DateTime? endDate,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
+    String? result,
   }) async {
     final query = <String, String>{};
     if (startDate != null) {
@@ -222,6 +282,18 @@ class QualityService {
     }
     if (endDate != null) {
       query['end_date'] = _formatDate(endDate);
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      query['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      query['process_code'] = processCode.trim();
+    }
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      query['operator_username'] = operatorUsername.trim();
+    }
+    if (result != null && result.isNotEmpty) {
+      query['result'] = result;
     }
     final uri = Uri.parse(
       '$_basePath/stats/overview',
@@ -241,6 +313,10 @@ class QualityService {
   Future<List<QualityProcessStatItem>> getQualityProcessStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
+    String? result,
   }) async {
     final query = <String, String>{};
     if (startDate != null) {
@@ -248,6 +324,18 @@ class QualityService {
     }
     if (endDate != null) {
       query['end_date'] = _formatDate(endDate);
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      query['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      query['process_code'] = processCode.trim();
+    }
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      query['operator_username'] = operatorUsername.trim();
+    }
+    if (result != null && result.isNotEmpty) {
+      query['result'] = result;
     }
     final uri = Uri.parse(
       '$_basePath/stats/processes',
@@ -272,6 +360,10 @@ class QualityService {
   Future<List<QualityOperatorStatItem>> getQualityOperatorStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
+    String? result,
   }) async {
     final query = <String, String>{};
     if (startDate != null) {
@@ -279,6 +371,18 @@ class QualityService {
     }
     if (endDate != null) {
       query['end_date'] = _formatDate(endDate);
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      query['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      query['process_code'] = processCode.trim();
+    }
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      query['operator_username'] = operatorUsername.trim();
+    }
+    if (result != null && result.isNotEmpty) {
+      query['result'] = result;
     }
     final uri = Uri.parse(
       '$_basePath/stats/operators',

@@ -149,14 +149,14 @@ class _QualityPageState extends State<QualityPage>
         return ProductionScrapStatisticsPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canExport: false,
+          canExport: widget.capabilityCodes.contains('production.scrap_statistics.export'),
         );
       case qualityRepairOrdersTabCode:
         return ProductionRepairOrdersPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canComplete: false,
-          canExport: false,
+          canComplete: widget.capabilityCodes.contains('production.repair_orders.complete'),
+          canExport: widget.capabilityCodes.contains('production.repair_orders.export'),
         );
       case qualityTrendTabCode:
         return QualityTrendPage(

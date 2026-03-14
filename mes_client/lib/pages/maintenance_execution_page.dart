@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import '../models/craft_models.dart';
 import '../models/equipment_models.dart';
 import '../services/api_exception.dart';
+import '../services/craft_service.dart';
 import '../services/equipment_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
@@ -26,6 +28,7 @@ class MaintenanceExecutionPage extends StatefulWidget {
 
 class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   late final EquipmentService _equipmentService;
+  late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
@@ -34,11 +37,17 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   List<MaintenanceWorkOrderItem> _items = const [];
   String? _statusFilter;
   bool _mineOnly = false;
+  DateTime? _dueDateStart;
+  DateTime? _dueDateEnd;
+  String? _stageCodeFilter;
+  List<CraftStageItem> _stages = const [];
 
   @override
   void initState() {
     super.initState();
     _equipmentService = EquipmentService(widget.session);
+    _craftService = CraftService(widget.session);
+    _loadStages();
     _loadItems();
   }
 
@@ -46,6 +55,15 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   void dispose() {
     _keywordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadStages() async {
+    try {
+      final result = await _craftService.listStages(enabled: true);
+      if (mounted) {
+        setState(() => _stages = result.items);
+      }
+    } catch (_) {}
   }
 
   bool _isUnauthorized(Object error) {
@@ -83,6 +101,18 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     return '${local.year}-$mm-$dd';
   }
 
+  Future<DateTime?> _pickDate({required DateTime initialDate}) async {
+    return showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000, 1, 1),
+      lastDate: DateTime(2100, 12, 31),
+      helpText: '选择日期',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+  }
+
   Future<void> _loadItems() async {
     if (!mounted) {
       return;
@@ -98,6 +128,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         keyword: _keywordController.text.trim(),
         status: _statusFilter,
         mineOnly: _mineOnly,
+        dueDateStart: _dueDateStart,
+        dueDateEnd: _dueDateEnd,
+        stageCode: _stageCodeFilter,
       );
       if (!mounted) {
         return;
@@ -461,6 +494,30 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                 ),
               ),
               const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await _pickDate(
+                    initialDate: _dueDateStart ?? DateTime.now(),
+                  );
+                  if (!mounted) return;
+                  if (picked != null) setState(() => _dueDateStart = picked);
+                },
+                icon: const Icon(Icons.event),
+                label: Text(_dueDateStart == null ? '到期开始' : _formatDate(_dueDateStart!)),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await _pickDate(
+                    initialDate: _dueDateEnd ?? DateTime.now(),
+                  );
+                  if (!mounted) return;
+                  if (picked != null) setState(() => _dueDateEnd = picked);
+                },
+                icon: const Icon(Icons.event_available),
+                label: Text(_dueDateEnd == null ? '到期结束' : _formatDate(_dueDateEnd!)),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: _loading ? null : _loadItems,
                 icon: const Icon(Icons.search),
@@ -494,6 +551,28 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                 ),
               ),
               const SizedBox(width: 12),
+              if (_stages.isNotEmpty)
+                SizedBox(
+                  width: 180,
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: _stageCodeFilter,
+                    items: [
+                      const DropdownMenuItem<String?>(value: null, child: Text('全部工段')),
+                      ..._stages.map(
+                        (s) => DropdownMenuItem<String?>(value: s.code, child: Text(s.name)),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _stageCodeFilter = value);
+                    },
+                    decoration: const InputDecoration(
+                      labelText: '工段',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 12),
               Row(
                 children: [
                   const Text('仅看我的任务'),
@@ -503,6 +582,21 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                   ),
                 ],
               ),
+              const SizedBox(width: 12),
+              if (_dueDateStart != null || _dueDateEnd != null || _stageCodeFilter != null)
+                TextButton(
+                  onPressed: _loading
+                      ? null
+                      : () {
+                          setState(() {
+                            _dueDateStart = null;
+                            _dueDateEnd = null;
+                            _stageCodeFilter = null;
+                          });
+                          _loadItems();
+                        },
+                  child: const Text('清空筛选'),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -527,11 +621,15 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                     child: AdaptiveTableContainer(
                       child: DataTable(
                         columns: const [
+                          DataColumn(label: Text('工单编号')),
                           DataColumn(label: Text('设备')),
                           DataColumn(label: Text('项目')),
                           DataColumn(label: Text('到期日期')),
                           DataColumn(label: Text('状态')),
                           DataColumn(label: Text('执行人')),
+                          DataColumn(label: Text('开始时间')),
+                          DataColumn(label: Text('完成时间')),
+                          DataColumn(label: Text('结果摘要')),
                           DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
@@ -548,11 +646,15 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                                   item.status == 'in_progress');
                           return DataRow(
                             cells: [
+                              DataCell(Text('#${item.id}')),
                               DataCell(Text(item.equipmentName)),
                               DataCell(Text(item.itemName)),
                               DataCell(Text(_formatDate(item.dueDate))),
                               DataCell(Text(_statusLabel(item.status))),
                               DataCell(Text(item.executorUsername ?? '-')),
+                              DataCell(Text(item.startedAt != null ? _formatDateTime(item.startedAt!) : '-')),
+                              DataCell(Text(item.completedAt != null ? _formatDateTime(item.completedAt!) : '-')),
+                              DataCell(Text(item.resultSummary ?? '-')),
                               DataCell(
                                 Row(
                                   mainAxisSize: MainAxisSize.min,

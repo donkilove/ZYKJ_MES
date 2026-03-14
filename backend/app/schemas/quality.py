@@ -58,6 +58,9 @@ class FirstArticleExportRequest(BaseModel):
     query_date: date | None = None
     keyword: str | None = None
     result: str | None = None
+    product_name: str | None = None
+    process_code: str | None = None
+    operator_username: str | None = None
 
 
 class FirstArticleExportResult(BaseModel):
@@ -127,6 +130,7 @@ class QualityTrendItem(BaseModel):
     failed_total: int
     pass_rate_percent: float
     scrap_total: int
+    repair_total: int = 0
 
 
 class QualityTrendResult(BaseModel):
@@ -136,6 +140,10 @@ class QualityTrendResult(BaseModel):
 class QualityStatsExportRequest(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
+    product_name: str | None = None
+    process_code: str | None = None
+    operator_username: str | None = None
+    result: str | None = None
 
 
 class QualityStatsExportResult(BaseModel):

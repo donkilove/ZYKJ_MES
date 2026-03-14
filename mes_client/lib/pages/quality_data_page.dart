@@ -26,12 +26,16 @@ class QualityDataPage extends StatefulWidget {
 
 class _QualityDataPageState extends State<QualityDataPage> {
   late final QualityService _service;
+  final TextEditingController _productNameController = TextEditingController();
+  final TextEditingController _processCodeController = TextEditingController();
+  final TextEditingController _operatorUsernameController = TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
   String _message = '';
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 29));
   DateTime _endDate = DateTime.now();
+  String? _resultFilter;
   QualityStatsOverview _overview = QualityStatsOverview(
     firstArticleTotal: 0,
     passedTotal: 0,
@@ -51,6 +55,14 @@ class _QualityDataPageState extends State<QualityDataPage> {
     super.initState();
     _service = QualityService(widget.session);
     _loadStats();
+  }
+
+  @override
+  void dispose() {
+    _productNameController.dispose();
+    _processCodeController.dispose();
+    _operatorUsernameController.dispose();
+    super.dispose();
   }
 
   bool _isUnauthorized(Object error) {
@@ -124,18 +136,34 @@ class _QualityDataPageState extends State<QualityDataPage> {
       final overview = await _service.getQualityOverview(
         startDate: _startDate,
         endDate: _endDate,
+        productName: _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim(),
+        operatorUsername: _operatorUsernameController.text.trim(),
+        result: _resultFilter,
       );
       final processItems = await _service.getQualityProcessStats(
         startDate: _startDate,
         endDate: _endDate,
+        productName: _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim(),
+        operatorUsername: _operatorUsernameController.text.trim(),
+        result: _resultFilter,
       );
       final operatorItems = await _service.getQualityOperatorStats(
         startDate: _startDate,
         endDate: _endDate,
+        productName: _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim(),
+        operatorUsername: _operatorUsernameController.text.trim(),
+        result: _resultFilter,
       );
       final productItems = await _service.getQualityProductStats(
         startDate: _startDate,
         endDate: _endDate,
+        productName: _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim(),
+        operatorUsername: _operatorUsernameController.text.trim(),
+        result: _resultFilter,
       );
       if (!mounted) {
         return;
@@ -175,6 +203,10 @@ class _QualityDataPageState extends State<QualityDataPage> {
       final csvBase64 = await _service.exportQualityStats(
         startDate: _startDate,
         endDate: _endDate,
+        productName: _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim(),
+        operatorUsername: _operatorUsernameController.text.trim(),
+        result: _resultFilter,
       );
       if (!mounted) return;
       if (csvBase64.isEmpty) {
@@ -319,7 +351,59 @@ class _QualityDataPageState extends State<QualityDataPage> {
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
               ),
+              DropdownButton<String?>(
+                value: _resultFilter,
+                hint: const Text('全部结果'),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('全部结果')),
+                  DropdownMenuItem(value: 'passed', child: Text('合格')),
+                  DropdownMenuItem(value: 'failed', child: Text('不合格')),
+                ],
+                onChanged: _loading
+                    ? null
+                    : (v) => setState(() => _resultFilter = v),
+              ),
               Text('时间范围默认最近30天（含当天）', style: theme.textTheme.bodySmall),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _productNameController,
+                  decoration: const InputDecoration(
+                    labelText: '产品名称',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadStats(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _processCodeController,
+                  decoration: const InputDecoration(
+                    labelText: '工序编码',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadStats(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _operatorUsernameController,
+                  decoration: const InputDecoration(
+                    labelText: '操作员',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadStats(),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),

@@ -14,11 +14,13 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.models.daily_verification_code import DailyVerificationCode
 from app.models.first_article_disposition import FirstArticleDisposition
+from app.models.first_article_disposition_history import FirstArticleDispositionHistory
 from app.models.first_article_record import FirstArticleRecord
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_scrap_statistics import ProductionScrapStatistics
 from app.models.product import Product
+from app.models.repair_order import RepairOrder
 from app.models.repair_order import RepairOrder
 from app.models.user import User
 
@@ -77,6 +79,9 @@ def list_first_articles(
     query_date: date,
     keyword: str | None,
     result_filter: str | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
     page: int,
     page_size: int,
 ) -> dict[str, object]:
@@ -95,6 +100,12 @@ def list_first_articles(
     normalized_result = (result_filter or "").strip().lower()
     if normalized_result in ("passed", "failed"):
         filters.append(FirstArticleRecord.result == normalized_result)
+    if product_name and product_name.strip():
+        filters.append(Product.name.ilike(f"%{product_name.strip()}%"))
+    if process_code and process_code.strip():
+        filters.append(ProductionOrderProcess.process_code.ilike(f"%{process_code.strip()}%"))
+    if operator_username and operator_username.strip():
+        filters.append(User.username.ilike(f"%{operator_username.strip()}%"))
 
     count_stmt = (
         select(func.count())
@@ -182,18 +193,37 @@ def _load_first_article_rows(
     *,
     start_date: date | None,
     end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+    result_filter: str | None = None,
 ) -> list[FirstArticleRecord]:
     filters = _build_created_at_filters(start_date=start_date, end_date=end_date)
-    return (
-        db.execute(
-            select(FirstArticleRecord)
-            .where(*filters)
-            .options(
-                selectinload(FirstArticleRecord.order_process),
-                selectinload(FirstArticleRecord.operator),
-            )
-            .order_by(FirstArticleRecord.created_at.desc(), FirstArticleRecord.id.desc())
+    stmt = (
+        select(FirstArticleRecord)
+        .join(FirstArticleRecord.order)
+        .join(ProductionOrder.product)
+        .join(FirstArticleRecord.order_process)
+        .join(FirstArticleRecord.operator)
+        .where(*filters)
+        .options(
+            selectinload(FirstArticleRecord.order).selectinload(ProductionOrder.product),
+            selectinload(FirstArticleRecord.order_process),
+            selectinload(FirstArticleRecord.operator),
         )
+        .order_by(FirstArticleRecord.created_at.desc(), FirstArticleRecord.id.desc())
+    )
+    if product_name and product_name.strip():
+        stmt = stmt.where(Product.name.ilike(f"%{product_name.strip()}%"))
+    if process_code and process_code.strip():
+        stmt = stmt.where(ProductionOrderProcess.process_code.ilike(f"%{process_code.strip()}%"))
+    if operator_username and operator_username.strip():
+        stmt = stmt.where(User.username.ilike(f"%{operator_username.strip()}%"))
+    normalized_result = (result_filter or "").strip().lower()
+    if normalized_result in ("passed", "failed"):
+        stmt = stmt.where(FirstArticleRecord.result == normalized_result)
+    return (
+        db.execute(stmt)
         .scalars()
         .all()
     )
@@ -204,8 +234,20 @@ def get_quality_overview(
     *,
     start_date: date | None,
     end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+    result_filter: str | None = None,
 ) -> dict[str, object]:
-    rows = _load_first_article_rows(db, start_date=start_date, end_date=end_date)
+    rows = _load_first_article_rows(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result_filter,
+    )
     first_article_total = len(rows)
     passed_total = sum(1 for row in rows if row.result == "passed")
     failed_total = sum(1 for row in rows if row.result == "failed")
@@ -236,8 +278,20 @@ def get_quality_process_stats(
     *,
     start_date: date | None,
     end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+    result_filter: str | None = None,
 ) -> list[dict[str, object]]:
-    rows = _load_first_article_rows(db, start_date=start_date, end_date=end_date)
+    rows = _load_first_article_rows(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result_filter,
+    )
     grouped: dict[str, dict[str, object]] = {}
     for row in rows:
         process_row = row.order_process
@@ -279,8 +333,20 @@ def get_quality_operator_stats(
     *,
     start_date: date | None,
     end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+    result_filter: str | None = None,
 ) -> list[dict[str, object]]:
-    rows = _load_first_article_rows(db, start_date=start_date, end_date=end_date)
+    rows = _load_first_article_rows(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result_filter,
+    )
     grouped: dict[int, dict[str, object]] = defaultdict(dict)
     for row in rows:
         operator_user_id = row.operator_user_id
@@ -390,12 +456,18 @@ def export_first_articles_csv(
     query_date: date,
     keyword: str | None,
     result_filter: str | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
 ) -> dict[str, Any]:
     payload = list_first_articles(
         db,
         query_date=query_date,
         keyword=keyword,
         result_filter=result_filter,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
         page=1,
         page_size=10000,
     )
@@ -434,17 +506,19 @@ def get_quality_product_stats(
     *,
     start_date: date | None,
     end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+    result_filter: str | None = None,
 ) -> list[dict[str, Any]]:
-    rows = (
-        db.execute(
-            select(FirstArticleRecord)
-            .where(*_build_created_at_filters(start_date=start_date, end_date=end_date))
-            .options(
-                selectinload(FirstArticleRecord.order).selectinload(ProductionOrder.product),
-            )
-        )
-        .scalars()
-        .all()
+    rows = _load_first_article_rows(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result_filter,
     )
 
     grouped: dict[int, dict[str, Any]] = {}
@@ -561,6 +635,7 @@ def get_quality_trend(
             "failed_total": 0,
             "pass_rate_percent": 0.0,
             "scrap_total": 0,
+            "repair_total": 0,
         }
         current += timedelta(days=1)
 
@@ -595,6 +670,26 @@ def get_quality_trend(
         if stat_date is not None and stat_date in grouped:
             grouped[stat_date]["scrap_total"] = int(sr.total or 0)
 
+    # 补充维修数量（按维修单创建日期聚合）
+    repair_rows = (
+        db.execute(
+            select(
+                func.date(RepairOrder.repair_time).label("d"),
+                func.count(RepairOrder.id).label("total"),
+            )
+            .where(
+                RepairOrder.repair_time >= datetime.combine(resolved_start, time.min),
+                RepairOrder.repair_time < datetime.combine(resolved_end + timedelta(days=1), time.min),
+            )
+            .group_by(func.date(RepairOrder.repair_time))
+        )
+        .all()
+    )
+    for rr in repair_rows:
+        stat_date = _normalize_stat_date(rr.d)
+        if stat_date is not None and stat_date in grouped:
+            grouped[stat_date]["repair_total"] = int(rr.total or 0)
+
     result = list(grouped.values())
     for item in result:
         item["pass_rate_percent"] = _round_rate(
@@ -610,10 +705,38 @@ def export_quality_stats_csv(
     *,
     start_date: date | None,
     end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+    result_filter: str | None = None,
 ) -> dict[str, Any]:
-    overview = get_quality_overview(db, start_date=start_date, end_date=end_date)
-    process_stats = get_quality_process_stats(db, start_date=start_date, end_date=end_date)
-    operator_stats = get_quality_operator_stats(db, start_date=start_date, end_date=end_date)
+    overview = get_quality_overview(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result_filter,
+    )
+    process_stats = get_quality_process_stats(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result_filter,
+    )
+    operator_stats = get_quality_operator_stats(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result_filter,
+    )
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -679,6 +802,8 @@ def submit_first_article_disposition(
     operator: User,
 ) -> FirstArticleDisposition:
     from datetime import UTC
+    now = datetime.now(UTC)
+
     existing = (
         db.execute(
             select(FirstArticleDisposition)
@@ -687,13 +812,41 @@ def submit_first_article_disposition(
         .scalars()
         .first()
     )
+
+    # 计算新版本号
+    if existing is not None:
+        prev_version = (
+            db.execute(
+                select(func.max(FirstArticleDispositionHistory.version))
+                .where(FirstArticleDispositionHistory.first_article_record_id == record_id)
+            )
+            .scalar()
+        ) or existing.version if hasattr(existing, "version") else 1
+        new_version = int(prev_version or 1) + 1
+    else:
+        new_version = 1
+
+    # 追加历史记录（每次处置均保留，不可覆盖）
+    history = FirstArticleDispositionHistory(
+        first_article_record_id=record_id,
+        disposition_opinion=disposition_opinion,
+        recheck_result=recheck_result,
+        final_judgment=final_judgment,
+        disposition_user_id=operator.id,
+        disposition_username=operator.username,
+        disposition_at=now,
+        version=new_version,
+    )
+    db.add(history)
+
+    # 更新或新建当前处置快照（供详情接口快速读取）
     if existing is not None:
         existing.disposition_opinion = disposition_opinion
         existing.recheck_result = recheck_result
         existing.final_judgment = final_judgment
         existing.disposition_user_id = operator.id
         existing.disposition_username = operator.username
-        existing.disposition_at = datetime.now(UTC)
+        existing.disposition_at = now
         db.flush()
         return existing
 
@@ -704,7 +857,7 @@ def submit_first_article_disposition(
         final_judgment=final_judgment,
         disposition_user_id=operator.id,
         disposition_username=operator.username,
-        disposition_at=datetime.now(UTC),
+        disposition_at=now,
     )
     db.add(disposition)
     db.flush()

@@ -23,6 +23,7 @@ class MaintenanceRecordPage extends StatefulWidget {
 class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
+  final TextEditingController _executorController = TextEditingController();
 
   bool _loading = false;
   String _message = '';
@@ -31,18 +32,31 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   DateTime? _startDate;
   DateTime? _endDate;
   String? _resultSummaryFilter;
+  List<EquipmentLedgerItem> _equipmentList = const [];
+  int? _equipmentIdFilter;
 
   @override
   void initState() {
     super.initState();
     _equipmentService = EquipmentService(widget.session);
+    _loadEquipmentList();
     _loadItems();
   }
 
   @override
   void dispose() {
     _keywordController.dispose();
+    _executorController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadEquipmentList() async {
+    try {
+      final result = await _equipmentService.listEquipment(page: 1, pageSize: 500);
+      if (mounted) {
+        setState(() => _equipmentList = result.items);
+      }
+    } catch (_) {}
   }
 
   bool _isUnauthorized(Object error) {
@@ -95,13 +109,20 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
       _message = '';
     });
     try {
+      final executorKeyword = _executorController.text.trim();
+      final keyword = _keywordController.text.trim().isNotEmpty
+          ? _keywordController.text.trim()
+          : executorKeyword.isNotEmpty
+              ? executorKeyword
+              : null;
       final result = await _equipmentService.listRecords(
         page: 1,
         pageSize: 200,
-        keyword: _keywordController.text.trim(),
+        keyword: keyword,
         startDate: _startDate,
         endDate: _endDate,
         resultSummary: _resultSummaryFilter,
+        equipmentId: _equipmentIdFilter,
       );
       if (!mounted) {
         return;
@@ -244,6 +265,18 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                 ),
               ),
               const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: TextField(
+                  controller: _executorController,
+                  decoration: const InputDecoration(
+                    labelText: '执行人',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _loadItems(),
+                ),
+              ),
+              const SizedBox(width: 12),
               OutlinedButton.icon(
                 onPressed: () async {
                   final picked = await _pickDate(
@@ -295,10 +328,12 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                         setState(() {
                           _startDate = null;
                           _endDate = null;
+                          _executorController.clear();
+                          _equipmentIdFilter = null;
                         });
                         _loadItems();
                       },
-                child: const Text('清空日期'),
+                child: const Text('清空筛选'),
               ),
             ],
           ),
@@ -324,6 +359,29 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                   ),
                 ),
               ),
+              if (_equipmentList.isNotEmpty) ...[
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 200,
+                  child: DropdownButtonFormField<int?>(
+                    initialValue: _equipmentIdFilter,
+                    items: [
+                      const DropdownMenuItem<int?>(value: null, child: Text('全部设备')),
+                      ..._equipmentList.map(
+                        (e) => DropdownMenuItem<int?>(value: e.id, child: Text(e.name)),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _equipmentIdFilter = value);
+                    },
+                    decoration: const InputDecoration(
+                      labelText: '设备',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 12),
@@ -348,6 +406,8 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                     child: AdaptiveTableContainer(
                       child: DataTable(
                         columns: const [
+                          DataColumn(label: Text('记录编号')),
+                          DataColumn(label: Text('工单编号')),
                           DataColumn(label: Text('完成时间')),
                           DataColumn(label: Text('设备')),
                           DataColumn(label: Text('项目')),
@@ -359,6 +419,8 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                         rows: _items.map((item) {
                           return DataRow(
                             cells: [
+                              DataCell(Text('#${item.id}')),
+                              DataCell(Text('#${item.workOrderId}')),
                               DataCell(
                                 Text(_formatDateTime(item.completedAt)),
                               ),

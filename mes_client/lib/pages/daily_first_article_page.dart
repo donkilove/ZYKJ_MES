@@ -32,6 +32,9 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
 
   late final QualityService _service;
   final TextEditingController _keywordController = TextEditingController();
+  final TextEditingController _productNameController = TextEditingController();
+  final TextEditingController _processCodeController = TextEditingController();
+  final TextEditingController _operatorUsernameController = TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -54,6 +57,9 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
   @override
   void dispose() {
     _keywordController.dispose();
+    _productNameController.dispose();
+    _processCodeController.dispose();
+    _operatorUsernameController.dispose();
     super.dispose();
   }
 
@@ -104,6 +110,9 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
         date: _queryDate,
         keyword: _keywordController.text.trim(),
         result: _resultFilter,
+        productName: _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim(),
+        operatorUsername: _operatorUsernameController.text.trim(),
         page: _page,
         pageSize: _pageSize,
       );
@@ -184,6 +193,9 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
         date: _queryDate,
         keyword: _keywordController.text.trim(),
         result: _resultFilter,
+        productName: _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim(),
+        operatorUsername: _operatorUsernameController.text.trim(),
       );
       if (!mounted) return;
       if (csvBase64.isEmpty) {
@@ -331,6 +343,46 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                 onPressed: _loading ? null : () => _loadFirstArticles(page: 1),
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _productNameController,
+                  decoration: const InputDecoration(
+                    labelText: '产品名称',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadFirstArticles(page: 1),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _processCodeController,
+                  decoration: const InputDecoration(
+                    labelText: '工序编码',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadFirstArticles(page: 1),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _operatorUsernameController,
+                  decoration: const InputDecoration(
+                    labelText: '操作员',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadFirstArticles(page: 1),
+                ),
               ),
             ],
           ),

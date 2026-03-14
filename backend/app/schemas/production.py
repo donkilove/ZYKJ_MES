@@ -675,6 +675,18 @@ class PipelineInstanceListResult(BaseModel):
     items: list[PipelineInstanceItem]
 
 
+class ScrapRelatedRepairItem(BaseModel):
+    """报废详情中关联的维修单摘要"""
+    id: int
+    repair_order_code: str
+    status: str
+    repair_quantity: int
+    repaired_quantity: int
+    scrap_quantity: int
+    repair_time: datetime
+    completed_at: datetime | None = None
+
+
 class ScrapStatisticsDetailItem(BaseModel):
     id: int
     order_id: int | None = None
@@ -691,6 +703,7 @@ class ScrapStatisticsDetailItem(BaseModel):
     applied_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    related_repair_orders: list[ScrapRelatedRepairItem] = Field(default_factory=list)
 
 
 class RepairDefectPhenomenonItem(BaseModel):
@@ -713,6 +726,15 @@ class RepairReturnRouteItem(BaseModel):
     target_process_code: str
     target_process_name: str
     return_quantity: int
+
+
+class RepairEventLogItem(BaseModel):
+    """维修详情中关联的订单事件日志摘要"""
+    id: int
+    event_type: str
+    event_title: str
+    event_detail: str | None = None
+    created_at: datetime
 
 
 class RepairOrderDetailItem(BaseModel):
@@ -740,5 +762,6 @@ class RepairOrderDetailItem(BaseModel):
     defect_rows: list[RepairDefectPhenomenonItem] = Field(default_factory=list)
     cause_rows: list[RepairCauseDetailItem] = Field(default_factory=list)
     return_routes: list[RepairReturnRouteItem] = Field(default_factory=list)
+    event_logs: list[RepairEventLogItem] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

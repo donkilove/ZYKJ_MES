@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
@@ -1111,6 +1111,12 @@ def get_assist_authorizations_api(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     status_text: str | None = Query(default=None, alias="status"),
+    order_code: str | None = Query(default=None),
+    process_name: str | None = Query(default=None),
+    requester_username: str | None = Query(default=None),
+    helper_username: str | None = Query(default=None),
+    created_at_from: datetime | None = Query(default=None),
+    created_at_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_LIST)),
 ) -> ApiResponse[AssistAuthorizationListResult]:
@@ -1121,6 +1127,12 @@ def get_assist_authorizations_api(
             page=page,
             page_size=page_size,
             status=status_text,
+            order_code=order_code,
+            process_name=process_name,
+            requester_username=requester_username,
+            helper_username=helper_username,
+            created_at_from=created_at_from,
+            created_at_to=created_at_to,
         )
     except Exception as error:
         _raise_service_error(error)
@@ -1257,8 +1269,8 @@ def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
     )
 
 
-def _to_repair_order_detail_item(row: object) -> RepairOrderDetailItem:
-    from app.schemas.production import RepairCauseDetailItem, RepairDefectPhenomenonItem, RepairReturnRouteItem
+def _to_repair_order_detail_item(row: object, event_logs: list | None = None) -> RepairOrderDetailItem:
+    from app.schemas.production import RepairCauseDetailItem, RepairDefectPhenomenonItem, RepairEventLogItem, RepairReturnRouteItem
     return RepairOrderDetailItem(
         id=row.id,
         repair_order_code=row.repair_order_code,
@@ -1304,6 +1316,16 @@ def _to_repair_order_detail_item(row: object) -> RepairOrderDetailItem:
                 return_quantity=r.return_quantity,
             )
             for r in (row.return_routes or [])
+        ],
+        event_logs=[
+            RepairEventLogItem(
+                id=e.id,
+                event_type=e.event_type,
+                event_title=e.event_title,
+                event_detail=e.event_detail,
+                created_at=e.created_at,
+            )
+            for e in (event_logs or [])
         ],
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -1381,11 +1403,38 @@ def get_scrap_statistics_detail_api(
 ) -> ApiResponse[ScrapStatisticsDetailItem]:
     from sqlalchemy import select as sa_select
     from app.models.production_scrap_statistics import ProductionScrapStatistics
+    from app.schemas.production import ScrapRelatedRepairItem
     row = db.execute(
         sa_select(ProductionScrapStatistics).where(ProductionScrapStatistics.id == scrap_id)
     ).scalars().first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scrap statistics not found")
+
+    # 查询关联维修单（通过 order_id + process_id 匹配）
+    related_repairs: list[ScrapRelatedRepairItem] = []
+    if row.order_id is not None:
+        repair_filters = [RepairOrder.source_order_id == row.order_id]
+        if row.process_id is not None:
+            repair_filters.append(RepairOrder.source_order_process_id == row.process_id)
+        repair_rows = db.execute(
+            sa_select(RepairOrder)
+            .where(*repair_filters)
+            .order_by(RepairOrder.repair_time.desc())
+        ).scalars().all()
+        related_repairs = [
+            ScrapRelatedRepairItem(
+                id=r.id,
+                repair_order_code=r.repair_order_code,
+                status=r.status,
+                repair_quantity=r.repair_quantity,
+                repaired_quantity=r.repaired_quantity,
+                scrap_quantity=r.scrap_quantity,
+                repair_time=r.repair_time,
+                completed_at=r.completed_at,
+            )
+            for r in repair_rows
+        ]
+
     return success_response(
         ScrapStatisticsDetailItem(
             id=row.id,
@@ -1403,6 +1452,7 @@ def get_scrap_statistics_detail_api(
             applied_at=row.applied_at,
             created_at=row.created_at,
             updated_at=row.updated_at,
+            related_repair_orders=related_repairs,
         )
     )
 
@@ -1416,7 +1466,19 @@ def get_repair_order_detail_api(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(PERM_PROD_REPAIR_ORDERS_DETAIL)),
 ) -> ApiResponse[RepairOrderDetailItem]:
+    from app.models.order_event_log import OrderEventLog
     row = get_repair_order_by_id(db, repair_order_id=repair_order_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found")
-    return success_response(_to_repair_order_detail_item(row))
+
+    # 查询关联订单的事件日志
+    event_logs = []
+    if row.source_order_id is not None:
+        event_logs = db.execute(
+            select(OrderEventLog)
+            .where(OrderEventLog.order_id == row.source_order_id)
+            .order_by(OrderEventLog.created_at.desc())
+            .limit(50)
+        ).scalars().all()
+
+    return success_response(_to_repair_order_detail_item(row, event_logs=event_logs))

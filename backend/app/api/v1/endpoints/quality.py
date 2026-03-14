@@ -58,6 +58,9 @@ def get_first_articles_api(
     query_date: date | None = Query(default=None, alias="date"),
     keyword: str | None = Query(default=None),
     result: str | None = Query(default=None),
+    product_name: str | None = Query(default=None),
+    process_code: str | None = Query(default=None),
+    operator_username: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -69,6 +72,9 @@ def get_first_articles_api(
         query_date=target_date,
         keyword=keyword,
         result_filter=result,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
         page=page,
         page_size=page_size,
     )
@@ -106,6 +112,9 @@ def export_first_articles_api(
         query_date=payload.query_date or date.today(),
         keyword=payload.keyword,
         result_filter=payload.result,
+        product_name=payload.product_name,
+        process_code=payload.process_code,
+        operator_username=payload.operator_username,
     )
     return success_response(FirstArticleExportResult(**result))
 
@@ -140,6 +149,10 @@ def submit_disposition_api(
 def get_quality_overview_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    product_name: str | None = Query(default=None),
+    process_code: str | None = Query(default=None),
+    operator_username: str | None = Query(default=None),
+    result: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("quality.stats.overview")),
 ) -> ApiResponse[QualityStatsOverview]:
@@ -148,6 +161,10 @@ def get_quality_overview_api(
         db,
         start_date=start_date,
         end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result,
     )
     return success_response(QualityStatsOverview(**payload))
 
@@ -156,6 +173,10 @@ def get_quality_overview_api(
 def get_quality_process_stats_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    product_name: str | None = Query(default=None),
+    process_code: str | None = Query(default=None),
+    operator_username: str | None = Query(default=None),
+    result: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("quality.stats.processes")),
 ) -> ApiResponse[QualityProcessStatsResult]:
@@ -164,6 +185,10 @@ def get_quality_process_stats_api(
         db,
         start_date=start_date,
         end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result,
     )
     return success_response(QualityProcessStatsResult(items=[QualityProcessStatItem(**item) for item in rows]))
 
@@ -172,6 +197,10 @@ def get_quality_process_stats_api(
 def get_quality_operator_stats_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    product_name: str | None = Query(default=None),
+    process_code: str | None = Query(default=None),
+    operator_username: str | None = Query(default=None),
+    result: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("quality.stats.operators")),
 ) -> ApiResponse[QualityOperatorStatsResult]:
@@ -180,6 +209,10 @@ def get_quality_operator_stats_api(
         db,
         start_date=start_date,
         end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result,
     )
     return success_response(
         QualityOperatorStatsResult(items=[QualityOperatorStatItem(**item) for item in rows])
@@ -190,11 +223,23 @@ def get_quality_operator_stats_api(
 def get_quality_product_stats_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    product_name: str | None = Query(default=None),
+    process_code: str | None = Query(default=None),
+    operator_username: str | None = Query(default=None),
+    result: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("quality.stats.products")),
 ) -> ApiResponse[QualityProductStatsResult]:
     _validate_date_range(start_date, end_date)
-    rows = get_quality_product_stats(db, start_date=start_date, end_date=end_date)
+    rows = get_quality_product_stats(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result,
+    )
     return success_response(QualityProductStatsResult(items=[QualityProductStatItem(**item) for item in rows]))
 
 
@@ -205,7 +250,15 @@ def export_quality_stats_api(
     _: User = Depends(require_permission("quality.stats.export")),
 ) -> ApiResponse[QualityStatsExportResult]:
     _validate_date_range(payload.start_date, payload.end_date)
-    result = export_quality_stats_csv(db, start_date=payload.start_date, end_date=payload.end_date)
+    result = export_quality_stats_csv(
+        db,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        product_name=payload.product_name,
+        process_code=payload.process_code,
+        operator_username=payload.operator_username,
+        result_filter=payload.result,
+    )
     return success_response(QualityStatsExportResult(**result))
 
 

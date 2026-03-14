@@ -566,6 +566,9 @@ def get_maintenance_executions(
     keyword: str | None = Query(default=None),
     mine: bool = Query(default=False),
     mine_only: bool = Query(default=False),
+    due_date_start: date_type | None = Query(default=None),
+    due_date_end: date_type | None = Query(default=None),
+    stage_code: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("equipment.executions.list")),
 ) -> ApiResponse[MaintenanceWorkOrderListResult]:
@@ -589,6 +592,9 @@ def get_maintenance_executions(
             executor_user_id=None,
             start_date=None,
             end_date=None,
+            due_date_start=due_date_start,
+            due_date_end=due_date_end,
+            stage_code_filter=stage_code,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
