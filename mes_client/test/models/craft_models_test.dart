@@ -167,4 +167,30 @@ void main() {
     expect(sync.reasons.single.orderCode, 'PO-100');
     expect(update.syncResult.synced, 8);
   });
+
+  test('batch import result parses error details', () {
+    final result = CraftTemplateBatchImportResult.fromJson({
+      'total': 2,
+      'created': 1,
+      'updated': 0,
+      'skipped': 1,
+      'items': [
+        {
+          'template_id': 10,
+          'product_id': 20,
+          'product_name': '产品A',
+          'template_name': '模板A',
+          'action': 'created',
+          'lifecycle_status': 'draft',
+          'published_version': 0,
+        },
+      ],
+      'errors': ['第2条：找不到产品 999999'],
+    });
+
+    expect(result.created, 1);
+    expect(result.skipped, 1);
+    expect(result.errors, hasLength(1));
+    expect(result.errors.single, contains('第2条'));
+  });
 }

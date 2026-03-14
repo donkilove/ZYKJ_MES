@@ -7,9 +7,9 @@ import '../services/craft_service.dart';
 import '../widgets/locked_form_dialog.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
-enum _StageAction { edit, toggle, delete }
+enum _StageAction { edit, toggle, viewReference, delete }
 
-enum _ProcessAction { edit, toggle, delete }
+enum _ProcessAction { edit, toggle, viewReference, delete }
 
 class ProcessManagementPage extends StatefulWidget {
   const ProcessManagementPage({
@@ -514,15 +514,19 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     _StageAction action,
     CraftStageItem item,
   ) async {
-    if (!widget.canWrite) {
-      _showNoPermission();
-      return;
-    }
     switch (action) {
       case _StageAction.edit:
+        if (!widget.canWrite) {
+          _showNoPermission();
+          return;
+        }
         await _showStageDialog(existing: item);
         return;
       case _StageAction.toggle:
+        if (!widget.canWrite) {
+          _showNoPermission();
+          return;
+        }
         try {
           await _service.updateStage(
             stageId: item.id,
@@ -544,7 +548,14 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           }
         }
         return;
+      case _StageAction.viewReference:
+        _showStageReferenceDialog(item);
+        return;
       case _StageAction.delete:
+        if (!widget.canWrite) {
+          _showNoPermission();
+          return;
+        }
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -587,15 +598,19 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     _ProcessAction action,
     CraftProcessItem item,
   ) async {
-    if (!widget.canWrite) {
-      _showNoPermission();
-      return;
-    }
     switch (action) {
       case _ProcessAction.edit:
+        if (!widget.canWrite) {
+          _showNoPermission();
+          return;
+        }
         await _showProcessDialog(existing: item);
         return;
       case _ProcessAction.toggle:
+        if (!widget.canWrite) {
+          _showNoPermission();
+          return;
+        }
         try {
           await _service.updateProcess(
             processId: item.id,
@@ -617,7 +632,14 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           }
         }
         return;
+      case _ProcessAction.viewReference:
+        _showProcessReferenceDialog(item);
+        return;
       case _ProcessAction.delete:
+        if (!widget.canWrite) {
+          _showNoPermission();
+          return;
+        }
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -654,6 +676,52 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         }
         return;
     }
+  }
+
+  void _showStageReferenceDialog(CraftStageItem stage) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => _ReferenceDialog(
+        title: '工段引用分析：${stage.name}',
+        loader: () => _service
+            .getStageReferences(stageId: stage.id)
+            .then(
+              (r) => r.items
+                  .map(
+                    (e) => _RefEntry(
+                      e.refType,
+                      e.refName,
+                      '#${e.refId}',
+                      e.detail,
+                    ),
+                  )
+                  .toList(),
+            ),
+      ),
+    );
+  }
+
+  void _showProcessReferenceDialog(CraftProcessItem process) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => _ReferenceDialog(
+        title: '工序引用分析：${process.name}',
+        loader: () => _service
+            .getProcessReferences(processId: process.id)
+            .then(
+              (r) => r.items
+                  .map(
+                    (e) => _RefEntry(
+                      e.refType,
+                      e.refName,
+                      '#${e.refId}',
+                      e.detail,
+                    ),
+                  )
+                  .toList(),
+            ),
+      ),
+    );
   }
 
   Widget _buildHeaderLabel(
@@ -848,10 +916,24 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                               item,
                                                             );
                                                           },
-                                                          itemBuilder:
-                                                              (
-                                                                context,
-                                                              ) => const [
+                                                          itemBuilder: (context) {
+                                                            final items =
+                                                                <
+                                                                  PopupMenuEntry<
+                                                                    _StageAction
+                                                                  >
+                                                                >[
+                                                                  const PopupMenuItem(
+                                                                    value: _StageAction
+                                                                        .viewReference,
+                                                                    child: Text(
+                                                                      '查看引用',
+                                                                    ),
+                                                                  ),
+                                                                ];
+                                                            if (widget
+                                                                .canWrite) {
+                                                              items.addAll(const [
                                                                 PopupMenuItem(
                                                                   value:
                                                                       _StageAction
@@ -876,7 +958,10 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                                     '删除',
                                                                   ),
                                                                 ),
-                                                              ],
+                                                              ]);
+                                                            }
+                                                            return items;
+                                                          },
                                                         ),
                                                       ),
                                                     ],
@@ -961,28 +1046,52 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                               item,
                                                             );
                                                           },
-                                                          itemBuilder: (context) => const [
-                                                            PopupMenuItem(
-                                                              value:
-                                                                  _ProcessAction
-                                                                      .edit,
-                                                              child: Text('编辑'),
-                                                            ),
-                                                            PopupMenuItem(
-                                                              value:
-                                                                  _ProcessAction
-                                                                      .toggle,
-                                                              child: Text(
-                                                                '启用/停用',
-                                                              ),
-                                                            ),
-                                                            PopupMenuItem(
-                                                              value:
-                                                                  _ProcessAction
-                                                                      .delete,
-                                                              child: Text('删除'),
-                                                            ),
-                                                          ],
+                                                          itemBuilder: (context) {
+                                                            final items =
+                                                                <
+                                                                  PopupMenuEntry<
+                                                                    _ProcessAction
+                                                                  >
+                                                                >[
+                                                                  const PopupMenuItem(
+                                                                    value: _ProcessAction
+                                                                        .viewReference,
+                                                                    child: Text(
+                                                                      '查看引用',
+                                                                    ),
+                                                                  ),
+                                                                ];
+                                                            if (widget
+                                                                .canWrite) {
+                                                              items.addAll(const [
+                                                                PopupMenuItem(
+                                                                  value:
+                                                                      _ProcessAction
+                                                                          .edit,
+                                                                  child: Text(
+                                                                    '编辑',
+                                                                  ),
+                                                                ),
+                                                                PopupMenuItem(
+                                                                  value:
+                                                                      _ProcessAction
+                                                                          .toggle,
+                                                                  child: Text(
+                                                                    '启用/停用',
+                                                                  ),
+                                                                ),
+                                                                PopupMenuItem(
+                                                                  value:
+                                                                      _ProcessAction
+                                                                          .delete,
+                                                                  child: Text(
+                                                                    '删除',
+                                                                  ),
+                                                                ),
+                                                              ]);
+                                                            }
+                                                            return items;
+                                                          },
                                                         ),
                                                       ),
                                                     ],
@@ -1003,6 +1112,112 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RefEntry {
+  _RefEntry(this.refType, this.refName, this.refId, this.detail);
+  final String refType;
+  final String refName;
+  final String refId;
+  final String? detail;
+}
+
+class _ReferenceDialog extends StatefulWidget {
+  const _ReferenceDialog({required this.title, required this.loader});
+  final String title;
+  final Future<List<_RefEntry>> Function() loader;
+
+  @override
+  State<_ReferenceDialog> createState() => _ReferenceDialogState();
+}
+
+class _ReferenceDialogState extends State<_ReferenceDialog> {
+  bool _loading = true;
+  String _error = '';
+  List<_RefEntry> _items = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final items = await widget.loader();
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  String _refTypeLabel(String t) => switch (t) {
+    'process' => '工序',
+    'user' => '用户',
+    'template' => '工艺模板',
+    'system_master_template' => '系统母版',
+    'order' => '生产工单',
+    _ => t,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 480,
+        height: 360,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error.isNotEmpty
+            ? Text(
+                _error,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              )
+            : _items.isEmpty
+            ? const Center(child: Text('无引用记录，可安全删除'))
+            : ListView.separated(
+                itemCount: _items.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final e = _items[i];
+                  return ListTile(
+                    dense: true,
+                    leading: Chip(
+                      label: Text(
+                        _refTypeLabel(e.refType),
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    title: Text(e.refName),
+                    subtitle: e.detail != null ? Text(e.detail!) : null,
+                    trailing: Text(
+                      e.refId,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
     );
   }
 }

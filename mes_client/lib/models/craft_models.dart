@@ -5,6 +5,7 @@ class CraftStageItem {
     required this.name,
     required this.sortOrder,
     required this.isEnabled,
+    required this.processCount,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -14,6 +15,7 @@ class CraftStageItem {
   final String name;
   final int sortOrder;
   final bool isEnabled;
+  final int processCount;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -24,6 +26,7 @@ class CraftStageItem {
       name: (json['name'] as String?) ?? '',
       sortOrder: (json['sort_order'] as int?) ?? 0,
       isEnabled: (json['is_enabled'] as bool?) ?? true,
+      processCount: (json['process_count'] as int?) ?? 0,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -795,6 +798,7 @@ class CraftTemplateBatchImportResult {
     required this.updated,
     required this.skipped,
     required this.items,
+    required this.errors,
   });
 
   final int total;
@@ -802,6 +806,7 @@ class CraftTemplateBatchImportResult {
   final int updated;
   final int skipped;
   final List<CraftTemplateBatchImportResultItem> items;
+  final List<String> errors;
 
   factory CraftTemplateBatchImportResult.fromJson(Map<String, dynamic> json) {
     return CraftTemplateBatchImportResult(
@@ -815,6 +820,88 @@ class CraftTemplateBatchImportResult {
               entry as Map<String, dynamic>,
             ),
           )
+          .toList(),
+      errors: (json['errors'] as List<dynamic>? ?? const [])
+          .map((entry) => entry.toString())
+          .toList(),
+    );
+  }
+}
+
+class CraftReferenceItem {
+  CraftReferenceItem({
+    required this.refType,
+    required this.refId,
+    required this.refName,
+    required this.detail,
+  });
+
+  final String refType;
+  final int refId;
+  final String refName;
+  final String? detail;
+
+  factory CraftReferenceItem.fromJson(Map<String, dynamic> json) {
+    return CraftReferenceItem(
+      refType: (json['ref_type'] as String?) ?? '',
+      refId: (json['ref_id'] as int?) ?? 0,
+      refName: (json['ref_name'] as String?) ?? '',
+      detail: json['detail'] as String?,
+    );
+  }
+}
+
+class CraftStageReferenceResult {
+  CraftStageReferenceResult({
+    required this.stageId,
+    required this.stageCode,
+    required this.stageName,
+    required this.total,
+    required this.items,
+  });
+
+  final int stageId;
+  final String stageCode;
+  final String stageName;
+  final int total;
+  final List<CraftReferenceItem> items;
+
+  factory CraftStageReferenceResult.fromJson(Map<String, dynamic> json) {
+    return CraftStageReferenceResult(
+      stageId: (json['stage_id'] as int?) ?? 0,
+      stageCode: (json['stage_code'] as String?) ?? '',
+      stageName: (json['stage_name'] as String?) ?? '',
+      total: (json['total'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map((e) => CraftReferenceItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class CraftProcessReferenceResult {
+  CraftProcessReferenceResult({
+    required this.processId,
+    required this.processCode,
+    required this.processName,
+    required this.total,
+    required this.items,
+  });
+
+  final int processId;
+  final String processCode;
+  final String processName;
+  final int total;
+  final List<CraftReferenceItem> items;
+
+  factory CraftProcessReferenceResult.fromJson(Map<String, dynamic> json) {
+    return CraftProcessReferenceResult(
+      processId: (json['process_id'] as int?) ?? 0,
+      processCode: (json['process_code'] as String?) ?? '',
+      processName: (json['process_name'] as String?) ?? '',
+      total: (json['total'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map((e) => CraftReferenceItem.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }

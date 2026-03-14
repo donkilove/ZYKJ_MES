@@ -19,19 +19,30 @@ class _TemplateStepDraft {
   int processId;
 }
 
-enum _TemplateAction { edit, publish, impact, versions, delete }
+enum _TemplateAction {
+  edit,
+  publish,
+  copy,
+  archive,
+  unarchive,
+  impact,
+  versions,
+  delete,
+}
 
 class ProcessConfigurationPage extends StatefulWidget {
   const ProcessConfigurationPage({
     super.key,
     required this.session,
     required this.onLogout,
+    required this.canViewTemplates,
     required this.canManageTemplates,
     required this.canManageSystemMasterTemplate,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canViewTemplates;
   final bool canManageTemplates;
   final bool canManageSystemMasterTemplate;
 
@@ -71,6 +82,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   bool get _canManageSystemMasterTemplate {
     return widget.canManageSystemMasterTemplate;
   }
+
+  bool get _canViewTemplates => widget.canViewTemplates;
 
   bool get _canManageTemplates => widget.canManageTemplates;
 
@@ -237,7 +250,21 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
 
     List<_TemplateStepDraft> steps = [];
     if (isEdit) {
-      final detail = await _getTemplateDetail(existing.id);
+      CraftTemplateDetail detail;
+      try {
+        detail = await _getTemplateDetail(existing.id);
+      } catch (error) {
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+          return;
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+        }
+        return;
+      }
       steps = detail.steps
           .map(
             (item) => _TemplateStepDraft(
@@ -825,6 +852,137 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
   }
 
+  Future<void> _copyTemplate(CraftTemplateItem item) async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
+    final nameController = TextEditingController(
+      text: '${item.templateName} 副本',
+    );
+    final saved = await showLockedFormDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('复制模板'),
+          content: SizedBox(
+            width: 420,
+            child: TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: '新模板名称',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final newName = nameController.text.trim();
+                if (newName.isEmpty) {
+                  ScaffoldMessenger.of(
+                    dialogContext,
+                  ).showSnackBar(const SnackBar(content: Text('请输入新模板名称')));
+                  return;
+                }
+                try {
+                  await _craftService.copyTemplate(
+                    templateId: item.id,
+                    newName: newName,
+                  );
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop(true);
+                  }
+                } catch (error) {
+                  if (_isUnauthorized(error)) {
+                    widget.onLogout();
+                    return;
+                  }
+                  if (dialogContext.mounted) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      SnackBar(content: Text(_errorMessage(error))),
+                    );
+                  }
+                }
+              },
+              child: const Text('复制'),
+            ),
+          ],
+        );
+      },
+    );
+    nameController.dispose();
+    if (saved == true) {
+      await _loadData();
+    }
+  }
+
+  Future<void> _archiveTemplate(CraftTemplateItem item) async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('归档模板'),
+        content: Text('确认归档模板 ${item.templateName} 吗？归档后将无法用于新订单。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('归档'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      await _craftService.archiveTemplate(templateId: item.id);
+      await _loadData();
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
+    }
+  }
+
+  Future<void> _unarchiveTemplate(CraftTemplateItem item) async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
+    try {
+      await _craftService.unarchiveTemplate(templateId: item.id);
+      await _loadData();
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
+    }
+  }
+
   Future<void> _deleteTemplate(CraftTemplateItem item) async {
     if (!_canManageTemplates) {
       _showNoPermission();
@@ -958,6 +1116,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   Future<void> _showImpactAnalysisDialog(CraftTemplateItem item) async {
+    if (!_canViewTemplates) {
+      _showNoPermission();
+      return;
+    }
     try {
       final analysis = await _craftService.getTemplateImpactAnalysis(
         templateId: item.id,
@@ -1312,6 +1474,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   Future<void> _showVersionDialog(CraftTemplateItem item) async {
+    if (!_canViewTemplates) {
+      _showNoPermission();
+      return;
+    }
     CraftTemplateVersionListResult versions;
     try {
       versions = await _craftService.listTemplateVersions(templateId: item.id);
@@ -1522,9 +1688,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                             ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      '历史版本（点击回滚）',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    Text(
+                      _canManageTemplates ? '历史版本（点击回滚）' : '历史版本',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
                     Expanded(
@@ -1543,18 +1709,21 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                               '${version.createdAt.toLocal()}'
                               '${version.note != null && version.note!.trim().isNotEmpty ? ' · ${version.note}' : ''}',
                             ),
-                            trailing: FilledButton.tonal(
-                              onPressed: () async {
-                                final rolledBack = await _showRollbackDialog(
-                                  item: item,
-                                  targetVersion: version.version,
-                                );
-                                if (rolledBack && dialogContext.mounted) {
-                                  Navigator.of(dialogContext).pop(true);
-                                }
-                              },
-                              child: const Text('回滚'),
-                            ),
+                            trailing: _canManageTemplates
+                                ? FilledButton.tonal(
+                                    onPressed: () async {
+                                      final rolledBack =
+                                          await _showRollbackDialog(
+                                            item: item,
+                                            targetVersion: version.version,
+                                          );
+                                      if (rolledBack && dialogContext.mounted) {
+                                        Navigator.of(dialogContext).pop(true);
+                                      }
+                                    },
+                                    child: const Text('回滚'),
+                                  )
+                                : null,
                           );
                         },
                       ),
@@ -1743,7 +1912,37 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                             ),
                           ),
                         );
-                        Navigator.of(dialogContext).pop(true);
+                        if (result.errors.isNotEmpty) {
+                          await showDialog<void>(
+                            context: dialogContext,
+                            builder: (errorContext) => AlertDialog(
+                              title: Text('导入错误明细（${result.errors.length} 条）'),
+                              content: SizedBox(
+                                width: 720,
+                                height: 420,
+                                child: ListView.separated(
+                                  itemCount: result.errors.length,
+                                  separatorBuilder: (context, index) =>
+                                      const Divider(height: 1),
+                                  itemBuilder: (context, index) => ListTile(
+                                    dense: true,
+                                    title: Text(result.errors[index]),
+                                  ),
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(errorContext).pop(),
+                                  child: const Text('关闭'),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        if (dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop(true);
+                        }
                       }
                     } on FormatException catch (error) {
                       if (dialogContext.mounted) {
@@ -1782,24 +1981,61 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     _TemplateAction action,
     CraftTemplateItem item,
   ) async {
-    if (!_canManageTemplates) {
-      _showNoPermission();
-      return;
-    }
     switch (action) {
+      case _TemplateAction.copy:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _copyTemplate(item);
+        return;
+      case _TemplateAction.archive:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _archiveTemplate(item);
+        return;
+      case _TemplateAction.unarchive:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _unarchiveTemplate(item);
+        return;
       case _TemplateAction.edit:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
         await _showTemplateDialog(existing: item);
         return;
       case _TemplateAction.publish:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
         await _showPublishDialog(item);
         return;
       case _TemplateAction.impact:
+        if (!_canViewTemplates) {
+          _showNoPermission();
+          return;
+        }
         await _showImpactAnalysisDialog(item);
         return;
       case _TemplateAction.versions:
+        if (!_canViewTemplates) {
+          _showNoPermission();
+          return;
+        }
         await _showVersionDialog(item);
         return;
       case _TemplateAction.delete:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
         await _deleteTemplate(item);
         return;
     }
@@ -2067,34 +2303,83 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                                     item,
                                                   );
                                                 },
-                                                itemBuilder: (context) =>
-                                                    const [
-                                                      PopupMenuItem(
+                                                itemBuilder: (context) {
+                                                  final items =
+                                                      <
+                                                        PopupMenuEntry<
+                                                          _TemplateAction
+                                                        >
+                                                      >[];
+                                                  if (_canManageTemplates) {
+                                                    items.add(
+                                                      const PopupMenuItem(
                                                         value: _TemplateAction
                                                             .edit,
                                                         child: Text('编辑'),
                                                       ),
-                                                      PopupMenuItem(
+                                                    );
+                                                    items.add(
+                                                      const PopupMenuItem(
                                                         value: _TemplateAction
                                                             .publish,
                                                         child: Text('发布'),
                                                       ),
-                                                      PopupMenuItem(
+                                                    );
+                                                    items.add(
+                                                      const PopupMenuItem(
+                                                        value: _TemplateAction
+                                                            .copy,
+                                                        child: Text('复制'),
+                                                      ),
+                                                    );
+                                                    if (item.lifecycleStatus ==
+                                                        'published') {
+                                                      items.add(
+                                                        const PopupMenuItem(
+                                                          value: _TemplateAction
+                                                              .archive,
+                                                          child: Text('归档'),
+                                                        ),
+                                                      );
+                                                    }
+                                                    if (item.lifecycleStatus ==
+                                                        'archived') {
+                                                      items.add(
+                                                        const PopupMenuItem(
+                                                          value: _TemplateAction
+                                                              .unarchive,
+                                                          child: Text('取消归档'),
+                                                        ),
+                                                      );
+                                                    }
+                                                  }
+                                                  if (_canViewTemplates) {
+                                                    items.add(
+                                                      const PopupMenuItem(
                                                         value: _TemplateAction
                                                             .impact,
                                                         child: Text('影响分析'),
                                                       ),
-                                                      PopupMenuItem(
+                                                    );
+                                                    items.add(
+                                                      const PopupMenuItem(
                                                         value: _TemplateAction
                                                             .versions,
                                                         child: Text('版本管理'),
                                                       ),
-                                                      PopupMenuItem(
+                                                    );
+                                                  }
+                                                  if (_canManageTemplates) {
+                                                    items.add(
+                                                      const PopupMenuItem(
                                                         value: _TemplateAction
                                                             .delete,
                                                         child: Text('删除'),
                                                       ),
-                                                    ],
+                                                    );
+                                                  }
+                                                  return items;
+                                                },
                                               ),
                                         ),
                                       ],

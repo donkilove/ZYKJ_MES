@@ -4,17 +4,20 @@ import 'package:flutter/material.dart';
 import '../models/app_session.dart';
 import '../models/authz_models.dart';
 import 'craft_kanban_page.dart';
+import 'craft_reference_analysis_page.dart';
 import 'process_configuration_page.dart';
 import 'process_management_page.dart';
 
 const String processManagementTabCode = 'process_management';
 const String productionProcessConfigTabCode = 'production_process_config';
 const String craftKanbanTabCode = 'craft_kanban';
+const String craftReferenceAnalysisTabCode = 'craft_reference_analysis';
 
 const List<String> _defaultTabOrder = [
   processManagementTabCode,
   productionProcessConfigTabCode,
   craftKanbanTabCode,
+  craftReferenceAnalysisTabCode,
 ];
 
 class CraftPage extends StatefulWidget {
@@ -72,6 +75,10 @@ class _CraftPageState extends State<CraftPage>
   bool get _canManageTemplates =>
       _hasPermission(CraftFeaturePermissionCodes.processTemplatesManage);
 
+  bool get _canViewTemplates =>
+      _hasPermission(CraftFeaturePermissionCodes.processTemplatesView) ||
+      _canManageTemplates;
+
   bool get _canManageSystemMasterTemplate =>
       _hasPermission(CraftFeaturePermissionCodes.processTemplatesManage);
 
@@ -127,6 +134,8 @@ class _CraftPageState extends State<CraftPage>
         return '生产工序配置';
       case craftKanbanTabCode:
         return '工艺看板';
+      case craftReferenceAnalysisTabCode:
+        return '引用分析';
       default:
         return code;
     }
@@ -144,11 +153,17 @@ class _CraftPageState extends State<CraftPage>
         return ProcessConfigurationPage(
           session: widget.session,
           onLogout: widget.onLogout,
+          canViewTemplates: _canViewTemplates,
           canManageTemplates: _canManageTemplates,
           canManageSystemMasterTemplate: _canManageSystemMasterTemplate,
         );
       case craftKanbanTabCode:
         return CraftKanbanPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+        );
+      case craftReferenceAnalysisTabCode:
+        return CraftReferenceAnalysisPage(
           session: widget.session,
           onLogout: widget.onLogout,
         );

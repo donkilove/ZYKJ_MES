@@ -196,7 +196,9 @@ def list_stages(
 
     stmt = stmt.order_by(ProcessStage.sort_order.asc(), ProcessStage.id.asc())
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
-    rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+    rows = db.execute(
+        stmt.offset((page - 1) * page_size).limit(page_size).options(selectinload(ProcessStage.processes))
+    ).scalars().all()
     return int(total), rows
 
 
@@ -211,6 +213,9 @@ def create_stage(
     normalized_name = _normalize_text(name, field_name="Stage name")
     if get_stage_by_code(db, normalized_code):
         raise ValueError("Stage code already exists")
+    existing_name = db.execute(select(ProcessStage).where(ProcessStage.name == normalized_name)).scalars().first()
+    if existing_name:
+        raise ValueError("Stage name already exists")
 
     row = ProcessStage(
         code=normalized_code,
@@ -240,7 +245,12 @@ def update_stage(
             if existing:
                 raise ValueError("Stage code already exists")
             row.code = normalized_code
-    row.name = _normalize_text(name, field_name="Stage name")
+    normalized_name = _normalize_text(name, field_name="Stage name")
+    if normalized_name != row.name:
+        existing_name = db.execute(select(ProcessStage).where(ProcessStage.name == normalized_name)).scalars().first()
+        if existing_name:
+            raise ValueError("Stage name already exists")
+    row.name = normalized_name
     row.sort_order = sort_order
     row.is_enabled = is_enabled
     db.commit()
@@ -259,9 +269,21 @@ def delete_stage(db: Session, *, row: ProcessStage) -> None:
     )
     if template_ref is not None:
         raise ValueError("Stage is referenced by templates")
+    system_master_ref = (
+        db.execute(
+            select(CraftSystemMasterTemplateStep.id).where(CraftSystemMasterTemplateStep.stage_id == row.id).limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if system_master_ref is not None:
+        raise ValueError("Stage is referenced by system master template")
     order_ref = db.execute(select(ProductionOrderProcess.id).where(ProductionOrderProcess.stage_id == row.id).limit(1)).scalars().first()
     if order_ref is not None:
         raise ValueError("Stage is referenced by orders")
+    user_ref = db.execute(select(User.id).where(User.stage_id == row.id).limit(1)).scalars().first()
+    if user_ref is not None:
+        raise ValueError("Stage is referenced by users")
     db.delete(row)
     db.commit()
 
@@ -350,6 +372,15 @@ def delete_process(db: Session, *, row: Process) -> None:
     )
     if template_ref is not None:
         raise ValueError("Process is referenced by templates")
+    system_master_ref = (
+        db.execute(
+            select(CraftSystemMasterTemplateStep.id).where(CraftSystemMasterTemplateStep.process_id == row.id).limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if system_master_ref is not None:
+        raise ValueError("Process is referenced by system master template")
     order_ref = db.execute(select(ProductionOrderProcess.id).where(ProductionOrderProcess.process_id == row.id).limit(1)).scalars().first()
     if order_ref is not None:
         raise ValueError("Process is referenced by orders")
@@ -1357,20 +1388,34 @@ def get_craft_kanban_process_metrics(
     *,
     product_id: int,
     limit: int = 5,
+    stage_id: int | None = None,
+    process_id: int | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
 ) -> CraftKanbanProcessMetricsResult:
     normalized_limit = max(1, min(int(limit), 20))
     product = db.execute(select(Product).where(Product.id == product_id)).scalars().first()
     if product is None:
         raise ValueError("Product not found")
 
+    filters = [
+        ProductionOrder.product_id == product_id,
+        ProductionOrderProcess.status == PROCESS_STATUS_COMPLETED,
+    ]
+    if stage_id is not None:
+        filters.append(ProductionOrderProcess.stage_id == stage_id)
+    if process_id is not None:
+        filters.append(ProductionOrderProcess.process_id == process_id)
+    if start_date is not None:
+        filters.append(ProductionOrderProcess.updated_at >= _normalize_kanban_datetime(start_date))
+    if end_date is not None:
+        filters.append(ProductionOrderProcess.updated_at <= _normalize_kanban_datetime(end_date))
+
     completed_rows = (
         db.execute(
             select(ProductionOrderProcess)
             .join(ProductionOrder, ProductionOrder.id == ProductionOrderProcess.order_id)
-            .where(
-                ProductionOrder.product_id == product_id,
-                ProductionOrderProcess.status == PROCESS_STATUS_COMPLETED,
-            )
+            .where(*filters)
             .options(
                 selectinload(ProductionOrderProcess.order),
                 selectinload(ProductionOrderProcess.production_records),
@@ -1465,107 +1510,120 @@ def import_templates(
     overwrite_existing: bool,
     publish_after_import: bool,
     operator: User,
-) -> tuple[list[ProductProcessTemplate], int, int, int]:
+) -> tuple[list[ProductProcessTemplate], int, int, int, list[str]]:
     created = 0
     updated = 0
     skipped = 0
+    errors: list[str] = []
     touched_rows: list[ProductProcessTemplate] = []
 
-    for item in items:
-        raw_product_id = item.get("product_id")
-        raw_product_name = str(item.get("product_name") or "").strip()
-        if raw_product_id is not None:
-            product = db.execute(select(Product).where(Product.id == int(raw_product_id))).scalars().first()
-        elif raw_product_name:
-            product = db.execute(select(Product).where(Product.name == raw_product_name)).scalars().first()
-        else:
-            raise ValueError("Either product_id or product_name is required for import")
-        if product is None:
-            raise ValueError(f"Product not found for import item: {raw_product_name or raw_product_id}")
+    for idx, item in enumerate(items):
+        item_label = f"第{idx + 1}条"
+        try:
+            with db.begin_nested():
+                raw_product_id = item.get("product_id")
+                raw_product_name = str(item.get("product_name") or "").strip()
+                if raw_product_id is not None:
+                    product = db.execute(select(Product).where(Product.id == int(raw_product_id))).scalars().first()
+                elif raw_product_name:
+                    product = db.execute(select(Product).where(Product.name == raw_product_name)).scalars().first()
+                else:
+                    errors.append(f"{item_label}：product_id 或 product_name 不能同时为空")
+                    skipped += 1
+                    continue
+                if product is None:
+                    errors.append(f"{item_label}：找不到产品 {raw_product_name or raw_product_id}")
+                    skipped += 1
+                    continue
 
-        template_name = _normalize_text(str(item.get("template_name") or ""), field_name="Template name")
-        existing = (
-            db.execute(
-                select(ProductProcessTemplate)
-                .where(
-                    ProductProcessTemplate.product_id == product.id,
-                    ProductProcessTemplate.template_name == template_name,
+                template_name = _normalize_text(str(item.get("template_name") or ""), field_name="Template name")
+                existing = (
+                    db.execute(
+                        select(ProductProcessTemplate)
+                        .where(
+                            ProductProcessTemplate.product_id == product.id,
+                            ProductProcessTemplate.template_name == template_name,
+                        )
+                        .options(selectinload(ProductProcessTemplate.steps))
+                        .order_by(ProductProcessTemplate.id.desc())
+                    )
+                    .scalars()
+                    .first()
                 )
-                .options(selectinload(ProductProcessTemplate.steps))
-                .order_by(ProductProcessTemplate.id.desc())
-            )
-            .scalars()
-            .first()
-        )
-        if existing is not None and not overwrite_existing:
+                if existing is not None and not overwrite_existing:
+                    skipped += 1
+                    continue
+
+                lifecycle_status = _normalize_template_lifecycle_status(
+                    TEMPLATE_LIFECYCLE_PUBLISHED if publish_after_import else str(item.get("lifecycle_status") or "draft")
+                )
+                is_published = lifecycle_status == TEMPLATE_LIFECYCLE_PUBLISHED
+                is_default = bool(item.get("is_default", False))
+                is_enabled = bool(item.get("is_enabled", True))
+                steps = item.get("steps")
+                if not isinstance(steps, list):
+                    errors.append(f"{item_label}（{template_name}）：steps 必须是列表")
+                    skipped += 1
+                    continue
+                step_payload = _build_template_steps_payload([dict(step) for step in steps])
+                step_processes = _load_template_step_process_map(db, steps=step_payload)
+
+                if existing is None:
+                    row = ProductProcessTemplate(
+                        product_id=product.id,
+                        template_name=template_name,
+                        version=1,
+                        lifecycle_status=lifecycle_status,
+                        published_version=1 if is_published else 0,
+                        is_default=is_default,
+                        is_enabled=is_enabled,
+                        created_by_user_id=operator.id,
+                        updated_by_user_id=operator.id,
+                    )
+                    db.add(row)
+                    db.flush()
+                    _replace_template_steps(db, template=row, steps=step_processes)
+                    if is_published:
+                        _create_template_revision_snapshot(
+                            db,
+                            template=row,
+                            operator=operator,
+                            action="import",
+                            note="Batch import",
+                        )
+                        if row.is_default and row.is_enabled:
+                            _set_product_default_template(db, product_id=row.product_id, template_id=row.id)
+                    touched_rows.append(row)
+                    created += 1
+                    continue
+
+                existing.is_default = is_default
+                existing.is_enabled = is_enabled
+                existing.lifecycle_status = lifecycle_status
+                existing.version += 1
+                existing.updated_by_user_id = operator.id
+                if is_published:
+                    existing.published_version = max(existing.published_version, 0) + 1
+                _replace_template_steps(db, template=existing, steps=step_processes)
+                if is_published:
+                    _create_template_revision_snapshot(
+                        db,
+                        template=existing,
+                        operator=operator,
+                        action="import",
+                        note="Batch import overwrite",
+                    )
+                    if existing.is_default and existing.is_enabled:
+                        _set_product_default_template(db, product_id=existing.product_id, template_id=existing.id)
+
+                touched_rows.append(existing)
+                updated += 1
+        except ValueError as exc:
+            errors.append(f"{item_label}：{exc}")
             skipped += 1
-            continue
-
-        lifecycle_status = _normalize_template_lifecycle_status(
-            TEMPLATE_LIFECYCLE_PUBLISHED if publish_after_import else str(item.get("lifecycle_status") or "draft")
-        )
-        is_published = lifecycle_status == TEMPLATE_LIFECYCLE_PUBLISHED
-        is_default = bool(item.get("is_default", False))
-        is_enabled = bool(item.get("is_enabled", True))
-        steps = item.get("steps")
-        if not isinstance(steps, list):
-            raise ValueError("steps must be a list")
-        step_payload = _build_template_steps_payload([dict(step) for step in steps])
-        step_processes = _load_template_step_process_map(db, steps=step_payload)
-
-        if existing is None:
-            row = ProductProcessTemplate(
-                product_id=product.id,
-                template_name=template_name,
-                version=1,
-                lifecycle_status=lifecycle_status,
-                published_version=1 if is_published else 0,
-                is_default=is_default,
-                is_enabled=is_enabled,
-                created_by_user_id=operator.id,
-                updated_by_user_id=operator.id,
-            )
-            db.add(row)
-            db.flush()
-            _replace_template_steps(db, template=row, steps=step_processes)
-            if is_published:
-                _create_template_revision_snapshot(
-                    db,
-                    template=row,
-                    operator=operator,
-                    action="import",
-                    note="Batch import",
-                )
-                if row.is_default and row.is_enabled:
-                    _set_product_default_template(db, product_id=row.product_id, template_id=row.id)
-            touched_rows.append(row)
-            created += 1
-            continue
-
-        existing.is_default = is_default
-        existing.is_enabled = is_enabled
-        existing.lifecycle_status = lifecycle_status
-        existing.version += 1
-        existing.updated_by_user_id = operator.id
-        if is_published:
-            existing.published_version = max(existing.published_version, 0) + 1
-        _replace_template_steps(db, template=existing, steps=step_processes)
-        if is_published:
-            _create_template_revision_snapshot(
-                db,
-                template=existing,
-                operator=operator,
-                action="import",
-                note="Batch import overwrite",
-            )
-            if existing.is_default and existing.is_enabled:
-                _set_product_default_template(db, product_id=existing.product_id, template_id=existing.id)
-
-        touched_rows.append(existing)
-        updated += 1
 
     db.commit()
-    return touched_rows, created, updated, skipped
+    return touched_rows, created, updated, skipped, errors
 
 
 def delete_template(db: Session, *, template: ProductProcessTemplate) -> None:
@@ -1583,6 +1641,94 @@ def delete_template(db: Session, *, template: ProductProcessTemplate) -> None:
         raise ValueError("Template is referenced by unfinished orders")
     db.delete(template)
     db.commit()
+
+
+def copy_template(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+    new_name: str,
+    operator: User,
+) -> ProductProcessTemplate:
+    normalized_name = _normalize_text(new_name, field_name="Template name")
+    existing_name = (
+        db.execute(
+            select(ProductProcessTemplate).where(
+                ProductProcessTemplate.product_id == template.product_id,
+                ProductProcessTemplate.template_name == normalized_name,
+                ProductProcessTemplate.is_enabled.is_(True),
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if existing_name:
+        raise ValueError("Template name already exists under this product")
+
+    row = ProductProcessTemplate(
+        product_id=template.product_id,
+        template_name=normalized_name,
+        version=1,
+        lifecycle_status=TEMPLATE_LIFECYCLE_DRAFT,
+        published_version=0,
+        is_default=False,
+        is_enabled=True,
+        created_by_user_id=operator.id,
+        updated_by_user_id=operator.id,
+    )
+    db.add(row)
+    db.flush()
+
+    sorted_steps = sorted(template.steps, key=lambda item: (item.step_order, item.id))
+    for step in sorted_steps:
+        row.steps.append(
+            ProductProcessTemplateStep(
+                step_order=step.step_order,
+                stage_id=step.stage_id,
+                stage_code=step.stage_code,
+                stage_name=step.stage_name,
+                process_id=step.process_id,
+                process_code=step.process_code,
+                process_name=step.process_name,
+            )
+        )
+    db.flush()
+    db.commit()
+    db.refresh(row)
+    return get_template_by_id(db, row.id) or row
+
+
+def archive_template(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+    operator: User,
+) -> ProductProcessTemplate:
+    if template.lifecycle_status == TEMPLATE_LIFECYCLE_ARCHIVED:
+        raise ValueError("Template is already archived")
+    if template.lifecycle_status != TEMPLATE_LIFECYCLE_PUBLISHED:
+        raise ValueError("Only published templates can be archived")
+    template.lifecycle_status = TEMPLATE_LIFECYCLE_ARCHIVED
+    template.is_default = False
+    template.updated_by_user_id = operator.id
+    db.commit()
+    db.refresh(template)
+    return get_template_by_id(db, template.id) or template
+
+
+def unarchive_template(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+    operator: User,
+) -> ProductProcessTemplate:
+    if template.lifecycle_status != TEMPLATE_LIFECYCLE_ARCHIVED:
+        raise ValueError("Template is not archived")
+    template.lifecycle_status = TEMPLATE_LIFECYCLE_PUBLISHED
+    template.updated_by_user_id = operator.id
+    db.commit()
+    db.refresh(template)
+    return get_template_by_id(db, template.id) or template
 
 
 def is_valid_stage_code(db: Session, code: str) -> bool:
@@ -1624,3 +1770,187 @@ def resolve_user_stage_codes(db: Session, *, process_codes: list[str]) -> set[st
         .all()
     )
     return {row for row in rows if row}
+
+
+@dataclass(slots=True)
+class ReferenceItem:
+    ref_type: str
+    ref_id: int
+    ref_name: str
+    detail: str | None = None
+
+
+@dataclass(slots=True)
+class StageReferenceResult:
+    stage_id: int
+    stage_code: str
+    stage_name: str
+    total: int
+    items: list[ReferenceItem]
+
+
+@dataclass(slots=True)
+class ProcessReferenceResult:
+    process_id: int
+    process_code: str
+    process_name: str
+    total: int
+    items: list[ReferenceItem]
+
+
+def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceResult:
+    items: list[ReferenceItem] = []
+
+    processes = db.execute(
+        select(Process).where(Process.stage_id == stage.id).order_by(Process.id.asc())
+    ).scalars().all()
+    for p in processes:
+        items.append(ReferenceItem(ref_type="process", ref_id=p.id, ref_name=p.name, detail=p.code))
+
+    users = db.execute(
+        select(User).where(User.stage_id == stage.id, User.is_deleted.is_(False)).order_by(User.id.asc())
+    ).scalars().all()
+    for u in users:
+        items.append(ReferenceItem(ref_type="user", ref_id=u.id, ref_name=u.username, detail=u.full_name))
+
+    system_master_template_ids = (
+        db.execute(
+            select(CraftSystemMasterTemplateStep.template_id)
+            .where(CraftSystemMasterTemplateStep.stage_id == stage.id)
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+    if system_master_template_ids:
+        system_master_templates = db.execute(
+            select(CraftSystemMasterTemplate)
+            .where(CraftSystemMasterTemplate.id.in_(system_master_template_ids))
+            .order_by(CraftSystemMasterTemplate.id.asc())
+        ).scalars().all()
+        for template in system_master_templates:
+            items.append(
+                ReferenceItem(
+                    ref_type="system_master_template",
+                    ref_id=template.id,
+                    ref_name="system_master_template",
+                    detail=f"v{template.version}",
+                )
+            )
+
+    template_step_ids = (
+        db.execute(
+            select(ProductProcessTemplateStep.template_id)
+            .where(ProductProcessTemplateStep.stage_id == stage.id)
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+    if template_step_ids:
+        templates = db.execute(
+            select(ProductProcessTemplate)
+            .where(ProductProcessTemplate.id.in_(template_step_ids))
+            .order_by(ProductProcessTemplate.id.asc())
+        ).scalars().all()
+        for t in templates:
+            items.append(ReferenceItem(ref_type="template", ref_id=t.id, ref_name=t.template_name, detail=t.lifecycle_status))
+
+    order_process_ids = (
+        db.execute(
+            select(ProductionOrderProcess.order_id)
+            .where(ProductionOrderProcess.stage_id == stage.id)
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+    if order_process_ids:
+        orders = db.execute(
+            select(ProductionOrder)
+            .where(ProductionOrder.id.in_(order_process_ids))
+            .order_by(ProductionOrder.id.asc())
+        ).scalars().all()
+        for o in orders:
+            items.append(ReferenceItem(ref_type="order", ref_id=o.id, ref_name=o.order_code, detail=o.status))
+
+    return StageReferenceResult(
+        stage_id=stage.id,
+        stage_code=stage.code,
+        stage_name=stage.name,
+        total=len(items),
+        items=items,
+    )
+
+
+def get_process_references(db: Session, *, process: Process) -> ProcessReferenceResult:
+    items: list[ReferenceItem] = []
+
+    system_master_template_ids = (
+        db.execute(
+            select(CraftSystemMasterTemplateStep.template_id)
+            .where(CraftSystemMasterTemplateStep.process_id == process.id)
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+    if system_master_template_ids:
+        system_master_templates = db.execute(
+            select(CraftSystemMasterTemplate)
+            .where(CraftSystemMasterTemplate.id.in_(system_master_template_ids))
+            .order_by(CraftSystemMasterTemplate.id.asc())
+        ).scalars().all()
+        for template in system_master_templates:
+            items.append(
+                ReferenceItem(
+                    ref_type="system_master_template",
+                    ref_id=template.id,
+                    ref_name="system_master_template",
+                    detail=f"v{template.version}",
+                )
+            )
+
+    template_step_ids = (
+        db.execute(
+            select(ProductProcessTemplateStep.template_id)
+            .where(ProductProcessTemplateStep.process_id == process.id)
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+    if template_step_ids:
+        templates = db.execute(
+            select(ProductProcessTemplate)
+            .where(ProductProcessTemplate.id.in_(template_step_ids))
+            .order_by(ProductProcessTemplate.id.asc())
+        ).scalars().all()
+        for t in templates:
+            items.append(ReferenceItem(ref_type="template", ref_id=t.id, ref_name=t.template_name, detail=t.lifecycle_status))
+
+    order_process_ids = (
+        db.execute(
+            select(ProductionOrderProcess.order_id)
+            .where(ProductionOrderProcess.process_id == process.id)
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+    if order_process_ids:
+        orders = db.execute(
+            select(ProductionOrder)
+            .where(ProductionOrder.id.in_(order_process_ids))
+            .order_by(ProductionOrder.id.asc())
+        ).scalars().all()
+        for o in orders:
+            items.append(ReferenceItem(ref_type="order", ref_id=o.id, ref_name=o.order_code, detail=o.status))
+
+    return ProcessReferenceResult(
+        process_id=process.id,
+        process_code=process.code,
+        process_name=process.name,
+        total=len(items),
+        items=items,
+    )
