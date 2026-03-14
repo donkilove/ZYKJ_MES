@@ -9,6 +9,8 @@ from app.api.deps import require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
+from app.services.audit_service import write_audit_log
+from app.services.message_service import create_message_for_users
 from app.schemas.quality import (
     FirstArticleDetail,
     FirstArticleDispositionRequest,
@@ -142,6 +144,49 @@ def submit_disposition_api(
     detail = get_first_article_by_id(db, record_id=record_id)
     if detail is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="首件记录不存在")
+
+    _judgment_label = {
+        "accept": "接受",
+        "reject": "拒绝",
+        "rework": "返工",
+        "scrap": "报废",
+    }.get(payload.final_judgment, payload.final_judgment)
+    write_audit_log(
+        db,
+        action_code="quality.first_article.disposition",
+        action_name="首件处置",
+        target_type="first_article_record",
+        target_id=str(record_id),
+        target_name=f"{detail.get('order_code', '')} / {detail.get('process_name', '')}",
+        operator=current_user,
+        after_data={
+            "final_judgment": payload.final_judgment,
+            "final_judgment_label": _judgment_label,
+            "disposition_opinion": payload.disposition_opinion,
+            "recheck_result": payload.recheck_result,
+        },
+    )
+    db.commit()
+
+    if payload.final_judgment != "accept":
+        operator_user_id = detail.get("operator_user_id")
+        if operator_user_id and operator_user_id != current_user.id:
+            create_message_for_users(
+                db,
+                message_type="notice",
+                priority="normal",
+                title=f"首件处置结果：{_judgment_label} — {detail.get('order_code', '')} / {detail.get('process_name', '')}",
+                summary=f"{current_user.username} 处置意见：{payload.disposition_opinion or ''}，最终判定：{_judgment_label}",
+                source_module="quality",
+                source_type="first_article_record",
+                source_id=str(record_id),
+                source_code=detail.get("order_code"),
+                target_page_code="quality_first_articles",
+                recipient_user_ids=[operator_user_id],
+                dedupe_key=f"first_article_disposition_{record_id}_{payload.final_judgment}",
+                created_by_user_id=current_user.id,
+            )
+
     return success_response(FirstArticleDetail(**detail))
 
 

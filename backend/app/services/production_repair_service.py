@@ -34,6 +34,7 @@ from app.models.repair_return_route import RepairReturnRoute
 from app.models.user import User
 from app.services.production_event_log_service import add_order_event_log
 from app.services.production_order_service import ensure_sub_orders_visible_quantity
+from app.services.message_service import create_message_for_users
 
 
 REPAIR_STATUS_FILTER_ALL = "all"
@@ -551,6 +552,28 @@ def complete_repair_order(
 
     db.commit()
     db.refresh(repair_row)
+
+    # 通知订单相关操作员：维修完成
+    if repair_row.source_order_id and repair_row.requester_user_id:
+        create_message_for_users(
+            db,
+            message_type="notice",
+            priority="normal",
+            title=f"维修单已完成：{repair_row.repair_order_code}",
+            summary=(
+                f"订单 {repair_row.source_order_code or ''} / {repair_row.source_process_name or ''} "
+                f"维修完成，回流 {repaired_quantity}，报废 {scrap_quantity}"
+            ),
+            source_module="production",
+            source_type="repair_order",
+            source_id=str(repair_row.id),
+            source_code=repair_row.repair_order_code,
+            target_page_code="production_repair_orders",
+            recipient_user_ids=[repair_row.requester_user_id],
+            dedupe_key=f"repair_complete_{repair_row.id}",
+            created_by_user_id=operator.id,
+        )
+
     return repair_row
 
 

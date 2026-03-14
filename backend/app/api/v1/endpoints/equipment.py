@@ -12,6 +12,7 @@ from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
+from app.services.audit_service import write_audit_log
 from app.schemas.equipment import (
     EquipmentDetailResult,
     EquipmentLedgerItem,
@@ -213,7 +214,7 @@ def get_equipment_ledger(
 def create_equipment_ledger(
     payload: EquipmentLedgerUpsertRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("equipment.ledger.create")),
+    current_user: User = Depends(require_permission("equipment.ledger.create")),
 ) -> ApiResponse[EquipmentLedgerItem]:
     try:
         row = create_equipment(
@@ -228,6 +229,17 @@ def create_equipment_ledger(
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
+    write_audit_log(
+        db,
+        action_code="equipment.ledger.create",
+        action_name="新增设备台账",
+        target_type="equipment",
+        target_id=str(row.id),
+        target_name=row.name,
+        operator=current_user,
+        after_data={"code": row.code, "name": row.name, "model": row.model},
+    )
+    db.commit()
     return success_response(to_equipment_item(row), message="created")
 
 
@@ -290,15 +302,28 @@ def disable_equipment_ledger(
 def delete_equipment_ledger(
     equipment_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("equipment.ledger.delete")),
+    current_user: User = Depends(require_permission("equipment.ledger.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     row = get_equipment_by_id(db, equipment_id)
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipment not found")
+    _name = row.name
+    _code = row.code
     try:
         delete_equipment(db, row=row)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="equipment.ledger.delete",
+        action_name="删除设备台账",
+        target_type="equipment",
+        target_id=str(equipment_id),
+        target_name=_name,
+        operator=current_user,
+        after_data={"code": _code, "name": _name},
+    )
+    db.commit()
     return success_response({"deleted": True}, message="deleted")
 
 
@@ -664,6 +689,17 @@ def complete_maintenance_execution(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="equipment.work_order.complete",
+        action_name="完成保养工单",
+        target_type="maintenance_work_order",
+        target_id=str(work_order_id),
+        target_name=f"{updated.equipment.name if updated.equipment else ''} / {updated.item.name if updated.item else ''}",
+        operator=current_user,
+        after_data={"result_summary": payload.result_summary, "result_remark": payload.result_remark},
+    )
+    db.commit()
     return success_response(to_work_order_item(updated), message="completed")
 
 
@@ -802,6 +838,17 @@ def cancel_maintenance_execution(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="equipment.work_order.cancel",
+        action_name="取消保养工单",
+        target_type="maintenance_work_order",
+        target_id=str(work_order_id),
+        target_name=f"{updated.equipment.name if updated.equipment else ''} / {updated.item.name if updated.item else ''}",
+        operator=current_user,
+        after_data={"status": "cancelled"},
+    )
+    db.commit()
     return success_response(to_work_order_item(updated), message="cancelled")
 
 

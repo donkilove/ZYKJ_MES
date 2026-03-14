@@ -14,6 +14,7 @@ from app.models.production_sub_order import ProductionSubOrder
 from app.models.user import User
 from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
+from app.services.message_service import create_message_for_users
 
 ASSIST_STATUS_PENDING = "pending"
 ASSIST_STATUS_APPROVED = "approved"
@@ -295,6 +296,31 @@ def review_assist_authorization(
     )
     db.commit()
     db.refresh(row)
+
+    # 通知申请人审批结果
+    if row.requester_user_id:
+        if approve:
+            msg_title = f"代班申请已通过：{row.order_code or ''} / {row.process_name or ''}"
+            msg_summary = f"{reviewer.username} 审批通过，{row.helper.username if row.helper else ''} 可代班执行"
+        else:
+            msg_title = f"代班申请已拒绝：{row.order_code or ''} / {row.process_name or ''}"
+            msg_summary = f"{reviewer.username} 拒绝代班申请，原因：{row.review_remark or '无'}"
+        create_message_for_users(
+            db,
+            message_type="todo" if approve else "notice",
+            priority="normal",
+            title=msg_title,
+            summary=msg_summary,
+            source_module="production",
+            source_type="assist_authorization",
+            source_id=str(row.id),
+            source_code=row.order_code,
+            target_page_code="production_order_query",
+            recipient_user_ids=[row.requester_user_id],
+            dedupe_key=f"assist_auth_review_{row.id}",
+            created_by_user_id=reviewer.id,
+        )
+
     return row
 
 
