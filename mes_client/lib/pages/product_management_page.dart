@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/product_models.dart';
