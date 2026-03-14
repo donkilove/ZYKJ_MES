@@ -21,6 +21,10 @@ class _FakeProductionOrderManagementService extends ProductionService {
     String? status,
     String? productName,
     bool? pipelineEnabled,
+    DateTime? startDateFrom,
+    DateTime? startDateTo,
+    DateTime? dueDateFrom,
+    DateTime? dueDateTo,
   }) async {
     return ProductionOrderListResult(
       total: 1,
@@ -30,6 +34,7 @@ class _FakeProductionOrderManagementService extends ProductionService {
           orderCode: 'PO-1',
           productId: 1,
           productName: '产品A',
+          productVersion: null,
           quantity: 10,
           status: 'pending',
           currentProcessCode: '01-01',
@@ -76,7 +81,12 @@ class _FakeProductionOrderManagementService extends ProductionService {
     String? status,
     String? productName,
     bool? pipelineEnabled,
+    DateTime? startDateFrom,
+    DateTime? startDateTo,
+    DateTime? dueDateFrom,
+    DateTime? dueDateTo,
   }) async {
+
     return {
       'file_name': 'orders_export.csv',
       'content_base64': base64Encode(const [1, 2, 3]),

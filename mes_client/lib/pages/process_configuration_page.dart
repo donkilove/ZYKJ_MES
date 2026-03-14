@@ -949,7 +949,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<int>(
-                      value: selectedProductId,
+                      initialValue: selectedProductId,
                       decoration: const InputDecoration(
                         labelText: '目标产品',
                         border: OutlineInputBorder(),
@@ -1043,7 +1043,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<int>(
-                      value: selectedProductId,
+                      initialValue: selectedProductId,
                       decoration: const InputDecoration(
                         labelText: '目标产品',
                         border: OutlineInputBorder(),

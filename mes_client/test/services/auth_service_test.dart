@@ -67,11 +67,11 @@ void main() {
       final accounts = await service.listAccounts(baseUrl: server.baseUrl);
       final currentUser = await service.getCurrentUser(
         baseUrl: server.baseUrl,
-        accessToken: token,
+        accessToken: token.token,
       );
-      await service.logout(baseUrl: server.baseUrl, accessToken: token);
+      await service.logout(baseUrl: server.baseUrl, accessToken: token.token);
 
-      expect(token, 'token-abc');
+      expect(token.token, 'token-abc');
       expect(accounts, ['admin', 'worker']);
       expect(currentUser.displayName, '管理员');
       expect(server.requests.length, 5);

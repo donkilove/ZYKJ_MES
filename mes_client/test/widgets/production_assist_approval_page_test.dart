@@ -17,6 +17,12 @@ class _FakeAssistApprovalService extends ProductionService {
     required int page,
     required int pageSize,
     String? status,
+    DateTime? createdAtFrom,
+    DateTime? createdAtTo,
+    String? helperUsername,
+    String? orderCode,
+    String? processName,
+    String? requesterUsername,
   }) async {
     return AssistAuthorizationListResult(
       total: 1,

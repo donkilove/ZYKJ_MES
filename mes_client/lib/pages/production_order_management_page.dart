@@ -738,10 +738,10 @@ class _ProductionOrderManagementPageState
                   '开始日期：${_startDateFrom == null ? '不限' : _formatDate(_startDateFrom)} ~ ${_startDateTo == null ? '不限' : _formatDate(_startDateTo)}',
                 ),
                 onPressed: () async {
-                  final ctx = context;
-                  final from = await _pickDate(ctx, _startDateFrom);
+                  final from = await _pickDate(context, _startDateFrom);
                   if (from == null || !mounted) return;
-                  final to = await _pickDate(ctx, _startDateTo ?? from);
+                  // ignore: use_build_context_synchronously
+                  final to = await _pickDate(context, _startDateTo ?? from);
                   if (!mounted) return;
                   setState(() {
                     _startDateFrom = from;
@@ -757,10 +757,10 @@ class _ProductionOrderManagementPageState
                   '交期：${_dueDateFrom == null ? '不限' : _formatDate(_dueDateFrom)} ~ ${_dueDateTo == null ? '不限' : _formatDate(_dueDateTo)}',
                 ),
                 onPressed: () async {
-                  final ctx = context;
-                  final from = await _pickDate(ctx, _dueDateFrom);
+                  final from = await _pickDate(context, _dueDateFrom);
                   if (from == null || !mounted) return;
-                  final to = await _pickDate(ctx, _dueDateTo ?? from);
+                  // ignore: use_build_context_synchronously
+                  final to = await _pickDate(context, _dueDateTo ?? from);
                   if (!mounted) return;
                   setState(() {
                     _dueDateFrom = from;

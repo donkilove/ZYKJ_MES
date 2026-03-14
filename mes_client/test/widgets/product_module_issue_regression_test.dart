@@ -69,6 +69,7 @@ class _VersionListService extends ProductService {
     String? keyword,
     String? category,
     String? lifecycleStatus,
+    bool? hasEffectiveVersion,
   }) async {
     return ProductListResult(total: products.length, items: products);
   }
@@ -121,6 +122,7 @@ class _ProductListOnlyService extends ProductService {
     String? keyword,
     String? category,
     String? lifecycleStatus,
+    bool? hasEffectiveVersion,
   }) async {
     return ProductListResult(total: products.length, items: products);
   }
