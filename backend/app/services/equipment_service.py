@@ -48,6 +48,7 @@ WORK_ORDER_EXECUTE_ALL_ROLE_CODES = {
     ROLE_SYSTEM_ADMIN,
     ROLE_PRODUCTION_ADMIN,
 }
+EQUIPMENT_DETAIL_RECENT_RECORD_LIMIT = 5
 
 
 def _normalize_name(name: str, *, field_name: str) -> str:
@@ -184,6 +185,7 @@ def create_equipment(
     model: str,
     location: str,
     owner_name: str,
+    remark: str = "",
 ) -> Equipment:
     normalized_code = _normalize_name(code, field_name="Equipment code")
     if get_equipment_by_code(db, normalized_code):
@@ -197,6 +199,7 @@ def create_equipment(
         model=_normalize_optional_text(model),
         location=_normalize_optional_text(location),
         owner_name=_normalize_optional_text(owner_name),
+        remark=_normalize_optional_text(remark),
         is_enabled=True,
     )
     db.add(row)
@@ -214,6 +217,7 @@ def update_equipment(
     model: str,
     location: str,
     owner_name: str,
+    remark: str = "",
 ) -> Equipment:
     normalized_code = _normalize_name(code, field_name="Equipment code")
     existing = get_equipment_by_code(db, normalized_code)
@@ -225,6 +229,7 @@ def update_equipment(
     row.model = _normalize_optional_text(model)
     row.location = _normalize_optional_text(location)
     row.owner_name = _normalize_optional_text(owner_name)
+    row.remark = _normalize_optional_text(remark)
     db.commit()
     db.refresh(row)
     return row
@@ -283,6 +288,54 @@ def list_active_system_admin_owners(db: Session) -> list[User]:
         .order_by(User.username.asc())
     )
     return db.execute(stmt).scalars().unique().all()
+
+
+def list_active_owners(db: Session) -> list[User]:
+    stmt = (
+        select(User)
+        .where(User.is_active.is_(True))
+        .order_by(User.username.asc())
+    )
+    return db.execute(stmt).scalars().all()
+
+
+def get_equipment_detail(
+    db: Session,
+    equipment_id: int,
+) -> tuple[Equipment, int, int, list[MaintenanceRecord]] | None:
+    row = get_equipment_by_id(db, equipment_id)
+    if row is None:
+        return None
+
+    active_plan_count = db.execute(
+        select(func.count())
+        .select_from(MaintenancePlan)
+        .where(
+            MaintenancePlan.equipment_id == equipment_id,
+            MaintenancePlan.is_enabled.is_(True),
+        )
+    ).scalar_one()
+
+    pending_work_order_count = db.execute(
+        select(func.count())
+        .select_from(MaintenanceWorkOrder)
+        .where(
+            MaintenanceWorkOrder.source_equipment_id == equipment_id,
+            MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
+        )
+    ).scalar_one()
+
+    recent_records = db.execute(
+        select(MaintenanceRecord)
+        .where(MaintenanceRecord.source_equipment_id == equipment_id)
+        .order_by(
+            MaintenanceRecord.completed_at.desc(),
+            MaintenanceRecord.id.desc(),
+        )
+        .limit(EQUIPMENT_DETAIL_RECENT_RECORD_LIMIT)
+    ).scalars().all()
+
+    return row, active_plan_count, pending_work_order_count, recent_records
 
 
 def get_maintenance_item_by_id(db: Session, item_id: int) -> MaintenanceItem | None:
@@ -508,12 +561,12 @@ def create_maintenance_plan(
     *,
     equipment_id: int,
     item_id: int,
-    cycle_days: int | None,
     execution_process_code: str,
     estimated_duration_minutes: int | None,
     start_date: date,
     next_due_date: date | None,
     default_executor_user_id: int | None,
+    cycle_days: int | None = None,
 ) -> MaintenancePlan:
     _, item = _validate_plan_relations(db, equipment_id=equipment_id, item_id=item_id)
     resolved_cycle_days = cycle_days if (cycle_days and cycle_days > 0) else _resolve_plan_cycle_days(item)
@@ -564,12 +617,12 @@ def update_maintenance_plan(
     row: MaintenancePlan,
     equipment_id: int,
     item_id: int,
-    cycle_days: int | None,
     execution_process_code: str,
     estimated_duration_minutes: int | None,
     start_date: date,
     next_due_date: date | None,
     default_executor_user_id: int | None,
+    cycle_days: int | None = None,
 ) -> MaintenancePlan:
     _, item = _validate_plan_relations(db, equipment_id=equipment_id, item_id=item_id)
     resolved_cycle_days = cycle_days if (cycle_days and cycle_days > 0) else _resolve_plan_cycle_days(item)
@@ -668,6 +721,11 @@ def get_work_order_by_id(db: Session, work_order_id: int) -> MaintenanceWorkOrde
             selectinload(MaintenanceWorkOrder.executor),
         )
     )
+    return db.execute(stmt).scalars().first()
+
+
+def get_maintenance_record_by_id(db: Session, record_id: int) -> MaintenanceRecord | None:
+    stmt = select(MaintenanceRecord).where(MaintenanceRecord.id == record_id)
     return db.execute(stmt).scalars().first()
 
 

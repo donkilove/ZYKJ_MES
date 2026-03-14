@@ -15,6 +15,7 @@ Map<String, dynamic> _equipmentJson() {
     'model': 'M1',
     'location': 'A区',
     'owner_name': 'admin',
+    'remark': '主线设备',
     'is_enabled': true,
     'created_at': '2026-03-01T00:00:00Z',
     'updated_at': '2026-03-01T00:00:00Z',
@@ -25,7 +26,10 @@ Map<String, dynamic> _maintenanceItemJson() {
   return {
     'id': 2,
     'name': '点检',
+    'category': '常规',
     'default_cycle_days': 30,
+    'default_duration_minutes': 45,
+    'standard_description': '按SOP执行',
     'is_enabled': true,
     'created_at': '2026-03-01T00:00:00Z',
     'updated_at': '2026-03-01T00:00:00Z',
@@ -75,6 +79,15 @@ Map<String, dynamic> _workOrderJson() {
   };
 }
 
+Map<String, dynamic> _workOrderDetailJson() {
+  return {
+    ..._workOrderJson(),
+    'source_plan_id': 3,
+    'source_plan_cycle_days': 30,
+    'source_execution_process_code': '01-01',
+  };
+}
+
 Map<String, dynamic> _recordJson() {
   return {
     'id': 5,
@@ -93,19 +106,42 @@ Map<String, dynamic> _recordJson() {
   };
 }
 
+Map<String, dynamic> _recordDetailJson() {
+  return {
+    ..._recordJson(),
+    'source_plan_id': 3,
+    'source_plan_cycle_days': 30,
+    'source_equipment_code': 'EQ-01',
+    'source_item_id': 2,
+  };
+}
+
+Map<String, dynamic> _equipmentDetailJson() {
+  return {
+    ..._equipmentJson(),
+    'active_plan_count': 2,
+    'pending_work_order_count': 1,
+    'recent_records': [_recordJson()],
+  };
+}
+
 void main() {
   group('EquipmentService', () {
     test('covers all equipment and maintenance APIs', () async {
       final server = await TestHttpServer.start({
-        'GET /equipment/admin-owners': (_) => TestResponse.json(
+        'GET /equipment/owners': (_) => TestResponse.json(
           200,
           body: {
             'data': {
               'items': [
-                {'username': 'admin', 'full_name': '管理员'},
+                {'id': 1, 'username': 'admin', 'full_name': '管理员'},
               ],
             },
           },
+        ),
+        'GET /equipment/ledger/1/detail': (_) => TestResponse.json(
+          200,
+          body: {'data': _equipmentDetailJson()},
         ),
         'GET /equipment/ledger': (request) {
           expect(request.uri.queryParameters['page'], '1');
@@ -125,11 +161,13 @@ void main() {
         'POST /equipment/ledger': (request) {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['code'], 'EQ-02');
+          expect(body['remark'], '新增备注');
           return TestResponse.json(201, body: {'data': {}});
         },
         'PUT /equipment/ledger/1': (request) {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['name'], '设备1-更新');
+          expect(body['remark'], '更新备注');
           return TestResponse.json(200, body: {'data': {}});
         },
         'POST /equipment/ledger/1/toggle': (request) {
@@ -137,7 +175,8 @@ void main() {
           expect(body.containsKey('enabled'), isTrue);
           return TestResponse.json(200, body: {'data': {}});
         },
-        'DELETE /equipment/ledger/1': (_) => TestResponse.json(200, body: {'data': {}}),
+        'DELETE /equipment/ledger/1': (_) =>
+            TestResponse.json(200, body: {'data': {}}),
         'GET /equipment/items': (request) {
           expect(request.uri.queryParameters['keyword'], '点检');
           expect(request.uri.queryParameters['enabled'], 'true');
@@ -154,11 +193,14 @@ void main() {
         'POST /equipment/items': (request) {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['name'], '润滑');
+          expect(body['category'], '润滑类');
+          expect(body['default_duration_minutes'], 50);
           return TestResponse.json(201, body: {'data': {}});
         },
         'PUT /equipment/items/2': (request) {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['default_cycle_days'], 7);
+          expect(body['standard_description'], '更新标准描述');
           return TestResponse.json(200, body: {'data': {}});
         },
         'POST /equipment/items/2/toggle': (request) {
@@ -166,7 +208,8 @@ void main() {
           expect(body.containsKey('enabled'), isTrue);
           return TestResponse.json(200, body: {'data': {}});
         },
-        'DELETE /equipment/items/2': (_) => TestResponse.json(200, body: {'data': {}}),
+        'DELETE /equipment/items/2': (_) =>
+            TestResponse.json(200, body: {'data': {}}),
         'GET /equipment/plans': (request) {
           expect(request.uri.queryParameters['equipment_id'], '1');
           expect(request.uri.queryParameters['item_id'], '2');
@@ -185,11 +228,13 @@ void main() {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['start_date'], '2026-03-01');
           expect(body['next_due_date'], '2026-03-31');
+          expect(body['cycle_days'], 35);
           return TestResponse.json(201, body: {'data': {}});
         },
         'PUT /equipment/plans/3': (request) {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['execution_process_code'], '01-02');
+          expect(body['cycle_days'], 40);
           return TestResponse.json(200, body: {'data': {}});
         },
         'POST /equipment/plans/3/toggle': (request) {
@@ -197,7 +242,8 @@ void main() {
           expect(body.containsKey('enabled'), isTrue);
           return TestResponse.json(200, body: {'data': {}});
         },
-        'DELETE /equipment/plans/3': (_) => TestResponse.json(200, body: {'data': {}}),
+        'DELETE /equipment/plans/3': (_) =>
+            TestResponse.json(200, body: {'data': {}}),
         'POST /equipment/plans/3/generate': (_) => TestResponse.json(
           200,
           body: {
@@ -213,6 +259,8 @@ void main() {
           expect(request.uri.queryParameters['page'], '1');
           expect(request.uri.queryParameters['page_size'], '10');
           expect(request.uri.queryParameters['keyword'], '设备');
+          expect(request.uri.queryParameters['status'], 'pending');
+          expect(request.uri.queryParameters['mine'], 'true');
           return TestResponse.json(
             200,
             body: {
@@ -223,17 +271,27 @@ void main() {
             },
           );
         },
-        'POST /equipment/executions/4/start': (_) => TestResponse.json(200, body: {'data': {}}),
+        'GET /equipment/executions/4/detail': (_) => TestResponse.json(
+          200,
+          body: {'data': _workOrderDetailJson()},
+        ),
+        'POST /equipment/executions/4/start': (_) =>
+            TestResponse.json(200, body: {'data': {}}),
         'POST /equipment/executions/4/complete': (request) {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['result_summary'], '已完成');
           expect(body['result_remark'], '正常');
+          expect(body['attachment_link'], 'https://example.com/report.png');
           return TestResponse.json(200, body: {'data': {}});
         },
+        'POST /equipment/executions/4/cancel': (_) =>
+            TestResponse.json(200, body: {'data': {}}),
         'GET /equipment/records': (request) {
           expect(request.uri.queryParameters['executor_id'], '8');
           expect(request.uri.queryParameters['start_date'], '2026-03-01');
           expect(request.uri.queryParameters['end_date'], '2026-03-31');
+          expect(request.uri.queryParameters['result_summary'], '完成');
+          expect(request.uri.queryParameters['equipment_id'], '1');
           return TestResponse.json(
             200,
             body: {
@@ -244,6 +302,10 @@ void main() {
             },
           );
         },
+        'GET /equipment/records/5/detail': (_) => TestResponse.json(
+          200,
+          body: {'data': _recordDetailJson()},
+        ),
       });
       addTearDown(server.close);
 
@@ -251,7 +313,8 @@ void main() {
         AppSession(baseUrl: server.baseUrl, accessToken: 'token-equipment'),
       );
 
-      final owners = await service.listAdminOwners();
+      final owners = await service.listAllOwners();
+      final equipmentDetail = await service.getEquipmentDetail(equipmentId: 1);
       final equipment = await service.listEquipment(
         page: 1,
         pageSize: 20,
@@ -264,6 +327,7 @@ void main() {
         model: 'M2',
         location: 'B区',
         ownerName: 'admin',
+        remark: '新增备注',
       );
       await service.updateEquipment(
         equipmentId: 1,
@@ -272,6 +336,7 @@ void main() {
         model: 'M1',
         location: 'A区',
         ownerName: 'admin',
+        remark: '更新备注',
       );
       await service.toggleEquipment(equipmentId: 1, enabled: true);
       await service.disableEquipment(equipmentId: 1);
@@ -283,11 +348,20 @@ void main() {
         keyword: '  点检 ',
         enabled: true,
       );
-      await service.createMaintenanceItem(name: '润滑', defaultCycleDays: 30);
+      await service.createMaintenanceItem(
+        name: '润滑',
+        defaultCycleDays: 30,
+        category: '润滑类',
+        defaultDurationMinutes: 50,
+        standardDescription: '标准描述',
+      );
       await service.updateMaintenanceItem(
         itemId: 2,
         name: '润滑-更新',
         defaultCycleDays: 7,
+        category: '更新分类',
+        defaultDurationMinutes: 60,
+        standardDescription: '更新标准描述',
       );
       await service.toggleMaintenanceItem(itemId: 2, enabled: true);
       await service.disableMaintenanceItem(itemId: 2);
@@ -308,6 +382,7 @@ void main() {
         estimatedDurationMinutes: 20,
         nextDueDate: DateTime(2026, 3, 31),
         defaultExecutorUserId: 8,
+        cycleDays: 35,
       );
       await service.updateMaintenancePlan(
         planId: 3,
@@ -318,6 +393,7 @@ void main() {
         estimatedDurationMinutes: 25,
         nextDueDate: DateTime(2026, 4, 1),
         defaultExecutorUserId: 8,
+        cycleDays: 40,
       );
       await service.toggleMaintenancePlan(planId: 3, enabled: true);
       await service.deleteMaintenancePlan(planId: 3);
@@ -327,13 +403,18 @@ void main() {
         page: 1,
         pageSize: 10,
         keyword: '  设备 ',
+        status: 'pending',
+        mineOnly: true,
       );
+      final workOrderDetail = await service.getWorkOrderDetail(workOrderId: 4);
       await service.startExecution(workOrderId: 4);
       await service.completeExecution(
         workOrderId: 4,
         resultSummary: '已完成',
         resultRemark: '正常',
+        attachmentLink: 'https://example.com/report.png',
       );
+      await service.cancelExecution(workOrderId: 4);
       final records = await service.listRecords(
         page: 1,
         pageSize: 20,
@@ -341,16 +422,23 @@ void main() {
         executorId: 8,
         startDate: DateTime(2026, 3, 1),
         endDate: DateTime(2026, 3, 31),
+        resultSummary: '完成',
+        equipmentId: 1,
       );
+      final recordDetail = await service.getRecordDetail(recordId: 5);
 
       expect(owners.single.username, 'admin');
+      expect(owners.single.userId, 1);
+      expect(equipmentDetail.activePlanCount, 2);
       expect(equipment.items.single.code, 'EQ-01');
       expect(items.items.single.name, '点检');
       expect(plans.items.single.executionProcessCode, '01-01');
       expect(generated.workOrderId, 4);
       expect(executions.items.single.id, 4);
+      expect(workOrderDetail.sourcePlanId, 3);
       expect(records.items.single.workOrderId, 4);
-      expect(server.requests.length, 23);
+      expect(recordDetail.sourceEquipmentCode, 'EQ-01');
+      expect(server.requests.length, 27);
     });
 
     test('throws ApiException when backend returns non-200 status', () async {

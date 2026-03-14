@@ -565,6 +565,7 @@ def get_maintenance_executions(
     status_filter: str | None = Query(default=None, alias="status"),
     keyword: str | None = Query(default=None),
     mine: bool = Query(default=False),
+    mine_only: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("equipment.executions.list")),
 ) -> ApiResponse[MaintenanceWorkOrderListResult]:
@@ -575,7 +576,7 @@ def get_maintenance_executions(
             page_size=page_size,
             status=status_filter,
             keyword=keyword,
-            mine=mine,
+            mine=mine or mine_only,
             current_user_id=current_user.id,
             current_user_role_codes=[role.code for role in current_user.roles],
             current_user_stage_codes=sorted(

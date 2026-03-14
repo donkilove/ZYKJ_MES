@@ -506,7 +506,7 @@ class EquipmentService {
       query['status'] = status;
     }
     if (mineOnly) {
-      query['mine_only'] = 'true';
+      query['mine'] = 'true';
     }
     final uri = Uri.parse('$_basePath/executions').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
