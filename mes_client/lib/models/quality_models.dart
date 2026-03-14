@@ -423,3 +423,92 @@ class FirstArticleDetail {
     );
   }
 }
+
+class DefectTopItem {
+  DefectTopItem({
+    required this.phenomenon,
+    required this.quantity,
+    required this.ratio,
+  });
+
+  final String phenomenon;
+  final int quantity;
+  final double ratio;
+
+  factory DefectTopItem.fromJson(Map<String, dynamic> json) {
+    return DefectTopItem(
+      phenomenon: (json['phenomenon'] as String?) ?? '',
+      quantity: (json['quantity'] as int?) ?? 0,
+      ratio: ((json['ratio'] as num?) ?? 0).toDouble(),
+    );
+  }
+}
+
+class DefectByProcessItem {
+  DefectByProcessItem({
+    required this.processCode,
+    required this.processName,
+    required this.quantity,
+  });
+
+  final String processCode;
+  final String? processName;
+  final int quantity;
+
+  factory DefectByProcessItem.fromJson(Map<String, dynamic> json) {
+    return DefectByProcessItem(
+      processCode: (json['process_code'] as String?) ?? '',
+      processName: json['process_name'] as String?,
+      quantity: (json['quantity'] as int?) ?? 0,
+    );
+  }
+}
+
+class DefectByProductItem {
+  DefectByProductItem({
+    required this.productId,
+    required this.productName,
+    required this.quantity,
+  });
+
+  final int? productId;
+  final String? productName;
+  final int quantity;
+
+  factory DefectByProductItem.fromJson(Map<String, dynamic> json) {
+    return DefectByProductItem(
+      productId: json['product_id'] as int?,
+      productName: json['product_name'] as String?,
+      quantity: (json['quantity'] as int?) ?? 0,
+    );
+  }
+}
+
+class DefectAnalysisResult {
+  DefectAnalysisResult({
+    required this.totalDefectQuantity,
+    required this.topDefects,
+    required this.byProcess,
+    required this.byProduct,
+  });
+
+  final int totalDefectQuantity;
+  final List<DefectTopItem> topDefects;
+  final List<DefectByProcessItem> byProcess;
+  final List<DefectByProductItem> byProduct;
+
+  factory DefectAnalysisResult.fromJson(Map<String, dynamic> json) {
+    return DefectAnalysisResult(
+      totalDefectQuantity: (json['total_defect_quantity'] as int?) ?? 0,
+      topDefects: (json['top_defects'] as List? ?? [])
+          .map((e) => DefectTopItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      byProcess: (json['by_process'] as List? ?? [])
+          .map((e) => DefectByProcessItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      byProduct: (json['by_product'] as List? ?? [])
+          .map((e) => DefectByProductItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}

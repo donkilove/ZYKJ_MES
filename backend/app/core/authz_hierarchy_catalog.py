@@ -290,6 +290,26 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         action_permission_codes=("equipment.records.list",),
     ),
     FeatureDefinition(
+        permission_code="feature.equipment.rules.manage",
+        permission_name="管理设备规则",
+        module_code="equipment",
+        page_code="equipment_rule_parameter",
+        action_permission_codes=(
+            "equipment.rules.list",
+            "equipment.rules.manage",
+        ),
+    ),
+    FeatureDefinition(
+        permission_code="feature.equipment.runtime_parameters.manage",
+        permission_name="管理运行参数",
+        module_code="equipment",
+        page_code="equipment_rule_parameter",
+        action_permission_codes=(
+            "equipment.runtime_parameters.list",
+            "equipment.runtime_parameters.manage",
+        ),
+    ),
+    FeatureDefinition(
         permission_code="feature.craft.process_basics.view",
         permission_name="查看工段与工序",
         module_code="craft",
@@ -419,6 +439,21 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         page_code="quality_repair_orders",
         action_permission_codes=("production.repair_orders.export",),
         dependency_permission_codes=("feature.quality.repair_orders.manage",),
+    ),
+    FeatureDefinition(
+        permission_code="feature.quality.defect_analysis.view",
+        permission_name="查看不良分析",
+        module_code="quality",
+        page_code="quality_defect_analysis",
+        action_permission_codes=("quality.defect_analysis.list",),
+    ),
+    FeatureDefinition(
+        permission_code="feature.quality.defect_analysis.export",
+        permission_name="导出不良分析",
+        module_code="quality",
+        page_code="quality_defect_analysis",
+        action_permission_codes=("quality.defect_analysis.export",),
+        dependency_permission_codes=("feature.quality.defect_analysis.view",),
     ),
     FeatureDefinition(
         permission_code="feature.production.order_management.manage",

@@ -3,6 +3,8 @@ from app.models.audit_log import AuditLog
 from app.models.daily_verification_code import DailyVerificationCode
 from app.models.authz_module_revision import AuthzModuleRevision
 from app.models.equipment import Equipment
+from app.models.equipment_rule import EquipmentRule
+from app.models.equipment_runtime_parameter import EquipmentRuntimeParameter
 from app.models.first_article_record import FirstArticleRecord
 from app.models.maintenance_item import MaintenanceItem
 from app.models.maintenance_plan import MaintenancePlan
@@ -61,6 +63,8 @@ __all__ = [
     "PermissionCatalog",
     "RolePermissionGrant",
     "Equipment",
+    "EquipmentRule",
+    "EquipmentRuntimeParameter",
     "MaintenanceItem",
     "MaintenancePlan",
     "MaintenanceRecord",

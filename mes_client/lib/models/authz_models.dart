@@ -1223,6 +1223,9 @@ class EquipmentFeaturePermissionCodes {
   static const String executionsOperate =
       'feature.equipment.executions.operate';
   static const String recordsView = 'feature.equipment.records.view';
+  static const String rulesManage = 'feature.equipment.rules.manage';
+  static const String runtimeParametersManage =
+      'feature.equipment.runtime_parameters.manage';
 }
 
 class CraftFeaturePermissionCodes {

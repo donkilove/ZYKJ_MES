@@ -156,3 +156,34 @@ class FirstArticleDispositionRequest(BaseModel):
     disposition_opinion: str
     recheck_result: str | None = None
     final_judgment: str
+
+
+class DefectTopItem(BaseModel):
+    phenomenon: str
+    quantity: int
+    ratio: float
+
+
+class DefectByProcessItem(BaseModel):
+    process_code: str
+    process_name: str | None
+    quantity: int
+
+
+class DefectByProductItem(BaseModel):
+    product_id: int | None
+    product_name: str | None
+    quantity: int
+
+
+class DefectAnalysisResult(BaseModel):
+    total_defect_quantity: int
+    top_defects: list[DefectTopItem]
+    by_process: list[DefectByProcessItem]
+    by_product: list[DefectByProductItem]
+
+
+class DefectAnalysisExportResult(BaseModel):
+    filename: str
+    content_base64: str
+    total_rows: int

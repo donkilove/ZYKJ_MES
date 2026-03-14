@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/app_session.dart';
 import '../models/authz_models.dart';
 import 'equipment_ledger_page.dart';
+import 'equipment_rule_parameter_page.dart';
 import 'maintenance_execution_page.dart';
 import 'maintenance_item_page.dart';
 import 'maintenance_plan_page.dart';
@@ -14,6 +15,7 @@ const String maintenanceItemTabCode = 'maintenance_item';
 const String maintenancePlanTabCode = 'maintenance_plan';
 const String maintenanceExecutionTabCode = 'maintenance_execution';
 const String maintenanceRecordTabCode = 'maintenance_record';
+const String equipmentRuleParameterTabCode = 'equipment_rule_parameter';
 
 const List<String> _defaultTabOrder = [
   equipmentLedgerTabCode,
@@ -21,6 +23,7 @@ const List<String> _defaultTabOrder = [
   maintenancePlanTabCode,
   maintenanceExecutionTabCode,
   maintenanceRecordTabCode,
+  equipmentRuleParameterTabCode,
 ];
 
 class EquipmentPage extends StatefulWidget {
@@ -140,6 +143,8 @@ class _EquipmentPageState extends State<EquipmentPage>
         return '保养执行';
       case maintenanceRecordTabCode:
         return '保养记录';
+      case equipmentRuleParameterTabCode:
+        return '规则与参数';
       default:
         return code;
     }
@@ -175,6 +180,17 @@ class _EquipmentPageState extends State<EquipmentPage>
         return MaintenanceRecordPage(
           session: widget.session,
           onLogout: widget.onLogout,
+        );
+      case equipmentRuleParameterTabCode:
+        return EquipmentRuleParameterPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          canManageRules: _hasPermission(
+            EquipmentFeaturePermissionCodes.rulesManage,
+          ),
+          canManageParameters: _hasPermission(
+            EquipmentFeaturePermissionCodes.runtimeParametersManage,
+          ),
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));

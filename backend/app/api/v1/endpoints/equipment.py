@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_permission
 from app.db.session import get_db
 from app.models.equipment import Equipment
+from app.models.equipment_rule import EquipmentRule
+from app.models.equipment_runtime_parameter import EquipmentRuntimeParameter
 from app.models.maintenance_item import MaintenanceItem
 from app.models.maintenance_plan import MaintenancePlan
 from app.models.maintenance_record import MaintenanceRecord
@@ -37,6 +39,14 @@ from app.schemas.equipment import (
     MaintenanceWorkOrderListResult,
     ToggleEnabledRequest,
 )
+from app.schemas.equipment_rule import (
+    EquipmentRuleItem,
+    EquipmentRuleListResult,
+    EquipmentRuleUpsertRequest,
+    EquipmentRuntimeParameterItem,
+    EquipmentRuntimeParameterListResult,
+    EquipmentRuntimeParameterUpsertRequest,
+)
 from app.services.equipment_service import (
     cancel_work_order,
     complete_work_order,
@@ -67,6 +77,17 @@ from app.services.equipment_service import (
     update_equipment,
     update_maintenance_item,
     update_maintenance_plan,
+)
+from app.services.equipment_rule_service import (
+    create_equipment_rule,
+    create_runtime_parameter,
+    delete_equipment_rule,
+    delete_runtime_parameter,
+    list_equipment_rules,
+    list_runtime_parameters,
+    toggle_equipment_rule,
+    update_equipment_rule,
+    update_runtime_parameter,
 )
 from app.services.craft_service import get_stage_by_code, resolve_user_stage_codes
 
@@ -871,3 +892,215 @@ def get_maintenance_record_detail_api(
             source_item_id=row.source_item_id,
         )
     )
+
+
+# ── 设备规则 ──────────────────────────────────────────────────────────────────
+
+@router.get("/rules", response_model=ApiResponse[EquipmentRuleListResult])
+def list_equipment_rules_api(
+    equipment_id: int | None = Query(default=None),
+    keyword: str | None = Query(default=None),
+    is_enabled: bool | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.rules.list")),
+) -> ApiResponse[EquipmentRuleListResult]:
+    result = list_equipment_rules(
+        db,
+        equipment_id=equipment_id,
+        keyword=keyword,
+        is_enabled=is_enabled,
+        page=page,
+        page_size=page_size,
+    )
+    return success_response(result)
+
+
+@router.post("/rules", response_model=ApiResponse[EquipmentRuleItem])
+def create_equipment_rule_api(
+    payload: EquipmentRuleUpsertRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("equipment.rules.manage")),
+) -> ApiResponse[EquipmentRuleItem]:
+    from app.schemas.equipment_rule import EquipmentRuleItem as _Item
+    row = create_equipment_rule(db, payload=payload)
+    write_audit_log(
+        db,
+        action_name="新增设备规则",
+        target_type="equipment_rule",
+        target_id=str(row.id),
+        target_name=row.rule_name,
+        operator=current_user,
+        after_data={"rule_name": row.rule_name, "rule_type": row.rule_type},
+    )
+    db.commit()
+    db.refresh(row)
+    return success_response(_Item.model_validate(row, from_attributes=True))
+
+
+@router.put("/rules/{rule_id}", response_model=ApiResponse[EquipmentRuleItem])
+def update_equipment_rule_api(
+    rule_id: int,
+    payload: EquipmentRuleUpsertRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("equipment.rules.manage")),
+) -> ApiResponse[EquipmentRuleItem]:
+    from app.schemas.equipment_rule import EquipmentRuleItem as _Item
+    row = db.get(EquipmentRule, rule_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found")
+    row = update_equipment_rule(db, row=row, payload=payload)
+    write_audit_log(
+        db,
+        action_name="编辑设备规则",
+        target_type="equipment_rule",
+        target_id=str(row.id),
+        target_name=row.rule_name,
+        operator=current_user,
+        after_data={"rule_name": row.rule_name, "rule_type": row.rule_type},
+    )
+    db.commit()
+    db.refresh(row)
+    return success_response(_Item.model_validate(row, from_attributes=True))
+
+
+@router.patch("/rules/{rule_id}/toggle", response_model=ApiResponse[EquipmentRuleItem])
+def toggle_equipment_rule_api(
+    rule_id: int,
+    payload: ToggleEnabledRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("equipment.rules.manage")),
+) -> ApiResponse[EquipmentRuleItem]:
+    from app.schemas.equipment_rule import EquipmentRuleItem as _Item
+    row = db.get(EquipmentRule, rule_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found")
+    row = toggle_equipment_rule(db, row=row, enabled=payload.is_enabled)
+    write_audit_log(
+        db,
+        action_name="启停设备规则",
+        target_type="equipment_rule",
+        target_id=str(row.id),
+        target_name=row.rule_name,
+        operator=current_user,
+        after_data={"is_enabled": row.is_enabled},
+    )
+    db.commit()
+    db.refresh(row)
+    return success_response(_Item.model_validate(row, from_attributes=True))
+
+
+@router.delete("/rules/{rule_id}", response_model=ApiResponse[None])
+def delete_equipment_rule_api(
+    rule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("equipment.rules.manage")),
+) -> ApiResponse[None]:
+    row = db.get(EquipmentRule, rule_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found")
+    name = row.rule_name
+    delete_equipment_rule(db, row=row)
+    write_audit_log(
+        db,
+        action_name="删除设备规则",
+        target_type="equipment_rule",
+        target_id=str(rule_id),
+        target_name=name,
+        operator=current_user,
+    )
+    db.commit()
+    return success_response(None, message="deleted")
+
+
+# ── 运行参数 ──────────────────────────────────────────────────────────────────
+
+@router.get("/runtime-parameters", response_model=ApiResponse[EquipmentRuntimeParameterListResult])
+def list_runtime_parameters_api(
+    equipment_id: int | None = Query(default=None),
+    keyword: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("equipment.runtime_parameters.list")),
+) -> ApiResponse[EquipmentRuntimeParameterListResult]:
+    result = list_runtime_parameters(
+        db,
+        equipment_id=equipment_id,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+    )
+    return success_response(result)
+
+
+@router.post("/runtime-parameters", response_model=ApiResponse[EquipmentRuntimeParameterItem])
+def create_runtime_parameter_api(
+    payload: EquipmentRuntimeParameterUpsertRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("equipment.runtime_parameters.manage")),
+) -> ApiResponse[EquipmentRuntimeParameterItem]:
+    from app.schemas.equipment_rule import EquipmentRuntimeParameterItem as _Item
+    row = create_runtime_parameter(db, payload=payload)
+    write_audit_log(
+        db,
+        action_name="新增运行参数",
+        target_type="equipment_runtime_parameter",
+        target_id=str(row.id),
+        target_name=row.param_name,
+        operator=current_user,
+        after_data={"param_code": row.param_code, "param_name": row.param_name},
+    )
+    db.commit()
+    db.refresh(row)
+    return success_response(_Item.model_validate(row, from_attributes=True))
+
+
+@router.put("/runtime-parameters/{param_id}", response_model=ApiResponse[EquipmentRuntimeParameterItem])
+def update_runtime_parameter_api(
+    param_id: int,
+    payload: EquipmentRuntimeParameterUpsertRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("equipment.runtime_parameters.manage")),
+) -> ApiResponse[EquipmentRuntimeParameterItem]:
+    from app.schemas.equipment_rule import EquipmentRuntimeParameterItem as _Item
+    row = db.get(EquipmentRuntimeParameter, param_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parameter not found")
+    row = update_runtime_parameter(db, row=row, payload=payload)
+    write_audit_log(
+        db,
+        action_name="编辑运行参数",
+        target_type="equipment_runtime_parameter",
+        target_id=str(row.id),
+        target_name=row.param_name,
+        operator=current_user,
+        after_data={"param_code": row.param_code, "param_name": row.param_name},
+    )
+    db.commit()
+    db.refresh(row)
+    return success_response(_Item.model_validate(row, from_attributes=True))
+
+
+@router.delete("/runtime-parameters/{param_id}", response_model=ApiResponse[None])
+def delete_runtime_parameter_api(
+    param_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("equipment.runtime_parameters.manage")),
+) -> ApiResponse[None]:
+    row = db.get(EquipmentRuntimeParameter, param_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parameter not found")
+    name = row.param_name
+    delete_runtime_parameter(db, row=row)
+    write_audit_log(
+        db,
+        action_name="删除运行参数",
+        target_type="equipment_runtime_parameter",
+        target_id=str(param_id),
+        target_name=name,
+        operator=current_user,
+    )
+    db.commit()
+    return success_response(None, message="deleted")

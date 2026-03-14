@@ -513,3 +513,119 @@ class MaintenanceRecordDetail extends MaintenanceRecordItem {
     );
   }
 }
+
+class EquipmentRuleItem {
+  EquipmentRuleItem({
+    required this.id,
+    required this.equipmentId,
+    required this.equipmentCode,
+    required this.equipmentName,
+    required this.ruleName,
+    required this.ruleType,
+    required this.conditionDesc,
+    required this.isEnabled,
+    required this.effectiveAt,
+    required this.remark,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final int id;
+  final int? equipmentId;
+  final String? equipmentCode;
+  final String? equipmentName;
+  final String ruleName;
+  final String ruleType;
+  final String conditionDesc;
+  final bool isEnabled;
+  final DateTime? effectiveAt;
+  final String remark;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory EquipmentRuleItem.fromJson(Map<String, dynamic> json) {
+    return EquipmentRuleItem(
+      id: json['id'] as int,
+      equipmentId: json['equipment_id'] as int?,
+      equipmentCode: json['equipment_code'] as String?,
+      equipmentName: json['equipment_name'] as String?,
+      ruleName: (json['rule_name'] as String?) ?? '',
+      ruleType: (json['rule_type'] as String?) ?? '',
+      conditionDesc: (json['condition_desc'] as String?) ?? '',
+      isEnabled: (json['is_enabled'] as bool?) ?? true,
+      effectiveAt: json['effective_at'] != null
+          ? DateTime.tryParse(json['effective_at'] as String)
+          : null,
+      remark: (json['remark'] as String?) ?? '',
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+  }
+}
+
+class EquipmentRuleListResult {
+  EquipmentRuleListResult({required this.total, required this.items});
+  final int total;
+  final List<EquipmentRuleItem> items;
+}
+
+class EquipmentRuntimeParameterItem {
+  EquipmentRuntimeParameterItem({
+    required this.id,
+    required this.equipmentId,
+    required this.equipmentCode,
+    required this.equipmentName,
+    required this.paramCode,
+    required this.paramName,
+    required this.unit,
+    required this.standardValue,
+    required this.upperLimit,
+    required this.lowerLimit,
+    required this.effectiveAt,
+    required this.remark,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final int id;
+  final int? equipmentId;
+  final String? equipmentCode;
+  final String? equipmentName;
+  final String paramCode;
+  final String paramName;
+  final String unit;
+  final String? standardValue;
+  final String? upperLimit;
+  final String? lowerLimit;
+  final DateTime? effectiveAt;
+  final String remark;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory EquipmentRuntimeParameterItem.fromJson(Map<String, dynamic> json) {
+    return EquipmentRuntimeParameterItem(
+      id: json['id'] as int,
+      equipmentId: json['equipment_id'] as int?,
+      equipmentCode: json['equipment_code'] as String?,
+      equipmentName: json['equipment_name'] as String?,
+      paramCode: (json['param_code'] as String?) ?? '',
+      paramName: (json['param_name'] as String?) ?? '',
+      unit: (json['unit'] as String?) ?? '',
+      standardValue: json['standard_value']?.toString(),
+      upperLimit: json['upper_limit']?.toString(),
+      lowerLimit: json['lower_limit']?.toString(),
+      effectiveAt: json['effective_at'] != null
+          ? DateTime.tryParse(json['effective_at'] as String)
+          : null,
+      remark: (json['remark'] as String?) ?? '',
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+  }
+}
+
+class EquipmentRuntimeParameterListResult {
+  EquipmentRuntimeParameterListResult({required this.total, required this.items});
+  final int total;
+  final List<EquipmentRuntimeParameterItem> items;
+}

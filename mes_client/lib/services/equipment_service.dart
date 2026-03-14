@@ -649,4 +649,209 @@ class EquipmentService {
     final dd = date.day.toString().padLeft(2, '0');
     return '${date.year}-$mm-$dd';
   }
+
+  // ── 设备规则 ────────────────────────────────────────────────────────────────
+
+  Future<EquipmentRuleListResult> listEquipmentRules({
+    int? equipmentId,
+    String? keyword,
+    bool? isEnabled,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final query = <String, String>{
+      'page': '$page',
+      'page_size': '$pageSize',
+    };
+    if (equipmentId != null) query['equipment_id'] = '$equipmentId';
+    if (keyword != null && keyword.isNotEmpty) query['keyword'] = keyword;
+    if (isEnabled != null) query['is_enabled'] = '$isEnabled';
+    final uri = Uri.parse('$_basePath/rules').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List)
+        .map((e) => EquipmentRuleItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return EquipmentRuleListResult(total: data['total'] as int, items: items);
+  }
+
+  Future<void> createEquipmentRule({
+    int? equipmentId,
+    required String ruleName,
+    String ruleType = '',
+    String conditionDesc = '',
+    bool isEnabled = true,
+    String remark = '',
+  }) async {
+    final uri = Uri.parse('$_basePath/rules');
+    final body = jsonEncode({
+      'equipment_id': equipmentId,
+      'rule_name': ruleName,
+      'rule_type': ruleType,
+      'condition_desc': conditionDesc,
+      'is_enabled': isEnabled,
+      'remark': remark,
+    });
+    final response = await http.post(uri, headers: _authHeaders, body: body);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+  }
+
+  Future<void> updateEquipmentRule({
+    required int ruleId,
+    int? equipmentId,
+    required String ruleName,
+    String ruleType = '',
+    String conditionDesc = '',
+    required bool isEnabled,
+    String remark = '',
+  }) async {
+    final uri = Uri.parse('$_basePath/rules/$ruleId');
+    final body = jsonEncode({
+      'equipment_id': equipmentId,
+      'rule_name': ruleName,
+      'rule_type': ruleType,
+      'condition_desc': conditionDesc,
+      'is_enabled': isEnabled,
+      'remark': remark,
+    });
+    final response = await http.put(uri, headers: _authHeaders, body: body);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+  }
+
+  Future<void> toggleEquipmentRule({
+    required int ruleId,
+    required bool isEnabled,
+  }) async {
+    final uri = Uri.parse('$_basePath/rules/$ruleId/toggle');
+    final body = jsonEncode({'is_enabled': isEnabled});
+    final response = await http.patch(uri, headers: _authHeaders, body: body);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+  }
+
+  Future<void> deleteEquipmentRule(int ruleId) async {
+    final uri = Uri.parse('$_basePath/rules/$ruleId');
+    final response = await http.delete(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+  }
+
+  // ── 运行参数 ────────────────────────────────────────────────────────────────
+
+  Future<EquipmentRuntimeParameterListResult> listRuntimeParameters({
+    int? equipmentId,
+    String? keyword,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final query = <String, String>{
+      'page': '$page',
+      'page_size': '$pageSize',
+    };
+    if (equipmentId != null) query['equipment_id'] = '$equipmentId';
+    if (keyword != null && keyword.isNotEmpty) query['keyword'] = keyword;
+    final uri = Uri.parse('$_basePath/runtime-parameters').replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List)
+        .map((e) => EquipmentRuntimeParameterItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return EquipmentRuntimeParameterListResult(total: data['total'] as int, items: items);
+  }
+
+  Future<void> createRuntimeParameter({
+    int? equipmentId,
+    required String paramCode,
+    required String paramName,
+    String unit = '',
+    String? standardValue,
+    String? upperLimit,
+    String? lowerLimit,
+    String remark = '',
+  }) async {
+    final uri = Uri.parse('$_basePath/runtime-parameters');
+    final body = jsonEncode({
+      'equipment_id': equipmentId,
+      'param_code': paramCode,
+      'param_name': paramName,
+      'unit': unit,
+      'standard_value': standardValue != null && standardValue.isNotEmpty
+          ? double.tryParse(standardValue)
+          : null,
+      'upper_limit': upperLimit != null && upperLimit.isNotEmpty
+          ? double.tryParse(upperLimit)
+          : null,
+      'lower_limit': lowerLimit != null && lowerLimit.isNotEmpty
+          ? double.tryParse(lowerLimit)
+          : null,
+      'remark': remark,
+    });
+    final response = await http.post(uri, headers: _authHeaders, body: body);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+  }
+
+  Future<void> updateRuntimeParameter({
+    required int paramId,
+    int? equipmentId,
+    required String paramCode,
+    required String paramName,
+    String unit = '',
+    String? standardValue,
+    String? upperLimit,
+    String? lowerLimit,
+    String remark = '',
+  }) async {
+    final uri = Uri.parse('$_basePath/runtime-parameters/$paramId');
+    final body = jsonEncode({
+      'equipment_id': equipmentId,
+      'param_code': paramCode,
+      'param_name': paramName,
+      'unit': unit,
+      'standard_value': standardValue != null && standardValue.isNotEmpty
+          ? double.tryParse(standardValue)
+          : null,
+      'upper_limit': upperLimit != null && upperLimit.isNotEmpty
+          ? double.tryParse(upperLimit)
+          : null,
+      'lower_limit': lowerLimit != null && lowerLimit.isNotEmpty
+          ? double.tryParse(lowerLimit)
+          : null,
+      'remark': remark,
+    });
+    final response = await http.put(uri, headers: _authHeaders, body: body);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+  }
+
+  Future<void> deleteRuntimeParameter(int paramId) async {
+    final uri = Uri.parse('$_basePath/runtime-parameters/$paramId');
+    final response = await http.delete(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+  }
 }

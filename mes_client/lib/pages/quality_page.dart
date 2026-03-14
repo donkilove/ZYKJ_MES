@@ -6,6 +6,7 @@ import 'daily_first_article_page.dart';
 import 'production_repair_orders_page.dart';
 import 'production_scrap_statistics_page.dart';
 import 'quality_data_page.dart';
+import 'quality_defect_analysis_page.dart';
 import 'quality_trend_page.dart';
 
 const String firstArticleManagementTabCode = 'first_article_management';
@@ -13,6 +14,7 @@ const String qualityDataQueryTabCode = 'quality_data_query';
 const String qualityScrapStatisticsTabCode = 'quality_scrap_statistics';
 const String qualityRepairOrdersTabCode = 'quality_repair_orders';
 const String qualityTrendTabCode = 'quality_trend';
+const String qualityDefectAnalysisTabCode = 'quality_defect_analysis';
 
 const List<String> _defaultTabOrder = [
   firstArticleManagementTabCode,
@@ -20,6 +22,7 @@ const List<String> _defaultTabOrder = [
   qualityScrapStatisticsTabCode,
   qualityRepairOrdersTabCode,
   qualityTrendTabCode,
+  qualityDefectAnalysisTabCode,
 ];
 
 class QualityPage extends StatefulWidget {
@@ -125,6 +128,8 @@ class _QualityPageState extends State<QualityPage>
         return '维修订单';
       case qualityTrendTabCode:
         return '质量趋势';
+      case qualityDefectAnalysisTabCode:
+        return '不良分析';
       default:
         return code;
     }
@@ -162,6 +167,13 @@ class _QualityPageState extends State<QualityPage>
         return QualityTrendPage(
           session: widget.session,
           onLogout: widget.onLogout,
+        );
+      case qualityDefectAnalysisTabCode:
+        return QualityDefectAnalysisPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          canExport: widget.capabilityCodes
+              .contains('quality.defect_analysis.export'),
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));

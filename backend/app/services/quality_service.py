@@ -22,6 +22,7 @@ from app.models.production_scrap_statistics import ProductionScrapStatistics
 from app.models.product import Product
 from app.models.repair_order import RepairOrder
 from app.models.repair_order import RepairOrder
+from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
 from app.models.user import User
 
 
@@ -862,3 +863,123 @@ def submit_first_article_disposition(
     db.add(disposition)
     db.flush()
     return disposition
+
+
+def get_defect_analysis(
+    db: Session,
+    *,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    product_id: int | None = None,
+    process_code: str | None = None,
+    top_n: int = 10,
+) -> dict:
+    from app.schemas.quality import DefectAnalysisResult, DefectTopItem, DefectByProcessItem, DefectByProductItem
+
+    stmt = select(RepairDefectPhenomenon)
+    if start_date is not None:
+        stmt = stmt.where(
+            RepairDefectPhenomenon.production_time >= datetime.combine(start_date, time.min)
+        )
+    if end_date is not None:
+        stmt = stmt.where(
+            RepairDefectPhenomenon.production_time < datetime.combine(end_date + timedelta(days=1), time.min)
+        )
+    if product_id is not None:
+        stmt = stmt.where(RepairDefectPhenomenon.product_id == product_id)
+    if process_code:
+        stmt = stmt.where(RepairDefectPhenomenon.process_code == process_code)
+
+    rows = db.execute(stmt).scalars().all()
+
+    total = sum(r.quantity for r in rows)
+
+    # Top 缺陷现象
+    phenomenon_counts: dict[str, int] = defaultdict(int)
+    for r in rows:
+        phenomenon_counts[r.phenomenon] += r.quantity
+    sorted_phenomena = sorted(phenomenon_counts.items(), key=lambda x: x[1], reverse=True)
+    top_defects = [
+        DefectTopItem(
+            phenomenon=ph,
+            quantity=qty,
+            ratio=round(qty * 100.0 / total, 2) if total > 0 else 0.0,
+        )
+        for ph, qty in sorted_phenomena[:top_n]
+    ]
+
+    # 按工序分布
+    process_counts: dict[tuple, int] = defaultdict(int)
+    for r in rows:
+        key = (r.process_code or "", r.process_name or "")
+        process_counts[key] += r.quantity
+    by_process = [
+        DefectByProcessItem(process_code=k[0], process_name=k[1] or None, quantity=v)
+        for k, v in sorted(process_counts.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    # 按产品分布
+    product_counts: dict[tuple, int] = defaultdict(int)
+    for r in rows:
+        key = (r.product_id, r.product_name or "")
+        product_counts[key] += r.quantity
+    by_product = [
+        DefectByProductItem(product_id=k[0], product_name=k[1] or None, quantity=v)
+        for k, v in sorted(product_counts.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    return DefectAnalysisResult(
+        total_defect_quantity=total,
+        top_defects=top_defects,
+        by_process=by_process,
+        by_product=by_product,
+    )
+
+
+def export_defect_analysis_csv(
+    db: Session,
+    *,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    product_id: int | None = None,
+    process_code: str | None = None,
+) -> dict:
+    from app.schemas.quality import DefectAnalysisExportResult
+
+    stmt = select(RepairDefectPhenomenon)
+    if start_date is not None:
+        stmt = stmt.where(
+            RepairDefectPhenomenon.production_time >= datetime.combine(start_date, time.min)
+        )
+    if end_date is not None:
+        stmt = stmt.where(
+            RepairDefectPhenomenon.production_time < datetime.combine(end_date + timedelta(days=1), time.min)
+        )
+    if product_id is not None:
+        stmt = stmt.where(RepairDefectPhenomenon.product_id == product_id)
+    if process_code:
+        stmt = stmt.where(RepairDefectPhenomenon.process_code == process_code)
+
+    rows = db.execute(stmt).scalars().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["缺陷现象", "产品", "工序编码", "工序名称", "数量", "操作员", "生产时间"])
+    for r in rows:
+        writer.writerow([
+            r.phenomenon,
+            r.product_name or "",
+            r.process_code or "",
+            r.process_name or "",
+            r.quantity,
+            r.operator_username or "",
+            r.production_time.strftime("%Y-%m-%d %H:%M") if r.production_time else "",
+        ])
+
+    content = output.getvalue().encode("utf-8-sig")
+    filename = f"defect_analysis_{uuid4().hex[:8]}.csv"
+    return DefectAnalysisExportResult(
+        filename=filename,
+        content_base64=base64.b64encode(content).decode(),
+        total_rows=len(rows),
+    )

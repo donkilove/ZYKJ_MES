@@ -12,6 +12,8 @@ from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
 from app.services.message_service import create_message_for_users
 from app.schemas.quality import (
+    DefectAnalysisExportResult,
+    DefectAnalysisResult,
     FirstArticleDetail,
     FirstArticleDispositionRequest,
     FirstArticleExportRequest,
@@ -31,8 +33,10 @@ from app.schemas.quality import (
     QualityTrendResult,
 )
 from app.services.quality_service import (
+    export_defect_analysis_csv,
     export_first_articles_csv,
     export_quality_stats_csv,
+    get_defect_analysis,
     get_first_article_by_id,
     get_quality_operator_stats,
     get_quality_overview,
@@ -317,3 +321,45 @@ def get_quality_trend_api(
     _validate_date_range(start_date, end_date)
     rows = get_quality_trend(db, start_date=start_date, end_date=end_date)
     return success_response(QualityTrendResult(items=[QualityTrendItem(**item) for item in rows]))
+
+
+@router.get("/defect-analysis", response_model=ApiResponse[DefectAnalysisResult])
+def get_defect_analysis_api(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    product_id: int | None = Query(default=None),
+    process_code: str | None = Query(default=None),
+    top_n: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("quality.defect_analysis.list")),
+) -> ApiResponse[DefectAnalysisResult]:
+    _validate_date_range(start_date, end_date)
+    result = get_defect_analysis(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_id=product_id,
+        process_code=process_code,
+        top_n=top_n,
+    )
+    return success_response(result)
+
+
+@router.post("/defect-analysis/export", response_model=ApiResponse[DefectAnalysisExportResult])
+def export_defect_analysis_api(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    product_id: int | None = Query(default=None),
+    process_code: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("quality.defect_analysis.export")),
+) -> ApiResponse[DefectAnalysisExportResult]:
+    _validate_date_range(start_date, end_date)
+    result = export_defect_analysis_csv(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_id=product_id,
+        process_code=process_code,
+    )
+    return success_response(result)

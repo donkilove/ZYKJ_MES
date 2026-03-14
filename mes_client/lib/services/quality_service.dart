@@ -429,4 +429,33 @@ class QualityService {
     final dd = local.day.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd';
   }
+
+  Future<DefectAnalysisResult> getDefectAnalysis({
+    DateTime? startDate,
+    DateTime? endDate,
+    int? productId,
+    String? processCode,
+    int topN = 10,
+  }) async {
+    final query = <String, String>{'top_n': '$topN'};
+    if (startDate != null) query['start_date'] = _formatDate(startDate);
+    if (endDate != null) query['end_date'] = _formatDate(endDate);
+    if (productId != null) query['product_id'] = '$productId';
+    if (processCode != null && processCode.isNotEmpty) {
+      query['process_code'] = processCode;
+    }
+    final uri = Uri.parse('${session.baseUrl}/quality/defect-analysis')
+        .replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return DefectAnalysisResult.fromJson(
+      json['data'] as Map<String, dynamic>,
+    );
+  }
 }

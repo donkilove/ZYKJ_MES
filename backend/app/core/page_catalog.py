@@ -31,6 +31,7 @@ PAGE_MAINTENANCE_ITEM = "maintenance_item"
 PAGE_MAINTENANCE_PLAN = "maintenance_plan"
 PAGE_MAINTENANCE_EXECUTION = "maintenance_execution"
 PAGE_MAINTENANCE_RECORD = "maintenance_record"
+PAGE_EQUIPMENT_RULE_PARAMETER = "equipment_rule_parameter"
 PAGE_PRODUCTION = "production"
 PAGE_PRODUCTION_ORDER_MANAGEMENT = "production_order_management"
 PAGE_PRODUCTION_ORDER_QUERY = "production_order_query"
@@ -45,6 +46,7 @@ PAGE_QUALITY_DATA_QUERY = "quality_data_query"
 PAGE_QUALITY_SCRAP_STATISTICS = "quality_scrap_statistics"
 PAGE_QUALITY_REPAIR_ORDERS = "quality_repair_orders"
 PAGE_QUALITY_TREND = "quality_trend"
+PAGE_QUALITY_DEFECT_ANALYSIS = "quality_defect_analysis"
 PAGE_CRAFT = "craft"
 PAGE_PROCESS_MANAGEMENT = "process_management"
 PAGE_PRODUCTION_PROCESS_CONFIG = "production_process_config"
@@ -217,6 +219,14 @@ PAGE_CATALOG = [
         "sort_order": 45,
     },
     {
+        "code": PAGE_EQUIPMENT_RULE_PARAMETER,
+        "name": "规则与参数",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_EQUIPMENT,
+        "always_visible": False,
+        "sort_order": 46,
+    },
+    {
         "code": PAGE_PRODUCTION,
         "name": "生产",
         "page_type": PAGE_TYPE_SIDEBAR,
@@ -329,6 +339,14 @@ PAGE_CATALOG = [
         "sort_order": 65,
     },
     {
+        "code": PAGE_QUALITY_DEFECT_ANALYSIS,
+        "name": "不良分析",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_QUALITY,
+        "always_visible": False,
+        "sort_order": 66,
+    },
+    {
         "code": PAGE_CRAFT,
         "name": "工艺",
         "page_type": PAGE_TYPE_SIDEBAR,
@@ -418,6 +436,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_MAINTENANCE_PLAN,
         PAGE_MAINTENANCE_EXECUTION,
         PAGE_MAINTENANCE_RECORD,
+        PAGE_EQUIPMENT_RULE_PARAMETER,
         PAGE_PRODUCTION,
         PAGE_PRODUCTION_ORDER_MANAGEMENT,
         PAGE_PRODUCTION_ORDER_QUERY,
@@ -432,6 +451,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY_SCRAP_STATISTICS,
         PAGE_QUALITY_REPAIR_ORDERS,
         PAGE_QUALITY_TREND,
+        PAGE_QUALITY_DEFECT_ANALYSIS,
         PAGE_CRAFT,
         PAGE_PROCESS_MANAGEMENT,
         PAGE_PRODUCTION_PROCESS_CONFIG,
@@ -455,6 +475,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_MAINTENANCE_PLAN,
         PAGE_MAINTENANCE_EXECUTION,
         PAGE_MAINTENANCE_RECORD,
+        PAGE_EQUIPMENT_RULE_PARAMETER,
         PAGE_PRODUCTION,
         PAGE_PRODUCTION_ORDER_MANAGEMENT,
         PAGE_PRODUCTION_ORDER_QUERY,
@@ -469,6 +490,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY_SCRAP_STATISTICS,
         PAGE_QUALITY_REPAIR_ORDERS,
         PAGE_QUALITY_TREND,
+        PAGE_QUALITY_DEFECT_ANALYSIS,
         PAGE_CRAFT,
         PAGE_PROCESS_MANAGEMENT,
         PAGE_PRODUCTION_PROCESS_CONFIG,
@@ -495,6 +517,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY_SCRAP_STATISTICS,
         PAGE_QUALITY_REPAIR_ORDERS,
         PAGE_QUALITY_TREND,
+        PAGE_QUALITY_DEFECT_ANALYSIS,
         PAGE_MESSAGE,
         PAGE_MESSAGE_CENTER,
     },
