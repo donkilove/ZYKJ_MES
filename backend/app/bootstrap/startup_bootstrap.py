@@ -67,6 +67,8 @@ def run_alembic_upgrade() -> None:
     config = Config(str(alembic_ini))
     config.set_main_option("script_location", str(backend_root / "alembic"))
     config.set_main_option("sqlalchemy.url", settings.database_url)
+    # 禁止 alembic 重置日志配置（避免在 uvicorn lifespan 中吞掉异常）
+    config.config_file_name = None
     command.upgrade(config, "head")
     logger.info("[BOOTSTRAP] Alembic migration completed.")
 

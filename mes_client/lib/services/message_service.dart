@@ -11,7 +11,7 @@ class MessageService {
 
   final AppSession _session;
 
-  String get _base => '${_session.baseUrl}/api/v1/messages';
+  String get _base => '${_session.baseUrl}/messages';
 
   Map<String, String> get _headers => {
         'Authorization': 'Bearer ${_session.accessToken}',

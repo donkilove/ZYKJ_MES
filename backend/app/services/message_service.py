@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.message import Message
@@ -79,7 +79,7 @@ def list_messages(
     total: int = db.execute(count_stmt).scalar_one()
 
     # 高优先级置顶，同优先级按发布时间倒序
-    priority_order = func.case(
+    priority_order = case(
         (Message.priority == "urgent", 0),
         (Message.priority == "important", 1),
         else_=2,

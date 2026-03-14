@@ -633,6 +633,8 @@ class _FunctionPermissionConfigPageState
               margin: const EdgeInsets.only(bottom: 8),
               child: ExpansionTile(
                 initiallyExpanded: true,
+                shape: const Border(),
+                collapsedShape: const Border(),
                 title: Text('$groupName（${items.length}）'),
                 children: items.map((capability) {
                   final checked = draft.capabilityCodes.contains(
