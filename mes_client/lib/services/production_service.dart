@@ -27,6 +27,10 @@ class ProductionService {
     String? status,
     String? productName,
     bool? pipelineEnabled,
+    DateTime? startDateFrom,
+    DateTime? startDateTo,
+    DateTime? dueDateFrom,
+    DateTime? dueDateTo,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -41,6 +45,14 @@ class ProductionService {
     if (pipelineEnabled != null) {
       query['pipeline_enabled'] = pipelineEnabled ? 'true' : 'false';
     }
+    final startDateFromText = _formatDateOrNull(startDateFrom);
+    if (startDateFromText != null) query['start_date_from'] = startDateFromText;
+    final startDateToText = _formatDateOrNull(startDateTo);
+    if (startDateToText != null) query['start_date_to'] = startDateToText;
+    final dueDateFromText = _formatDateOrNull(dueDateFrom);
+    if (dueDateFromText != null) query['due_date_from'] = dueDateFromText;
+    final dueDateToText = _formatDateOrNull(dueDateTo);
+    if (dueDateToText != null) query['due_date_to'] = dueDateToText;
     final uri = Uri.parse('$_basePath/orders').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
@@ -69,6 +81,10 @@ class ProductionService {
     String? status,
     String? productName,
     bool? pipelineEnabled,
+    DateTime? startDateFrom,
+    DateTime? startDateTo,
+    DateTime? dueDateFrom,
+    DateTime? dueDateTo,
   }) async {
     final payload = <String, dynamic>{};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -83,6 +99,14 @@ class ProductionService {
     if (pipelineEnabled != null) {
       payload['pipeline_enabled'] = pipelineEnabled;
     }
+    final startDateFromText = _formatDateOrNull(startDateFrom);
+    if (startDateFromText != null) payload['start_date_from'] = startDateFromText;
+    final startDateToText = _formatDateOrNull(startDateTo);
+    if (startDateToText != null) payload['start_date_to'] = startDateToText;
+    final dueDateFromText = _formatDateOrNull(dueDateFrom);
+    if (dueDateFromText != null) payload['due_date_from'] = dueDateFromText;
+    final dueDateToText = _formatDateOrNull(dueDateTo);
+    if (dueDateToText != null) payload['due_date_to'] = dueDateToText;
     final uri = Uri.parse('$_basePath/orders/export');
     final response = await http.post(
       uri,
@@ -892,6 +916,12 @@ class ProductionService {
     required int page,
     required int pageSize,
     String? status,
+    String? orderCode,
+    String? processName,
+    String? requesterUsername,
+    String? helperUsername,
+    DateTime? createdAtFrom,
+    DateTime? createdAtTo,
   }) async {
     final query = <String, String>{
       'page': '$page',
@@ -900,6 +930,22 @@ class ProductionService {
     if (status != null && status.trim().isNotEmpty) {
       query['status'] = status.trim();
     }
+    if (orderCode != null && orderCode.trim().isNotEmpty) {
+      query['order_code'] = orderCode.trim();
+    }
+    if (processName != null && processName.trim().isNotEmpty) {
+      query['process_name'] = processName.trim();
+    }
+    if (requesterUsername != null && requesterUsername.trim().isNotEmpty) {
+      query['requester_username'] = requesterUsername.trim();
+    }
+    if (helperUsername != null && helperUsername.trim().isNotEmpty) {
+      query['helper_username'] = helperUsername.trim();
+    }
+    final createdAtFromText = _formatDateOrNull(createdAtFrom);
+    if (createdAtFromText != null) query['created_at_from'] = createdAtFromText;
+    final createdAtToText = _formatDateOrNull(createdAtTo);
+    if (createdAtToText != null) query['created_at_to'] = createdAtToText;
     final uri = Uri.parse(
       '$_basePath/assist-authorizations',
     ).replace(queryParameters: query);
@@ -1012,6 +1058,44 @@ class ProductionService {
         )
         .toList();
     return AssistUserOptionListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<PipelineInstanceListResult> listPipelineInstances({
+    int? orderId,
+    int? orderProcessId,
+    bool? isActive,
+    int page = 1,
+    int pageSize = 200,
+  }) async {
+    final query = <String, String>{
+      'page': '$page',
+      'page_size': '${pageSize.clamp(1, 500)}',
+    };
+    if (orderId != null) query['order_id'] = '$orderId';
+    if (orderProcessId != null) query['order_process_id'] = '$orderProcessId';
+    if (isActive != null) query['is_active'] = isActive ? 'true' : 'false';
+    final uri = Uri.parse(
+      '$_basePath/pipeline-instances',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) =>
+              PipelineInstanceItem.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+    return PipelineInstanceListResult(
       total: (data['total'] as int?) ?? 0,
       items: items,
     );

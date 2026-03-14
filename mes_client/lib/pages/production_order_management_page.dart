@@ -12,6 +12,7 @@ import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
 import 'production_order_detail_page.dart';
 import 'production_order_form_page.dart';
+import 'production_pipeline_instances_page.dart';
 
 class ProductionOrderManagementPage extends StatefulWidget {
   const ProductionOrderManagementPage({
@@ -53,6 +54,10 @@ class _ProductionOrderManagementPageState
   int _total = 0;
   String? _statusFilter;
   bool? _pipelineEnabledFilter;
+  DateTime? _startDateFrom;
+  DateTime? _startDateTo;
+  DateTime? _dueDateFrom;
+  DateTime? _dueDateTo;
   final TextEditingController _productNameController = TextEditingController();
   List<ProductionOrderItem> _items = const [];
   List<ProductionProductOption> _products = const [];
@@ -106,6 +111,15 @@ class _ProductionOrderManagementPageState
     return '${local.year}-$mm-$dd';
   }
 
+  Future<DateTime?> _pickDate(BuildContext context, DateTime? initial) async {
+    return showDatePicker(
+      context: context,
+      initialDate: initial ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+  }
+
   Future<void> _loadReferenceData() async {
     try {
       final products = await _service.listProductOptions();
@@ -148,6 +162,10 @@ class _ProductionOrderManagementPageState
             ? null
             : _productNameController.text.trim(),
         pipelineEnabled: _pipelineEnabledFilter,
+        startDateFrom: _startDateFrom,
+        startDateTo: _startDateTo,
+        dueDateFrom: _dueDateFrom,
+        dueDateTo: _dueDateTo,
       );
       if (!mounted) return;
       final filename =
@@ -189,6 +207,10 @@ class _ProductionOrderManagementPageState
             ? null
             : _productNameController.text.trim(),
         pipelineEnabled: _pipelineEnabledFilter,
+        startDateFrom: _startDateFrom,
+        startDateTo: _startDateTo,
+        dueDateFrom: _dueDateFrom,
+        dueDateTo: _dueDateTo,
       );
       if (!mounted) {
         return;
@@ -707,6 +729,64 @@ class _ProductionOrderManagementPageState
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                icon: const Icon(Icons.date_range, size: 16),
+                label: Text(
+                  '开始日期：${_startDateFrom == null ? '不限' : _formatDate(_startDateFrom)} ~ ${_startDateTo == null ? '不限' : _formatDate(_startDateTo)}',
+                ),
+                onPressed: () async {
+                  final ctx = context;
+                  final from = await _pickDate(ctx, _startDateFrom);
+                  if (from == null || !mounted) return;
+                  final to = await _pickDate(ctx, _startDateTo ?? from);
+                  if (!mounted) return;
+                  setState(() {
+                    _startDateFrom = from;
+                    _startDateTo = to;
+                  });
+                  _loadOrders();
+                },
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.event, size: 16),
+                label: Text(
+                  '交期：${_dueDateFrom == null ? '不限' : _formatDate(_dueDateFrom)} ~ ${_dueDateTo == null ? '不限' : _formatDate(_dueDateTo)}',
+                ),
+                onPressed: () async {
+                  final ctx = context;
+                  final from = await _pickDate(ctx, _dueDateFrom);
+                  if (from == null || !mounted) return;
+                  final to = await _pickDate(ctx, _dueDateTo ?? from);
+                  if (!mounted) return;
+                  setState(() {
+                    _dueDateFrom = from;
+                    _dueDateTo = to;
+                  });
+                  _loadOrders();
+                },
+              ),
+              if (_startDateFrom != null || _startDateTo != null || _dueDateFrom != null || _dueDateTo != null) ...[
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  icon: const Icon(Icons.clear, size: 16),
+                  label: const Text('清除日期'),
+                  onPressed: () {
+                    setState(() {
+                      _startDateFrom = null;
+                      _startDateTo = null;
+                      _dueDateFrom = null;
+                      _dueDateTo = null;
+                    });
+                    _loadOrders();
+                  },
+                ),
+              ],
+            ],
+          ),
           const SizedBox(height: 12),
           Text('总数：$_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
@@ -731,6 +811,7 @@ class _ProductionOrderManagementPageState
                         columns: const [
                           DataColumn(label: Text('订单号')),
                           DataColumn(label: Text('产品')),
+                          DataColumn(label: Text('产品版本')),
                           DataColumn(label: Text('数量')),
                           DataColumn(label: Text('状态')),
                           DataColumn(label: Text('当前工序')),
@@ -750,6 +831,7 @@ class _ProductionOrderManagementPageState
                             cells: [
                               DataCell(Text(item.orderCode)),
                               DataCell(Text(item.productName)),
+                              DataCell(Text(item.productVersion != null ? 'v${item.productVersion}' : '-')),
                               DataCell(Text('${item.quantity}')),
                               DataCell(
                                 Text(productionOrderStatusLabel(item.status)),
@@ -782,6 +864,20 @@ class _ProductionOrderManagementPageState
                                       case 'pipeline':
                                         await _showPipelineModeDialog(item);
                                         break;
+                                      case 'pipeline_instances':
+                                        await Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) =>
+                                                ProductionPipelineInstancesPage(
+                                              session: widget.session,
+                                              onLogout: widget.onLogout,
+                                              orderId: item.id,
+                                              orderCode: item.orderCode,
+                                              service: _service,
+                                            ),
+                                          ),
+                                        );
+                                        break;
                                     }
                                   },
                                   itemBuilder: (context) => [
@@ -789,6 +885,11 @@ class _ProductionOrderManagementPageState
                                       value: 'detail',
                                       child: Text('查看详情'),
                                     ),
+                                    if (item.pipelineEnabled)
+                                      const PopupMenuItem(
+                                        value: 'pipeline_instances',
+                                        child: Text('查看并行实例'),
+                                      ),
                                     if (widget.canEditOrder &&
                                         item.status == 'pending')
                                       const PopupMenuItem(

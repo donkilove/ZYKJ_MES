@@ -820,7 +820,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('代班已发起并生效')));
+      ).showSnackBar(const SnackBar(content: Text('代班已发起，等待审批后生效')));
       if (reloadAfterAction) {
         await _loadOrders();
       }
@@ -974,14 +974,23 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                           DataColumn(label: Text('订单号')),
                           DataColumn(label: Text('产品')),
                           DataColumn(label: Text('订单状态')),
+                          DataColumn(label: Text('工段')),
                           DataColumn(label: Text('工序')),
                           DataColumn(label: Text('工序状态')),
                           DataColumn(label: Text('可见数量')),
+                          DataColumn(label: Text('分配数量')),
                           DataColumn(label: Text('完成数量')),
+                          DataColumn(label: Text('查看视角')),
                           DataColumn(label: Text('更新时间')),
                           DataColumn(label: Text('详情')),
                         ],
                         rows: _items.map((item) {
+                          final viewLabel = switch (item.workView) {
+                            'own' => '本人',
+                            'assist' => '代班',
+                            'proxy' => '代理',
+                            _ => item.workView,
+                          };
                           return DataRow(
                             cells: [
                               DataCell(Text(item.orderCode)),
@@ -991,6 +1000,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                                   productionOrderStatusLabel(item.orderStatus),
                                 ),
                               ),
+                              DataCell(Text(item.currentStageName ?? '-')),
                               DataCell(Text(item.currentProcessName)),
                               DataCell(
                                 Text(
@@ -1001,8 +1011,16 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                               ),
                               DataCell(Text('${item.visibleQuantity}')),
                               DataCell(
+                                Text(
+                                  item.userAssignedQuantity != null
+                                      ? '${item.userAssignedQuantity}'
+                                      : '-',
+                                ),
+                              ),
+                              DataCell(
                                 Text('${item.processCompletedQuantity}'),
                               ),
+                              DataCell(Text(viewLabel)),
                               DataCell(Text(_formatDateTime(item.updatedAt))),
                               DataCell(
                                 OutlinedButton(

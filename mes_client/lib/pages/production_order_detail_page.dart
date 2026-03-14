@@ -5,6 +5,7 @@ import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import 'production_pipeline_instances_page.dart';
 
 class ProductionOrderDetailPage extends StatefulWidget {
   const ProductionOrderDetailPage({
@@ -212,6 +213,22 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
           icon: const Icon(Icons.alt_route),
           label: Text(order.pipelineEnabled ? '关闭并行模式' : '并行模式设置'),
         ),
+        if (order.pipelineEnabled)
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ProductionPipelineInstancesPage(
+                  session: widget.session,
+                  onLogout: widget.onLogout,
+                  orderId: order.id,
+                  orderCode: order.orderCode,
+                  service: _service,
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.account_tree_outlined),
+            label: const Text('查看并行实例'),
+          ),
       ],
     );
   }

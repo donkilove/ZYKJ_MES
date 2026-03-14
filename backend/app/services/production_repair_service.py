@@ -743,7 +743,7 @@ def export_scrap_statistics_csv(
                 row.scrap_reason,
                 int(row.scrap_quantity),
                 row.last_scrap_time.astimezone().strftime("%Y-%m-%d %H:%M:%S") if row.last_scrap_time else "",
-                "待申请" if row.progress == SCRAP_PROGRESS_PENDING_APPLY else "已申请",
+                "待处理" if row.progress == SCRAP_PROGRESS_PENDING_APPLY else "已处理",
             ]
         )
     content_base64 = _build_csv_base64(

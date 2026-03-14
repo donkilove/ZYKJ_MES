@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.core.authz_catalog import PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW
 from app.core.production_constants import ORDER_STATUS_COMPLETED, PROCESS_STATUS_COMPLETED
@@ -174,6 +174,12 @@ def list_assist_authorizations(
     page: int,
     page_size: int,
     status: str | None = None,
+    order_code: str | None = None,
+    process_name: str | None = None,
+    requester_username: str | None = None,
+    helper_username: str | None = None,
+    created_at_from: datetime | None = None,
+    created_at_to: datetime | None = None,
 ) -> tuple[int, list[ProductionAssistAuthorization]]:
     stmt = (
         select(ProductionAssistAuthorization)
@@ -194,6 +200,22 @@ def list_assist_authorizations(
         if status not in ASSIST_STATUS_ALL:
             raise ValueError("Invalid assist authorization status")
         stmt = stmt.where(ProductionAssistAuthorization.status == status)
+    if order_code:
+        stmt = stmt.where(ProductionAssistAuthorization.order_code.ilike(f"%{order_code}%"))
+    if process_name:
+        stmt = stmt.where(ProductionAssistAuthorization.process_name.ilike(f"%{process_name}%"))
+    if requester_username:
+        RequesterUser = aliased(User)
+        stmt = stmt.join(RequesterUser, ProductionAssistAuthorization.requester_user_id == RequesterUser.id, isouter=True)
+        stmt = stmt.where(RequesterUser.username.ilike(f"%{requester_username}%"))
+    if helper_username:
+        HelperUser = aliased(User)
+        stmt = stmt.join(HelperUser, ProductionAssistAuthorization.helper_user_id == HelperUser.id, isouter=True)
+        stmt = stmt.where(HelperUser.username.ilike(f"%{helper_username}%"))
+    if created_at_from:
+        stmt = stmt.where(ProductionAssistAuthorization.created_at >= created_at_from)
+    if created_at_to:
+        stmt = stmt.where(ProductionAssistAuthorization.created_at <= created_at_to)
 
     can_view_all = has_permission(
         db,

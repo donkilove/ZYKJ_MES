@@ -79,9 +79,9 @@ String repairOrderStatusLabel(String status) {
 String scrapProgressLabel(String status) {
   switch (status) {
     case 'pending_apply':
-      return '待申请';
+      return '待处理';
     case 'applied':
-      return '已申请';
+      return '已处理';
     default:
       return status;
   }
@@ -93,6 +93,7 @@ class ProductionOrderItem {
     required this.orderCode,
     required this.productId,
     required this.productName,
+    required this.productVersion,
     required this.quantity,
     required this.status,
     required this.currentProcessCode,
@@ -115,6 +116,7 @@ class ProductionOrderItem {
   final String orderCode;
   final int productId;
   final String productName;
+  final int? productVersion;
   final int quantity;
   final String status;
   final String? currentProcessCode;
@@ -138,6 +140,7 @@ class ProductionOrderItem {
       orderCode: (json['order_code'] as String?) ?? '',
       productId: (json['product_id'] as int?) ?? 0,
       productName: (json['product_name'] as String?) ?? '',
+      productVersion: json['product_version'] as int?,
       quantity: (json['quantity'] as int?) ?? 0,
       status: (json['status'] as String?) ?? 'pending',
       currentProcessCode: json['current_process_code'] as String?,
@@ -535,6 +538,62 @@ class OrderPipelineModeItem {
               .toList(),
     );
   }
+}
+
+class PipelineInstanceItem {
+  PipelineInstanceItem({
+    required this.id,
+    required this.subOrderId,
+    required this.orderId,
+    required this.orderProcessId,
+    required this.processCode,
+    required this.pipelineSeq,
+    required this.pipelineSubOrderNo,
+    required this.isActive,
+    required this.invalidReason,
+    required this.invalidatedAt,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final int id;
+  final int subOrderId;
+  final int orderId;
+  final int orderProcessId;
+  final String processCode;
+  final int pipelineSeq;
+  final String pipelineSubOrderNo;
+  final bool isActive;
+  final String? invalidReason;
+  final DateTime? invalidatedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory PipelineInstanceItem.fromJson(Map<String, dynamic> json) {
+    return PipelineInstanceItem(
+      id: json['id'] as int,
+      subOrderId: (json['sub_order_id'] as int?) ?? 0,
+      orderId: (json['order_id'] as int?) ?? 0,
+      orderProcessId: (json['order_process_id'] as int?) ?? 0,
+      processCode: (json['process_code'] as String?) ?? '',
+      pipelineSeq: (json['pipeline_seq'] as int?) ?? 0,
+      pipelineSubOrderNo: (json['pipeline_sub_order_no'] as String?) ?? '',
+      isActive: (json['is_active'] as bool?) ?? false,
+      invalidReason: json['invalid_reason'] as String?,
+      invalidatedAt: json['invalidated_at'] != null
+          ? DateTime.tryParse(json['invalidated_at'] as String)
+          : null,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+  }
+}
+
+class PipelineInstanceListResult {
+  PipelineInstanceListResult({required this.total, required this.items});
+
+  final int total;
+  final List<PipelineInstanceItem> items;
 }
 
 class AssistAuthorizationItem {
