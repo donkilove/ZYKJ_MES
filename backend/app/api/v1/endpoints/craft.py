@@ -15,6 +15,7 @@ from app.models.process_stage import ProcessStage
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
+from app.services.audit_service import write_audit_log
 from app.schemas.craft import (
     CraftKanbanProcessItem,
     CraftKanbanProcessMetricsResult,
@@ -731,7 +732,17 @@ def publish_template_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
-
+    write_audit_log(
+        db,
+        action_code="craft.template.publish",
+        action_name="发布工艺模板",
+        target_type="craft_template",
+        target_id=str(row.id),
+        target_name=row.template_name,
+        operator=current_user,
+        after_data={"version": updated.version, "note": payload.note},
+    )
+    db.commit()
     return success_response(
         ProductProcessTemplateUpdateResult(
             detail=_to_template_detail(updated),
@@ -843,7 +854,17 @@ def rollback_template_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
-
+    write_audit_log(
+        db,
+        action_code="craft.template.rollback",
+        action_name="回滚工艺模板",
+        target_type="craft_template",
+        target_id=str(row.id),
+        target_name=row.template_name,
+        operator=current_user,
+        after_data={"target_version": payload.target_version, "note": payload.note},
+    )
+    db.commit()
     return success_response(
         ProductProcessTemplateUpdateResult(
             detail=_to_template_detail(updated),
@@ -961,6 +982,17 @@ def copy_template_api(
         new_row = copy_template(db, template=row, new_name=body.new_name, operator=current_user)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="craft.template.copy",
+        action_name="复制工艺模板",
+        target_type="craft_template",
+        target_id=str(row.id),
+        target_name=row.template_name,
+        operator=current_user,
+        after_data={"new_template_id": new_row.id, "new_name": new_row.template_name},
+    )
+    db.commit()
     return success_response(_to_template_detail(new_row), message="created")
 
 
@@ -984,6 +1016,17 @@ def copy_template_to_product_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="craft.template.copy",
+        action_name="跨产品复制工艺模板",
+        target_type="craft_template",
+        target_id=str(row.id),
+        target_name=row.template_name,
+        operator=current_user,
+        after_data={"new_template_id": new_row.id, "new_name": new_row.template_name, "target_product_id": body.target_product_id},
+    )
+    db.commit()
     return success_response(_to_template_detail(new_row), message="created")
 
 
@@ -1006,6 +1049,17 @@ def copy_system_master_to_product_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="craft.template.copy",
+        action_name="从系统母版套版",
+        target_type="craft_template",
+        target_id=str(new_row.id),
+        target_name=new_row.template_name,
+        operator=current_user,
+        after_data={"source": "system_master", "product_id": body.product_id},
+    )
+    db.commit()
     return success_response(_to_template_detail(new_row), message="created")
 
 
@@ -1022,6 +1076,16 @@ def archive_template_api(
         updated = archive_template(db, template=row, operator=current_user)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="craft.template.archive",
+        action_name="归档工艺模板",
+        target_type="craft_template",
+        target_id=str(row.id),
+        target_name=row.template_name,
+        operator=current_user,
+    )
+    db.commit()
     return success_response(_to_template_detail(updated), message="archived")
 
 
@@ -1038,6 +1102,16 @@ def unarchive_template_api(
         updated = unarchive_template(db, template=row, operator=current_user)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="craft.template.unarchive",
+        action_name="取消归档工艺模板",
+        target_type="craft_template",
+        target_id=str(row.id),
+        target_name=row.template_name,
+        operator=current_user,
+    )
+    db.commit()
     return success_response(_to_template_detail(updated), message="unarchived")
 
 
