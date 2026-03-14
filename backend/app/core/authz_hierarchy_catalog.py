@@ -558,6 +558,14 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         dependency_permission_codes=("feature.production.order_query.execute",),
     ),
     FeatureDefinition(
+        permission_code="feature.production.pipeline_instances.view",
+        permission_name="查看并行实例追踪",
+        module_code="production",
+        page_code="production_pipeline_instances",
+        action_permission_codes=("production.pipeline_instances.list",),
+        dependency_permission_codes=("feature.production.order_management.manage",),
+    ),
+    FeatureDefinition(
         permission_code="feature.message.center.view",
         permission_name="查看消息中心",
         module_code="message",

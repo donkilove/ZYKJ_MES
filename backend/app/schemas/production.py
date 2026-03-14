@@ -659,6 +659,7 @@ class PipelineInstanceItem(BaseModel):
     id: int
     sub_order_id: int
     order_id: int
+    order_code: str
     order_process_id: int
     process_code: str
     pipeline_seq: int

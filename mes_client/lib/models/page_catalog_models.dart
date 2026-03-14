@@ -394,6 +394,48 @@ const fallbackPageCatalog = <PageCatalogItem>[
   ),
 
   PageCatalogItem(
+    code: 'production_scrap_statistics',
+
+    name: '报废统计',
+
+    pageType: 'tab',
+
+    parentCode: 'production',
+
+    alwaysVisible: false,
+
+    sortOrder: 55,
+  ),
+
+  PageCatalogItem(
+    code: 'production_repair_orders',
+
+    name: '维修订单',
+
+    pageType: 'tab',
+
+    parentCode: 'production',
+
+    alwaysVisible: false,
+
+    sortOrder: 56,
+  ),
+
+  PageCatalogItem(
+    code: 'production_pipeline_instances',
+
+    name: '并行实例追踪',
+
+    pageType: 'tab',
+
+    parentCode: 'production',
+
+    alwaysVisible: false,
+
+    sortOrder: 57,
+  ),
+
+  PageCatalogItem(
     code: 'quality',
 
     name: '品质',

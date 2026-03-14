@@ -1065,6 +1065,7 @@ class ProductionService {
 
   Future<PipelineInstanceListResult> listPipelineInstances({
     int? orderId,
+    String? orderCode,
     int? orderProcessId,
     bool? isActive,
     int page = 1,
@@ -1075,6 +1076,9 @@ class ProductionService {
       'page_size': '${pageSize.clamp(1, 500)}',
     };
     if (orderId != null) query['order_id'] = '$orderId';
+    if (orderCode != null && orderCode.trim().isNotEmpty) {
+      query['order_code'] = orderCode.trim();
+    }
     if (orderProcessId != null) query['order_process_id'] = '$orderProcessId';
     if (isActive != null) query['is_active'] = isActive ? 'true' : 'false';
     final uri = Uri.parse(

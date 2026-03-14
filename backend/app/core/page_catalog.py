@@ -38,6 +38,7 @@ PAGE_PRODUCTION_ASSIST_APPROVAL = "production_assist_approval"
 PAGE_PRODUCTION_DATA_QUERY = "production_data_query"
 PAGE_PRODUCTION_SCRAP_STATISTICS = "production_scrap_statistics"
 PAGE_PRODUCTION_REPAIR_ORDERS = "production_repair_orders"
+PAGE_PRODUCTION_PIPELINE_INSTANCES = "production_pipeline_instances"
 PAGE_QUALITY = "quality"
 PAGE_FIRST_ARTICLE_MANAGEMENT = "first_article_management"
 PAGE_QUALITY_DATA_QUERY = "quality_data_query"
@@ -272,6 +273,14 @@ PAGE_CATALOG = [
         "sort_order": 56,
     },
     {
+        "code": PAGE_PRODUCTION_PIPELINE_INSTANCES,
+        "name": "并行实例追踪",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_PRODUCTION,
+        "always_visible": False,
+        "sort_order": 57,
+    },
+    {
         "code": PAGE_QUALITY,
         "name": "质量",
         "page_type": PAGE_TYPE_SIDEBAR,
@@ -416,6 +425,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCTION_DATA_QUERY,
         PAGE_PRODUCTION_SCRAP_STATISTICS,
         PAGE_PRODUCTION_REPAIR_ORDERS,
+        PAGE_PRODUCTION_PIPELINE_INSTANCES,
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,
@@ -452,6 +462,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCTION_DATA_QUERY,
         PAGE_PRODUCTION_SCRAP_STATISTICS,
         PAGE_PRODUCTION_REPAIR_ORDERS,
+        PAGE_PRODUCTION_PIPELINE_INSTANCES,
         PAGE_QUALITY,
         PAGE_FIRST_ARTICLE_MANAGEMENT,
         PAGE_QUALITY_DATA_QUERY,

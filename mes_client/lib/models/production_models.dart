@@ -545,6 +545,7 @@ class PipelineInstanceItem {
     required this.id,
     required this.subOrderId,
     required this.orderId,
+    required this.orderCode,
     required this.orderProcessId,
     required this.processCode,
     required this.pipelineSeq,
@@ -559,6 +560,7 @@ class PipelineInstanceItem {
   final int id;
   final int subOrderId;
   final int orderId;
+  final String orderCode;
   final int orderProcessId;
   final String processCode;
   final int pipelineSeq;
@@ -574,6 +576,7 @@ class PipelineInstanceItem {
       id: json['id'] as int,
       subOrderId: (json['sub_order_id'] as int?) ?? 0,
       orderId: (json['order_id'] as int?) ?? 0,
+      orderCode: (json['order_code'] as String?) ?? '',
       orderProcessId: (json['order_process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       pipelineSeq: (json['pipeline_seq'] as int?) ?? 0,

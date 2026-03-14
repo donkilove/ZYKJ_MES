@@ -1257,6 +1257,7 @@ def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
         id=row.id,
         sub_order_id=row.sub_order_id,
         order_id=row.order_id,
+        order_code=row.order.order_code if row.order else "",
         order_process_id=row.order_process_id,
         process_code=row.process_code,
         pipeline_seq=row.pipeline_seq,
@@ -1364,6 +1365,7 @@ def export_orders_api(
 )
 def get_pipeline_instances_api(
     order_id: int | None = Query(default=None),
+    order_code: str | None = Query(default=None),
     order_process_id: int | None = Query(default=None),
     sub_order_id: int | None = Query(default=None),
     is_active: bool | None = Query(default=None),
@@ -1376,6 +1378,7 @@ def get_pipeline_instances_api(
         total, rows = list_pipeline_instances(
             db,
             order_id=order_id,
+            order_code=order_code,
             order_process_id=order_process_id,
             sub_order_id=sub_order_id,
             is_active=is_active,

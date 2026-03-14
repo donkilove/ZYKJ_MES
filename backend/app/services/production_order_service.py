@@ -1722,15 +1722,25 @@ def list_pipeline_instances(
     db: Session,
     *,
     order_id: int | None = None,
+    order_code: str | None = None,
     order_process_id: int | None = None,
     sub_order_id: int | None = None,
     is_active: bool | None = None,
     page: int = 1,
     page_size: int = 100,
 ) -> tuple[int, list[OrderSubOrderPipelineInstance]]:
-    stmt = select(OrderSubOrderPipelineInstance)
+    from sqlalchemy.orm import joinedload
+    stmt = select(OrderSubOrderPipelineInstance).options(
+        joinedload(OrderSubOrderPipelineInstance.order)
+    )
     if order_id is not None:
         stmt = stmt.where(OrderSubOrderPipelineInstance.order_id == order_id)
+    if order_code is not None and order_code.strip():
+        stmt = stmt.join(
+            ProductionOrder,
+            ProductionOrder.id == OrderSubOrderPipelineInstance.order_id,
+            isouter=False,
+        ).where(ProductionOrder.order_code.ilike(f"%{order_code.strip()}%"))
     if order_process_id is not None:
         stmt = stmt.where(OrderSubOrderPipelineInstance.order_process_id == order_process_id)
     if sub_order_id is not None:
@@ -1742,7 +1752,7 @@ def list_pipeline_instances(
         OrderSubOrderPipelineInstance.pipeline_seq.asc(),
         OrderSubOrderPipelineInstance.id.asc(),
     )
-    rows = db.execute(stmt).scalars().all()
+    rows = db.execute(stmt).unique().scalars().all()
     total = len(rows)
     offset = (page - 1) * page_size
     return total, rows[offset: offset + page_size]
