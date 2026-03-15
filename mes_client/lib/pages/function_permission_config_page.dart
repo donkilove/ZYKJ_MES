@@ -168,9 +168,8 @@ class _FunctionPermissionConfigPageState
       _message = '';
     });
     try {
-      final roleResult = await _userService.listRoles();
-      final roles = roleResult.items.toList()
-        ..sort((a, b) => a.id - b.id);
+      final roleResult = await _userService.listAllRoles();
+      final roles = roleResult.items.toList()..sort((a, b) => a.id - b.id);
       if (roles.isEmpty) {
         if (!mounted) {
           return;
@@ -245,7 +244,8 @@ class _FunctionPermissionConfigPageState
       moduleCode: moduleCode,
     );
     _catalogByModule[catalog.moduleCode] = catalog;
-    final effectiveModuleCodes = (moduleCodes ?? catalog.moduleCodes).toList()..sort();
+    final effectiveModuleCodes = (moduleCodes ?? catalog.moduleCodes).toList()
+      ..sort();
     if (effectiveModuleCodes.isEmpty) {
       if (!mounted) {
         return;
@@ -555,10 +555,7 @@ class _FunctionPermissionConfigPageState
                           ),
                         ),
                       if (readonly)
-                        const Text(
-                          '只读',
-                          style: TextStyle(fontSize: 12),
-                        ),
+                        const Text('只读', style: TextStyle(fontSize: 12)),
                     ],
                   ),
                 );
@@ -578,14 +575,15 @@ class _FunctionPermissionConfigPageState
   }) {
     final grouped = <String, List<CapabilityPackItem>>{};
     for (final item in capabilityPacks) {
-      grouped.putIfAbsent(item.groupName, () => <CapabilityPackItem>[]).add(
-        item,
-      );
+      grouped
+          .putIfAbsent(item.groupName, () => <CapabilityPackItem>[])
+          .add(item);
     }
     final groupNames = grouped.keys.toList()..sort();
     for (final groupName in groupNames) {
-      grouped[groupName]!
-          .sort((a, b) => a.capabilityName.compareTo(b.capabilityName));
+      grouped[groupName]!.sort(
+        (a, b) => a.capabilityName.compareTo(b.capabilityName),
+      );
     }
 
     return Card(
@@ -622,10 +620,7 @@ class _FunctionPermissionConfigPageState
           if (readonly)
             const Padding(
               padding: EdgeInsets.only(bottom: 8),
-              child: Text(
-                '当前角色为只读，权限项不可编辑。',
-                style: TextStyle(fontSize: 12),
-              ),
+              child: Text('当前角色为只读，权限项不可编辑。', style: TextStyle(fontSize: 12)),
             ),
           ...groupNames.map((groupName) {
             final items = grouped[groupName] ?? const <CapabilityPackItem>[];

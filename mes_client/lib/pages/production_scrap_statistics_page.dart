@@ -255,24 +255,54 @@ class _ProductionScrapStatisticsPageState
         content: SizedBox(
           width: 420,
           child: errorMsg != null
-              ? Text(errorMsg, style: TextStyle(color: Theme.of(ctx).colorScheme.error))
+              ? Text(
+                  errorMsg,
+                  style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                )
               : SingleChildScrollView(
-                  child: Table(
-                    columnWidths: const {
-                      0: IntrinsicColumnWidth(),
-                      1: FlexColumnWidth(),
-                    },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _detailRow('订单号', d.orderCode ?? '-'),
-                      _detailRow('产品', d.productName ?? '-'),
-                      _detailRow('工序', d.processName ?? '-'),
-                      _detailRow('工序编码', d.processCode ?? '-'),
-                      _detailRow('报废原因', d.scrapReason),
-                      _detailRow('报废数量', '${d.scrapQuantity}'),
-                      _detailRow('进度', scrapProgressLabel(d.progress)),
-                      _detailRow('最近报废时间', _formatDateTime(d.lastScrapTime)),
-                      _detailRow('申请时间', _formatDateTime(d.appliedAt)),
-                      _detailRow('创建时间', _formatDateTime(d.createdAt)),
+                      Table(
+                        columnWidths: const {
+                          0: IntrinsicColumnWidth(),
+                          1: FlexColumnWidth(),
+                        },
+                        children: [
+                          _detailRow('订单号', d.orderCode ?? '-'),
+                          _detailRow('产品', d.productName ?? '-'),
+                          _detailRow('工序', d.processName ?? '-'),
+                          _detailRow('工序编码', d.processCode ?? '-'),
+                          _detailRow('报废原因', d.scrapReason),
+                          _detailRow('报废数量', '${d.scrapQuantity}'),
+                          _detailRow('进度', scrapProgressLabel(d.progress)),
+                          _detailRow(
+                            '最近报废时间',
+                            _formatDateTime(d.lastScrapTime),
+                          ),
+                          _detailRow('申请时间', _formatDateTime(d.appliedAt)),
+                          _detailRow('创建时间', _formatDateTime(d.createdAt)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        '关联维修工单',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 6),
+                      if (d.relatedRepairOrders.isEmpty)
+                        const Text('无')
+                      else
+                        ...d.relatedRepairOrders.map(
+                          (repair) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              '${repair.repairOrderCode} | ${repairOrderStatusLabel(repair.status)} | '
+                              '送修:${repair.repairQuantity} 已修:${repair.repairedQuantity} 报废:${repair.scrapQuantity} | '
+                              '${_formatDateTime(repair.repairTime)}',
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -288,16 +318,21 @@ class _ProductionScrapStatisticsPageState
   }
 
   TableRow _detailRow(String label, String value) {
-    return TableRow(children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-      ),
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        child: Text(value),
-      ),
-    ]);
+    return TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+          child: Text(value),
+        ),
+      ],
+    );
   }
 
   @override
@@ -421,6 +456,7 @@ class _ProductionScrapStatisticsPageState
                               context,
                               '最近报废时间',
                             ),
+                            UnifiedListTableHeaderStyle.column(context, '处理时间'),
                             UnifiedListTableHeaderStyle.column(context, '操作'),
                           ],
                           rows: _items
@@ -437,6 +473,9 @@ class _ProductionScrapStatisticsPageState
                                     ),
                                     DataCell(
                                       Text(_formatDateTime(item.lastScrapTime)),
+                                    ),
+                                    DataCell(
+                                      Text(_formatDateTime(item.appliedAt)),
                                     ),
                                     DataCell(
                                       TextButton(

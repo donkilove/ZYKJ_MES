@@ -100,7 +100,8 @@ class ProductionService {
       payload['pipeline_enabled'] = pipelineEnabled;
     }
     final startDateFromText = _formatDateOrNull(startDateFrom);
-    if (startDateFromText != null) payload['start_date_from'] = startDateFromText;
+    if (startDateFromText != null)
+      payload['start_date_from'] = startDateFromText;
     final startDateToText = _formatDateOrNull(startDateTo);
     if (startDateToText != null) payload['start_date_to'] = startDateToText;
     final dueDateFromText = _formatDateOrNull(dueDateFrom);
@@ -294,6 +295,8 @@ class ProductionService {
     String? keyword,
     String? viewMode,
     int? proxyOperatorUserId,
+    String? orderStatus,
+    int? currentProcessId,
   }) async {
     final normalizedPageSize = pageSize.clamp(1, 200).toInt();
     final query = <String, String>{
@@ -308,6 +311,14 @@ class ProductionService {
     }
     if (proxyOperatorUserId != null && proxyOperatorUserId > 0) {
       query['proxy_operator_user_id'] = '$proxyOperatorUserId';
+    }
+    if (orderStatus != null &&
+        orderStatus.trim().isNotEmpty &&
+        orderStatus.trim() != 'all') {
+      query['order_status'] = orderStatus.trim();
+    }
+    if (currentProcessId != null && currentProcessId > 0) {
+      query['current_process_id'] = '$currentProcessId';
     }
     final uri = Uri.parse(
       '$_basePath/my-orders',
@@ -1067,6 +1078,7 @@ class ProductionService {
     int? orderId,
     String? orderCode,
     int? orderProcessId,
+    int? subOrderId,
     bool? isActive,
     int page = 1,
     int pageSize = 200,
@@ -1080,6 +1092,7 @@ class ProductionService {
       query['order_code'] = orderCode.trim();
     }
     if (orderProcessId != null) query['order_process_id'] = '$orderProcessId';
+    if (subOrderId != null) query['sub_order_id'] = '$subOrderId';
     if (isActive != null) query['is_active'] = isActive ? 'true' : 'false';
     final uri = Uri.parse(
       '$_basePath/pipeline-instances',

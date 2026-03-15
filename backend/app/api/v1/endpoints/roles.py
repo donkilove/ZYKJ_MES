@@ -81,7 +81,12 @@ def create_role_api(
         target_id=str(role.id),
         target_name=role.name,
         operator=current_user,
-        after_data={"code": role.code, "name": role.name},
+        after_data={
+            "code": role.code,
+            "name": role.name,
+            "role_type": role.role_type,
+            "is_enabled": role.is_enabled,
+        },
         ip_address=request.client.host if request.client else None,
         terminal_info=request.headers.get("user-agent"),
     )
@@ -104,6 +109,7 @@ def update_role_api(
         "code": role.code,
         "name": role.name,
         "description": role.description,
+        "role_type": role.role_type,
         "is_enabled": role.is_enabled,
     }
     updated, errors = update_role(db, role, payload)
@@ -124,6 +130,7 @@ def update_role_api(
             "code": updated.code,
             "name": updated.name,
             "description": updated.description,
+            "role_type": updated.role_type,
             "is_enabled": updated.is_enabled,
         },
         ip_address=request.client.host if request.client else None,

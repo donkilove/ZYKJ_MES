@@ -19,6 +19,7 @@ class ProductionPipelineInstancesPage extends StatefulWidget {
 
   final AppSession session;
   final VoidCallback onLogout;
+
   /// 从订单进入时传入，独立进入时为 null
   final int? orderId;
   final String? orderCode;
@@ -38,6 +39,8 @@ class _ProductionPipelineInstancesPageState
   int _total = 0;
   bool? _isActiveFilter;
   final _orderCodeController = TextEditingController();
+  final _orderProcessIdController = TextEditingController();
+  final _subOrderIdController = TextEditingController();
   List<PipelineInstanceItem> _items = const [];
 
   /// 独立进入模式（无固定订单）
@@ -56,6 +59,8 @@ class _ProductionPipelineInstancesPageState
   @override
   void dispose() {
     _orderCodeController.dispose();
+    _orderProcessIdController.dispose();
+    _subOrderIdController.dispose();
     super.dispose();
   }
 
@@ -74,6 +79,18 @@ class _ProductionPipelineInstancesPageState
     return '${local.year}-$mm-$dd $hh:$min';
   }
 
+  int? _parsePositiveInt(String raw) {
+    final token = raw.trim();
+    if (token.isEmpty) {
+      return null;
+    }
+    final value = int.tryParse(token);
+    if (value == null || value <= 0) {
+      return null;
+    }
+    return value;
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -83,6 +100,8 @@ class _ProductionPipelineInstancesPageState
       final result = await _service.listPipelineInstances(
         orderId: widget.orderId,
         orderCode: _standaloneMode ? _orderCodeController.text : null,
+        orderProcessId: _parsePositiveInt(_orderProcessIdController.text),
+        subOrderId: _parsePositiveInt(_subOrderIdController.text),
         isActive: _isActiveFilter,
       );
       if (!mounted) return;
@@ -106,13 +125,15 @@ class _ProductionPipelineInstancesPageState
 
   void _copyOrderCode(PipelineInstanceItem item) {
     Clipboard.setData(ClipboardData(text: item.orderCode));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已复制订单号：${item.orderCode}')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('已复制订单号：${item.orderCode}')));
   }
 
   Widget _buildFilterBar() {
-    return Row(
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
       children: [
         if (_standaloneMode) ...[
           SizedBox(
@@ -127,8 +148,33 @@ class _ProductionPipelineInstancesPageState
               onSubmitted: (_) => _load(),
             ),
           ),
-          const SizedBox(width: 12),
         ],
+        SizedBox(
+          width: 180,
+          child: TextField(
+            controller: _orderProcessIdController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '工序ID',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _load(),
+          ),
+        ),
+        SizedBox(
+          width: 180,
+          child: TextField(
+            controller: _subOrderIdController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '子订单ID',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _load(),
+          ),
+        ),
         SizedBox(
           width: 160,
           child: DropdownButtonFormField<bool?>(
@@ -152,7 +198,6 @@ class _ProductionPipelineInstancesPageState
                   },
           ),
         ),
-        const SizedBox(width: 12),
         IconButton(
           tooltip: '查询',
           onPressed: _loading ? null : _load,
@@ -170,9 +215,7 @@ class _ProductionPipelineInstancesPageState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = _standaloneMode
-        ? '并行实例追踪'
-        : '并行实例 - ${widget.orderCode}';
+    final title = _standaloneMode ? '并行实例追踪' : '并行实例 - ${widget.orderCode}';
 
     final body = Padding(
       padding: const EdgeInsets.all(16),
@@ -210,6 +253,7 @@ class _ProductionPipelineInstancesPageState
                           const DataColumn(label: Text('失效原因')),
                           const DataColumn(label: Text('失效时间')),
                           const DataColumn(label: Text('创建时间')),
+                          const DataColumn(label: Text('更新时间')),
                           if (_standaloneMode)
                             const DataColumn(label: Text('操作')),
                         ],
@@ -222,9 +266,7 @@ class _ProductionPipelineInstancesPageState
                               DataCell(Text(item.processCode)),
                               DataCell(Text('${item.pipelineSeq}')),
                               DataCell(Text(item.pipelineSubOrderNo)),
-                              DataCell(
-                                Text(item.isActive ? '活跃' : '已失效'),
-                              ),
+                              DataCell(Text(item.isActive ? '活跃' : '已失效')),
                               DataCell(Text(item.invalidReason ?? '-')),
                               DataCell(
                                 Text(
@@ -234,6 +276,7 @@ class _ProductionPipelineInstancesPageState
                                 ),
                               ),
                               DataCell(Text(_formatDateTime(item.createdAt))),
+                              DataCell(Text(_formatDateTime(item.updatedAt))),
                               if (_standaloneMode)
                                 DataCell(
                                   TextButton(

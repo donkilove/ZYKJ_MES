@@ -11,6 +11,7 @@ import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/user_service.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 enum _UserAction { edit, disable, enable, resetPassword, delete }
 
@@ -48,6 +49,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
     _roleQualityAdmin,
     _roleOperator,
   ];
+  static const int _userPageSize = 50;
 
   late final UserService _userService;
   late final CraftService _craftService;
@@ -70,9 +72,17 @@ class _UserManagementPageState extends State<UserManagementPage> {
   List<ProcessItem> _processes = const [];
   List<CraftStageItem> _stages = const [];
   int _total = 0;
+  int _userPage = 1;
   List<String> _myRoleCodes = const [];
 
   bool _isCurrentUserSystemAdmin() => _myRoleCodes.contains(_roleSystemAdmin);
+
+  int get _userTotalPages {
+    if (_total <= 0) {
+      return 1;
+    }
+    return ((_total - 1) ~/ _userPageSize) + 1;
+  }
 
   @override
   void initState() {
@@ -167,7 +177,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
     _onlineRefreshInFlight = false;
   }
 
-  Future<void> _loadInitialData() async {
+  Future<void> _loadInitialData({int? page}) async {
+    final targetPage = page ?? _userPage;
     setState(() {
       _loading = true;
       _message = '';
@@ -175,12 +186,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
     try {
       final result = await Future.wait<dynamic>([
-        _userService.listRoles(),
+        _userService.listAllRoles(),
         _userService.listProcesses(),
         _craftService.listStages(pageSize: 500, enabled: true),
         _userService.listUsers(
-          page: 1,
-          pageSize: 50,
+          page: targetPage,
+          pageSize: _userPageSize,
           keyword: _keywordController.text.trim(),
           roleCode: _filterRoleCode,
           stageId: _filterStageId,
@@ -198,14 +209,24 @@ class _UserManagementPageState extends State<UserManagementPage> {
       if (!mounted) {
         return;
       }
+      final resolvedTotalPages = users.total <= 0
+          ? 1
+          : (((users.total - 1) ~/ _userPageSize) + 1);
+      final resolvedPage = targetPage > resolvedTotalPages
+          ? resolvedTotalPages
+          : targetPage;
       setState(() {
         _roles = roles.items;
         _processes = processes.items;
         _stages = stages.items;
         _users = users.items;
         _total = users.total;
+        _userPage = resolvedPage;
         _myRoleCodes = myProfile.roleCodes;
       });
+      if (resolvedPage != targetPage) {
+        await _loadInitialData(page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -228,7 +249,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
-  Future<void> _loadUsers({bool silent = false}) async {
+  Future<void> _loadUsers({bool silent = false, int? page}) async {
+    final targetPage = page ?? _userPage;
     if (!silent) {
       setState(() {
         _loading = true;
@@ -238,8 +260,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
     try {
       final result = await _userService.listUsers(
-        page: 1,
-        pageSize: 50,
+        page: targetPage,
+        pageSize: _userPageSize,
         keyword: _keywordController.text.trim(),
         roleCode: _filterRoleCode,
         stageId: _filterStageId,
@@ -249,10 +271,20 @@ class _UserManagementPageState extends State<UserManagementPage> {
       if (!mounted) {
         return;
       }
+      final resolvedTotalPages = result.total <= 0
+          ? 1
+          : (((result.total - 1) ~/ _userPageSize) + 1);
+      final resolvedPage = targetPage > resolvedTotalPages
+          ? resolvedTotalPages
+          : targetPage;
       setState(() {
         _users = result.items;
         _total = result.total;
+        _userPage = resolvedPage;
       });
+      if (resolvedPage != targetPage) {
+        await _loadUsers(silent: silent, page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -1046,12 +1078,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
                     labelText: '按账号搜索',
                     border: OutlineInputBorder(),
                   ),
-                  onSubmitted: (_) => _loadUsers(),
+                  onSubmitted: (_) => _loadUsers(page: 1),
                 ),
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadUsers,
+                onPressed: _loading ? null : () => _loadUsers(page: 1),
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
               ),
@@ -1116,7 +1148,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                   ],
                   onChanged: (value) {
                     setState(() => _filterRoleCode = value);
-                    _loadUsers();
+                    _loadUsers(page: 1);
                   },
                 ),
               ),
@@ -1147,7 +1179,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                   ],
                   onChanged: (value) {
                     setState(() => _filterStageId = value);
-                    _loadUsers();
+                    _loadUsers(page: 1);
                   },
                 ),
               ),
@@ -1171,7 +1203,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                   ],
                   onChanged: (value) {
                     setState(() => _filterIsOnline = value);
-                    _loadUsers();
+                    _loadUsers(page: 1);
                   },
                 ),
               ),
@@ -1195,7 +1227,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                   ],
                   onChanged: (value) {
                     setState(() => _filterIsActive = value);
-                    _loadUsers();
+                    _loadUsers(page: 1);
                   },
                 ),
               ),
@@ -1327,6 +1359,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       ),
                     ),
                   ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _userPage,
+            totalPages: _userTotalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadUsers(page: _userPage - 1),
+            onNext: () => _loadUsers(page: _userPage + 1),
           ),
         ],
       ),

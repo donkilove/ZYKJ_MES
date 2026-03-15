@@ -113,10 +113,39 @@ class UserService {
     return RoleListResult(total: (data['total'] as int?) ?? 0, items: items);
   }
 
+  Future<RoleListResult> listAllRoles({String? keyword}) async {
+    const pageSize = 200;
+    var page = 1;
+    var total = 0;
+    final items = <RoleItem>[];
+
+    while (true) {
+      final result = await listRoles(
+        page: page,
+        pageSize: pageSize,
+        keyword: keyword,
+      );
+      total = result.total;
+      items.addAll(result.items);
+
+      if (result.items.isEmpty) {
+        break;
+      }
+      if (total > 0 && items.length >= total) {
+        break;
+      }
+      page += 1;
+    }
+
+    return RoleListResult(total: total, items: items);
+  }
+
   Future<RoleItem> createRole({
     required String code,
     required String name,
     String? description,
+    String roleType = 'custom',
+    bool isEnabled = true,
   }) async {
     final uri = Uri.parse('${session.baseUrl}/roles');
     final response = await http.post(
@@ -126,6 +155,8 @@ class UserService {
         'code': code.trim(),
         'name': name.trim(),
         if (description != null) 'description': description.trim(),
+        'role_type': roleType,
+        'is_enabled': isEnabled,
       }),
     );
     final json = _decodeBody(response);

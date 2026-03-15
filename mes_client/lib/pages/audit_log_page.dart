@@ -4,6 +4,7 @@ import '../models/app_session.dart';
 import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/user_service.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class AuditLogPage extends StatefulWidget {
   const AuditLogPage({
@@ -20,6 +21,8 @@ class AuditLogPage extends StatefulWidget {
 }
 
 class _AuditLogPageState extends State<AuditLogPage> {
+  static const int _pageSize = 200;
+
   late final UserService _userService;
   final TextEditingController _operatorController = TextEditingController();
   final TextEditingController _actionController = TextEditingController();
@@ -31,7 +34,15 @@ class _AuditLogPageState extends State<AuditLogPage> {
   bool _loading = false;
   String _message = '';
   int _total = 0;
+  int _page = 1;
   List<AuditLogItem> _items = const [];
+
+  int get _totalPages {
+    if (_total <= 0) {
+      return 1;
+    }
+    return ((_total - 1) ~/ _pageSize) + 1;
+  }
 
   @override
   void initState() {
@@ -58,15 +69,16 @@ class _AuditLogPageState extends State<AuditLogPage> {
     return error.toString();
   }
 
-  Future<void> _loadAuditLogs() async {
+  Future<void> _loadAuditLogs({int? page}) async {
+    final targetPage = page ?? _page;
     setState(() {
       _loading = true;
       _message = '';
     });
     try {
       final result = await _userService.listAuditLogs(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         operatorUsername: _operatorController.text.trim(),
         actionCode: _actionController.text.trim(),
         targetType: _targetController.text.trim(),
@@ -76,10 +88,20 @@ class _AuditLogPageState extends State<AuditLogPage> {
       if (!mounted) {
         return;
       }
+      final resolvedTotalPages = result.total <= 0
+          ? 1
+          : (((result.total - 1) ~/ _pageSize) + 1);
+      final resolvedPage = targetPage > resolvedTotalPages
+          ? resolvedTotalPages
+          : targetPage;
       setState(() {
         _items = result.items;
         _total = result.total;
+        _page = resolvedPage;
       });
+      if (resolvedPage != targetPage) {
+        await _loadAuditLogs(page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -199,7 +221,7 @@ class _AuditLogPageState extends State<AuditLogPage> {
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadAuditLogs(),
+                  onSubmitted: (_) => _loadAuditLogs(page: 1),
                 ),
               ),
               SizedBox(
@@ -211,7 +233,7 @@ class _AuditLogPageState extends State<AuditLogPage> {
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadAuditLogs(),
+                  onSubmitted: (_) => _loadAuditLogs(page: 1),
                 ),
               ),
               SizedBox(
@@ -223,7 +245,7 @@ class _AuditLogPageState extends State<AuditLogPage> {
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadAuditLogs(),
+                  onSubmitted: (_) => _loadAuditLogs(page: 1),
                 ),
               ),
               // 时间范围选择
@@ -243,10 +265,13 @@ class _AuditLogPageState extends State<AuditLogPage> {
                   icon: const Icon(Icons.clear, size: 16),
                   tooltip: '清除时间范围',
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                 ),
               FilledButton(
-                onPressed: _loadAuditLogs,
+                onPressed: () => _loadAuditLogs(page: 1),
                 child: const Text('查询'),
               ),
             ],
@@ -299,22 +324,33 @@ class _AuditLogPageState extends State<AuditLogPage> {
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : _items.isEmpty
-                  ? const Center(child: Text('暂无数据'))
-                  : ListView.separated(
-                      itemCount: _items.length,
-                      separatorBuilder: (_, _) =>
-                          const Divider(height: 1, indent: 8, endIndent: 8),
-                      itemBuilder: (context, index) {
-                        final item = _items[index];
-                        return _AuditLogRow(
-                          item: item,
-                          columns: _columns,
-                          formatDateTime: _formatDateTime,
-                          formatMapData: _formatMapData,
-                          resultLabel: _resultLabel,
-                        );
-                      },
-                    ),
+              ? const Center(child: Text('暂无数据'))
+              : ListView.separated(
+                  itemCount: _items.length,
+                  separatorBuilder: (_, _) =>
+                      const Divider(height: 1, indent: 8, endIndent: 8),
+                  itemBuilder: (context, index) {
+                    final item = _items[index];
+                    return _AuditLogRow(
+                      item: item,
+                      columns: _columns,
+                      formatDateTime: _formatDateTime,
+                      formatMapData: _formatMapData,
+                      resultLabel: _resultLabel,
+                    );
+                  },
+                ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadAuditLogs(page: _page - 1),
+            onNext: () => _loadAuditLogs(page: _page + 1),
+          ),
         ),
       ],
     );

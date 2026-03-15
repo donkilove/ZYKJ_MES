@@ -368,7 +368,12 @@ def get_unfinished_progress_data(
     orders = db.execute(stmt).scalars().all()
     table_rows: list[dict[str, Any]] = []
     for order in orders:
-        process_rows = list(order.processes or [])
+        process_rows = sorted(
+            list(order.processes or []),
+            key=lambda row: (row.process_order, row.id),
+        )
+        if not process_rows:
+            continue
         if normalized_stage_ids and not any((row.stage_id or 0) in normalized_stage_ids for row in process_rows):
             continue
         if normalized_process_ids and not any(row.process_id in normalized_process_ids for row in process_rows):
@@ -382,9 +387,18 @@ def get_unfinished_progress_data(
         if normalized_operator_ids and not any(row.operator_user_id in normalized_operator_ids for row in record_rows):
             continue
 
-        produced_total = int(sum(int(row.production_quantity or 0) for row in record_rows))
+        current_process = next(
+            (row for row in process_rows if row.status != PROCESS_STATUS_COMPLETED),
+            None,
+        )
+        if current_process is None:
+            current_process = process_rows[-1]
+
+        current_process_name = str(current_process.process_name or "")
+        produced_total = int(current_process.completed_quantity or 0)
         process_count = len(process_rows)
-        target_total = int(max(order.quantity, 0) * process_count)
+        target_total = int(max(order.quantity, 0))
+        remaining_quantity = max(target_total - produced_total, 0)
         progress_percent = round((produced_total / target_total * 100.0), 2) if target_total > 0 else 0.0
         progress_percent = max(0.0, min(progress_percent, 100.0))
 
@@ -395,6 +409,8 @@ def get_unfinished_progress_data(
                 "product_id": order.product_id,
                 "product_name": order.product.name if order.product else "",
                 "order_status": order.status,
+                "current_process_name": current_process_name,
+                "remaining_quantity": remaining_quantity,
                 "process_count": process_count,
                 "produced_total": produced_total,
                 "target_total": target_total,

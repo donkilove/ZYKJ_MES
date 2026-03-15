@@ -25,6 +25,25 @@ def test_role_service_create_list_update(db) -> None:
     assert updated.name == "Role X"
 
 
+def test_role_service_create_role_type_and_status_rules(db) -> None:
+    created_builtin, errors_builtin = role_service.create_role(
+        db,
+        RoleCreate(code="manual_builtin", name="手工内置角色", role_type="builtin"),
+    )
+    assert created_builtin is None
+    assert errors_builtin == ["系统内置角色由系统维护，不支持手动创建"]
+
+    created_disabled, errors_disabled = role_service.create_role(
+        db,
+        RoleCreate(code="r_disabled", name="Role Disabled", is_enabled=False),
+    )
+    assert errors_disabled == []
+    assert created_disabled is not None
+    assert created_disabled.role_type == "custom"
+    assert created_disabled.is_builtin is False
+    assert created_disabled.is_enabled is False
+
+
 def test_role_service_get_roles_by_codes_returns_missing(db) -> None:
     role_service.create_role(db, RoleCreate(code="r2", name="Role 2"))
     roles, missing = role_service.get_roles_by_codes(db, ["r2", "r3"])

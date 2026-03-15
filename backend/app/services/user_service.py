@@ -82,6 +82,8 @@ def query_users(
     keyword: str | None,
     role_code: str | None = None,
     stage_id: int | None = None,
+    is_online: bool | None = None,
+    online_user_ids: set[int] | None = None,
     is_active: bool | None = None,
     include_deleted: bool = False,
 ) -> Select[tuple[User]]:
@@ -103,6 +105,15 @@ def query_users(
         stmt = stmt.join(User.roles).where(Role.code == role_code)
     if stage_id is not None:
         stmt = stmt.where(User.stage_id == stage_id)
+    if is_online is not None:
+        effective_online_user_ids = online_user_ids or set()
+        if is_online:
+            if not effective_online_user_ids:
+                stmt = stmt.where(User.id == -1)
+            else:
+                stmt = stmt.where(User.id.in_(effective_online_user_ids))
+        elif effective_online_user_ids:
+            stmt = stmt.where(~User.id.in_(effective_online_user_ids))
     if is_active is not None:
         stmt = stmt.where(User.is_active.is_(is_active))
     return stmt
@@ -178,6 +189,8 @@ def list_users(
     keyword: str | None,
     role_code: str | None = None,
     stage_id: int | None = None,
+    is_online: bool | None = None,
+    online_user_ids: set[int] | None = None,
     is_active: bool | None = None,
     include_deleted: bool = False,
 ) -> tuple[int, list[User]]:
@@ -185,6 +198,8 @@ def list_users(
         keyword=keyword,
         role_code=role_code,
         stage_id=stage_id,
+        is_online=is_online,
+        online_user_ids=online_user_ids,
         is_active=is_active,
         include_deleted=include_deleted,
     )

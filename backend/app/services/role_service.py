@@ -72,22 +72,25 @@ def list_roles(db: Session, page: int, page_size: int, keyword: str | None) -> t
 
 
 def create_role(db: Session, payload: RoleCreate) -> tuple[Role | None, list[str]]:
-    existing = get_role_by_code_case_insensitive(db, payload.code)
+    normalized_code = payload.code.strip()
+    if payload.role_type == "builtin" or normalized_code in BUILTIN_ROLE_CODES:
+        return None, ["系统内置角色由系统维护，不支持手动创建"]
+
+    existing = get_role_by_code_case_insensitive(db, normalized_code)
     if existing:
-        return None, [f"Role code already exists: {payload.code}"]
+        return None, [f"Role code already exists: {normalized_code}"]
 
     existing_name = get_role_by_name_case_insensitive(db, payload.name)
     if existing_name:
         return None, [f"角色名称已存在：{payload.name}"]
 
-    role_type = "builtin" if payload.code in BUILTIN_ROLE_CODES else "custom"
     role = Role(
-        code=payload.code.strip(),
+        code=normalized_code,
         name=payload.name.strip(),
         description=payload.description.strip() if payload.description else None,
-        role_type=role_type,
-        is_builtin=payload.code in BUILTIN_ROLE_CODES,
-        is_enabled=True,
+        role_type="custom",
+        is_builtin=False,
+        is_enabled=payload.is_enabled,
     )
     db.add(role)
     db.commit()

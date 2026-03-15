@@ -4,6 +4,7 @@ import '../models/app_session.dart';
 import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/user_service.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class RoleManagementPage extends StatefulWidget {
   const RoleManagementPage({
@@ -22,13 +23,25 @@ class RoleManagementPage extends StatefulWidget {
 }
 
 class _RoleManagementPageState extends State<RoleManagementPage> {
+  static const int _pageSize = 50;
+  static const String _roleTypeBuiltin = 'builtin';
+  static const String _roleTypeCustom = 'custom';
+
   late final UserService _userService;
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
   String _message = '';
   int _total = 0;
+  int _page = 1;
   List<RoleItem> _items = const [];
+
+  int get _totalPages {
+    if (_total <= 0) {
+      return 1;
+    }
+    return ((_total - 1) ~/ _pageSize) + 1;
+  }
 
   @override
   void initState() {
@@ -53,24 +66,39 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
     return error.toString();
   }
 
-  Future<void> _loadRoles() async {
+  String _roleTypeLabel(String roleType) {
+    return roleType == _roleTypeBuiltin ? '系统内置' : '自定义';
+  }
+
+  Future<void> _loadRoles({int? page}) async {
+    final targetPage = page ?? _page;
     setState(() {
       _loading = true;
       _message = '';
     });
     try {
       final result = await _userService.listRoles(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         keyword: _keywordController.text.trim(),
       );
       if (!mounted) {
         return;
       }
+      final resolvedTotalPages = result.total <= 0
+          ? 1
+          : (((result.total - 1) ~/ _pageSize) + 1);
+      final resolvedPage = targetPage > resolvedTotalPages
+          ? resolvedTotalPages
+          : targetPage;
       setState(() {
         _items = result.items;
         _total = result.total;
+        _page = resolvedPage;
       });
+      if (resolvedPage != targetPage) {
+        await _loadRoles(page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -99,93 +127,162 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
     final codeController = TextEditingController(text: role?.code ?? '');
     final nameController = TextEditingController(text: role?.name ?? '');
     final descController = TextEditingController(text: role?.description ?? '');
+    var selectedRoleType = role?.roleType == _roleTypeBuiltin
+        ? _roleTypeBuiltin
+        : _roleTypeCustom;
+    var selectedEnabled = role?.isEnabled ?? true;
+    final canEditRoleType = role == null;
+    final canEditStatus = !(role?.isBuiltin ?? false);
 
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(role == null ? '新增角色' : '编辑角色'),
-          content: SizedBox(
-            width: 420,
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: codeController,
-                    readOnly: role?.isBuiltin ?? false,
-                    decoration: const InputDecoration(labelText: '角色编码'),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return '角色编码不能为空';
-                      }
-                      return null;
-                    },
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(role == null ? '新增角色' : '编辑角色'),
+              content: SizedBox(
+                width: 420,
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: codeController,
+                        readOnly: role?.isBuiltin ?? false,
+                        decoration: const InputDecoration(labelText: '角色编码'),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '角色编码不能为空';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: nameController,
+                        readOnly: role?.isBuiltin ?? false,
+                        decoration: const InputDecoration(labelText: '角色名称'),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '角色名称不能为空';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: descController,
+                        decoration: const InputDecoration(labelText: '角色说明'),
+                        minLines: 1,
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedRoleType,
+                        decoration: const InputDecoration(labelText: '角色类型'),
+                        items: [
+                          const DropdownMenuItem(
+                            value: _roleTypeCustom,
+                            child: Text('自定义'),
+                          ),
+                          if (selectedRoleType == _roleTypeBuiltin)
+                            const DropdownMenuItem(
+                              value: _roleTypeBuiltin,
+                              child: Text('系统内置'),
+                            ),
+                        ],
+                        onChanged: canEditRoleType
+                            ? (value) {
+                                if (value == null) {
+                                  return;
+                                }
+                                setDialogState(() {
+                                  selectedRoleType = value;
+                                });
+                              }
+                            : null,
+                      ),
+                      if (role == null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '新增角色仅支持自定义角色，系统内置角色由系统预置。',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<bool>(
+                        initialValue: selectedEnabled,
+                        decoration: const InputDecoration(labelText: '状态'),
+                        items: const [
+                          DropdownMenuItem(value: true, child: Text('启用')),
+                          DropdownMenuItem(value: false, child: Text('停用')),
+                        ],
+                        onChanged: canEditStatus
+                            ? (value) {
+                                if (value == null) {
+                                  return;
+                                }
+                                setDialogState(() {
+                                  selectedEnabled = value;
+                                });
+                              }
+                            : null,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: nameController,
-                    readOnly: role?.isBuiltin ?? false,
-                    decoration: const InputDecoration(labelText: '角色名称'),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return '角色名称不能为空';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: descController,
-                    decoration: const InputDecoration(labelText: '角色说明'),
-                    minLines: 1,
-                    maxLines: 3,
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) {
-                  return;
-                }
-                try {
-                  if (role == null) {
-                    await _userService.createRole(
-                      code: codeController.text.trim(),
-                      name: nameController.text.trim(),
-                      description: descController.text.trim(),
-                    );
-                  } else {
-                    await _userService.updateRole(
-                      roleId: role.id,
-                      code: codeController.text.trim(),
-                      name: nameController.text.trim(),
-                      description: descController.text.trim(),
-                    );
-                  }
-                  if (context.mounted) {
-                    Navigator.of(context).pop(true);
-                  }
-                } catch (error) {
-                  if (!context.mounted) {
-                    return;
-                  }
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(_errorMessage(error))),
-                  );
-                }
-              },
-              child: const Text('保存'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) {
+                      return;
+                    }
+                    try {
+                      if (role == null) {
+                        await _userService.createRole(
+                          code: codeController.text.trim(),
+                          name: nameController.text.trim(),
+                          description: descController.text.trim(),
+                          roleType: selectedRoleType,
+                          isEnabled: selectedEnabled,
+                        );
+                      } else {
+                        await _userService.updateRole(
+                          roleId: role.id,
+                          code: codeController.text.trim(),
+                          name: nameController.text.trim(),
+                          description: descController.text.trim(),
+                          isEnabled: selectedEnabled,
+                        );
+                      }
+                      if (context.mounted) {
+                        Navigator.of(context).pop(true);
+                      }
+                    } catch (error) {
+                      if (!context.mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(_errorMessage(error))),
+                      );
+                    }
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -282,11 +379,14 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadRoles(),
+                  onSubmitted: (_) => _loadRoles(page: 1),
                 ),
               ),
               const SizedBox(width: 10),
-              OutlinedButton(onPressed: _loadRoles, child: const Text('查询')),
+              OutlinedButton(
+                onPressed: () => _loadRoles(page: 1),
+                child: const Text('查询'),
+              ),
               const SizedBox(width: 10),
               FilledButton(
                 onPressed: widget.canManage ? () => _showRoleDialog() : null,
@@ -300,10 +400,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(
-                _message,
-                style: const TextStyle(color: Colors.red),
-              ),
+              child: Text(_message, style: const TextStyle(color: Colors.red)),
             ),
           ),
         Padding(
@@ -326,7 +423,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                       child: ListTile(
                         title: Text('${role.name} (${role.code})'),
                         subtitle: Text(
-                          '类型=${role.roleType.isEmpty ? '-' : role.roleType} | '
+                          '类型=${_roleTypeLabel(role.roleType)} | '
                           '内置=${role.isBuiltin ? '是' : '否'} | 启用=${role.isEnabled ? '是' : '否'} | '
                           '绑定用户=${role.userCount}\n'
                           '${role.description ?? ''}',
@@ -358,6 +455,15 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                     );
                   },
                 ),
+        ),
+        const SizedBox(height: 12),
+        SimplePaginationBar(
+          page: _page,
+          totalPages: _totalPages,
+          total: _total,
+          loading: _loading,
+          onPrevious: () => _loadRoles(page: _page - 1),
+          onNext: () => _loadRoles(page: _page + 1),
         ),
       ],
     );

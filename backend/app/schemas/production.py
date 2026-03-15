@@ -388,6 +388,8 @@ class ProductionDataUnfinishedProgressRow(BaseModel):
     product_id: int
     product_name: str
     order_status: str
+    current_process_name: str
+    remaining_quantity: int
     process_count: int
     produced_total: int
     target_total: int

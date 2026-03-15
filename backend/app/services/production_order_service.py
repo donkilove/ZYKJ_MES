@@ -1371,6 +1371,8 @@ def _collect_my_order_items(
     keyword: str | None,
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
+    order_status: str | None = None,
+    current_process_id: int | None = None,
     exact_order_id: int | None = None,
     exact_order_process_id: int | None = None,
 ) -> list[dict[str, object]]:
@@ -1609,6 +1611,22 @@ def _collect_my_order_items(
                 )
             )
 
+    if order_status is not None or current_process_id is not None:
+        filtered_items: list[dict[str, object]] = []
+        for item in items:
+            if order_status is not None and str(item.get("order_status") or "") != order_status:
+                continue
+            if current_process_id is not None:
+                current_process_value = item.get("current_process_id")
+                try:
+                    process_id_value = int(current_process_value) if current_process_value is not None else 0
+                except (TypeError, ValueError):
+                    continue
+                if process_id_value != current_process_id:
+                    continue
+            filtered_items.append(item)
+        items = filtered_items
+
     return items
 
 
@@ -1621,6 +1639,8 @@ def list_my_orders(
     page_size: int,
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
+    order_status: str | None = None,
+    current_process_id: int | None = None,
 ) -> tuple[int, list[dict[str, object]]]:
     items = _collect_my_order_items(
         db,
@@ -1628,6 +1648,8 @@ def list_my_orders(
         keyword=keyword,
         view_mode=view_mode,
         proxy_operator_user_id=proxy_operator_user_id,
+        order_status=order_status,
+        current_process_id=current_process_id,
         exact_order_id=None,
     )
     total = len(items)

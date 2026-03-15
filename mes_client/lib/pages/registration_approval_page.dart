@@ -7,6 +7,7 @@ import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/user_service.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class RegistrationApprovalPage extends StatefulWidget {
   const RegistrationApprovalPage({
@@ -27,6 +28,7 @@ class RegistrationApprovalPage extends StatefulWidget {
 
 class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   static const String _operatorRoleCode = 'operator';
+  static const int _requestPageSize = 100;
 
   late final UserService _userService;
   late final CraftService _craftService;
@@ -39,6 +41,14 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   List<RoleItem> _roles = const [];
   List<ProcessItem> _processes = const [];
   List<CraftStageItem> _stages = const [];
+  int _requestPage = 1;
+
+  int get _requestTotalPages {
+    if (_total <= 0) {
+      return 1;
+    }
+    return ((_total - 1) ~/ _requestPageSize) + 1;
+  }
 
   @override
   void initState() {
@@ -134,7 +144,8 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         .toList();
   }
 
-  Future<void> _loadInitialData() async {
+  Future<void> _loadInitialData({int? page}) async {
+    final targetPage = page ?? _requestPage;
     setState(() {
       _loading = true;
       _message = '';
@@ -142,8 +153,12 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
 
     try {
       final result = await Future.wait<dynamic>([
-        _userService.listRegistrationRequests(page: 1, pageSize: 100, status: 'pending'),
-        _userService.listRoles(),
+        _userService.listRegistrationRequests(
+          page: targetPage,
+          pageSize: _requestPageSize,
+          status: 'pending',
+        ),
+        _userService.listAllRoles(),
         _userService.listProcesses(),
         _craftService.listStages(pageSize: 500, enabled: true),
       ]);
@@ -155,13 +170,23 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       if (!mounted) {
         return;
       }
+      final resolvedTotalPages = requests.total <= 0
+          ? 1
+          : (((requests.total - 1) ~/ _requestPageSize) + 1);
+      final resolvedPage = targetPage > resolvedTotalPages
+          ? resolvedTotalPages
+          : targetPage;
       setState(() {
         _items = requests.items;
         _total = requests.total;
         _roles = roles.items;
         _processes = processes.items;
         _stages = stages.items;
+        _requestPage = resolvedPage;
       });
+      if (resolvedPage != targetPage) {
+        await _loadInitialData(page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -184,7 +209,8 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     }
   }
 
-  Future<void> _loadRequests() async {
+  Future<void> _loadRequests({int? page}) async {
+    final targetPage = page ?? _requestPage;
     setState(() {
       _loading = true;
       _message = '';
@@ -192,17 +218,27 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
 
     try {
       final result = await _userService.listRegistrationRequests(
-        page: 1,
-        pageSize: 100,
+        page: targetPage,
+        pageSize: _requestPageSize,
         status: 'pending',
       );
       if (!mounted) {
         return;
       }
+      final resolvedTotalPages = result.total <= 0
+          ? 1
+          : (((result.total - 1) ~/ _requestPageSize) + 1);
+      final resolvedPage = targetPage > resolvedTotalPages
+          ? resolvedTotalPages
+          : targetPage;
       setState(() {
         _items = result.items;
         _total = result.total;
+        _requestPage = resolvedPage;
       });
+      if (resolvedPage != targetPage) {
+        await _loadRequests(page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -231,6 +267,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     required String roleCode,
     required List<String> processCodes,
     String? password,
+    int? stageId,
   }) async {
     try {
       await _userService.approveRegistrationRequest(
@@ -239,6 +276,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         roleCodes: [roleCode],
         processCodes: processCodes,
         password: password,
+        stageId: stageId,
       );
       if (!mounted) {
         return false;
@@ -454,6 +492,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                       roleCode: selectedRoleCode!,
                       processCodes: orderedProcessCodes,
                       password: passwordController.text.trim(),
+                      stageId: selectedStageId,
                     );
                     if (success && context.mounted) {
                       Navigator.of(context).pop(true);
@@ -469,6 +508,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     );
 
     accountController.dispose();
+    passwordController.dispose();
 
     if (approved == true && mounted) {
       setState(() {
@@ -477,13 +517,19 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     }
   }
 
-  Future<void> _rejectRequest(RegistrationRequestItem item, {String? reason}) async {
+  Future<void> _rejectRequest(
+    RegistrationRequestItem item, {
+    String? reason,
+  }) async {
     if (!widget.canReviewAction) {
       _showNoPermission();
       return;
     }
     try {
-      await _userService.rejectRegistrationRequest(requestId: item.id, reason: reason);
+      await _userService.rejectRegistrationRequest(
+        requestId: item.id,
+        reason: reason,
+      );
       if (!mounted) {
         return;
       }
@@ -577,7 +623,9 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
               const Spacer(),
               IconButton(
                 tooltip: '刷新',
-                onPressed: _loading ? null : _loadInitialData,
+                onPressed: _loading
+                    ? null
+                    : () => _loadInitialData(page: _requestPage),
                 icon: const Icon(Icons.refresh),
               ),
             ],
@@ -619,46 +667,67 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                               DataColumn(label: Text('操作')),
                             ],
                             rows: _items.map((item) {
-                              return DataRow(cells: [
-                                DataCell(Text(item.account)),
-                                DataCell(Text(_formatTime(item.createdAt))),
-                                DataCell(Text(
-                                  _statusLabel(item.status),
-                                  style: TextStyle(
-                                    color: _statusColor(item.status, theme),
-                                    fontWeight: FontWeight.w600,
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(item.account)),
+                                  DataCell(Text(_formatTime(item.createdAt))),
+                                  DataCell(
+                                    Text(
+                                      _statusLabel(item.status),
+                                      style: TextStyle(
+                                        color: _statusColor(item.status, theme),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
-                                )),
-                                DataCell(Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (item.status == 'pending') ...[
-                                      TextButton(
-                                        onPressed: widget.canReviewAction
-                                            ? () => _openApproveDialog(item)
-                                            : null,
-                                        child: const Text('通过'),
-                                      ),
-                                      TextButton(
-                                        onPressed: widget.canReviewAction
-                                            ? () => _confirmReject(item)
-                                            : null,
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: theme.colorScheme.error,
-                                        ),
-                                        child: const Text('驳回'),
-                                      ),
-                                    ] else
-                                      const Text('-', style: TextStyle(color: Colors.grey)),
-                                  ],
-                                )),
-                              ]);
+                                  DataCell(
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (item.status == 'pending') ...[
+                                          TextButton(
+                                            onPressed: widget.canReviewAction
+                                                ? () => _openApproveDialog(item)
+                                                : null,
+                                            child: const Text('通过'),
+                                          ),
+                                          TextButton(
+                                            onPressed: widget.canReviewAction
+                                                ? () => _confirmReject(item)
+                                                : null,
+                                            style: TextButton.styleFrom(
+                                              foregroundColor:
+                                                  theme.colorScheme.error,
+                                            ),
+                                            child: const Text('驳回'),
+                                          ),
+                                        ] else
+                                          const Text(
+                                            '-',
+                                            style: TextStyle(
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
                             }).toList(),
                           ),
                         ),
                       ),
                     ),
                   ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _requestPage,
+            totalPages: _requestTotalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadRequests(page: _requestPage - 1),
+            onNext: () => _loadRequests(page: _requestPage + 1),
           ),
         ],
       ),

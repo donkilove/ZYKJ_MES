@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import date, datetime
 
@@ -621,11 +621,25 @@ def get_my_orders_api(
     page_size: int = Query(default=30, ge=1, le=200),
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
+    order_status: str | None = Query(default=None),
+    current_process_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_PROD_MY_ORDERS_LIST)),
 ) -> ApiResponse[MyOrderListResult]:
+    normalized_status: str | None = None
     if proxy_operator_user_id is not None and proxy_operator_user_id <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="proxy_operator_user_id must be > 0")
+    if current_process_id is not None and current_process_id <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="current_process_id must be > 0")
+    if order_status is not None:
+        token = order_status.strip().lower()
+        if token and token != "all":
+            if token not in ORDER_STATUS_ALL:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid order status: {order_status}",
+                )
+            normalized_status = token
     try:
         total, items = list_my_orders(
             db,
@@ -635,6 +649,8 @@ def get_my_orders_api(
             page_size=page_size,
             view_mode=view_mode,
             proxy_operator_user_id=proxy_operator_user_id,
+            order_status=normalized_status,
+            current_process_id=current_process_id,
         )
     except Exception as error:
         _raise_service_error(error)
@@ -1412,8 +1428,7 @@ def get_scrap_statistics_detail_api(
     ).scalars().first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scrap statistics not found")
-
-    # 查询关联维修单（通过 order_id + process_id 匹配）
+    # Query related repair orders by order/process.
     related_repairs: list[ScrapRelatedRepairItem] = []
     if row.order_id is not None:
         repair_filters = [RepairOrder.source_order_id == row.order_id]
@@ -1473,8 +1488,7 @@ def get_repair_order_detail_api(
     row = get_repair_order_by_id(db, repair_order_id=repair_order_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found")
-
-    # 查询关联订单的事件日志
+    # Query latest related order events for context.
     event_logs = []
     if row.source_order_id is not None:
         event_logs = db.execute(
@@ -1485,3 +1499,4 @@ def get_repair_order_detail_api(
         ).scalars().all()
 
     return success_response(_to_repair_order_detail_item(row, event_logs=event_logs))
+

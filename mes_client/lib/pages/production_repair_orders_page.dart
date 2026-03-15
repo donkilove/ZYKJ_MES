@@ -156,9 +156,7 @@ class _ProductionRepairOrdersPageState
           child: errorMsg != null
               ? Text(
                   errorMsg,
-                  style: TextStyle(
-                    color: Theme.of(ctx).colorScheme.error,
-                  ),
+                  style: TextStyle(color: Theme.of(ctx).colorScheme.error),
                 )
               : detail == null
               ? const Text('无数据')
@@ -226,6 +224,20 @@ class _ProductionRepairOrdersPageState
                           ),
                         ),
                       ],
+                      if (detail.eventLogs.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          '相关事件记录',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        ...detail.eventLogs.map(
+                          (event) => Text(
+                            '• ${_formatDateTime(event.createdAt)} | ${event.eventTitle}'
+                            '${(event.eventDetail ?? '').trim().isEmpty ? '' : ' | ${event.eventDetail}'}',
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -241,16 +253,21 @@ class _ProductionRepairOrdersPageState
   }
 
   TableRow _dRow(String label, String value) {
-    return TableRow(children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-      ),
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
-        child: Text(value),
-      ),
-    ]);
+    return TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+          child: Text(value),
+        ),
+      ],
+    );
   }
 
   String _formatDateTime(DateTime? value) {
@@ -771,9 +788,7 @@ class _ProductionRepairOrdersPageState
               ),
               OutlinedButton(
                 onPressed: _loading ? null : () => _pickDate(isStart: false),
-                child: Text(
-                  _endDate == null ? '结束日期' : _formatDate(_endDate!),
-                ),
+                child: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
               ),
               FilledButton.icon(
                 onPressed: _loading ? null : _loadItems,
@@ -814,6 +829,8 @@ class _ProductionRepairOrdersPageState
                             UnifiedListTableHeaderStyle.column(context, '产品'),
                             UnifiedListTableHeaderStyle.column(context, '工序'),
                             UnifiedListTableHeaderStyle.column(context, '送修量'),
+                            UnifiedListTableHeaderStyle.column(context, '已修复量'),
+                            UnifiedListTableHeaderStyle.column(context, '补投产'),
                             UnifiedListTableHeaderStyle.column(context, '报废量'),
                             UnifiedListTableHeaderStyle.column(context, '状态'),
                             UnifiedListTableHeaderStyle.column(context, '送修时间'),
@@ -828,6 +845,10 @@ class _ProductionRepairOrdersPageState
                                     DataCell(Text(item.productName ?? '-')),
                                     DataCell(Text(item.sourceProcessName)),
                                     DataCell(Text('${item.repairQuantity}')),
+                                    DataCell(Text('${item.repairedQuantity}')),
+                                    DataCell(
+                                      Text(item.scrapReplenished ? '是' : '否'),
+                                    ),
                                     DataCell(Text('${item.scrapQuantity}')),
                                     DataCell(
                                       Text(repairOrderStatusLabel(item.status)),

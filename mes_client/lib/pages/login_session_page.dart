@@ -4,6 +4,7 @@ import '../models/app_session.dart';
 import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/user_service.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class LoginSessionPage extends StatefulWidget {
   const LoginSessionPage({
@@ -22,6 +23,9 @@ class LoginSessionPage extends StatefulWidget {
 }
 
 class _LoginSessionPageState extends State<LoginSessionPage> {
+  static const int _logPageSize = 200;
+  static const int _sessionPageSize = 200;
+
   late final UserService _userService;
 
   final TextEditingController _logUsernameController = TextEditingController();
@@ -37,9 +41,25 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
 
   int _logTotal = 0;
   int _sessionTotal = 0;
+  int _logPage = 1;
+  int _sessionPage = 1;
   List<LoginLogItem> _loginLogs = const [];
   List<OnlineSessionItem> _onlineSessions = const [];
   final Set<String> _selectedSessionIds = <String>{};
+
+  int get _logTotalPages {
+    if (_logTotal <= 0) {
+      return 1;
+    }
+    return ((_logTotal - 1) ~/ _logPageSize) + 1;
+  }
+
+  int get _sessionTotalPages {
+    if (_sessionTotal <= 0) {
+      return 1;
+    }
+    return ((_sessionTotal - 1) ~/ _sessionPageSize) + 1;
+  }
 
   @override
   void initState() {
@@ -66,21 +86,19 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   }
 
   Future<void> _loadAll() async {
-    await Future.wait([
-      _loadLoginLogs(),
-      _loadOnlineSessions(),
-    ]);
+    await Future.wait([_loadLoginLogs(), _loadOnlineSessions()]);
   }
 
-  Future<void> _loadLoginLogs() async {
+  Future<void> _loadLoginLogs({int? page}) async {
+    final targetPage = page ?? _logPage;
     setState(() {
       _loadingLogs = true;
       _message = '';
     });
     try {
       final result = await _userService.listLoginLogs(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _logPageSize,
         username: _logUsernameController.text.trim(),
         success: _logSuccessFilter,
         startTime: _logStartTime,
@@ -89,10 +107,20 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
       if (!mounted) {
         return;
       }
+      final resolvedTotalPages = result.total <= 0
+          ? 1
+          : (((result.total - 1) ~/ _logPageSize) + 1);
+      final resolvedPage = targetPage > resolvedTotalPages
+          ? resolvedTotalPages
+          : targetPage;
       setState(() {
         _loginLogs = result.items;
         _logTotal = result.total;
+        _logPage = resolvedPage;
       });
+      if (resolvedPage != targetPage) {
+        await _loadLoginLogs(page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -113,26 +141,37 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
     }
   }
 
-  Future<void> _loadOnlineSessions() async {
+  Future<void> _loadOnlineSessions({int? page}) async {
+    final targetPage = page ?? _sessionPage;
     setState(() {
       _loadingSessions = true;
       _message = '';
     });
     try {
       final result = await _userService.listOnlineSessions(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _sessionPageSize,
         keyword: _sessionKeywordController.text.trim(),
       );
       if (!mounted) {
         return;
       }
       final validIds = result.items.map((item) => item.sessionTokenId).toSet();
+      final resolvedTotalPages = result.total <= 0
+          ? 1
+          : (((result.total - 1) ~/ _sessionPageSize) + 1);
+      final resolvedPage = targetPage > resolvedTotalPages
+          ? resolvedTotalPages
+          : targetPage;
       setState(() {
         _onlineSessions = result.items;
         _sessionTotal = result.total;
+        _sessionPage = resolvedPage;
         _selectedSessionIds.removeWhere((id) => !validIds.contains(id));
       });
+      if (resolvedPage != targetPage) {
+        await _loadOnlineSessions(page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -233,7 +272,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadLoginLogs(),
+                  onSubmitted: (_) => _loadLoginLogs(page: 1),
                 ),
               ),
               DropdownButton<bool?>(
@@ -245,7 +284,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                 ],
                 onChanged: (value) {
                   setState(() => _logSuccessFilter = value);
-                  _loadLoginLogs();
+                  _loadLoginLogs(page: 1);
                 },
               ),
               OutlinedButton.icon(
@@ -274,7 +313,16 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                     lastDate: DateTime.now().add(const Duration(days: 1)),
                   );
                   if (picked != null) {
-                    setState(() => _logEndTime = DateTime(picked.year, picked.month, picked.day, 23, 59, 59));
+                    setState(
+                      () => _logEndTime = DateTime(
+                        picked.year,
+                        picked.month,
+                        picked.day,
+                        23,
+                        59,
+                        59,
+                      ),
+                    );
                   }
                 },
               ),
@@ -285,12 +333,12 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                       _logStartTime = null;
                       _logEndTime = null;
                     });
-                    _loadLoginLogs();
+                    _loadLoginLogs(page: 1);
                   },
                   child: const Text('清除时间'),
                 ),
               OutlinedButton(
-                onPressed: _loadLoginLogs,
+                onPressed: () => _loadLoginLogs(page: 1),
                 child: const Text('查询'),
               ),
             ],
@@ -324,6 +372,17 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                   },
                 ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: SimplePaginationBar(
+            page: _logPage,
+            totalPages: _logTotalPages,
+            total: _logTotal,
+            loading: _loadingLogs,
+            onPrevious: () => _loadLoginLogs(page: _logPage - 1),
+            onNext: () => _loadLoginLogs(page: _logPage + 1),
+          ),
+        ),
       ],
     );
   }
@@ -343,12 +402,12 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadOnlineSessions(),
+                  onSubmitted: (_) => _loadOnlineSessions(page: 1),
                 ),
               ),
               const SizedBox(width: 8),
               OutlinedButton(
-                onPressed: _loadOnlineSessions,
+                onPressed: () => _loadOnlineSessions(page: 1),
                 child: const Text('查询'),
               ),
               const SizedBox(width: 8),
@@ -383,12 +442,16 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                                 if (checked ?? false) {
                                   _selectedSessionIds.add(item.sessionTokenId);
                                 } else {
-                                  _selectedSessionIds.remove(item.sessionTokenId);
+                                  _selectedSessionIds.remove(
+                                    item.sessionTokenId,
+                                  );
                                 }
                               });
                             }
                           : null,
-                      title: Text('${item.username}（${item.roleNames.join('、')}）'),
+                      title: Text(
+                        '${item.username}（${item.roleNames.join('、')}）',
+                      ),
                       subtitle: Text(
                         '工段=${item.stageName ?? '-'} | 状态=${item.status}\n'
                         '登录时间=${_formatDateTime(item.loginTime)}\n'
@@ -406,6 +469,17 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                     );
                   },
                 ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: SimplePaginationBar(
+            page: _sessionPage,
+            totalPages: _sessionTotalPages,
+            total: _sessionTotal,
+            loading: _loadingSessions,
+            onPrevious: () => _loadOnlineSessions(page: _sessionPage - 1),
+            onNext: () => _loadOnlineSessions(page: _sessionPage + 1),
+          ),
         ),
       ],
     );
@@ -436,10 +510,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
           ),
           Expanded(
             child: TabBarView(
-              children: [
-                _buildLoginLogsTab(),
-                _buildOnlineSessionsTab(),
-              ],
+              children: [_buildLoginLogsTab(), _buildOnlineSessionsTab()],
             ),
           ),
         ],

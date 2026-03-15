@@ -65,6 +65,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     finishedQuantity: 0,
   );
   ProductionTodayRealtimeResult? _todayResult;
+  DateTime? _todayLastRefreshedAt;
   ProductionUnfinishedProgressResult? _unfinishedResult;
   ProductionManualQueryResult? _manualResult;
   List<ProductionProcessStatItem> _processStats = const [];
@@ -213,6 +214,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
       setState(() {
         _overview = results[0] as ProductionStatsOverview;
         _todayResult = results[1] as ProductionTodayRealtimeResult;
+        _todayLastRefreshedAt = DateTime.now();
         _unfinishedResult = results[2] as ProductionUnfinishedProgressResult;
         _manualResult = results[3] as ProductionManualQueryResult;
         _productOptions = results[4] as List<ProductionProductOption>;
@@ -245,9 +247,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     }
   }
 
-  Future<void> _pickManualDate({
-    required bool isStart,
-  }) async {
+  Future<void> _pickManualDate({required bool isStart}) async {
     final picked = await showDatePicker(
       context: context,
       firstDate: DateTime(2020, 1, 1),
@@ -321,6 +321,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
       }
       setState(() {
         _todayResult = result;
+        _todayLastRefreshedAt = DateTime.now();
       });
     } catch (error) {
       if (!mounted) {
@@ -477,9 +478,9 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功：${location.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
     } catch (error) {
       if (!mounted) {
         return;
@@ -715,7 +716,9 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
           ),
         ],
         titlesData: FlTitlesData(
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           rightTitles: const AxisTitles(
             sideTitles: SideTitles(showTitles: false),
           ),
@@ -827,6 +830,11 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
               '统计模式：${_statModeLabel(_todayStatMode)}',
               style: theme.textTheme.bodyMedium,
             ),
+            if (_todayLastRefreshedAt != null)
+              Text(
+                '最后刷新：${_formatDateTime(_todayLastRefreshedAt)}',
+                style: theme.textTheme.bodyMedium,
+              ),
           ],
         ),
         const SizedBox(height: 12),
@@ -865,7 +873,9 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                                         DataCell(
                                           Text(
                                             row.latestTimeText.isEmpty
-                                                ? _formatDateTime(row.latestTime)
+                                                ? _formatDateTime(
+                                                    row.latestTime,
+                                                  )
                                                 : row.latestTimeText,
                                           ),
                                         ),
@@ -908,9 +918,10 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                             columns: const [
                               DataColumn(label: Text('订单编号')),
                               DataColumn(label: Text('产品名称')),
+                              DataColumn(label: Text('当前工序')),
                               DataColumn(label: Text('订单状态')),
                               DataColumn(label: Text('已产总量')),
-                              DataColumn(label: Text('目标总量')),
+                              DataColumn(label: Text('剩余数量')),
                               DataColumn(label: Text('进度')),
                             ],
                             rows: rows.map((row) {
@@ -921,19 +932,31 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                                   DataCell(Text(row.productName)),
                                   DataCell(
                                     Text(
-                                      productionOrderStatusLabel(row.orderStatus),
+                                      row.currentProcessName.trim().isEmpty
+                                          ? '-'
+                                          : row.currentProcessName,
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      productionOrderStatusLabel(
+                                        row.orderStatus,
+                                      ),
                                     ),
                                   ),
                                   DataCell(Text('${row.producedTotal}')),
-                                  DataCell(Text('${row.targetTotal}')),
+                                  DataCell(Text('${row.remainingQuantity}')),
                                   DataCell(
                                     SizedBox(
                                       width: 200,
                                       child: Column(
                                         mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Text('${row.progressPercent.toStringAsFixed(2)}%'),
+                                          Text(
+                                            '${row.progressPercent.toStringAsFixed(2)}%',
+                                          ),
                                           const SizedBox(height: 4),
                                           LinearProgressIndicator(
                                             value: progress.clamp(0, 1),
@@ -1019,7 +1042,8 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
               label: const Text('筛选'),
             ),
             FilledButton.icon(
-              onPressed: (!widget.canExport || _loadingManual || _exportingManual)
+              onPressed:
+                  (!widget.canExport || _loadingManual || _exportingManual)
                   ? null
                   : _exportManual,
               icon: _exportingManual
@@ -1042,10 +1066,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
             DropdownButton<int?>(
               value: _manualProductId,
               items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('全部产品'),
-                ),
+                const DropdownMenuItem<int?>(value: null, child: Text('全部产品')),
                 ..._productOptions.map(
                   (item) => DropdownMenuItem<int?>(
                     value: item.id,
@@ -1064,10 +1085,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
             DropdownButton<int?>(
               value: _manualStageId,
               items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('全部工段'),
-                ),
+                const DropdownMenuItem<int?>(value: null, child: Text('全部工段')),
                 ..._stageOptions.map(
                   (item) => DropdownMenuItem<int?>(
                     value: item.id,
@@ -1093,10 +1111,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
             DropdownButton<int?>(
               value: _manualProcessId,
               items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('全部工序'),
-                ),
+                const DropdownMenuItem<int?>(value: null, child: Text('全部工序')),
                 ..._filteredProcessOptions.map(
                   (item) => DropdownMenuItem<int?>(
                     value: item.id,
@@ -1115,10 +1130,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
             DropdownButton<int?>(
               value: _manualOperatorUserId,
               items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('全部操作员'),
-                ),
+                const DropdownMenuItem<int?>(value: null, child: Text('全部操作员')),
                 ..._operatorOptions.map(
                   (item) => DropdownMenuItem<int?>(
                     value: item.id,
@@ -1170,7 +1182,9 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
               Chip(label: Text('记录数：${summary.rows}')),
               Chip(label: Text('筛选产量：${summary.filteredTotal}')),
               Chip(label: Text('区间总量：${summary.timeRangeTotal}')),
-              Chip(label: Text('占比：${summary.ratioPercent.toStringAsFixed(2)}%')),
+              Chip(
+                label: Text('占比：${summary.ratioPercent.toStringAsFixed(2)}%'),
+              ),
             ],
           ),
         const SizedBox(height: 12),
@@ -1239,8 +1253,18 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                                       cells: [
                                         DataCell(Text(row.orderCode)),
                                         DataCell(Text(row.productName)),
-                                        DataCell(Text(stageLabel.isEmpty ? '-' : stageLabel)),
-                                        DataCell(Text('${row.processCode} ${row.processName}')),
+                                        DataCell(
+                                          Text(
+                                            stageLabel.isEmpty
+                                                ? '-'
+                                                : stageLabel,
+                                          ),
+                                        ),
+                                        DataCell(
+                                          Text(
+                                            '${row.processCode} ${row.processName}',
+                                          ),
+                                        ),
                                         DataCell(
                                           Text(
                                             row.operatorUsername.trim().isEmpty
@@ -1252,13 +1276,17 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                                         DataCell(
                                           Text(
                                             row.productionTimeText.isEmpty
-                                                ? _formatDateTime(row.productionTime)
+                                                ? _formatDateTime(
+                                                    row.productionTime,
+                                                  )
                                                 : row.productionTimeText,
                                           ),
                                         ),
                                         DataCell(
                                           Text(
-                                            productionOrderStatusLabel(row.orderStatus),
+                                            productionOrderStatusLabel(
+                                              row.orderStatus,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -1294,17 +1322,19 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
             DataColumn(label: Text('完成总量')),
           ],
           rows: _processStats.map((item) {
-            return DataRow(cells: [
-              DataCell(Text(item.processCode)),
-              DataCell(Text(item.processName)),
-              DataCell(Text('${item.totalOrders}')),
-              DataCell(Text('${item.pendingOrders}')),
-              DataCell(Text('${item.inProgressOrders}')),
-              DataCell(Text('${item.partialOrders}')),
-              DataCell(Text('${item.completedOrders}')),
-              DataCell(Text('${item.totalVisibleQuantity}')),
-              DataCell(Text('${item.totalCompletedQuantity}')),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text(item.processCode)),
+                DataCell(Text(item.processName)),
+                DataCell(Text('${item.totalOrders}')),
+                DataCell(Text('${item.pendingOrders}')),
+                DataCell(Text('${item.inProgressOrders}')),
+                DataCell(Text('${item.partialOrders}')),
+                DataCell(Text('${item.completedOrders}')),
+                DataCell(Text('${item.totalVisibleQuantity}')),
+                DataCell(Text('${item.totalCompletedQuantity}')),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -1327,14 +1357,16 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
             DataColumn(label: Text('最近报工时间')),
           ],
           rows: _operatorStats.map((item) {
-            return DataRow(cells: [
-              DataCell(Text(item.operatorUsername)),
-              DataCell(Text(item.processCode)),
-              DataCell(Text(item.processName)),
-              DataCell(Text('${item.productionRecords}')),
-              DataCell(Text('${item.productionQuantity}')),
-              DataCell(Text(_formatDateTime(item.lastProductionAt))),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text(item.operatorUsername)),
+                DataCell(Text(item.processCode)),
+                DataCell(Text(item.processName)),
+                DataCell(Text('${item.productionRecords}')),
+                DataCell(Text('${item.productionQuantity}')),
+                DataCell(Text(_formatDateTime(item.lastProductionAt))),
+              ],
+            );
           }).toList(),
         ),
       ),

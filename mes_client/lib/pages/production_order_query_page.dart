@@ -81,6 +81,8 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   bool _loading = false;
   String _message = '';
   String _viewMode = 'own';
+  String _orderStatusFilter = 'all';
+  int? _currentProcessIdFilter;
   int? _proxyOperatorUserId;
   int _total = 0;
   List<MyOrderItem> _items = const [];
@@ -192,6 +194,8 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         keyword: _keywordController.text.trim(),
         viewMode: _viewMode,
         proxyOperatorUserId: _proxyOperatorUserId,
+        orderStatus: _orderStatusFilter,
+        currentProcessId: _currentProcessIdFilter,
       );
       if (!mounted) return;
       setState(() {
@@ -845,6 +849,34 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final processFilterOptions =
+        _items
+            .map(
+              (item) =>
+                  (id: item.currentProcessId, name: item.currentProcessName),
+            )
+            .toSet()
+            .toList()
+          ..sort((left, right) {
+            final byName = left.name.compareTo(right.name);
+            if (byName != 0) {
+              return byName;
+            }
+            return left.id.compareTo(right.id);
+          });
+    final hasSelectedProcess = _currentProcessIdFilter == null
+        ? true
+        : processFilterOptions.any(
+            (entry) => entry.id == _currentProcessIdFilter,
+          );
+    if (_currentProcessIdFilter != null && !hasSelectedProcess) {
+      processFilterOptions.insert(0, (
+        id: _currentProcessIdFilter!,
+        name: '工序',
+      ));
+    }
+    final processDropdownValue = _currentProcessIdFilter;
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -949,6 +981,63 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                   ),
                 ),
               ],
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 170,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _orderStatusFilter,
+                  decoration: const InputDecoration(
+                    labelText: '状态',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('全部')),
+                    DropdownMenuItem(value: 'pending', child: Text('待生产')),
+                    DropdownMenuItem(value: 'in_progress', child: Text('生产中')),
+                    DropdownMenuItem(value: 'completed', child: Text('已完成')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null || value == _orderStatusFilter) {
+                      return;
+                    }
+                    setState(() => _orderStatusFilter = value);
+                    _loadOrders();
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 280,
+                child: DropdownButtonFormField<int?>(
+                  key: ValueKey<int?>(processDropdownValue),
+                  initialValue: processDropdownValue,
+                  decoration: const InputDecoration(
+                    labelText: '当前工序',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('全部工序'),
+                    ),
+                    ...processFilterOptions.map(
+                      (entry) => DropdownMenuItem<int?>(
+                        value: entry.id,
+                        child: Text('${entry.name} (#${entry.id})'),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == _currentProcessIdFilter) {
+                      return;
+                    }
+                    setState(() => _currentProcessIdFilter = value);
+                    _loadOrders();
+                  },
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),

@@ -11,6 +11,7 @@ from app.core.rbac import (
 from app.core.security import verify_password
 from app.schemas.user import UserCreate, UserUpdate
 from app.services import user_service
+from app.services.session_service import create_user_session
 
 
 def test_create_user_validations(db, factory) -> None:
@@ -103,6 +104,44 @@ def test_list_users_and_all_usernames(db, factory) -> None:
     assert usernames == ["alice", "bob"]
 
 
+def test_list_users_online_filter_applies_before_pagination(db, factory) -> None:
+    factory.ensure_default_roles()
+    factory.user(username="online_filter_1", role_codes=[ROLE_SYSTEM_ADMIN])
+    factory.user(username="online_filter_2", role_codes=[ROLE_PRODUCTION_ADMIN])
+    online_user = factory.user(username="online_filter_3", role_codes=[ROLE_QUALITY_ADMIN])
+    db.commit()
+
+    create_user_session(
+        db,
+        user=online_user,
+        ip_address="10.10.10.10",
+        terminal_info="pytest-online-filter",
+    )
+    db.commit()
+
+    total_online, rows_online = user_service.list_users(
+        db,
+        page=1,
+        page_size=1,
+        keyword="online_filter_",
+        is_online=True,
+        online_user_ids={online_user.id},
+    )
+    assert total_online == 1
+    assert [row.username for row in rows_online] == ["online_filter_3"]
+
+    total_offline, rows_offline = user_service.list_users(
+        db,
+        page=1,
+        page_size=1,
+        keyword="online_filter_",
+        is_online=False,
+        online_user_ids={online_user.id},
+    )
+    assert total_offline == 2
+    assert [row.username for row in rows_offline] == ["online_filter_1"]
+
+
 def test_registration_submit_approve_reject_flow(db, factory) -> None:
     factory.ensure_default_roles()
     stage = factory.stage(code="22")
@@ -120,7 +159,7 @@ def test_registration_submit_approve_reject_flow(db, factory) -> None:
         db,
         request=req,
         account="new_user",
-        password=None,
+        password="Init@123",
         role_codes=[ROLE_OPERATOR],
         process_codes=[process.code],
         stage_id=stage.id,

@@ -84,8 +84,11 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            icon: const Icon(Icons.warning_amber_rounded,
-                color: Colors.deepOrange, size: 36),
+            icon: const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.deepOrange,
+              size: 36,
+            ),
             title: const Text('会话即将过期'),
             content: Text(
               '当前会话将在 ${_formatDuration(session.remainingSeconds)} 后过期，'
@@ -197,9 +200,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('密码修改成功，请重新登录。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('密码修改成功，请重新登录。')));
       widget.onLogout();
     } catch (error) {
       if (!mounted) {
@@ -257,9 +260,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
             Text('创建时间：${_formatDateTime(profile.createdAt)}'),
             Text('最近登录：${_formatDateTime(profile.lastLoginAt)}'),
             Text('最近登录 IP：${profile.lastLoginIp ?? '-'}'),
-            Text(
-              '最近改密时间：${_formatDateTime(profile.passwordChangedAt)}',
-            ),
+            Text('最近改密时间：${_formatDateTime(profile.passwordChangedAt)}'),
           ],
         ),
       ),
@@ -290,10 +291,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '当前会话',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
+            const Text('当前会话', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             if (currentSession == null)
               const Text('未查询到当前在线会话记录')
@@ -301,9 +299,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               Text('会话令牌：${currentSession.sessionTokenId}'),
               _buildSessionStatusRow(currentSession),
               Text('登录时间：${_formatDateTime(currentSession.loginTime)}'),
-              Text(
-                '最后活跃时间：${_formatDateTime(currentSession.lastActiveAt)}',
-              ),
+              Text('最后活跃时间：${_formatDateTime(currentSession.lastActiveAt)}'),
               Text('过期时间：${_formatDateTime(currentSession.expiresAt)}'),
               _buildRemainingRow(currentSession),
               const SizedBox(height: 12),
@@ -338,7 +334,10 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
             color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(4),
           ),
-          child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+          child: Text(
+            label,
+            style: TextStyle(color: color, fontWeight: FontWeight.w600),
+          ),
         ),
       ],
     );
@@ -371,10 +370,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '修改密码',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              const Text('修改密码', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _oldPasswordController,
@@ -397,6 +393,8 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                 obscureText: true,
                 decoration: const InputDecoration(
                   labelText: '新密码',
+                  helperText: '密码规则：至少6位；不能与原密码相同；不能包含连续4位相同字符；不能与系统中已有用户密码相同。',
+                  helperMaxLines: 3,
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),

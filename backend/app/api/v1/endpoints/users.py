@@ -130,6 +130,7 @@ def get_users(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("user.users.list")),
 ) -> ApiResponse[UserListResult]:
+    online_user_ids = list_online_user_ids(db)
     total, users = list_users(
         db,
         page=page,
@@ -137,13 +138,11 @@ def get_users(
         keyword=keyword,
         role_code=role_code,
         stage_id=stage_id,
+        is_online=is_online,
+        online_user_ids=online_user_ids,
         is_active=is_active,
         include_deleted=include_deleted,
     )
-    online_user_ids = list_online_user_ids(db)
-    if is_online is not None:
-        users = [u for u in users if (u.id in online_user_ids) == is_online]
-        total = len(users)
     result = UserListResult(total=total, items=[to_user_item(user, online_user_ids=online_user_ids) for user in users])
     return success_response(result)
 

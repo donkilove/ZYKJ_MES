@@ -184,6 +184,53 @@ def test_users_endpoints_full_lifecycle_and_export(db, factory) -> None:
     assert include_deleted_list.data.items[0].is_deleted is True
 
 
+def test_users_endpoints_online_filter_before_pagination(db, factory) -> None:
+    factory.ensure_default_roles()
+    admin = factory.user(username="um_online_admin", role_codes=[ROLE_SYSTEM_ADMIN])
+    factory.user(username="um_online_filter_a", role_codes=[ROLE_SYSTEM_ADMIN])
+    factory.user(username="um_online_filter_b", role_codes=[ROLE_PRODUCTION_ADMIN])
+    online_user = factory.user(username="um_online_filter_c", role_codes=[ROLE_OPERATOR])
+    db.commit()
+
+    create_user_session(
+        db,
+        user=online_user,
+        ip_address="10.9.9.9",
+        terminal_info="pytest-online-filter-endpoint",
+    )
+    db.commit()
+
+    online = users.get_users(
+        page=1,
+        page_size=1,
+        keyword="um_online_filter_",
+        role_code=None,
+        stage_id=None,
+        is_active=None,
+        is_online=True,
+        include_deleted=False,
+        db=db,
+        _=admin,
+    )
+    assert online.data.total == 1
+    assert [item.username for item in online.data.items] == ["um_online_filter_c"]
+
+    offline = users.get_users(
+        page=1,
+        page_size=1,
+        keyword="um_online_filter_",
+        role_code=None,
+        stage_id=None,
+        is_active=None,
+        is_online=False,
+        include_deleted=False,
+        db=db,
+        _=admin,
+    )
+    assert offline.data.total == 2
+    assert [item.username for item in offline.data.items] == ["um_online_filter_a"]
+
+
 def test_users_endpoints_validation_errors(db, factory) -> None:
     factory.ensure_default_roles()
     admin = factory.user(username="um_validate_admin", role_codes=[ROLE_SYSTEM_ADMIN])
@@ -248,11 +295,26 @@ def test_roles_endpoints_custom_role_lifecycle_and_builtin_guard(db, factory) ->
     admin = factory.user(username="um_role_admin", role_codes=[ROLE_SYSTEM_ADMIN])
     db.commit()
 
+    with pytest.raises(HTTPException) as builtin_create:
+        roles.create_role_api(
+            RoleCreate(
+                code="um_builtin_try",
+                name="手工内置角色",
+                role_type="builtin",
+            ),
+            request=_mock_request(),
+            db=db,
+            current_user=admin,
+        )
+    assert builtin_create.value.status_code == 400
+    assert "系统内置角色由系统维护，不支持手动创建" in str(builtin_create.value.detail)
+
     created = roles.create_role_api(
         RoleCreate(
             code="um_custom_role",
             name="用户模块自定义角色",
             description="用于功能测试",
+            is_enabled=False,
         ),
         request=_mock_request(),
         db=db,
@@ -261,6 +323,7 @@ def test_roles_endpoints_custom_role_lifecycle_and_builtin_guard(db, factory) ->
     role_id = created.data.id
     assert created.message == "created"
     assert created.data.code == "um_custom_role"
+    assert created.data.is_enabled is False
 
     detail = roles.get_role_detail(role_id, db=db, _=admin)
     assert detail.data.user_count == 0
@@ -277,14 +340,6 @@ def test_roles_endpoints_custom_role_lifecycle_and_builtin_guard(db, factory) ->
     )
     assert updated.data.name == "用户模块自定义角色-更新"
 
-    disabled = roles.disable_role_api(
-        role_id,
-        request=_mock_request(),
-        db=db,
-        current_user=admin,
-    )
-    assert disabled.data.is_enabled is False
-
     enabled = roles.enable_role_api(
         role_id,
         request=_mock_request(),
@@ -292,6 +347,14 @@ def test_roles_endpoints_custom_role_lifecycle_and_builtin_guard(db, factory) ->
         current_user=admin,
     )
     assert enabled.data.is_enabled is True
+
+    disabled = roles.disable_role_api(
+        role_id,
+        request=_mock_request(),
+        db=db,
+        current_user=admin,
+    )
+    assert disabled.data.is_enabled is False
 
     deleted = roles.delete_role_api(
         role_id,
@@ -347,6 +410,7 @@ def test_registration_request_endpoints_approve_and_reject(db, factory) -> None:
         request_id,
         ApproveRegistrationRequest(
             account="um_reg_a",
+            password="Init@123",
             role_codes=[ROLE_OPERATOR],
             process_codes=[process.code],
             stage_id=stage.id,

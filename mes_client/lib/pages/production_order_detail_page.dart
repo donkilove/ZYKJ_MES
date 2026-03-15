@@ -161,7 +161,8 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
   }
 
   Widget _buildActionBar(ProductionOrderItem order) {
-    final canEdit = widget.canEditOrder && order.status == 'pending' && !_acting;
+    final canEdit =
+        widget.canEditOrder && order.status == 'pending' && !_acting;
     final canDelete =
         widget.canDeleteOrder && order.status == 'pending' && !_acting;
     final canComplete =
@@ -431,14 +432,29 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
                       spacing: 16,
                       runSpacing: 8,
                       children: [
+                        Text('订单号：${detail.order.orderCode}'),
                         Text('产品：${detail.order.productName}'),
+                        Text('产品版本：${detail.order.productVersion ?? '-'}'),
                         Text('数量：${detail.order.quantity}'),
                         Text(
                           '状态：${productionOrderStatusLabel(detail.order.status)}',
                         ),
                         Text('当前工序：${detail.order.currentProcessName ?? '-'}'),
+                        Text('模板：${detail.order.processTemplateName ?? '-'}'),
+                        Text(
+                          '模板版本：${detail.order.processTemplateVersion ?? '-'}',
+                        ),
+                        Text(
+                          '并行模式：${detail.order.pipelineEnabled ? '开启' : '关闭'}',
+                        ),
+                        Text('创建人：${detail.order.createdByUsername ?? '-'}'),
+                        Text('创建时间：${_formatDateTime(detail.order.createdAt)}'),
+                        Text('更新时间：${_formatDateTime(detail.order.updatedAt)}'),
                         Text('开始日期：${_formatDate(detail.order.startDate)}'),
                         Text('交期：${_formatDate(detail.order.dueDate)}'),
+                        Text(
+                          '备注：${(detail.order.remark ?? '').trim().isEmpty ? '-' : detail.order.remark}',
+                        ),
                       ],
                     ),
                     if (_message.isNotEmpty)
