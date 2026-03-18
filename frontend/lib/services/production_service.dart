@@ -100,14 +100,21 @@ class ProductionService {
       payload['pipeline_enabled'] = pipelineEnabled;
     }
     final startDateFromText = _formatDateOrNull(startDateFrom);
-    if (startDateFromText != null)
+    if (startDateFromText != null) {
       payload['start_date_from'] = startDateFromText;
+    }
     final startDateToText = _formatDateOrNull(startDateTo);
-    if (startDateToText != null) payload['start_date_to'] = startDateToText;
+    if (startDateToText != null) {
+      payload['start_date_to'] = startDateToText;
+    }
     final dueDateFromText = _formatDateOrNull(dueDateFrom);
-    if (dueDateFromText != null) payload['due_date_from'] = dueDateFromText;
+    if (dueDateFromText != null) {
+      payload['due_date_from'] = dueDateFromText;
+    }
     final dueDateToText = _formatDateOrNull(dueDateTo);
-    if (dueDateToText != null) payload['due_date_to'] = dueDateToText;
+    if (dueDateToText != null) {
+      payload['due_date_to'] = dueDateToText;
+    }
     final uri = Uri.parse('$_basePath/orders/export');
     final response = await http.post(
       uri,

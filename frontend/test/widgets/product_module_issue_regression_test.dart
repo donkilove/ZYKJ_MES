@@ -70,6 +70,8 @@ class _VersionListService extends ProductService {
     String? category,
     String? lifecycleStatus,
     bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
   }) async {
     return ProductListResult(total: products.length, items: products);
   }
@@ -123,6 +125,8 @@ class _ProductListOnlyService extends ProductService {
     String? category,
     String? lifecycleStatus,
     bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
   }) async {
     return ProductListResult(total: products.length, items: products);
   }

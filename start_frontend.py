@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-FRONTEND_DIR = ROOT_DIR / "mes_client"
+FRONTEND_DIR = ROOT_DIR / "frontend"
 DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api/v1"
 LOCAL_NO_PROXY_ENTRIES = ("localhost", "127.0.0.1", "::1")
 
@@ -204,7 +204,13 @@ def main() -> int:
         if pub_get_code != 0:
             return pub_get_code
 
-    run_args = [flutter, "run", "-d", args.device]
+    run_args = [
+        flutter,
+        "run",
+        "-d",
+        args.device,
+        f"--dart-define=MES_API_BASE_URL={args.api_base_url}",
+    ]
     if args.release:
         run_args.append("--release")
     return run_command(run_args, FRONTEND_DIR, env)

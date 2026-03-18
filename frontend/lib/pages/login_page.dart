@@ -4,11 +4,16 @@ import '../models/app_session.dart';
 import '../services/auth_service.dart';
 import 'register_page.dart';
 
+const String _defaultApiBaseUrl = String.fromEnvironment(
+  'MES_API_BASE_URL',
+  defaultValue: 'http://127.0.0.1:8000/api/v1',
+);
+
 class LoginPage extends StatefulWidget {
   const LoginPage({
     super.key,
     required this.onLoginSuccess,
-    this.defaultBaseUrl = 'http://127.0.0.1:8000/api/v1',
+    this.defaultBaseUrl = _defaultApiBaseUrl,
   });
 
   final ValueChanged<AppSession> onLoginSuccess;

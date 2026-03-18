@@ -97,7 +97,7 @@ class CraftService {
         'name': name,
         'sort_order': sortOrder,
         'is_enabled': isEnabled,
-        if (remark != null) 'remark': remark,
+        'remark': ?remark,
       }),
     );
     final body = _decodeBody(response);
@@ -207,7 +207,7 @@ class CraftService {
         'name': name,
         'stage_id': stageId,
         'is_enabled': isEnabled,
-        if (remark != null) 'remark': remark,
+        'remark': ?remark,
       }),
     );
     final body = _decodeBody(response);
@@ -417,7 +417,7 @@ class CraftService {
         'is_enabled': isEnabled,
         'steps': steps.map((item) => item.toJson()).toList(),
         'sync_orders': syncOrders,
-        if (remark != null) 'remark': remark,
+        'remark': ?remark,
       }),
     );
     final body = _decodeBody(response);
@@ -463,7 +463,7 @@ class CraftService {
       body: jsonEncode({
         'apply_order_sync': applyOrderSync,
         'confirmed': confirmed,
-        if (expectedVersion != null) 'expected_version': expectedVersion,
+        'expected_version': ?expectedVersion,
         'note': note,
       }),
     );

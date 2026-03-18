@@ -8,12 +8,11 @@ cd backend
 ..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-On Windows, from the repo root you can also use:
+在仓库根目录也可以直接执行：
 
 ```powershell
-.\start_backend.bat
-.\start_frontend.bat
-.\start_all.bat
+.\.venv\Scripts\python.exe .\start_backend.py
+.\.venv\Scripts\python.exe .\start_frontend.py
 ```
 
 Backend startup now performs bootstrap automatically:
@@ -27,8 +26,7 @@ Backend startup now performs bootstrap automatically:
 If your environment sets `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`, local
 requests to `127.0.0.1` may be forwarded to the proxy and fail with `502`.
 
-The root startup entrypoints (`start_backend.py`, `start_frontend.py`,
-`start_backend.bat`, `start_frontend.bat`) now auto-merge:
+根目录启动入口 `start_backend.py`、`start_frontend.py` 会自动合并：
 
 `NO_PROXY` and `no_proxy` => `localhost,127.0.0.1,::1`
 

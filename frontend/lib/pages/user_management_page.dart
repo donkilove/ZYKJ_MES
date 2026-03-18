@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -138,6 +138,20 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   bool _isOperator(String? roleCode) => roleCode == _roleOperator;
+
+  List<XTypeGroup> _exportTypeGroups(String format) {
+    switch (format) {
+      case 'excel':
+        return const [
+          XTypeGroup(label: 'Excel', extensions: ['xlsx']),
+        ];
+      case 'csv':
+      default:
+        return const [
+          XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ];
+    }
+  }
 
   List<String> _getProcessCodesByStage(int stageId) {
     return _processes
@@ -995,15 +1009,20 @@ class _UserManagementPageState extends State<UserManagementPage> {
       );
       if (!mounted) return;
       final bytes = base64Decode(result.contentBase64);
-      final downloadsDir = Directory(
-        '${Platform.environment['USERPROFILE'] ?? '.'}\\Downloads',
+      final location = await getSaveLocation(
+        suggestedName: result.filename,
+        acceptedTypeGroups: _exportTypeGroups(format),
       );
-      final file = File('${downloadsDir.path}\\${result.filename}');
-      await file.writeAsBytes(bytes);
+      if (location == null || !mounted) return;
+      await XFile.fromData(
+        bytes,
+        mimeType: result.contentType,
+        name: result.filename,
+      ).saveTo(location.path);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('已导出到 ${file.path}')));
+        ).showSnackBar(SnackBar(content: Text('已导出到 ${location.path}')));
       }
     } catch (error) {
       if (!mounted) return;
