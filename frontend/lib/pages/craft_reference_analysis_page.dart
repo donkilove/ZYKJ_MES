@@ -19,10 +19,12 @@ class CraftReferenceAnalysisPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    required this.onNavigate,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final void Function({required String moduleCode, String? jumpTarget}) onNavigate;
 
   @override
   State<CraftReferenceAnalysisPage> createState() =>
@@ -305,6 +307,8 @@ class _CraftReferenceAnalysisPageState
       'user' => ('用户', Colors.purple),
       'template' => ('工艺模板', Colors.teal),
       'system_master_template' => ('系统母版', Colors.indigo),
+      'template_revision' => ('模板历史版本', Colors.teal),
+      'system_master_revision' => ('母版历史版本', Colors.indigo),
       'order' => ('生产工单', Colors.orange),
       _ => (refType, Colors.grey),
     };
@@ -422,12 +426,13 @@ class _CraftReferenceAnalysisPageState
                   onPressed: () {
                     final target = (item.jumpTarget ?? '').trim();
                     final module = (item.jumpModule ?? '').trim();
-                    final message = target.isEmpty
-                        ? '暂无可跳转来源'
-                        : '来源模块：${module.isEmpty ? '-': module}，目标：$target';
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(message)),
-                    );
+                    if (target.isEmpty || module.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('暂无可跳转来源')),
+                      );
+                      return;
+                    }
+                    widget.onNavigate(moduleCode: module, jumpTarget: target);
                   },
                   child: Text(_jumpLabel(item)),
                 ),

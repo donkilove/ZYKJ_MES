@@ -27,12 +27,14 @@ class CraftPage extends StatefulWidget {
     required this.onLogout,
     required this.visibleTabCodes,
     required this.capabilityCodes,
+    this.onNavigateToPage,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
+  final void Function(String pageCode)? onNavigateToPage;
 
   @override
   State<CraftPage> createState() => _CraftPageState();
@@ -141,6 +143,47 @@ class _CraftPageState extends State<CraftPage>
     }
   }
 
+  void _selectCraftTab(String tabCode) {
+    final index = _orderedVisibleTabCodes.indexOf(tabCode);
+    if (index >= 0 && _tabController != null) {
+      _tabController!.animateTo(index);
+    }
+  }
+
+  void _handleReferenceNavigation({required String moduleCode, String? jumpTarget}) {
+    final normalizedModule = moduleCode.trim();
+    if (normalizedModule == 'craft') {
+      final target = (jumpTarget ?? '').trim();
+      if (target.startsWith('process-management')) {
+        _selectCraftTab(processManagementTabCode);
+        return;
+      }
+      if (target.startsWith('process-configuration')) {
+        _selectCraftTab(productionProcessConfigTabCode);
+        return;
+      }
+      if (target.startsWith('craft-kanban')) {
+        _selectCraftTab(craftKanbanTabCode);
+        return;
+      }
+      _selectCraftTab(craftReferenceAnalysisTabCode);
+      return;
+    }
+
+    final pageCode = switch (normalizedModule) {
+      'user' => 'user',
+      'product' => 'product',
+      'production' => 'production',
+      'equipment' => 'equipment',
+      'quality' => 'quality',
+      'message' => 'message',
+      _ => '',
+    };
+    if (pageCode.isNotEmpty) {
+      widget.onNavigateToPage?.call(pageCode);
+    }
+  }
+
   Widget _buildTabContent(String code) {
     switch (code) {
       case processManagementTabCode:
@@ -166,6 +209,7 @@ class _CraftPageState extends State<CraftPage>
         return CraftReferenceAnalysisPage(
           session: widget.session,
           onLogout: widget.onLogout,
+          onNavigate: _handleReferenceNavigation,
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));

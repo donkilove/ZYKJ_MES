@@ -61,8 +61,29 @@ class ProductProcessTemplate(Base, TimestampMixin):
         index=True,
     )
     remark: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default=text("''"))
+    source_type: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="manual",
+        server_default=text("'manual'"),
+    )
+    source_template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_product_process_template.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_template_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    source_template_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_product_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_product.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_system_master_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    product = relationship("Product")
+    product = relationship("Product", foreign_keys=[product_id])
+    source_template = relationship("ProductProcessTemplate", remote_side=[id])
+    source_product = relationship("Product", foreign_keys=[source_product_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     updated_by = relationship("User", foreign_keys=[updated_by_user_id])
     steps = relationship(

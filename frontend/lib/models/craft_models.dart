@@ -43,6 +43,39 @@ class CraftStageListResult {
   final List<CraftStageItem> items;
 }
 
+class CraftStageLightItem {
+  CraftStageLightItem({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.sortOrder,
+    required this.isEnabled,
+  });
+
+  final int id;
+  final String code;
+  final String name;
+  final int sortOrder;
+  final bool isEnabled;
+
+  factory CraftStageLightItem.fromJson(Map<String, dynamic> json) {
+    return CraftStageLightItem(
+      id: json['id'] as int,
+      code: (json['code'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      sortOrder: (json['sort_order'] as int?) ?? 0,
+      isEnabled: (json['is_enabled'] as bool?) ?? true,
+    );
+  }
+}
+
+class CraftStageLightListResult {
+  CraftStageLightListResult({required this.total, required this.items});
+
+  final int total;
+  final List<CraftStageLightItem> items;
+}
+
 class CraftProcessItem {
   CraftProcessItem({
     required this.id,
@@ -91,22 +124,70 @@ class CraftProcessListResult {
   final List<CraftProcessItem> items;
 }
 
+class CraftProcessLightItem {
+  CraftProcessLightItem({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.stageId,
+    required this.stageCode,
+    required this.stageName,
+    required this.isEnabled,
+  });
+
+  final int id;
+  final String code;
+  final String name;
+  final int? stageId;
+  final String? stageCode;
+  final String? stageName;
+  final bool isEnabled;
+
+  factory CraftProcessLightItem.fromJson(Map<String, dynamic> json) {
+    return CraftProcessLightItem(
+      id: json['id'] as int,
+      code: (json['code'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      stageId: json['stage_id'] as int?,
+      stageCode: json['stage_code'] as String?,
+      stageName: json['stage_name'] as String?,
+      isEnabled: (json['is_enabled'] as bool?) ?? true,
+    );
+  }
+}
+
+class CraftProcessLightListResult {
+  CraftProcessLightListResult({required this.total, required this.items});
+
+  final int total;
+  final List<CraftProcessLightItem> items;
+}
+
 class CraftTemplateStepPayload {
   const CraftTemplateStepPayload({
     required this.stepOrder,
     required this.stageId,
     required this.processId,
+    this.standardMinutes = 0,
+    this.isKeyProcess = false,
+    this.stepRemark = '',
   });
 
   final int stepOrder;
   final int stageId;
   final int processId;
+  final int standardMinutes;
+  final bool isKeyProcess;
+  final String stepRemark;
 
   Map<String, dynamic> toJson() {
     return {
       'step_order': stepOrder,
       'stage_id': stageId,
       'process_id': processId,
+      'standard_minutes': standardMinutes,
+      'is_key_process': isKeyProcess,
+      'step_remark': stepRemark,
     };
   }
 }
@@ -121,6 +202,9 @@ class CraftTemplateStepItem {
     required this.processId,
     required this.processCode,
     required this.processName,
+    required this.standardMinutes,
+    required this.isKeyProcess,
+    required this.stepRemark,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -133,6 +217,9 @@ class CraftTemplateStepItem {
   final int processId;
   final String processCode;
   final String processName;
+  final int standardMinutes;
+  final bool isKeyProcess;
+  final String stepRemark;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -146,6 +233,9 @@ class CraftTemplateStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
+      standardMinutes: (json['standard_minutes'] as int?) ?? 0,
+      isKeyProcess: (json['is_key_process'] as bool?) ?? false,
+      stepRemark: (json['step_remark'] as String?) ?? '',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -169,6 +259,12 @@ class CraftTemplateItem {
     required this.updatedByUserId,
     required this.updatedByUsername,
     this.remark = '',
+    this.sourceType = 'manual',
+    this.sourceTemplateId,
+    this.sourceTemplateName,
+    this.sourceTemplateVersion,
+    this.sourceProductId,
+    this.sourceSystemMasterVersion,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -188,6 +284,12 @@ class CraftTemplateItem {
   final int? updatedByUserId;
   final String? updatedByUsername;
   final String remark;
+  final String sourceType;
+  final int? sourceTemplateId;
+  final String? sourceTemplateName;
+  final int? sourceTemplateVersion;
+  final int? sourceProductId;
+  final int? sourceSystemMasterVersion;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -208,6 +310,12 @@ class CraftTemplateItem {
       updatedByUserId: json['updated_by_user_id'] as int?,
       updatedByUsername: json['updated_by_username'] as String?,
       remark: (json['remark'] as String?) ?? '',
+      sourceType: (json['source_type'] as String?) ?? 'manual',
+      sourceTemplateId: json['source_template_id'] as int?,
+      sourceTemplateName: json['source_template_name'] as String?,
+      sourceTemplateVersion: json['source_template_version'] as int?,
+      sourceProductId: json['source_product_id'] as int?,
+      sourceSystemMasterVersion: json['source_system_master_version'] as int?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -231,6 +339,9 @@ class CraftSystemMasterTemplateStepItem {
     required this.processId,
     required this.processCode,
     required this.processName,
+    required this.standardMinutes,
+    required this.isKeyProcess,
+    required this.stepRemark,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -243,6 +354,9 @@ class CraftSystemMasterTemplateStepItem {
   final int processId;
   final String processCode;
   final String processName;
+  final int standardMinutes;
+  final bool isKeyProcess;
+  final String stepRemark;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -258,6 +372,9 @@ class CraftSystemMasterTemplateStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
+      standardMinutes: (json['standard_minutes'] as int?) ?? 0,
+      isKeyProcess: (json['is_key_process'] as bool?) ?? false,
+      stepRemark: (json['step_remark'] as String?) ?? '',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -318,6 +435,9 @@ class CraftSystemMasterTemplateVersionStepItem {
     required this.processId,
     required this.processCode,
     required this.processName,
+    required this.standardMinutes,
+    required this.isKeyProcess,
+    required this.stepRemark,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -330,6 +450,9 @@ class CraftSystemMasterTemplateVersionStepItem {
   final int processId;
   final String processCode;
   final String processName;
+  final int standardMinutes;
+  final bool isKeyProcess;
+  final String stepRemark;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -345,6 +468,9 @@ class CraftSystemMasterTemplateVersionStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
+      standardMinutes: (json['standard_minutes'] as int?) ?? 0,
+      isKeyProcess: (json['is_key_process'] as bool?) ?? false,
+      stepRemark: (json['step_remark'] as String?) ?? '',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );

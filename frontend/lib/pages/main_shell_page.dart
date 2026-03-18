@@ -605,6 +605,9 @@ class _MainShellPageState extends State<MainShellPage>
           visibleTabCodes: _visibleCraftTabCodes(),
 
           capabilityCodes: _capabilityCodesForModule('craft'),
+          onNavigateToPage: (pageCode) {
+            setState(() => _selectedPageCode = pageCode);
+          },
         );
 
       case _messagePageCode:

@@ -44,6 +44,19 @@ class ProcessStageListResult(BaseModel):
     items: list[ProcessStageItem]
 
 
+class ProcessStageLightItem(BaseModel):
+    id: int
+    code: str
+    name: str
+    sort_order: int
+    is_enabled: bool
+
+
+class ProcessStageLightListResult(BaseModel):
+    total: int
+    items: list[ProcessStageLightItem]
+
+
 class CraftProcessCreate(BaseModel):
     code: str = Field(min_length=2, max_length=64)
     name: str = Field(min_length=1, max_length=128)
@@ -77,10 +90,28 @@ class CraftProcessListResult(BaseModel):
     items: list[CraftProcessItem]
 
 
+class CraftProcessLightItem(BaseModel):
+    id: int
+    code: str
+    name: str
+    stage_id: int | None = None
+    stage_code: str | None = None
+    stage_name: str | None = None
+    is_enabled: bool
+
+
+class CraftProcessLightListResult(BaseModel):
+    total: int
+    items: list[CraftProcessLightItem]
+
+
 class TemplateStepPayload(BaseModel):
     step_order: int = Field(gt=0)
     stage_id: int = Field(gt=0)
     process_id: int = Field(gt=0)
+    standard_minutes: int = Field(default=0, ge=0)
+    is_key_process: bool = False
+    step_remark: str = Field(default="", max_length=500)
 
 
 class ProductProcessTemplateCreate(BaseModel):
@@ -134,6 +165,9 @@ class TemplateStepItem(BaseModel):
     process_id: int
     process_code: str
     process_name: str
+    standard_minutes: int = 0
+    is_key_process: bool = False
+    step_remark: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -154,6 +188,12 @@ class ProductProcessTemplateItem(BaseModel):
     updated_by_user_id: int | None = None
     updated_by_username: str | None = None
     remark: str = ""
+    source_type: str = "manual"
+    source_template_id: int | None = None
+    source_template_name: str | None = None
+    source_template_version: int | None = None
+    source_product_id: int | None = None
+    source_system_master_version: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -189,6 +229,9 @@ class SystemMasterTemplateStepItem(BaseModel):
     process_id: int
     process_code: str
     process_name: str
+    standard_minutes: int = 0
+    is_key_process: bool = False
+    step_remark: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -492,6 +535,9 @@ class SystemMasterTemplateVersionStepItem(BaseModel):
     process_id: int
     process_code: str
     process_name: str
+    standard_minutes: int = 0
+    is_key_process: bool = False
+    step_remark: str = ""
     created_at: datetime
     updated_at: datetime
 

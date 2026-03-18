@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import csv
 import io
+import json
 from datetime import UTC, datetime
 from dataclasses import dataclass
 from math import ceil
@@ -115,6 +116,9 @@ class TemplateStepPayloadItem:
     step_order: int
     stage_id: int
     process_id: int
+    standard_minutes: int = 0
+    is_key_process: bool = False
+    step_remark: str = ""
 
 
 @dataclass(slots=True)
@@ -122,6 +126,9 @@ class TemplateStepResolvedItem:
     step_order: int
     stage: ProcessStage
     process: Process
+    standard_minutes: int
+    is_key_process: bool
+    step_remark: str
 
 
 @dataclass(slots=True)
@@ -298,6 +305,28 @@ def delete_stage(db: Session, *, row: ProcessStage) -> None:
     )
     if system_master_ref is not None:
         raise ValueError("Stage is referenced by system master template")
+    system_master_revision_ref = (
+        db.execute(
+            select(CraftSystemMasterTemplateRevisionStep.id).where(
+                CraftSystemMasterTemplateRevisionStep.stage_id == row.id
+            ).limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if system_master_revision_ref is not None:
+        raise ValueError("Stage is referenced by system master template revisions")
+    template_revision_ref = (
+        db.execute(
+            select(ProductProcessTemplateRevisionStep.id).where(
+                ProductProcessTemplateRevisionStep.stage_id == row.id
+            ).limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if template_revision_ref is not None:
+        raise ValueError("Stage is referenced by template revisions")
     order_ref = db.execute(select(ProductionOrderProcess.id).where(ProductionOrderProcess.stage_id == row.id).limit(1)).scalars().first()
     if order_ref is not None:
         raise ValueError("Stage is referenced by orders")
@@ -427,6 +456,28 @@ def delete_process(db: Session, *, row: Process) -> None:
     )
     if system_master_ref is not None:
         raise ValueError("Process is referenced by system master template")
+    system_master_revision_ref = (
+        db.execute(
+            select(CraftSystemMasterTemplateRevisionStep.id).where(
+                CraftSystemMasterTemplateRevisionStep.process_id == row.id
+            ).limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if system_master_revision_ref is not None:
+        raise ValueError("Process is referenced by system master template revisions")
+    template_revision_ref = (
+        db.execute(
+            select(ProductProcessTemplateRevisionStep.id).where(
+                ProductProcessTemplateRevisionStep.process_id == row.id
+            ).limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if template_revision_ref is not None:
+        raise ValueError("Process is referenced by template revisions")
     order_ref = db.execute(select(ProductionOrderProcess.id).where(ProductionOrderProcess.process_id == row.id).limit(1)).scalars().first()
     if order_ref is not None:
         raise ValueError("Process is referenced by orders")
@@ -480,6 +531,9 @@ def _load_template_step_process_map(
                 step_order=item.step_order,
                 stage=stage,
                 process=process,
+                standard_minutes=max(int(item.standard_minutes), 0),
+                is_key_process=bool(item.is_key_process),
+                step_remark=(item.step_remark or "").strip(),
             )
         )
     return result
@@ -503,6 +557,9 @@ def _replace_template_steps(
                 process_id=item.process.id,
                 process_code=item.process.code,
                 process_name=item.process.name,
+                standard_minutes=item.standard_minutes,
+                is_key_process=item.is_key_process,
+                step_remark=item.step_remark,
             )
         )
     db.flush()
@@ -525,6 +582,9 @@ def _build_template_steps_payload(
                 step_order=step_order,
                 stage_id=int(item["stage_id"]),
                 process_id=int(item["process_id"]),
+                standard_minutes=max(int(item.get("standard_minutes") or 0), 0),
+                is_key_process=bool(item.get("is_key_process") or False),
+                step_remark=str(item.get("step_remark") or "").strip(),
             )
         )
     return result
@@ -535,11 +595,14 @@ def _build_steps_payload_from_template_row(
 ) -> list[TemplateStepPayloadItem]:
     sorted_steps = sorted(template.steps, key=lambda item: (item.step_order, item.id))
     return [
-        TemplateStepPayloadItem(
-            step_order=step.step_order,
-            stage_id=step.stage_id,
-            process_id=step.process_id,
-        )
+            TemplateStepPayloadItem(
+                step_order=step.step_order,
+                stage_id=step.stage_id,
+                process_id=step.process_id,
+                standard_minutes=step.standard_minutes,
+                is_key_process=step.is_key_process,
+                step_remark=step.step_remark,
+            )
         for step in sorted_steps
     ]
 
@@ -581,8 +644,6 @@ def list_templates(
             == _normalize_template_lifecycle_status(lifecycle_status)
         )
     stmt = stmt.order_by(
-        ProductProcessTemplate.product_id.asc(),
-        ProductProcessTemplate.is_default.desc(),
         ProductProcessTemplate.updated_at.desc(),
         ProductProcessTemplate.id.desc(),
     )
@@ -639,6 +700,9 @@ def _create_template_revision_snapshot(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
+                standard_minutes=step.standard_minutes,
+                is_key_process=step.is_key_process,
+                step_remark=step.step_remark,
             )
         )
     db.flush()
@@ -716,6 +780,9 @@ def _replace_system_master_template_steps(
                 process_id=item.process.id,
                 process_code=item.process.code,
                 process_name=item.process.name,
+                standard_minutes=item.standard_minutes,
+                is_key_process=item.is_key_process,
+                step_remark=item.step_remark,
             )
         )
     db.flush()
@@ -750,6 +817,9 @@ def _create_system_master_revision_snapshot(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
+                standard_minutes=step.standard_minutes,
+                is_key_process=step.is_key_process,
+                step_remark=step.step_remark,
             )
         )
     db.flush()
@@ -934,6 +1004,7 @@ def create_template(
         created_by_user_id=operator.id,
         updated_by_user_id=operator.id,
         remark=_normalize_remark(remark),
+        source_type="manual",
     )
     db.add(row)
     db.flush()
@@ -1162,6 +1233,8 @@ def update_template(
     operator: User,
 ) -> tuple[ProductProcessTemplate, TemplateSyncResult]:
     del sync_orders  # Sync is handled by explicit publish/rollback actions.
+    if template.lifecycle_status != TEMPLATE_LIFECYCLE_DRAFT:
+        raise ValueError("已发布或已归档模板不可直接编辑，请先创建草稿后再修改")
 
     normalized_name = _normalize_text(template_name, field_name="Template name")
     existing_name = (
@@ -1205,6 +1278,22 @@ def update_template(
     db.refresh(template)
 
     return get_template_by_id(db, template.id) or template, sync_result
+
+
+def create_template_draft(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+    operator: User,
+) -> ProductProcessTemplate:
+    if template.lifecycle_status == TEMPLATE_LIFECYCLE_DRAFT:
+        raise ValueError("当前模板已是草稿版本")
+    template.lifecycle_status = TEMPLATE_LIFECYCLE_DRAFT
+    template.version += 1
+    template.updated_by_user_id = operator.id
+    db.commit()
+    db.refresh(template)
+    return get_template_by_id(db, template.id) or template
 
 
 def set_template_enabled(
@@ -1842,6 +1931,7 @@ def import_templates(
                         is_enabled=is_enabled,
                         created_by_user_id=operator.id,
                         updated_by_user_id=operator.id,
+                        source_type="manual",
                     )
                     db.add(row)
                     db.flush()
@@ -1890,18 +1980,19 @@ def import_templates(
 
 
 def delete_template(db: Session, *, template: ProductProcessTemplate) -> None:
-    active_ref = (
+    any_order_ref = (
         db.execute(
             select(ProductionOrder.id).where(
                 ProductionOrder.process_template_id == template.id,
-                ProductionOrder.status != ORDER_STATUS_COMPLETED,
             )
         )
         .scalars()
         .first()
     )
-    if active_ref is not None:
-        raise ValueError("Template is referenced by unfinished orders")
+    if any_order_ref is not None:
+        raise ValueError("Template is referenced by production orders")
+    if template.published_version > 0 or template.revisions:
+        raise ValueError("Template already has published versions or history, please archive instead of deleting")
     db.delete(template)
     db.commit()
 
@@ -1938,6 +2029,11 @@ def copy_template(
         is_enabled=True,
         created_by_user_id=operator.id,
         updated_by_user_id=operator.id,
+        source_type="template",
+        source_template_id=template.id,
+        source_template_name=template.template_name,
+        source_template_version=template.version,
+        source_product_id=template.product_id,
     )
     db.add(row)
     db.flush()
@@ -1953,6 +2049,9 @@ def copy_template(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
+                standard_minutes=step.standard_minutes,
+                is_key_process=step.is_key_process,
+                step_remark=step.step_remark,
             )
         )
     db.flush()
@@ -1995,6 +2094,8 @@ def copy_template_from_system_master(
         is_enabled=True,
         created_by_user_id=operator.id,
         updated_by_user_id=operator.id,
+        source_type="system_master",
+        source_system_master_version=system_master.version,
     )
     db.add(row)
     db.flush()
@@ -2010,6 +2111,9 @@ def copy_template_from_system_master(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
+                standard_minutes=step.standard_minutes,
+                is_key_process=step.is_key_process,
+                step_remark=step.step_remark,
             )
         )
     db.flush()
@@ -2052,6 +2156,11 @@ def copy_template_to_product(
         is_enabled=True,
         created_by_user_id=operator.id,
         updated_by_user_id=operator.id,
+        source_type="cross_product_template",
+        source_template_id=template.id,
+        source_template_name=template.template_name,
+        source_template_version=template.version,
+        source_product_id=template.product_id,
     )
     db.add(row)
     db.flush()
@@ -2067,6 +2176,9 @@ def copy_template_to_product(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
+                standard_minutes=step.standard_minutes,
+                is_key_process=step.is_key_process,
+                step_remark=step.step_remark,
             )
         )
     db.flush()
@@ -2131,6 +2243,18 @@ def list_enabled_stage_options(db: Session) -> list[ProcessStage]:
         .scalars()
         .all()
     )
+
+
+def list_enabled_process_options(
+    db: Session,
+    *,
+    stage_id: int | None = None,
+) -> list[Process]:
+    stmt = select(Process).options(selectinload(Process.stage)).where(Process.is_enabled.is_(True))
+    if stage_id is not None:
+        stmt = stmt.where(Process.stage_id == stage_id)
+    stmt = stmt.order_by(Process.stage_id.asc(), Process.code.asc(), Process.id.asc())
+    return db.execute(stmt).scalars().all()
 
 
 def resolve_user_stage_codes(db: Session, *, process_codes: list[str]) -> set[str]:
@@ -2285,6 +2409,35 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 )
             )
 
+    system_master_revision_rows = (
+        db.execute(
+            select(CraftSystemMasterTemplateRevision)
+            .join(
+                CraftSystemMasterTemplateRevisionStep,
+                CraftSystemMasterTemplateRevisionStep.revision_id == CraftSystemMasterTemplateRevision.id,
+            )
+            .where(CraftSystemMasterTemplateRevisionStep.stage_id == stage.id)
+            .order_by(CraftSystemMasterTemplateRevision.version.desc(), CraftSystemMasterTemplateRevision.id.desc())
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+    for revision in system_master_revision_rows:
+        items.append(
+            ReferenceItem(
+                ref_type="system_master_revision",
+                ref_id=revision.id,
+                ref_name=f"系统母版历史版本 v{revision.version}",
+                detail=revision.action,
+                ref_status="历史引用",
+                jump_module="craft",
+                jump_target="process-configuration?system_master_versions=1",
+                risk_level="low",
+                risk_note="工段存在于系统母版历史版本中，删除会破坏历史追溯",
+            )
+        )
+
     template_step_ids = (
         db.execute(
             select(ProductProcessTemplateStep.template_id)
@@ -2320,6 +2473,36 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                     risk_note=risk_note,
                 )
             )
+
+    template_revision_rows = (
+        db.execute(
+            select(ProductProcessTemplateRevision)
+            .join(
+                ProductProcessTemplateRevisionStep,
+                ProductProcessTemplateRevisionStep.revision_id == ProductProcessTemplateRevision.id,
+            )
+            .join(ProductProcessTemplate, ProductProcessTemplate.id == ProductProcessTemplateRevision.template_id)
+            .where(ProductProcessTemplateRevisionStep.stage_id == stage.id)
+            .order_by(ProductProcessTemplateRevision.created_at.desc(), ProductProcessTemplateRevision.id.desc())
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+    for revision in template_revision_rows:
+        items.append(
+            ReferenceItem(
+                ref_type="template_revision",
+                ref_id=revision.id,
+                ref_name=f"{revision.template.template_name} 历史版本 v{revision.version}",
+                detail=revision.action,
+                ref_status="历史引用",
+                jump_module="craft",
+                jump_target=f"process-configuration?template_id={revision.template_id}&version={revision.version}",
+                risk_level="low",
+                risk_note="工段存在于模板历史版本中，删除会破坏版本追溯",
+            )
+        )
 
     order_process_ids = (
         db.execute(
@@ -2499,6 +2682,35 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                 )
             )
 
+    system_master_revision_rows = (
+        db.execute(
+            select(CraftSystemMasterTemplateRevision)
+            .join(
+                CraftSystemMasterTemplateRevisionStep,
+                CraftSystemMasterTemplateRevisionStep.revision_id == CraftSystemMasterTemplateRevision.id,
+            )
+            .where(CraftSystemMasterTemplateRevisionStep.process_id == process.id)
+            .order_by(CraftSystemMasterTemplateRevision.version.desc(), CraftSystemMasterTemplateRevision.id.desc())
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+    for revision in system_master_revision_rows:
+        items.append(
+            ReferenceItem(
+                ref_type="system_master_revision",
+                ref_id=revision.id,
+                ref_name=f"系统母版历史版本 v{revision.version}",
+                detail=revision.action,
+                ref_status="历史引用",
+                jump_module="craft",
+                jump_target="process-configuration?system_master_versions=1",
+                risk_level="low",
+                risk_note="工序存在于系统母版历史版本中，删除会破坏历史追溯",
+            )
+        )
+
     template_step_ids = (
         db.execute(
             select(ProductProcessTemplateStep.template_id)
@@ -2534,6 +2746,36 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                     risk_note=risk_note,
                 )
             )
+
+    template_revision_rows = (
+        db.execute(
+            select(ProductProcessTemplateRevision)
+            .join(
+                ProductProcessTemplateRevisionStep,
+                ProductProcessTemplateRevisionStep.revision_id == ProductProcessTemplateRevision.id,
+            )
+            .join(ProductProcessTemplate, ProductProcessTemplate.id == ProductProcessTemplateRevision.template_id)
+            .where(ProductProcessTemplateRevisionStep.process_id == process.id)
+            .order_by(ProductProcessTemplateRevision.created_at.desc(), ProductProcessTemplateRevision.id.desc())
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+    for revision in template_revision_rows:
+        items.append(
+            ReferenceItem(
+                ref_type="template_revision",
+                ref_id=revision.id,
+                ref_name=f"{revision.template.template_name} 历史版本 v{revision.version}",
+                detail=revision.action,
+                ref_status="历史引用",
+                jump_module="craft",
+                jump_target=f"process-configuration?template_id={revision.template_id}&version={revision.version}",
+                risk_level="low",
+                risk_note="工序存在于模板历史版本中，删除会破坏版本追溯",
+            )
+        )
 
     order_process_ids = (
         db.execute(
@@ -2891,6 +3133,107 @@ def _craft_csv_base64(headers: list[str], rows: list[list[object]]) -> str:
     for row in rows:
         writer.writerow(row)
     return base64.b64encode(output.getvalue().encode("utf-8-sig")).decode("ascii")
+
+
+def _craft_json_base64(payload: dict[str, object]) -> str:
+    return base64.b64encode(io.StringIO(json.dumps(payload, ensure_ascii=False, indent=2)).getvalue().encode("utf-8-sig")).decode("ascii")
+
+
+def export_template_detail_json(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+) -> dict[str, object]:
+    detail = get_template_by_id(db, template.id) or template
+    steps = sorted(detail.steps, key=lambda item: (item.step_order, item.id))
+    payload = {
+        "template": {
+            "id": detail.id,
+            "product_id": detail.product_id,
+            "product_name": detail.product.name if detail.product else "",
+            "template_name": detail.template_name,
+            "version": detail.version,
+            "lifecycle_status": detail.lifecycle_status,
+            "published_version": detail.published_version,
+            "is_default": detail.is_default,
+            "is_enabled": detail.is_enabled,
+            "remark": detail.remark,
+            "source_type": detail.source_type,
+            "source_template_id": detail.source_template_id,
+            "source_template_name": detail.source_template_name,
+            "source_template_version": detail.source_template_version,
+            "source_product_id": detail.source_product_id,
+            "source_system_master_version": detail.source_system_master_version,
+        },
+        "steps": [
+            {
+                "step_order": step.step_order,
+                "stage_id": step.stage_id,
+                "stage_code": step.stage_code,
+                "stage_name": step.stage_name,
+                "process_id": step.process_id,
+                "process_code": step.process_code,
+                "process_name": step.process_name,
+                "standard_minutes": step.standard_minutes,
+                "is_key_process": step.is_key_process,
+                "step_remark": step.step_remark,
+            }
+            for step in steps
+        ],
+    }
+    return {
+        "file_name": f"craft_template_{detail.id}.json",
+        "mime_type": "application/json",
+        "content_base64": _craft_json_base64(payload),
+        "exported_count": len(steps),
+    }
+
+
+def export_template_version_json(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+    version: int,
+) -> dict[str, object]:
+    revision = get_template_version(db, template_id=template.id, version=version)
+    if revision is None:
+        raise ValueError("Template version not found")
+    steps = sorted(revision.steps, key=lambda item: (item.step_order, item.id))
+    payload = {
+        "template": {
+            "template_id": template.id,
+            "template_name": template.template_name,
+            "product_id": template.product_id,
+            "product_name": template.product.name if template.product else "",
+        },
+        "revision": {
+            "version": revision.version,
+            "action": revision.action,
+            "note": revision.note,
+            "source_revision_id": revision.source_revision_id,
+        },
+        "steps": [
+            {
+                "step_order": step.step_order,
+                "stage_id": step.stage_id,
+                "stage_code": step.stage_code,
+                "stage_name": step.stage_name,
+                "process_id": step.process_id,
+                "process_code": step.process_code,
+                "process_name": step.process_name,
+                "standard_minutes": step.standard_minutes,
+                "is_key_process": step.is_key_process,
+                "step_remark": step.step_remark,
+            }
+            for step in steps
+        ],
+    }
+    return {
+        "file_name": f"craft_template_{template.id}_version_{version}.json",
+        "mime_type": "application/json",
+        "content_base64": _craft_json_base64(payload),
+        "exported_count": len(steps),
+    }
 
 
 def export_stages_csv(

@@ -13,15 +13,25 @@ import '../widgets/locked_form_dialog.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 class _TemplateStepDraft {
-  _TemplateStepDraft({required this.stageId, required this.processId});
+  _TemplateStepDraft({
+    required this.stageId,
+    required this.processId,
+    this.standardMinutes = 0,
+    this.isKeyProcess = false,
+    this.stepRemark = '',
+  });
 
   int stageId;
   int processId;
+  int standardMinutes;
+  bool isKeyProcess;
+  String stepRemark;
 }
 
 enum _TemplateAction {
   detail,
   edit,
+  createDraft,
   publish,
   copy,
   copyToProduct,
@@ -304,6 +314,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return _TemplateStepDraft(
         stageId: stage.id,
         processId: processRows.first.id,
+        standardMinutes: 0,
+        isKeyProcess: false,
+        stepRemark: '',
       );
     }
     return null;
@@ -319,6 +332,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           stepOrder: i + 1,
           stageId: steps[i].stageId,
           processId: steps[i].processId,
+          standardMinutes: steps[i].standardMinutes,
+          isKeyProcess: steps[i].isKeyProcess,
+          stepRemark: steps[i].stepRemark,
         ),
       );
     }
@@ -361,6 +377,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 Text('版本：${item.version} / 已发布 P${item.publishedVersion}'),
                 Text('生命周期：${_lifecycleLabel(item.lifecycleStatus)}'),
                 Text('状态：${item.isEnabled ? '启用' : '停用'}'),
+                Text('来源：${_templateSourceLabel(item)}'),
                 if (item.remark.trim().isNotEmpty) Text('备注：${item.remark.trim()}'),
                 const SizedBox(height: 10),
                 const Text('步骤列表', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -377,7 +394,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                               dense: true,
                               leading: Text('#${step.stepOrder}'),
                               title: Text('${step.stageCode} ${step.stageName}'),
-                              subtitle: Text('${step.processCode} ${step.processName}'),
+                              subtitle: Text(
+                                '${step.processCode} ${step.processName}\n'
+                                '标准工时：${step.standardMinutes} 分钟｜${step.isKeyProcess ? '关键工序' : '普通工序'}'
+                                '${step.stepRemark.trim().isNotEmpty ? '｜说明：${step.stepRemark.trim()}' : ''}',
+                              ),
+                              isThreeLine: true,
                             );
                           },
                         ),
@@ -386,6 +408,34 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             ),
           ),
           actions: [
+            TextButton(
+              onPressed: () async {
+                try {
+                  final contentBase64 = await _craftService.exportTemplateDetail(
+                    templateId: item.id,
+                  );
+                  if (!dialogContext.mounted) {
+                    return;
+                  }
+                  await _showJsonPreviewDialog(
+                    dialogContext,
+                    title: '模板导出 - ${item.templateName}',
+                    contentBase64: contentBase64,
+                  );
+                } catch (error) {
+                  if (_isUnauthorized(error)) {
+                    widget.onLogout();
+                    return;
+                  }
+                  if (dialogContext.mounted) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      SnackBar(content: Text(_errorMessage(error))),
+                    );
+                  }
+                }
+              },
+              child: const Text('导出当前模板'),
+            ),
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('关闭'),
@@ -456,6 +506,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             (item) => _TemplateStepDraft(
               stageId: item.stageId,
               processId: item.processId,
+              standardMinutes: item.standardMinutes,
+              isKeyProcess: item.isKeyProcess,
+              stepRemark: item.stepRemark,
             ),
           )
           .toList();
@@ -717,6 +770,61 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                       ),
                                     ],
                                   ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 160,
+                                        child: TextFormField(
+                                          initialValue:
+                                              step.standardMinutes.toString(),
+                                          decoration: const InputDecoration(
+                                            labelText: '标准工时(分钟)',
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                          ),
+                                          keyboardType: TextInputType.number,
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter.digitsOnly,
+                                          ],
+                                          onChanged: (value) {
+                                            setDialogState(() {
+                                              step.standardMinutes =
+                                                  int.tryParse(value) ?? 0;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: TextFormField(
+                                          initialValue: step.stepRemark,
+                                          decoration: const InputDecoration(
+                                            labelText: '步骤说明',
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                          ),
+                                          maxLength: 500,
+                                          onChanged: (value) {
+                                            setDialogState(() {
+                                              step.stepRemark = value.trim();
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  CheckboxListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    title: const Text('关键工序'),
+                                    value: step.isKeyProcess,
+                                    onChanged: (value) {
+                                      setDialogState(() {
+                                        step.isKeyProcess = value ?? false;
+                                      });
+                                    },
+                                  ),
                                 ],
                               ),
                             ),
@@ -796,6 +904,37 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
   }
 
+  Future<void> _createDraftThenEdit(CraftTemplateItem item) async {
+    try {
+      await _craftService.createTemplateDraft(templateId: item.id);
+      _detailCache.remove(item.id);
+      await _loadData();
+      if (!mounted) {
+        return;
+      }
+      CraftTemplateItem? refreshed;
+      for (final row in _templates) {
+        if (row.id == item.id) {
+          refreshed = row;
+          break;
+        }
+      }
+      if (refreshed != null) {
+        await _showTemplateDialog(existing: refreshed);
+      }
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage(error))),
+        );
+      }
+    }
+  }
+
   Future<void> _showSystemMasterTemplateDialog() async {
     if (!_canManageSystemMasterTemplate) {
       _showNoPermission();
@@ -816,6 +955,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 (item) => _TemplateStepDraft(
                   stageId: item.stageId,
                   processId: item.processId,
+                  standardMinutes: item.standardMinutes,
+                  isKeyProcess: item.isKeyProcess,
+                  stepRemark: item.stepRemark,
                 ),
               )
               .toList()
@@ -985,6 +1127,61 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                         icon: const Icon(Icons.delete_outline),
                                       ),
                                     ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 160,
+                                        child: TextFormField(
+                                          initialValue:
+                                              step.standardMinutes.toString(),
+                                          decoration: const InputDecoration(
+                                            labelText: '标准工时(分钟)',
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                          ),
+                                          keyboardType: TextInputType.number,
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter.digitsOnly,
+                                          ],
+                                          onChanged: (value) {
+                                            setDialogState(() {
+                                              step.standardMinutes =
+                                                  int.tryParse(value) ?? 0;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: TextFormField(
+                                          initialValue: step.stepRemark,
+                                          decoration: const InputDecoration(
+                                            labelText: '步骤说明',
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                          ),
+                                          maxLength: 500,
+                                          onChanged: (value) {
+                                            setDialogState(() {
+                                              step.stepRemark = value.trim();
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  CheckboxListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    title: const Text('关键工序'),
+                                    value: step.isKeyProcess,
+                                    onChanged: (value) {
+                                      setDialogState(() {
+                                        step.isKeyProcess = value ?? false;
+                                      });
+                                    },
                                   ),
                                 ],
                               ),
@@ -1559,6 +1756,19 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
   }
 
+  String _templateSourceLabel(CraftTemplateItem item) {
+    switch (item.sourceType) {
+      case 'template':
+        return '同产品模板复制：${item.sourceTemplateName ?? '-'}${item.sourceTemplateVersion != null ? ' v${item.sourceTemplateVersion}' : ''}';
+      case 'cross_product_template':
+        return '跨产品模板复制：${item.sourceTemplateName ?? '-'}${item.sourceTemplateVersion != null ? ' v${item.sourceTemplateVersion}' : ''}';
+      case 'system_master':
+        return '系统母版套版${item.sourceSystemMasterVersion != null ? ' v${item.sourceSystemMasterVersion}' : ''}';
+      default:
+        return '手工创建';
+    }
+  }
+
   int _parseIntSafe(Object? value, {int fallback = 0}) {
     if (value is int) {
       return value;
@@ -1727,6 +1937,33 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     }
+  }
+
+  Future<void> _showJsonPreviewDialog(
+    BuildContext context, {
+    required String title,
+    required String contentBase64,
+  }) async {
+    final content = contentBase64.trim().isEmpty
+        ? '无导出内容'
+        : utf8.decode(base64Decode(contentBase64));
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 760,
+          height: 520,
+          child: SingleChildScrollView(child: SelectableText(content)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showPublishDialog(CraftTemplateItem item) async {
@@ -2234,20 +2471,96 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                               '${version.note != null && version.note!.trim().isNotEmpty ? ' · ${version.note}' : ''}',
                             ),
                             trailing: _canManageTemplates
-                                ? FilledButton.tonal(
+                                ? Wrap(
+                                    spacing: 8,
+                                    children: [
+                                      TextButton(
+                                        onPressed: () async {
+                                          try {
+                                            final contentBase64 =
+                                                await _craftService.exportTemplateVersion(
+                                                  templateId: item.id,
+                                                  version: version.version,
+                                                );
+                                            if (!dialogContext.mounted) {
+                                              return;
+                                            }
+                                            await _showJsonPreviewDialog(
+                                              dialogContext,
+                                              title:
+                                                  '版本导出 - ${item.templateName} v${version.version}',
+                                              contentBase64: contentBase64,
+                                            );
+                                          } catch (error) {
+                                            if (_isUnauthorized(error)) {
+                                              widget.onLogout();
+                                              return;
+                                            }
+                                            if (dialogContext.mounted) {
+                                              ScaffoldMessenger.of(dialogContext)
+                                                  .showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        _errorMessage(error),
+                                                      ),
+                                                    ),
+                                                  );
+                                            }
+                                          }
+                                        },
+                                        child: const Text('导出'),
+                                      ),
+                                      FilledButton.tonal(
+                                        onPressed: () async {
+                                          final rolledBack =
+                                              await _showRollbackDialog(
+                                                item: item,
+                                                targetVersion: version.version,
+                                              );
+                                          if (rolledBack && dialogContext.mounted) {
+                                            Navigator.of(dialogContext).pop(true);
+                                          }
+                                        },
+                                        child: const Text('回滚'),
+                                      ),
+                                    ],
+                                  )
+                                : TextButton(
                                     onPressed: () async {
-                                      final rolledBack =
-                                          await _showRollbackDialog(
-                                            item: item,
-                                            targetVersion: version.version,
-                                          );
-                                      if (rolledBack && dialogContext.mounted) {
-                                        Navigator.of(dialogContext).pop(true);
+                                      try {
+                                        final contentBase64 = await _craftService
+                                            .exportTemplateVersion(
+                                              templateId: item.id,
+                                              version: version.version,
+                                            );
+                                        if (!dialogContext.mounted) {
+                                          return;
+                                        }
+                                        await _showJsonPreviewDialog(
+                                          dialogContext,
+                                          title:
+                                              '版本导出 - ${item.templateName} v${version.version}',
+                                          contentBase64: contentBase64,
+                                        );
+                                      } catch (error) {
+                                        if (_isUnauthorized(error)) {
+                                          widget.onLogout();
+                                          return;
+                                        }
+                                        if (dialogContext.mounted) {
+                                          ScaffoldMessenger.of(dialogContext)
+                                              .showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    _errorMessage(error),
+                                                  ),
+                                                ),
+                                              );
+                                        }
                                       }
                                     },
-                                    child: const Text('回滚'),
-                                  )
-                                : null,
+                                    child: const Text('导出'),
+                                  ),
                           );
                         },
                       ),
@@ -2585,6 +2898,13 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           return;
         }
         await _showTemplateDialog(existing: item);
+        return;
+      case _TemplateAction.createDraft:
+        if (!_canManageTemplates) {
+          _showNoPermission();
+          return;
+        }
+        await _createDraftThenEdit(item);
         return;
       case _TemplateAction.publish:
         if (!_canManageTemplates) {
@@ -3058,10 +3378,15 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                                       >[];
                                                   if (_canManageTemplates) {
                                                     items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .edit,
-                                                        child: Text('编辑'),
+                                                      PopupMenuItem(
+                                                        value: item.lifecycleStatus == 'draft'
+                                                            ? _TemplateAction.edit
+                                                            : _TemplateAction.createDraft,
+                                                        child: Text(
+                                                          item.lifecycleStatus == 'draft'
+                                                              ? '编辑'
+                                                              : '创建草稿',
+                                                        ),
                                                       ),
                                                     );
                                                     items.add(

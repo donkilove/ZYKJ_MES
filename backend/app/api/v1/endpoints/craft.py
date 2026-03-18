@@ -20,12 +20,16 @@ from app.services.audit_service import write_audit_log
 from app.schemas.craft import (
     CraftKanbanProcessItem,
     CraftKanbanProcessMetricsResult,
+    CraftProcessLightItem,
+    CraftProcessLightListResult,
     CraftKanbanSampleItem,
     CraftProcessCreate,
     CraftProcessItem,
     CraftProcessListResult,
     CraftProcessUpdate,
     ProcessStageCreate,
+    ProcessStageLightItem,
+    ProcessStageLightListResult,
     ProcessStageItem,
     ProcessStageListResult,
     ProcessStageUpdate,
@@ -77,6 +81,8 @@ from app.services.craft_service import (
     compare_template_versions,
     create_process,
     export_craft_kanban_process_metrics_csv,
+    export_template_detail_json,
+    export_template_version_json,
     export_templates,
     get_craft_kanban_process_metrics,
     import_templates,
@@ -85,6 +91,7 @@ from app.services.craft_service import (
     rollback_template_to_version,
     create_system_master_template,
     create_stage,
+    create_template_draft,
     create_template,
     copy_template,
     copy_template_from_system_master,
@@ -102,7 +109,11 @@ from app.services.craft_service import (
     get_process_references,
     get_template_references,
     list_craft_processes,
+    list_enabled_process_options,
+    list_enabled_stage_options,
     list_stages,
+    list_enabled_process_options,
+    list_enabled_stage_options,
     list_system_master_template_versions,
     list_templates,
     export_stages_csv,
@@ -132,6 +143,16 @@ def _to_stage_item(row: ProcessStage) -> ProcessStageItem:
     )
 
 
+def _to_stage_light_item(row: ProcessStage) -> ProcessStageLightItem:
+    return ProcessStageLightItem(
+        id=row.id,
+        code=row.code,
+        name=row.name,
+        sort_order=row.sort_order,
+        is_enabled=row.is_enabled,
+    )
+
+
 def _to_process_item(row: Process) -> CraftProcessItem:
     stage = row.stage
     return CraftProcessItem(
@@ -145,6 +166,19 @@ def _to_process_item(row: Process) -> CraftProcessItem:
         remark=row.remark,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def _to_process_light_item(row: Process) -> CraftProcessLightItem:
+    stage = row.stage
+    return CraftProcessLightItem(
+        id=row.id,
+        code=row.code,
+        name=row.name,
+        stage_id=row.stage_id,
+        stage_code=stage.code if stage else None,
+        stage_name=stage.name if stage else None,
+        is_enabled=row.is_enabled,
     )
 
 
@@ -165,6 +199,12 @@ def _to_template_item(row: ProductProcessTemplate) -> ProductProcessTemplateItem
         updated_by_user_id=row.updated_by_user_id,
         updated_by_username=row.updated_by.username if row.updated_by else None,
         remark=row.remark,
+        source_type=row.source_type,
+        source_template_id=row.source_template_id,
+        source_template_name=row.source_template_name,
+        source_template_version=row.source_template_version,
+        source_product_id=row.source_product_id,
+        source_system_master_version=row.source_system_master_version,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -184,6 +224,9 @@ def _to_template_detail(row: ProductProcessTemplate) -> ProductProcessTemplateDe
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
+                standard_minutes=step.standard_minutes,
+                is_key_process=step.is_key_process,
+                step_remark=step.step_remark,
                 created_at=step.created_at,
                 updated_at=step.updated_at,
             )
@@ -213,6 +256,9 @@ def _to_system_master_template_item(row: CraftSystemMasterTemplate) -> SystemMas
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
+                standard_minutes=step.standard_minutes,
+                is_key_process=step.is_key_process,
+                step_remark=step.step_remark,
                 created_at=step.created_at,
                 updated_at=step.updated_at,
             )
@@ -345,6 +391,9 @@ def _to_system_master_template_version_list_result(result) -> SystemMasterTempla
                         process_id=step.process_id,
                         process_code=step.process_code,
                         process_name=step.process_name,
+                        standard_minutes=step.standard_minutes,
+                        is_key_process=step.is_key_process,
+                        step_remark=step.step_remark,
                         created_at=step.created_at,
                         updated_at=step.updated_at,
                     )
@@ -399,6 +448,24 @@ def get_stages(
         enabled=enabled,
     )
     return success_response(ProcessStageListResult(total=total, items=[_to_stage_item(row) for row in rows]))
+
+
+@router.get("/stages/light", response_model=ApiResponse[ProcessStageLightListResult])
+def get_stage_light_options(
+    enabled: bool | None = Query(default=True),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.stages.list")),
+) -> ApiResponse[ProcessStageLightListResult]:
+    rows = list_enabled_stage_options(db) if enabled is True else list_stages(
+        db,
+        page=1,
+        page_size=1000,
+        keyword=None,
+        enabled=enabled,
+    )[1]
+    return success_response(
+        ProcessStageLightListResult(total=len(rows), items=[_to_stage_light_item(row) for row in rows])
+    )
 
 
 @router.post("/stages", response_model=ApiResponse[ProcessStageItem], status_code=status.HTTP_201_CREATED)
@@ -503,6 +570,26 @@ def get_processes_api(
         enabled=enabled,
     )
     return success_response(CraftProcessListResult(total=total, items=[_to_process_item(row) for row in rows]))
+
+
+@router.get("/processes/light", response_model=ApiResponse[CraftProcessLightListResult])
+def get_process_light_options(
+    stage_id: int | None = Query(default=None, ge=1),
+    enabled: bool | None = Query(default=True),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.processes.list")),
+) -> ApiResponse[CraftProcessLightListResult]:
+    rows = list_enabled_process_options(db, stage_id=stage_id) if enabled is True else list_craft_processes(
+        db,
+        page=1,
+        page_size=2000,
+        keyword=None,
+        stage_id=stage_id,
+        enabled=enabled,
+    )[1]
+    return success_response(
+        CraftProcessLightListResult(total=len(rows), items=[_to_process_light_item(row) for row in rows])
+    )
 
 
 @router.post("/processes", response_model=ApiResponse[CraftProcessItem], status_code=status.HTTP_201_CREATED)
@@ -701,6 +788,39 @@ def get_templates_api(
         lifecycle_status=lifecycle_status,
     )
     return success_response(ProductProcessTemplateListResult(total=total, items=[_to_template_item(row) for row in rows]))
+
+
+@router.get("/templates/{template_id}/export", response_model=ApiResponse[CraftExportResult])
+def export_template_detail_api(
+    template_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.templates.export")),
+) -> ApiResponse[CraftExportResult]:
+    row = get_template_by_id(db, template_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    result = export_template_detail_json(db, template=row)
+    return success_response(CraftExportResult(**result))
+
+
+@router.get(
+    "/templates/{template_id}/versions/{version}/export",
+    response_model=ApiResponse[CraftExportResult],
+)
+def export_template_version_api(
+    template_id: int,
+    version: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.templates.export")),
+) -> ApiResponse[CraftExportResult]:
+    row = get_template_by_id(db, template_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    try:
+        result = export_template_version_json(db, template=row, version=version)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
+    return success_response(CraftExportResult(**result))
 
 
 @router.post("/templates", response_model=ApiResponse[ProductProcessTemplateDetail], status_code=status.HTTP_201_CREATED)
@@ -1112,6 +1232,35 @@ def update_template_api(
         ),
         message="updated",
     )
+
+
+@router.post(
+    "/templates/{template_id}/draft",
+    response_model=ApiResponse[ProductProcessTemplateDetail],
+)
+def create_template_draft_api(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("craft.templates.update")),
+) -> ApiResponse[ProductProcessTemplateDetail]:
+    row = get_template_by_id(db, template_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    try:
+        updated = create_template_draft(db, template=row, operator=current_user)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    write_audit_log(
+        db,
+        action_code="craft.template.draft",
+        action_name="创建模板草稿",
+        target_type="craft_template",
+        target_id=str(updated.id),
+        target_name=updated.template_name,
+        operator=current_user,
+        after_data={"version": updated.version, "lifecycle_status": updated.lifecycle_status},
+    )
+    return success_response(_to_template_detail(updated), message="draft_created")
 
 
 @router.post(
