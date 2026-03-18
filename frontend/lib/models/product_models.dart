@@ -110,12 +110,18 @@ class ProductParameterListResult {
   ProductParameterListResult({
     required this.productId,
     required this.productName,
+    required this.version,
+    required this.versionLabel,
+    required this.lifecycleStatus,
     required this.total,
     required this.items,
   });
 
   final int productId;
   final String productName;
+  final int version;
+  final String versionLabel;
+  final String lifecycleStatus;
   final int total;
   final List<ProductParameterItem> items;
 
@@ -123,6 +129,9 @@ class ProductParameterListResult {
     return ProductParameterListResult(
       productId: json['product_id'] as int,
       productName: json['product_name'] as String,
+      version: (json['version'] as int?) ?? 0,
+      versionLabel: (json['version_label'] as String?) ?? 'V1.0',
+      lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
       total: (json['total'] as int?) ?? 0,
       items: (json['items'] as List<dynamic>? ?? const [])
           .map(
@@ -137,6 +146,8 @@ class ProductParameterListResult {
 class ProductParameterHistoryItem {
   ProductParameterHistoryItem({
     required this.id,
+    required this.version,
+    required this.versionLabel,
     required this.remark,
     required this.changeType,
     required this.changedKeys,
@@ -147,6 +158,8 @@ class ProductParameterHistoryItem {
   });
 
   final int id;
+  final int? version;
+  final String? versionLabel;
   final String remark;
   final String changeType;
   final List<String> changedKeys;
@@ -158,6 +171,8 @@ class ProductParameterHistoryItem {
   factory ProductParameterHistoryItem.fromJson(Map<String, dynamic> json) {
     return ProductParameterHistoryItem(
       id: json['id'] as int,
+      version: json['version'] as int?,
+      versionLabel: json['version_label'] as String?,
       remark: json['remark'] as String,
       changeType: (json['change_type'] as String?) ?? 'edit',
       changedKeys: (json['changed_keys'] as List<dynamic>? ?? const [])
@@ -171,8 +186,17 @@ class ProductParameterHistoryItem {
 }
 
 class ProductParameterHistoryListResult {
-  ProductParameterHistoryListResult({required this.total, required this.items});
+  ProductParameterHistoryListResult({
+    required this.version,
+    required this.versionLabel,
+    required this.lifecycleStatus,
+    required this.total,
+    required this.items,
+  });
 
+  final int? version;
+  final String? versionLabel;
+  final String? lifecycleStatus;
   final int total;
   final List<ProductParameterHistoryItem> items;
 }
@@ -413,6 +437,8 @@ class ProductJumpCommand {
     required this.action,
     required this.productId,
     required this.productName,
+    this.targetVersion,
+    this.targetVersionLabel,
   });
 
   final int seq;
@@ -420,4 +446,6 @@ class ProductJumpCommand {
   final String action;
   final int productId;
   final String productName;
+  final int? targetVersion;
+  final String? targetVersionLabel;
 }

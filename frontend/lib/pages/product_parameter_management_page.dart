@@ -71,6 +71,9 @@ class _ProductParameterManagementPageState
   int _handledJumpSeq = 0;
 
   ProductItem? _editingProduct;
+  int? _editingVersion;
+  String _editingVersionLabel = '';
+  String _editingLifecycleStatus = '';
   bool _editorLoading = false;
   bool _editorSubmitting = false;
   String _editorMessage = '';
@@ -78,6 +81,8 @@ class _ProductParameterManagementPageState
   bool _hasUnsavedChanges = false;
   int _editorRowIdSeed = 1;
   String _editorGroupFilter = '';
+
+  bool get _editorReadOnly => _editingLifecycleStatus.isNotEmpty && _editingLifecycleStatus != 'draft';
 
   @override
   void initState() {
@@ -142,6 +147,25 @@ class _ProductParameterManagementPageState
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
+  String _historyTypeLabel(String value) {
+    switch (value) {
+      case 'create':
+        return '创建';
+      case 'copy':
+        return '复制';
+      case 'activate':
+        return '生效';
+      case 'disable':
+        return '停用';
+      case 'delete':
+        return '删除';
+      case 'rollback':
+        return '回滚';
+      default:
+        return '编辑';
+    }
+  }
+
   List<PopupMenuEntry<_ProductParameterManagementListAction>>
   _buildListActionMenuItems() {
     return const [
@@ -165,7 +189,7 @@ class _ProductParameterManagementPageState
         await _showHistoryDialog(product);
         return;
       case _ProductParameterManagementListAction.edit:
-        await _enterEditor(product);
+        await _enterEditor(product, version: product.currentVersion);
         return;
     }
   }
@@ -301,7 +325,11 @@ class _ProductParameterManagementPageState
     if (command.action == 'edit') {
       final product = _findProductById(command.productId);
       if (product != null) {
-        await _enterEditor(product);
+        await _enterEditor(
+          product,
+          version: command.targetVersion ?? product.currentVersion,
+          requestedVersionLabel: command.targetVersionLabel,
+        );
         if (mounted && _editingProduct?.id == command.productId) {
           widget.onJumpHandled?.call(command.seq);
         }
@@ -345,6 +373,7 @@ class _ProductParameterManagementPageState
     try {
       historyResult = await _productService.listProductParameterHistory(
         productId: product.id,
+        version: product.currentVersion,
         page: 1,
         pageSize: 100,
       );
@@ -361,35 +390,36 @@ class _ProductParameterManagementPageState
       return;
     }
 
+    final dialogHistory = historyResult;
+
     await showDialog<void>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('历史修改备注 - ${product.name}'),
+          title: Text(
+            '历史修改备注 - ${product.name}（${dialogHistory.versionLabel ?? 'V1.${product.currentVersion}'}）',
+          ),
           content: SizedBox(
             width: 760,
             height: 480,
-            child: historyResult!.items.isEmpty
+            child: dialogHistory.items.isEmpty
                 ? const Center(child: Text('暂无历史记录'))
                 : ListView.separated(
-                    itemCount: historyResult.items.length,
+                    itemCount: dialogHistory.items.length,
                     separatorBuilder: (context, index) =>
                         const Divider(height: 1),
                     itemBuilder: (context, index) {
-                      final item = historyResult!.items[index];
+                      final item = dialogHistory.items[index];
                       final keySummary = item.changedKeys.isEmpty
-                          ? '-'
+                          ? '无参数字段变化'
                           : item.changedKeys.join(', ');
-                      final changeTypeLabel = switch (item.changeType) {
-                        'rollback' => '回滚',
-                        'create' => '创建',
-                        _ => '编辑',
-                      };
+                      final changeTypeLabel = _historyTypeLabel(item.changeType);
                       return ListTile(
                         title: Text(item.remark),
                         subtitle: Text(
                           '时间：${_formatTime(item.createdAt)}\n'
-                          '操作人：${item.operatorUsername}   类型：$changeTypeLabel   修改参数：$keySummary',
+                          '版本：${item.versionLabel ?? '-'}   操作人：${item.operatorUsername}   类型：$changeTypeLabel\n'
+                          '参数：$keySummary',
                         ),
                         isThreeLine: true,
                         trailing: item.beforeSnapshot != '{}' || item.afterSnapshot != '{}'
@@ -530,6 +560,9 @@ class _ProductParameterManagementPageState
     }
     setState(() {
       _editingProduct = null;
+      _editingVersion = null;
+      _editingVersionLabel = '';
+      _editingLifecycleStatus = '';
       _editorLoading = false;
       _editorSubmitting = false;
       _editorMessage = '';
@@ -538,7 +571,11 @@ class _ProductParameterManagementPageState
     return true;
   }
 
-  Future<void> _enterEditor(ProductItem product) async {
+  Future<void> _enterEditor(
+    ProductItem product, {
+    int? version,
+    String? requestedVersionLabel,
+  }) async {
     if (_editorSubmitting) {
       return;
     }
@@ -562,6 +599,7 @@ class _ProductParameterManagementPageState
     try {
       result = await _productService.listProductParameters(
         productId: product.id,
+        version: version ?? product.currentVersion,
       );
     } catch (error) {
       if (!mounted) {
@@ -602,6 +640,9 @@ class _ProductParameterManagementPageState
     _disposeEditorRows();
     setState(() {
       _editorRows = rows;
+      _editingVersion = result.version;
+      _editingVersionLabel = requestedVersionLabel ?? result.versionLabel;
+      _editingLifecycleStatus = result.lifecycleStatus;
       _editorLoading = false;
       _editorMessage = '';
       _hasUnsavedChanges = false;
@@ -623,6 +664,15 @@ class _ProductParameterManagementPageState
   Future<void> _saveEditor() async {
     final product = _editingProduct;
     if (product == null || _editorSubmitting) {
+      return;
+    }
+    final editingVersion = _editingVersion;
+    if (editingVersion == null) {
+      _showSnackBar('当前编辑版本信息缺失，请刷新后重试');
+      return;
+    }
+    if (_editorReadOnly) {
+      _showSnackBar('当前版本不是草稿，已切换为只读，请先在版本管理中复制或新建草稿版本');
       return;
     }
 
@@ -690,6 +740,7 @@ class _ProductParameterManagementPageState
       try {
         result = await _productService.updateProductParameters(
           productId: product.id,
+          version: editingVersion,
           remark: remark,
           items: items,
         );
@@ -712,6 +763,7 @@ class _ProductParameterManagementPageState
         }
         result = await _productService.updateProductParameters(
           productId: product.id,
+          version: editingVersion,
           remark: remark,
           items: items,
           confirmed: true,
@@ -788,7 +840,7 @@ class _ProductParameterManagementPageState
     _attachCategoryDirtyListener(row);
     return DropdownMenu<String>(
       controller: row.categoryController,
-      enabled: !_editorSubmitting,
+      enabled: !_editorSubmitting && !_editorReadOnly,
       enableFilter: true,
       requestFocusOnTap: true,
       expandedInsets: EdgeInsets.zero,
@@ -804,7 +856,7 @@ class _ProductParameterManagementPageState
   }
 
   Widget _buildDragHandle({required int index}) {
-    final iconColor = _editorSubmitting
+    final iconColor = (_editorSubmitting || _editorReadOnly)
         ? Theme.of(context).disabledColor
         : Theme.of(context).iconTheme.color;
 
@@ -812,7 +864,7 @@ class _ProductParameterManagementPageState
       message: '按住拖动排序',
       child: ReorderableDelayedDragStartListener(
         index: index,
-        enabled: !_editorSubmitting,
+        enabled: !_editorSubmitting && !_editorReadOnly,
         child: SizedBox(
           width: _rowActionButtonSize,
           height: _rowActionButtonSize,
@@ -836,8 +888,8 @@ class _ProductParameterManagementPageState
           flex: 3,
           child: TextField(
             controller: row.nameController,
-            readOnly: isProductNameRow,
-            onChanged: isProductNameRow ? null : (_) => _markDirty(),
+            readOnly: isProductNameRow || _editorReadOnly,
+            onChanged: (isProductNameRow || _editorReadOnly) ? null : (_) => _markDirty(),
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               isDense: true,
@@ -856,7 +908,7 @@ class _ProductParameterManagementPageState
               DropdownMenuItem(value: 'Text', child: Text('Text')),
               DropdownMenuItem(value: 'Link', child: Text('Link')),
             ],
-            onChanged: _editorSubmitting
+            onChanged: (_editorSubmitting || _editorReadOnly)
                 ? null
                 : (value) {
                     if (value == null || value == row.parameterType) {
@@ -882,7 +934,8 @@ class _ProductParameterManagementPageState
                     Expanded(
                       child: TextField(
                         controller: row.valueController,
-                        onChanged: (_) => _markDirty(),
+                        readOnly: _editorReadOnly,
+                        onChanged: _editorReadOnly ? null : (_) => _markDirty(),
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
                           isDense: true,
@@ -891,7 +944,7 @@ class _ProductParameterManagementPageState
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
-                      onPressed: _editorSubmitting
+                      onPressed: (_editorSubmitting || _editorReadOnly)
                           ? null
                           : () => _pickLinkValue(row),
                       icon: const Icon(Icons.folder_open),
@@ -901,7 +954,8 @@ class _ProductParameterManagementPageState
                 )
               : TextField(
                   controller: row.valueController,
-                  onChanged: (_) => _markDirty(),
+                  readOnly: _editorReadOnly,
+                  onChanged: _editorReadOnly ? null : (_) => _markDirty(),
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     isDense: true,
@@ -913,7 +967,8 @@ class _ProductParameterManagementPageState
           flex: 3,
           child: TextField(
             controller: row.descriptionController,
-            onChanged: (_) => _markDirty(),
+            readOnly: _editorReadOnly,
+            onChanged: _editorReadOnly ? null : (_) => _markDirty(),
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               isDense: true,
@@ -932,7 +987,7 @@ class _ProductParameterManagementPageState
               _buildRowActionIconButton(
                 icon: Icons.delete_outline,
                 tooltip: isProductNameRow ? '产品名称参数不可删除' : '删除',
-                onPressed: _editorSubmitting || isProductNameRow
+                onPressed: _editorSubmitting || _editorReadOnly || isProductNameRow
                     ? null
                     : () {
                         setState(() {
@@ -1015,9 +1070,9 @@ class _ProductParameterManagementPageState
                               buildDefaultDragHandles: false,
                               itemCount: _editorRows.length,
                               onReorder: (oldIndex, newIndex) {
-                                if (_editorSubmitting) {
-                                  return;
-                                }
+                                 if (_editorSubmitting || _editorReadOnly) {
+                                   return;
+                                 }
                                 setState(() {
                                   if (newIndex > oldIndex) {
                                     newIndex -= 1;
@@ -1060,7 +1115,7 @@ class _ProductParameterManagementPageState
         ),
         const SizedBox(width: 12),
         FilledButton(
-          onPressed: _editorSubmitting ? null : _saveEditor,
+          onPressed: (_editorSubmitting || _editorReadOnly) ? null : _saveEditor,
           child: _editorSubmitting
               ? const SizedBox(
                   width: 18,
@@ -1087,12 +1142,18 @@ class _ProductParameterManagementPageState
             ),
             const SizedBox(width: 8),
             Text(
-              '编辑产品参数 - ${product.name}',
+              '编辑产品参数 - ${product.name}（${_editingVersionLabel.isEmpty ? 'V1.${_editingVersion ?? product.currentVersion}' : _editingVersionLabel}）',
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(width: 12),
+            if (_editingLifecycleStatus.isNotEmpty)
+              Chip(
+                label: Text(_editingLifecycleStatus == 'draft' ? '草稿可编辑' : '非草稿只读'),
+                visualDensity: VisualDensity.compact,
+              ),
+            const SizedBox(width: 8),
             if (_hasUnsavedChanges)
               Chip(
                 label: const Text('有未保存修改'),
@@ -1156,6 +1217,16 @@ class _ProductParameterManagementPageState
               ),
             ),
           ),
+        if (_editorReadOnly)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              '当前版本不是草稿，参数仅可查看。如需修改，请先在版本管理中复制或新建草稿版本。',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.secondary,
+              ),
+            ),
+          ),
         Expanded(
           child: Card(
             child: Padding(
@@ -1168,7 +1239,7 @@ class _ProductParameterManagementPageState
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
-                      onPressed: _editorSubmitting
+                      onPressed: (_editorSubmitting || _editorReadOnly)
                           ? null
                           : () {
                               setState(() {
@@ -1188,7 +1259,8 @@ class _ProductParameterManagementPageState
                   TextField(
                     controller: _remarkController,
                     maxLines: 2,
-                    onChanged: (_) => _markDirty(),
+                    readOnly: _editorReadOnly,
+                    onChanged: _editorReadOnly ? null : (_) => _markDirty(),
                     decoration: const InputDecoration(
                       labelText: '本次修改备注（必填）',
                       border: OutlineInputBorder(),

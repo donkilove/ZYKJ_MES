@@ -13,6 +13,7 @@ from app.models.order_event_log import OrderEventLog
 from app.models.permission_catalog import PermissionCatalog
 from app.models.product import Product
 from app.models.product_revision import ProductRevision
+from app.models.product_revision_parameter import ProductRevisionParameter
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
@@ -64,6 +65,7 @@ __all__ = [
     "OrderSubOrderPipelineInstance",
     "Product",
     "ProductRevision",
+    "ProductRevisionParameter",
     "ProductionOrder",
     "ProductionOrderProcess",
     "ProductionSubOrder",

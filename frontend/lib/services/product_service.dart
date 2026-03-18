@@ -152,8 +152,14 @@ class ProductService {
 
   Future<ProductParameterListResult> listProductParameters({
     required int productId,
+    int? version,
+    bool effectiveOnly = false,
   }) async {
-    final uri = Uri.parse('${session.baseUrl}/products/$productId/parameters');
+    final uri = effectiveOnly
+        ? Uri.parse('${session.baseUrl}/products/$productId/effective-parameters')
+        : version != null
+        ? Uri.parse('${session.baseUrl}/products/$productId/versions/$version/parameters')
+        : Uri.parse('${session.baseUrl}/products/$productId/parameters');
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -168,11 +174,14 @@ class ProductService {
 
   Future<ProductParameterUpdateResult> updateProductParameters({
     required int productId,
+    int? version,
     required String remark,
     required List<ProductParameterUpdateItem> items,
     bool confirmed = false,
   }) async {
-    final uri = Uri.parse('${session.baseUrl}/products/$productId/parameters');
+    final uri = version != null
+        ? Uri.parse('${session.baseUrl}/products/$productId/versions/$version/parameters')
+        : Uri.parse('${session.baseUrl}/products/$productId/parameters');
     final response = await http.put(
       uri,
       headers: _authHeaders,
@@ -195,11 +204,14 @@ class ProductService {
 
   Future<ProductParameterHistoryListResult> listProductParameterHistory({
     required int productId,
+    int? version,
     required int page,
     required int pageSize,
   }) async {
     final uri = Uri.parse(
-      '${session.baseUrl}/products/$productId/parameter-history',
+      version != null
+          ? '${session.baseUrl}/products/$productId/versions/$version/parameter-history'
+          : '${session.baseUrl}/products/$productId/parameter-history',
     ).replace(queryParameters: {'page': '$page', 'page_size': '$pageSize'});
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
@@ -218,6 +230,9 @@ class ProductService {
         )
         .toList();
     return ProductParameterHistoryListResult(
+      version: data['version'] as int?,
+      versionLabel: data['version_label'] as String?,
+      lifecycleStatus: data['lifecycle_status'] as String?,
       total: (data['total'] as int?) ?? 0,
       items: items,
     );
@@ -339,6 +354,7 @@ class ProductService {
     required int productId,
     required int version,
     bool confirmed = false,
+    int? expectedEffectiveVersion,
   }) async {
     final uri = Uri.parse(
       '${session.baseUrl}/products/$productId/versions/$version/activate',
@@ -346,7 +362,10 @@ class ProductService {
     final response = await http.post(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({'confirmed': confirmed}),
+      body: jsonEncode({
+        'confirmed': confirmed,
+        'expected_effective_version': expectedEffectiveVersion,
+      }),
     );
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -510,7 +529,7 @@ class ProductService {
       query['has_effective_version'] = hasEffectiveVersion ? 'true' : 'false';
     }
     final uri = Uri.parse(
-      '${session.baseUrl}/products/export',
+      '${session.baseUrl}/products/export/list',
     ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders);
     if (response.statusCode != 200) {

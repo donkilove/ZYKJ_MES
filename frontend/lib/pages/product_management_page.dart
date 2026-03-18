@@ -138,6 +138,55 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     }
   }
 
+  String _versionLifecycleLabel(String value) {
+    switch (value) {
+      case 'draft':
+        return '草稿';
+      case 'effective':
+        return '已生效';
+      case 'obsolete':
+        return '已失效';
+      case 'disabled':
+        return '已停用';
+      default:
+        return value;
+    }
+  }
+
+  String _parameterHistoryTypeLabel(String value) {
+    switch (value) {
+      case 'create':
+        return '创建';
+      case 'copy':
+        return '复制';
+      case 'activate':
+        return '生效';
+      case 'disable':
+        return '停用';
+      case 'delete':
+        return '删除';
+      case 'rollback':
+        return '回滚';
+      default:
+        return '编辑';
+    }
+  }
+
+  ProductVersionItem? _findVersionByNumber(
+    List<ProductVersionItem>? versions,
+    int version,
+  ) {
+    if (versions == null) {
+      return null;
+    }
+    for (final item in versions) {
+      if (item.version == version) {
+        return item;
+      }
+    }
+    return null;
+  }
+
   String _formatDisplayVersion(int version) {
     if (version <= 0) {
       return '-';
@@ -1652,11 +1701,16 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   Future<void> _showDetailDrawer(ProductItem product) async {
     List<ProductParameterItem>? parameters;
     List<ProductParameterHistoryItem>? history;
+    List<ProductVersionItem>? versions;
     String? paramError;
     String? historyError;
+    String? versionError;
 
     try {
-      final paramResult = await _productService.listProductParameters(productId: product.id);
+      final paramResult = await _productService.listProductParameters(
+        productId: product.id,
+        effectiveOnly: true,
+      );
       parameters = paramResult.items;
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -1664,6 +1718,19 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         return;
       }
       paramError = _errorMessage(error);
+    }
+
+    try {
+      final versionResult = await _productService.listProductVersions(
+        productId: product.id,
+      );
+      versions = versionResult.items;
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      versionError = _errorMessage(error);
     }
 
     try {
@@ -1684,6 +1751,15 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     if (!mounted) return;
 
     String paramSearch = '';
+    final currentVersionItem = _findVersionByNumber(versions, product.currentVersion);
+    final effectiveVersionItem = _findVersionByNumber(versions, product.effectiveVersion);
+    final currentVersionLabel = currentVersionItem?.versionLabel ?? _formatDisplayVersion(product.currentVersion);
+    final effectiveVersionLabel = effectiveVersionItem?.versionLabel ?? _formatDisplayVersion(product.effectiveVersion);
+    final currentVersionStatus = currentVersionItem != null
+        ? _versionLifecycleLabel(currentVersionItem.lifecycleStatus)
+        : versionError != null
+        ? '加载失败'
+        : '-';
 
     await showDialog<void>(
       context: context,
@@ -1710,12 +1786,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                   _detailRow('产品名称', product.name),
                   _detailRow('产品分类', product.category.isEmpty ? '-' : product.category),
                   _detailRow('状态', _lifecycleLabel(product.lifecycleStatus)),
-                  _detailRow('当前版本', _formatDisplayVersion(product.currentVersion)),
-                  _detailRow('当前版本状态', product.effectiveVersion == product.currentVersion ? '已生效' : '草稿'),
+                  _detailRow('当前版本', currentVersionLabel),
+                  _detailRow('当前版本状态', currentVersionStatus),
                   _detailRow(
                     '生效版本',
                     product.effectiveVersion > 0
-                        ? _formatDisplayVersion(product.effectiveVersion)
+                        ? effectiveVersionLabel
                         : '-',
                   ),
                   if (product.effectiveAt != null)
@@ -1728,7 +1804,10 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
 
                   // 当前生效参数快照区
                   const SizedBox(height: 16),
-                  const Text('当前生效参数快照', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(
+                    '当前生效参数快照${effectiveVersionItem != null ? '（${effectiveVersionItem.versionLabel}）' : ''}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
                   const Divider(),
                   if (paramError != null)
                     Text('加载参数失败：$paramError', style: const TextStyle(color: Colors.red))
@@ -1797,7 +1876,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                           ),
                           Expanded(
                             child: Text(
-                              '${h.remark}（${h.changedKeys.join(', ')}）',
+                              [
+                                if (h.versionLabel?.trim().isNotEmpty == true) h.versionLabel!,
+                                _parameterHistoryTypeLabel(h.changeType),
+                                h.remark,
+                                if (h.changedKeys.isNotEmpty) '参数：${h.changedKeys.join(', ')}',
+                              ].join('｜'),
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),

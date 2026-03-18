@@ -330,6 +330,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     try {
       result = await _productService.listProductParameters(
         productId: product.id,
+        effectiveOnly: true,
       );
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -352,7 +353,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('产品参数 - ${product.name}（V1.${product.effectiveVersion}）'),
+          title: Text('产品参数 - ${product.name}（${result.versionLabel}）'),
           content: SizedBox(
             width: 1000,
             height: 520,

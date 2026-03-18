@@ -154,6 +154,7 @@ class _ActivateImpactService extends _VersionListService {
     required int productId,
     required int version,
     bool confirmed = false,
+    int? expectedEffectiveVersion,
   }) async {
     if (!confirmed) {
       throw ApiException('Impact confirmation required before activation', 400);

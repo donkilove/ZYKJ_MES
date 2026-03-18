@@ -54,9 +54,13 @@ from app.services.product_service import (
     delete_product_version,
     disable_product_version,
     ensure_product_parameter_template_initialized,
+    get_current_revision,
+    get_effective_product_parameters,
+    get_effective_revision,
     get_latest_history_map_by_product_ids,
     get_product_by_id,
     get_product_by_name,
+    get_product_version_parameters,
     get_product_version,
     list_parameter_history,
     list_product_parameters,
@@ -65,6 +69,7 @@ from app.services.product_service import (
     rollback_product_to_version,
     summarize_changed_keys,
     update_product_parameters,
+    update_product_version_parameters,
     update_product_version_note,
 )
 
@@ -96,6 +101,37 @@ def to_product_item(
         last_parameter_summary=last_parameter_summary,
         created_at=product.created_at,
         updated_at=product.updated_at,
+    )
+
+
+def _to_parameter_list_result(
+    *,
+    product: Product,
+    version: int,
+    version_label: str,
+    lifecycle_status: str,
+    parameters: tuple[object, ...] | list[object],
+) -> ProductParameterListResult:
+    items = [
+        ProductParameterItem(
+            name=str(getattr(parameter, "param_key")),
+            category=str(getattr(parameter, "param_category")),
+            type=str(getattr(parameter, "param_type")),
+            value=str(getattr(parameter, "param_value")),
+            description=str(getattr(parameter, "param_description") or ""),
+            sort_order=int(getattr(parameter, "sort_order")),
+            is_preset=bool(getattr(parameter, "is_preset")),
+        )
+        for parameter in parameters
+    ]
+    return ProductParameterListResult(
+        product_id=product.id,
+        product_name=product.name,
+        version=version,
+        version_label=version_label,
+        lifecycle_status=lifecycle_status,
+        total=len(items),
+        items=items,
     )
 
 
@@ -257,26 +293,83 @@ def get_product_parameters(
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    ensure_product_parameter_template_initialized(db, product)
-    parameters = list_product_parameters(db, product.id)
-    items = [
-        ProductParameterItem(
-            name=parameter.param_key,
-            category=parameter.param_category,
-            type=parameter.param_type,
-            value=parameter.param_value,
-            description=parameter.param_description,
-            sort_order=parameter.sort_order,
-            is_preset=parameter.is_preset,
-        )
-        for parameter in parameters
-    ]
+    revision = get_current_revision(db, product=product)
+    if revision is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Current version not found")
+    revision, parameters = get_product_version_parameters(
+        db,
+        product=product,
+        version=revision.version,
+    )
     return success_response(
-        ProductParameterListResult(
-            product_id=product.id,
-            product_name=product.name,
-            total=len(items),
-            items=items,
+        _to_parameter_list_result(
+            product=product,
+            version=revision.version,
+            version_label=revision.version_label,
+            lifecycle_status=revision.lifecycle_status,
+            parameters=parameters,
+        )
+    )
+
+
+@router.get(
+    "/{product_id}/versions/{version}/parameters",
+    response_model=ApiResponse[ProductParameterListResult],
+)
+def get_product_version_parameters_api(
+    product_id: int,
+    version: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("product.parameters.view")),
+) -> ApiResponse[ProductParameterListResult]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    try:
+        revision, parameters = get_product_version_parameters(
+            db,
+            product=product,
+            version=version,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
+    return success_response(
+        _to_parameter_list_result(
+            product=product,
+            version=revision.version,
+            version_label=revision.version_label,
+            lifecycle_status=revision.lifecycle_status,
+            parameters=parameters,
+        )
+    )
+
+
+@router.get(
+    "/{product_id}/effective-parameters",
+    response_model=ApiResponse[ProductParameterListResult],
+)
+def get_effective_product_parameters_api(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("product.parameters.view")),
+) -> ApiResponse[ProductParameterListResult]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    try:
+        revision, parameters = get_effective_product_parameters(
+            db,
+            product=product,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    return success_response(
+        _to_parameter_list_result(
+            product=product,
+            version=revision.version,
+            version_label=revision.version_label,
+            lifecycle_status=revision.lifecycle_status,
+            parameters=parameters,
         )
     )
 
@@ -292,7 +385,6 @@ def update_parameters(
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    ensure_product_parameter_template_initialized(db, product)
     try:
         changed_keys = update_product_parameters(
             db,
@@ -313,7 +405,59 @@ def update_parameters(
         target_id=str(product.id),
         target_name=product.name,
         operator=current_user,
-        after_data={"remark": payload.remark, "changed_keys": changed_keys},
+        after_data={
+            "version": product.current_version,
+            "remark": payload.remark,
+            "changed_keys": changed_keys,
+        },
+        )
+    db.commit()
+    return success_response(
+        ProductParameterUpdateResult(
+            updated_count=len(changed_keys),
+            changed_keys=changed_keys,
+        ),
+        message="updated",
+    )
+
+
+@router.put(
+    "/{product_id}/versions/{version}/parameters",
+    response_model=ApiResponse[ProductParameterUpdateResult],
+)
+def update_product_version_parameters_api(
+    product_id: int,
+    version: int,
+    payload: ProductParameterUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("product.parameters.update")),
+) -> ApiResponse[ProductParameterUpdateResult]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    try:
+        changed_keys = update_product_version_parameters(
+            db,
+            product=product,
+            version=version,
+            items=[(item.name, item.category, item.type, item.value, item.description) for item in payload.items],
+            remark=payload.remark,
+            operator=current_user,
+            confirmed=payload.confirmed,
+        )
+    except (ValueError, ValidationError) as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+
+    write_audit_log(
+        db,
+        action_code="product.parameters.update",
+        action_name="更新版本参数",
+        target_type="product",
+        target_id=str(product.id),
+        target_name=product.name,
+        operator=current_user,
+        after_data={"version": version, "remark": payload.remark, "changed_keys": changed_keys},
     )
     db.commit()
     return success_response(
@@ -537,7 +681,12 @@ def activate_product_version_api(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
     try:
         revision = activate_product_version(
-            db, product=product, version=version, confirmed=payload.confirmed, operator=current_user
+            db,
+            product=product,
+            version=version,
+            confirmed=payload.confirmed,
+            expected_effective_version=payload.expected_effective_version,
+            operator=current_user,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -757,6 +906,8 @@ def get_parameter_history(
     items = [
         ProductParameterHistoryItem(
             id=row.id,
+            version=row.version,
+            version_label=f"V1.{row.version - 1}" if row.version is not None else None,
             remark=row.remark,
             change_type=row.change_type or "edit",
             changed_keys=[str(value) for value in (row.changed_keys or [])],
@@ -767,7 +918,61 @@ def get_parameter_history(
         )
         for row in rows
     ]
-    return success_response(ProductParameterHistoryListResult(total=total, items=items))
+    return success_response(
+        ProductParameterHistoryListResult(total=total, items=items)
+    )
+
+
+@router.get(
+    "/{product_id}/versions/{version}/parameter-history",
+    response_model=ApiResponse[ProductParameterHistoryListResult],
+)
+def get_version_parameter_history(
+    product_id: int,
+    version: int,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("product.parameter_history.list")),
+) -> ApiResponse[ProductParameterHistoryListResult]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    revision = get_product_version(db, product_id=product.id, version=version)
+    if revision is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found")
+
+    total, rows = list_parameter_history(
+        db,
+        product_id=product.id,
+        revision_id=revision.id,
+        page=page,
+        page_size=page_size,
+    )
+    items = [
+        ProductParameterHistoryItem(
+            id=row.id,
+            version=row.version,
+            version_label=f"V1.{row.version - 1}" if row.version is not None else None,
+            remark=row.remark,
+            change_type=row.change_type or "edit",
+            changed_keys=[str(value) for value in (row.changed_keys or [])],
+            operator_username=row.operator_username,
+            before_snapshot=row.before_snapshot or "{}",
+            after_snapshot=row.after_snapshot or "{}",
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+    return success_response(
+        ProductParameterHistoryListResult(
+            version=revision.version,
+            version_label=revision.version_label,
+            lifecycle_status=revision.lifecycle_status,
+            total=total,
+            items=items,
+        )
+    )
 
 
 def _make_csv_response(rows: list[list[str]], filename: str) -> StreamingResponse:
@@ -784,7 +989,7 @@ def _make_csv_response(rows: list[list[str]], filename: str) -> StreamingRespons
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers=headers)
 
 
-@router.get("/export", response_class=StreamingResponse)
+@router.get("/export/list", response_class=StreamingResponse)
 def export_products(
     keyword: str | None = Query(default=None),
     category: str | None = Query(default=None),
@@ -808,8 +1013,8 @@ def export_products(
             p.name,
             p.category or "",
             p.lifecycle_status,
-            f"V1.{p.current_version}" if p.current_version else "",
-            f"V1.{p.effective_version}" if p.effective_version else "无",
+            f"V1.{p.current_version - 1}" if p.current_version > 0 else "",
+            f"V1.{p.effective_version - 1}" if p.effective_version > 0 else "无",
             p.remark or "",
             p.created_at.strftime("%Y-%m-%d %H:%M:%S") if p.created_at else "",
             p.updated_at.strftime("%Y-%m-%d %H:%M:%S") if p.updated_at else "",
@@ -824,27 +1029,28 @@ def export_product_version_parameters(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("product.parameters.view")),
 ) -> StreamingResponse:
-    import json as _json
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    revision = get_product_version(db, product_id=product.id, version=version)
-    if not revision:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found")
     try:
-        snapshot = _json.loads(revision.snapshot_json or "{}")
-        parameters = snapshot.get("parameters", [])
-    except (TypeError, ValueError):
-        parameters = []
-    header = ["参数名称", "参数分组", "类型", "参数值", "排序"]
+        revision, parameters = get_product_version_parameters(
+            db,
+            product=product,
+            version=version,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
+    header = ["版本号", "参数名称", "参数分组", "类型", "参数值", "参数说明", "排序"]
     rows: list[list[str]] = [header]
     for param in parameters:
         rows.append([
-            str(param.get("name", "")),
-            str(param.get("category", "")),
-            str(param.get("type", "")),
-            str(param.get("value", "")),
-            str(param.get("sort_order", "")),
+            revision.version_label,
+            param.param_key,
+            param.param_category or "",
+            param.param_type,
+            param.param_value,
+            param.param_description or "",
+            str(param.sort_order),
         ])
     filename = f"product_{product.name}_v1.{version}_params.csv"
     return _make_csv_response(rows, filename)
@@ -858,13 +1064,20 @@ def export_product_parameters(
     _: User = Depends(require_permission("product.parameters.view")),
 ) -> StreamingResponse:
     _, products, _ = list_products(db, 1, 10000, keyword, category, None)
-    header = ["产品名称", "参数名称", "参数分组", "类型", "参数值", "参数说明"]
+    header = ["产品名称", "生效版本", "参数名称", "参数分组", "类型", "参数值", "参数说明"]
     rows: list[list[str]] = [header]
     for product in products:
-        params = list_product_parameters(db, product.id)
+        effective_revision = get_effective_revision(db, product=product)
+        if effective_revision is None:
+            continue
+        params = get_effective_product_parameters(
+            db,
+            product=product,
+        )[1]
         for param in params:
             rows.append([
                 product.name,
+                effective_revision.version_label,
                 param.param_key,
                 param.param_category or "",
                 param.param_type,

@@ -124,6 +124,8 @@ class _ProductPageState extends State<ProductPage>
     required String targetTabCode,
     required String action,
     required ProductItem product,
+    int? targetVersion,
+    String? targetVersionLabel,
   }) {
     final targetIndex = _orderedVisibleTabCodes.indexOf(targetTabCode);
     if (targetIndex < 0) {
@@ -138,6 +140,8 @@ class _ProductPageState extends State<ProductPage>
         action: action,
         productId: product.id,
         productName: product.name,
+        targetVersion: targetVersion,
+        targetVersionLabel: targetVersionLabel,
       );
     });
     _tabController?.animateTo(targetIndex);
@@ -223,6 +227,15 @@ class _ProductPageState extends State<ProductPage>
           tabCode: productVersionManagementTabCode,
           jumpCommand: _jumpCommand,
           onJumpHandled: _handleJumpConsumed,
+          onEditVersionParameters: (product, version) {
+            _dispatchJump(
+              targetTabCode: productParameterManagementTabCode,
+              action: 'edit',
+              product: product,
+              targetVersion: version.version,
+              targetVersionLabel: version.versionLabel,
+            );
+          },
           canManageVersions: _hasPermission(
             ProductFeaturePermissionCodes.versionsManage,
           ),

@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, ForeignKey, String, Text, text
+from sqlalchemy import JSON, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -13,6 +13,12 @@ class ProductParameterHistory(Base, TimestampMixin):
         index=True,
         nullable=False,
     )
+    revision_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_product_revision.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    version: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     operator_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("sys_user.id", ondelete="SET NULL"),
         index=True,
@@ -32,4 +38,5 @@ class ProductParameterHistory(Base, TimestampMixin):
     after_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
 
     product = relationship("Product", back_populates="parameter_histories")
+    revision = relationship("ProductRevision")
     operator = relationship("User", foreign_keys=[operator_user_id])

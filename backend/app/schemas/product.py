@@ -6,6 +6,7 @@ from pydantic import field_validator
 
 from app.core.product_lifecycle import (
     PRODUCT_LIFECYCLE_ACTIVE,
+    PRODUCT_LIFECYCLE_DRAFT,
     PRODUCT_LIFECYCLE_INACTIVE,
     PRODUCT_LIFECYCLE_OPTIONS,
 )
@@ -85,6 +86,9 @@ class ProductParameterItem(BaseModel):
 class ProductParameterListResult(BaseModel):
     product_id: int
     product_name: str
+    version: int
+    version_label: str = "V1.0"
+    lifecycle_status: str = PRODUCT_LIFECYCLE_DRAFT
     total: int
     items: list[ProductParameterItem]
 
@@ -102,6 +106,8 @@ class ProductParameterUpdateResult(BaseModel):
 
 class ProductParameterHistoryItem(BaseModel):
     id: int
+    version: int | None = None
+    version_label: str | None = None
     remark: str
     change_type: str = "edit"
     changed_keys: list[str]
@@ -112,6 +118,9 @@ class ProductParameterHistoryItem(BaseModel):
 
 
 class ProductParameterHistoryListResult(BaseModel):
+    version: int | None = None
+    version_label: str | None = None
+    lifecycle_status: str | None = None
     total: int
     items: list[ProductParameterHistoryItem]
 
@@ -164,6 +173,7 @@ class ProductVersionCopyRequest(BaseModel):
 
 class ProductVersionActivateRequest(BaseModel):
     confirmed: bool = False
+    expected_effective_version: int | None = Field(default=None, ge=0)
 
 
 class ProductVersionDisableRequest(BaseModel):

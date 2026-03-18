@@ -2,6 +2,7 @@ from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+from app.models.product_revision_parameter import ProductRevisionParameter
 
 
 class ProductRevision(Base, TimestampMixin):
@@ -45,4 +46,10 @@ class ProductRevision(Base, TimestampMixin):
     product = relationship("Product", back_populates="revisions")
     source_revision = relationship("ProductRevision", remote_side=[id])
     created_by = relationship("User")
-
+    parameters = relationship(
+        "ProductRevisionParameter",
+        back_populates="revision",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by=ProductRevisionParameter.sort_order.asc(),
+    )

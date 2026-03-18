@@ -1,0 +1,47 @@
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, UniqueConstraint, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models.base import Base, TimestampMixin
+
+
+class ProductRevisionParameter(Base, TimestampMixin):
+    __tablename__ = "mes_product_revision_parameter"
+    __table_args__ = (
+        UniqueConstraint(
+            "revision_id",
+            "param_key",
+            name="uq_mes_product_revision_parameter_revision_id_param_key",
+        ),
+        CheckConstraint(
+            "param_type IN ('Text', 'Link')",
+            name="ck_mes_product_revision_parameter_param_type_allowed",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("mes_product.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    revision_id: Mapped[int] = mapped_column(
+        ForeignKey("mes_product_revision.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    param_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    param_category: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    param_type: Mapped[str] = mapped_column(String(16), nullable=False, default="Text")
+    param_value: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    param_description: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
+    is_preset: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    product = relationship("Product")
+    revision = relationship("ProductRevision", back_populates="parameters")

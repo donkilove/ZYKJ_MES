@@ -32,6 +32,7 @@ class ProductVersionManagementPage extends StatefulWidget {
     required this.tabCode,
     this.jumpCommand,
     this.onJumpHandled,
+    this.onEditVersionParameters,
     required this.canManageVersions,
     this.service,
   });
@@ -41,6 +42,7 @@ class ProductVersionManagementPage extends StatefulWidget {
   final String tabCode;
   final ProductJumpCommand? jumpCommand;
   final void Function(int seq)? onJumpHandled;
+  final void Function(ProductItem product, ProductVersionItem version)? onEditVersionParameters;
   final bool canManageVersions;
   final ProductService? service;
 
@@ -159,7 +161,7 @@ class _ProductVersionManagementPageState
     try {
       await _service.createProductVersion(productId: product.id);
       _showSuccess('新建版本成功');
-      await _loadVersions(product);
+      await _reloadSelectedProductAndVersions(product.id);
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (e) {
@@ -176,7 +178,7 @@ class _ProductVersionManagementPageState
         sourceVersion: source.version,
       );
       _showSuccess('复制版本成功（来源：${source.versionLabel}）');
-      await _loadVersions(product);
+      await _reloadSelectedProductAndVersions(product.id);
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (e) {
@@ -210,9 +212,10 @@ class _ProductVersionManagementPageState
         productId: product.id,
         version: rev.version,
         confirmed: true,
+        expectedEffectiveVersion: product.effectiveVersion,
       );
       _showSuccess('版本 ${rev.versionLabel} 已生效');
-      await _loadVersions(product);
+      await _reloadSelectedProductAndVersions(product.id);
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (e) {
@@ -248,7 +251,7 @@ class _ProductVersionManagementPageState
         version: rev.version,
       );
       _showSuccess('版本 ${rev.versionLabel} 已停用');
-      await _loadVersions(product);
+      await _reloadSelectedProductAndVersions(product.id);
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (e) {
@@ -284,7 +287,7 @@ class _ProductVersionManagementPageState
         version: rev.version,
       );
       _showSuccess('版本 ${rev.versionLabel} 已删除');
-      await _loadVersions(product);
+      await _reloadSelectedProductAndVersions(product.id);
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (e) {
@@ -391,15 +394,21 @@ class _ProductVersionManagementPageState
   }
 
   void _navigateToEditParams(ProductVersionItem rev) {
-    // 提示用户通过参数管理页维护参数
     final product = _selectedProduct;
     if (product == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('请前往参数管理页面维护产品「${product.name}」的参数'),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    widget.onEditVersionParameters?.call(product, rev);
+  }
+
+  Future<void> _reloadSelectedProductAndVersions(int productId) async {
+    try {
+      final product = await _service.getProduct(productId: productId);
+      if (!mounted) return;
+      await _loadVersions(product);
+    } catch (e) {
+      if (mounted) {
+        _showError('刷新产品状态失败: $e');
+      }
+    }
   }
 
   Future<void> _exportVersionParams(ProductVersionItem rev) async {
@@ -678,11 +687,10 @@ class _ProductVersionManagementPageState
                       value: 'editNote',
                       child: Text('编辑备注'),
                     ),
-                    if (isDraft)
-                      const PopupMenuItem(
-                        value: 'editParams',
-                        child: Text('维护参数'),
-                      ),
+                    PopupMenuItem(
+                      value: 'editParams',
+                      child: Text(isDraft ? '维护参数' : '查看参数'),
+                    ),
                     const PopupMenuItem(
                       value: 'export',
                       child: Text('导出版本参数'),

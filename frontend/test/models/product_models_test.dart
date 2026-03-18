@@ -42,6 +42,7 @@ void main() {
       'category': '尺寸',
       'type': 'Number',
       'value': '10',
+      'description': '',
     });
   });
 
@@ -49,6 +50,9 @@ void main() {
     final list = ProductParameterListResult.fromJson({
       'product_id': 5,
       'product_name': '产品X',
+      'version': 3,
+      'version_label': 'V1.3',
+      'lifecycle_status': 'draft',
       'total': 2,
       'items': [
         {
@@ -64,6 +68,8 @@ void main() {
 
     final history = ProductParameterHistoryItem.fromJson({
       'id': 10,
+      'version': 3,
+      'version_label': 'V1.3',
       'remark': '变更备注',
       'changed_keys': ['参数1'],
       'operator_username': null,
@@ -76,13 +82,18 @@ void main() {
     });
 
     final historyList = ProductParameterHistoryListResult(
+      version: 3,
+      versionLabel: 'V1.3',
+      lifecycleStatus: 'draft',
       total: 1,
       items: [history],
     );
 
     expect(list.productId, 5);
+    expect(list.versionLabel, 'V1.3');
     expect(list.items.single.isPreset, isTrue);
     expect(history.operatorUsername, '-');
+    expect(history.versionLabel, 'V1.3');
     expect(historyList.total, 1);
     expect(update.updatedCount, 3);
     expect(update.changedKeys.length, 2);

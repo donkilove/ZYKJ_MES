@@ -71,12 +71,15 @@ void main() {
           expect(jsonDecode(request.bodyText), {'password': 'pwd123'});
           return TestResponse.json(200, body: {'data': {}});
         },
-        'GET /products/8/parameters': (_) => TestResponse.json(
+        'GET /products/8/versions/3/parameters': (_) => TestResponse.json(
           200,
           body: {
             'data': {
               'product_id': 8,
               'product_name': 'Product A',
+              'version': 3,
+              'version_label': 'V1.3',
+              'lifecycle_status': 'draft',
               'total': 1,
               'items': [
                 {
@@ -91,7 +94,7 @@ void main() {
             },
           },
         ),
-        'PUT /products/8/parameters': (request) {
+        'PUT /products/8/versions/3/parameters': (request) {
           final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
           expect(body['remark'], 'batch update');
           expect((body['items'] as List).length, 1);
@@ -105,17 +108,22 @@ void main() {
             },
           );
         },
-        'GET /products/8/parameter-history': (request) {
+        'GET /products/8/versions/3/parameter-history': (request) {
           expect(request.uri.queryParameters['page'], '2');
           expect(request.uri.queryParameters['page_size'], '5');
           return TestResponse.json(
             200,
             body: {
               'data': {
+                'version': 3,
+                'version_label': 'V1.3',
+                'lifecycle_status': 'draft',
                 'total': 1,
                 'items': [
                   {
                     'id': 9,
+                    'version': 3,
+                    'version_label': 'V1.3',
                     'remark': 'Changed',
                     'changed_keys': ['Param 1'],
                     'operator_username': 'admin',
@@ -274,9 +282,13 @@ void main() {
       );
       await service.createProduct(name: 'Product B');
       await service.deleteProduct(productId: 8, password: 'pwd123');
-      final parameters = await service.listProductParameters(productId: 8);
+      final parameters = await service.listProductParameters(
+        productId: 8,
+        version: 3,
+      );
       final updateResult = await service.updateProductParameters(
         productId: 8,
+        version: 3,
         remark: 'batch update',
         items: [
           ProductParameterUpdateItem(
@@ -289,6 +301,7 @@ void main() {
       );
       final history = await service.listProductParameterHistory(
         productId: 8,
+        version: 3,
         page: 2,
         pageSize: 5,
       );
@@ -321,8 +334,10 @@ void main() {
       expect(products.items.single.name, 'Product A');
       expect(products.items.single.lifecycleStatus, 'effective');
       expect(parameters.items.single.name, 'Param 1');
+      expect(parameters.versionLabel, 'V1.3');
       expect(updateResult.updatedCount, 1);
       expect(history.items.single.remark, 'Changed');
+      expect(history.versionLabel, 'V1.3');
       expect(lifecycleUpdated.lifecycleStatus, 'inactive');
       expect(impact.requiresConfirmation, isTrue);
       expect(versions.total, 2);
