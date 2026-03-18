@@ -21,11 +21,8 @@ class UserItem {
     required this.lastSeenAt,
     required this.stageId,
     required this.stageName,
-    required this.roleCodes,
-    required this.roleNames,
-    required this.processCodes,
-    required this.processNames,
-    required this.stageNames,
+    required this.roleCode,
+    required this.roleName,
     required this.lastLoginAt,
     required this.lastLoginIp,
     required this.passwordChangedAt,
@@ -44,11 +41,8 @@ class UserItem {
   final DateTime? lastSeenAt;
   final int? stageId;
   final String? stageName;
-  final List<String> roleCodes;
-  final List<String> roleNames;
-  final List<String> processCodes;
-  final List<String> processNames;
-  final List<String> stageNames;
+  final String? roleCode;
+  final String? roleName;
   final DateTime? lastLoginAt;
   final String? lastLoginIp;
   final DateTime? passwordChangedAt;
@@ -68,13 +62,8 @@ class UserItem {
       lastSeenAt: _parseDateTimeOrNull(json['last_seen_at']),
       stageId: json['stage_id'] as int?,
       stageName: json['stage_name'] as String?,
-      roleCodes: (json['role_codes'] as List<dynamic>? ?? const []).cast<String>(),
-      roleNames: (json['role_names'] as List<dynamic>? ?? const []).cast<String>(),
-      processCodes:
-          (json['process_codes'] as List<dynamic>? ?? const []).cast<String>(),
-      processNames:
-          (json['process_names'] as List<dynamic>? ?? const []).cast<String>(),
-      stageNames: (json['stage_names'] as List<dynamic>? ?? const []).cast<String>(),
+      roleCode: json['role_code'] as String?,
+      roleName: json['role_name'] as String?,
       lastLoginAt: _parseDateTimeOrNull(json['last_login_at']),
       lastLoginIp: json['last_login_ip'] as String?,
       passwordChangedAt: _parseDateTimeOrNull(json['password_changed_at']),
@@ -303,8 +292,9 @@ class ProfileResult {
     required this.id,
     required this.username,
     required this.fullName,
-    required this.roleCodes,
-    required this.roleNames,
+    required this.roleCode,
+    required this.roleName,
+    required this.stageId,
     required this.stageName,
     required this.isActive,
     required this.createdAt,
@@ -316,8 +306,9 @@ class ProfileResult {
   final int id;
   final String username;
   final String? fullName;
-  final List<String> roleCodes;
-  final List<String> roleNames;
+  final String? roleCode;
+  final String? roleName;
+  final int? stageId;
   final String? stageName;
   final bool isActive;
   final DateTime? createdAt;
@@ -330,8 +321,9 @@ class ProfileResult {
       id: (json['id'] as int?) ?? 0,
       username: (json['username'] as String?) ?? '',
       fullName: json['full_name'] as String?,
-      roleCodes: (json['role_codes'] as List<dynamic>? ?? const []).cast<String>(),
-      roleNames: (json['role_names'] as List<dynamic>? ?? const []).cast<String>(),
+      roleCode: json['role_code'] as String?,
+      roleName: json['role_name'] as String?,
+      stageId: json['stage_id'] as int?,
       stageName: json['stage_name'] as String?,
       isActive: (json['is_active'] as bool?) ?? true,
       createdAt: _parseDateTimeOrNull(json['created_at']),
@@ -419,8 +411,9 @@ class OnlineSessionItem {
     required this.sessionTokenId,
     required this.userId,
     required this.username,
-    required this.roleCodes,
-    required this.roleNames,
+    required this.roleCode,
+    required this.roleName,
+    required this.stageId,
     required this.stageName,
     required this.loginTime,
     required this.lastActiveAt,
@@ -434,8 +427,9 @@ class OnlineSessionItem {
   final String sessionTokenId;
   final int userId;
   final String username;
-  final List<String> roleCodes;
-  final List<String> roleNames;
+  final String? roleCode;
+  final String? roleName;
+  final int? stageId;
   final String? stageName;
   final DateTime? loginTime;
   final DateTime? lastActiveAt;
@@ -450,8 +444,9 @@ class OnlineSessionItem {
       sessionTokenId: (json['session_token_id'] as String?) ?? '',
       userId: (json['user_id'] as int?) ?? 0,
       username: (json['username'] as String?) ?? '',
-      roleCodes: (json['role_codes'] as List<dynamic>? ?? const []).cast<String>(),
-      roleNames: (json['role_names'] as List<dynamic>? ?? const []).cast<String>(),
+      roleCode: json['role_code'] as String?,
+      roleName: json['role_name'] as String?,
+      stageId: json['stage_id'] as int?,
       stageName: json['stage_name'] as String?,
       loginTime: _parseDateTimeOrNull(json['login_time']),
       lastActiveAt: _parseDateTimeOrNull(json['last_active_at']),

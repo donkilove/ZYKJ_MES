@@ -1189,20 +1189,46 @@ class QualityPermissionCodes {
 
 class UserFeaturePermissionCodes {
   static const String userManagementView = 'feature.user.user_management.view';
-  static const String userManagementManage =
-      'feature.user.user_management.manage';
-  static const String registrationApprovalReview =
-      'feature.user.registration_approval.review';
+  static const String userManagementCreate =
+      'feature.user.user_management.create';
+  static const String userManagementUpdate =
+      'feature.user.user_management.update';
+  static const String userManagementLifecycle =
+      'feature.user.user_management.lifecycle';
+  static const String userManagementPasswordReset =
+      'feature.user.user_management.password_reset';
+  static const String userManagementDelete =
+      'feature.user.user_management.delete';
+  static const String userManagementExport =
+      'feature.user.user_management.export';
+  static const String registrationApprovalView =
+      'feature.user.registration_approval.view';
+  static const String registrationApprovalApprove =
+      'feature.user.registration_approval.approve';
+  static const String registrationApprovalReject =
+      'feature.user.registration_approval.reject';
   static const String roleManagementView = 'feature.user.role_management.view';
-  static const String roleManagementManage =
-      'feature.user.role_management.manage';
+  static const String roleManagementCreate =
+      'feature.user.role_management.create';
+  static const String roleManagementUpdate =
+      'feature.user.role_management.update';
+  static const String roleManagementLifecycle =
+      'feature.user.role_management.lifecycle';
+  static const String roleManagementDelete =
+      'feature.user.role_management.delete';
   static const String auditLogView = 'feature.user.audit_log.view';
-  static const String accountSettingsView =
-      'feature.user.account_settings.view';
-  static const String accountSettingsManage =
-      'feature.user.account_settings.manage';
-  static const String loginSessionView = 'feature.user.login_session.view';
-  static const String loginSessionManage = 'feature.user.login_session.manage';
+  static const String accountSettingsProfileView =
+      'feature.user.account_settings.profile_view';
+  static const String accountSettingsPasswordUpdate =
+      'feature.user.account_settings.password_update';
+  static const String accountSettingsSessionView =
+      'feature.user.account_settings.session_view';
+  static const String loginSessionLoginLogsView =
+      'feature.user.login_session.login_logs_view';
+  static const String loginSessionOnlineView =
+      'feature.user.login_session.online_view';
+  static const String loginSessionForceOffline =
+      'feature.user.login_session.force_offline';
 }
 
 class ProductFeaturePermissionCodes {

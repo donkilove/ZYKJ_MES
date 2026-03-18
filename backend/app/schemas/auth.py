@@ -29,10 +29,10 @@ class CurrentUserResult(BaseModel):
     id: int
     username: str
     full_name: str | None
-    role_codes: list[str]
-    role_names: list[str]
-    process_codes: list[str]
-    process_names: list[str]
+    role_code: str | None = None
+    role_name: str | None = None
+    stage_id: int | None = None
+    stage_name: str | None = None
 
 
 class BootstrapAdminResult(BaseModel):
@@ -64,8 +64,7 @@ class RegistrationRequestListResult(BaseModel):
 class ApproveRegistrationRequest(BaseModel):
     account: str = Field(min_length=2, max_length=10)
     password: str = Field(min_length=6, max_length=128)
-    role_codes: list[str] = Field(default_factory=list)
-    process_codes: list[str] = Field(default_factory=list)
+    role_code: str = Field(min_length=2, max_length=64)
     stage_id: int | None = Field(default=None, gt=0)
 
 
@@ -77,8 +76,7 @@ class RegistrationActionResult(BaseModel):
     final_account: str | None = None
     approved: bool
     user_id: int | None = None
-    role_codes: list[str] = Field(default_factory=list)
-    process_codes: list[str] = Field(default_factory=list)
+    role_code: str | None = None
 
 
 class RejectRegistrationRequest(BaseModel):

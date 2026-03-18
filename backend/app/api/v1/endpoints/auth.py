@@ -291,8 +291,7 @@ def approve_registration(
         request=request_row,
         account=payload.account,
         password=payload.password,
-        role_codes=payload.role_codes,
-        process_codes=payload.process_codes,
+        role_code=payload.role_code,
         stage_id=payload.stage_id,
         reviewer=current_user,
     )
@@ -311,7 +310,7 @@ def approve_registration(
         operator=current_user,
         after_data={
             "final_account": user.username,
-            "role_codes": sorted(role.code for role in user.roles),
+            "role_code": user.roles[0].code if user.roles else None,
             "stage_id": user.stage_id,
         },
         ip_address=request.client.host if request and request.client else None,
@@ -341,8 +340,7 @@ def approve_registration(
             final_account=user.username,
             approved=True,
             user_id=user.id,
-            role_codes=sorted(role.code for role in user.roles),
-            process_codes=sorted(process.code for process in user.processes),
+            role_code=user.roles[0].code if user.roles else None,
         ),
         message="approved",
     )
@@ -389,8 +387,7 @@ def reject_registration(
             final_account=None,
             approved=False,
             user_id=None,
-            role_codes=[],
-            process_codes=[],
+            role_code=None,
         ),
         message="rejected",
     )
@@ -405,9 +402,9 @@ def get_current_login_user(
             id=current_user.id,
             username=current_user.username,
             full_name=current_user.full_name,
-            role_codes=sorted(role.code for role in current_user.roles),
-            role_names=sorted(role.name for role in current_user.roles),
-            process_codes=sorted(process.code for process in current_user.processes),
-            process_names=sorted(process.name for process in current_user.processes),
+            role_code=current_user.roles[0].code if current_user.roles else None,
+            role_name=current_user.roles[0].name if current_user.roles else None,
+            stage_id=current_user.stage_id,
+            stage_name=current_user.stage.name if current_user.stage else None,
         )
     )

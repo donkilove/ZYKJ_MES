@@ -29,11 +29,9 @@ void main() {
                       'full_name': 'Test User',
                       'is_online': true,
                       'last_seen_at': '2026-03-01T10:00:00Z',
-                      'role_codes': ['production_admin'],
-                      'role_names': ['Production admin'],
-                      'process_codes': ['01-01'],
-                      'process_names': ['Cutting'],
-                      'stage_names': ['Cutting stage'],
+                      'role_code': 'production_admin',
+                      'role_name': 'Production admin',
+                      'stage_name': 'Cutting stage',
                     },
                   ],
                 },
@@ -98,8 +96,7 @@ void main() {
           'POST /auth/register-requests/7/approve': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['account'], 'new_user');
-            expect(body['role_codes'], ['production_admin']);
-            expect(body['process_codes'], ['01-01']);
+            expect(body['role_code'], 'production_admin');
             return TestResponse.json(200, body: {'data': {}});
           },
           'POST /auth/register-requests/7/reject': (_) =>
@@ -108,7 +105,7 @@ void main() {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['username'], 'created_user');
             expect(body['full_name'], 'created_user');
-            expect(body['role_codes'], ['production_admin']);
+            expect(body['role_code'], 'production_admin');
             expect(body['stage_id'], 1);
             return TestResponse.json(201, body: {'data': {}});
           },
@@ -117,8 +114,7 @@ void main() {
             expect(body['username'], 'updated_user');
             expect(body['full_name'], 'updated_user');
             expect(body['password'], 'new-pass');
-            expect(body['role_codes'], ['system_admin']);
-            expect(body['process_codes'], ['01-02']);
+            expect(body['role_code'], 'system_admin');
             expect(body['stage_id'], 2);
             return TestResponse.json(200, body: {'data': {}});
           },
@@ -154,23 +150,20 @@ void main() {
         await service.approveRegistrationRequest(
           requestId: 7,
           account: 'new_user',
-          roleCodes: ['production_admin'],
-          processCodes: ['01-01'],
+          roleCode: 'production_admin',
         );
         await service.rejectRegistrationRequest(requestId: 7);
         await service.createUser(
           account: 'created_user',
           password: 'pass',
-          roleCodes: ['production_admin'],
-          processCodes: ['01-01'],
+          roleCode: 'production_admin',
           stageId: 1,
         );
         await service.updateUser(
           userId: 9,
           account: 'updated_user',
           password: 'new-pass',
-          roleCodes: ['system_admin'],
-          processCodes: ['01-02'],
+          roleCode: 'system_admin',
           stageId: 2,
         );
         await service.resetUserPassword(userId: 9, password: 'reset-pass-2');

@@ -254,7 +254,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           children: [
             Text('用户名：${profile.username}'),
             Text('显示名称：${profile.fullName ?? '-'}'),
-            Text('角色：${profile.roleNames.join('、')}'),
+            Text('角色：${profile.roleName?.trim().isNotEmpty == true ? profile.roleName! : '-'}'),
             Text('工段：${profile.stageName ?? '/'}'),
             Text('账号状态：${profile.isActive ? '启用' : '停用'}'),
             Text('创建时间：${_formatDateTime(profile.createdAt)}'),
@@ -296,7 +296,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
             if (currentSession == null)
               const Text('未查询到当前在线会话记录')
             else ...[
-              Text('会话令牌：${currentSession.sessionTokenId}'),
               _buildSessionStatusRow(currentSession),
               Text('登录时间：${_formatDateTime(currentSession.loginTime)}'),
               Text('最后活跃时间：${_formatDateTime(currentSession.lastActiveAt)}'),

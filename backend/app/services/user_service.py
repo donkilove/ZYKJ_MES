@@ -5,13 +5,16 @@ from datetime import UTC, datetime
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.authz_catalog import (
+    PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
+    PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
+)
 from app.core.rbac import (
     ROLE_MAINTENANCE_STAFF,
     ROLE_OPERATOR,
     ROLE_PRODUCTION_ADMIN,
     ROLE_QUALITY_ADMIN,
     ROLE_SYSTEM_ADMIN,
-    VALID_ROLE_CODES,
 )
 from app.core.security import get_password_hash, verify_password
 from app.models.process import Process
@@ -20,8 +23,8 @@ from app.models.registration_request import RegistrationRequest
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
-from app.services.process_service import get_processes_by_codes
-from app.services.role_service import get_roles_by_codes
+from app.services.authz_service import get_permission_codes_for_role_codes
+from app.services.role_service import get_role_by_code_case_insensitive, get_roles_by_codes
 
 
 REG_STATUS_PENDING = "pending"
@@ -59,12 +62,6 @@ def normalize_username(username: str) -> str:
 
 def _normalize_codes(codes: list[str]) -> list[str]:
     return sorted({code.strip() for code in codes if code and code.strip()})
-
-
-def _validate_role_codes(role_codes: list[str]) -> tuple[list[str], list[str]]:
-    normalized_codes = _normalize_codes(role_codes)
-    invalid_codes = [code for code in normalized_codes if code not in VALID_ROLE_CODES]
-    return normalized_codes, invalid_codes
 
 
 ROLE_PRIORITY = [
@@ -212,29 +209,25 @@ def list_users(
     return total, users
 
 
-def _resolve_roles(db: Session, role_codes: list[str]) -> tuple[list[Role] | None, str | None]:
-    normalized_codes, invalid_codes = _validate_role_codes(role_codes)
-    if invalid_codes:
-        return None, f"Invalid role codes: {', '.join(invalid_codes)}"
-    if len(normalized_codes) != 1:
-        return None, "Exactly one role is required"
-
-    roles, missing_role_codes = get_roles_by_codes(db, normalized_codes)
-    if missing_role_codes:
-        return None, f"Role codes not found: {', '.join(missing_role_codes)}"
-    role = roles[0]
+def _resolve_role(db: Session, role_code: str | None) -> tuple[Role | None, str | None]:
+    normalized_code = (role_code or "").strip()
+    if not normalized_code:
+        return None, "Role is required"
+    role = get_role_by_code_case_insensitive(db, normalized_code)
+    if role is None:
+        return None, f"Role code not found: {normalized_code}"
     if not role.is_enabled:
         return None, "Role is disabled"
-    return roles, None
+    return role, None
 
 
 def _resolve_stage(
     db: Session,
     *,
-    role_codes: list[str],
+    role_code: str | None,
     stage_id: int | None,
 ) -> tuple[ProcessStage | None, str | None]:
-    is_operator = ROLE_OPERATOR in role_codes
+    is_operator = role_code == ROLE_OPERATOR
     if not is_operator:
         if stage_id is not None:
             return None, "Only operator role can be assigned stage"
@@ -253,27 +246,13 @@ def _resolve_stage(
 def _resolve_processes(
     db: Session,
     *,
-    role_codes: list[str],
+    role_code: str | None,
     stage: ProcessStage | None,
-    process_codes: list[str],
 ) -> tuple[list[Process] | None, str | None]:
-    normalized_process_codes = _normalize_codes(process_codes)
-    is_operator = ROLE_OPERATOR in role_codes
+    is_operator = role_code == ROLE_OPERATOR
 
     if not is_operator:
-        if normalized_process_codes:
-            return None, "Only operator role can be assigned processes"
         return [], None
-
-    if normalized_process_codes:
-        processes, missing_process_codes = get_processes_by_codes(db, normalized_process_codes)
-        if missing_process_codes:
-            return None, f"Process codes not found: {', '.join(missing_process_codes)}"
-        if stage is not None:
-            out_of_stage = [process.code for process in processes if process.stage_id != stage.id]
-            if out_of_stage:
-                return None, f"Process not in selected stage: {', '.join(out_of_stage)}"
-        return processes, None
 
     if stage is None:
         return None, "Operator role must be assigned a stage"
@@ -290,6 +269,27 @@ def _resolve_processes(
     if not processes:
         return None, "Selected stage has no enabled processes"
     return processes, None
+
+
+_SYSTEM_ADMIN_GUARDRAIL_PERMISSION_CODES = {
+    PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
+    PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
+}
+
+
+def count_active_permission_admin_users(
+    db: Session,
+    *,
+    exclude_user_id: int | None = None,
+) -> int:
+    effective_codes = get_permission_codes_for_role_codes(
+        db,
+        role_codes=[ROLE_SYSTEM_ADMIN],
+        module_code="system",
+    )
+    if not _SYSTEM_ADMIN_GUARDRAIL_PERMISSION_CODES.issubset(effective_codes):
+        return 0
+    return count_active_system_admin_users(db, exclude_user_id=exclude_user_id)
 
 
 def _pick_highest_priority_role(roles: list[Role]) -> Role | None:
@@ -324,9 +324,9 @@ def ensure_can_deactivate_user(db: Session, user: User) -> tuple[bool, str | Non
     role_codes = {role.code for role in user.roles}
     if ROLE_SYSTEM_ADMIN not in role_codes:
         return True, None
-    remaining = count_active_system_admin_users(db, exclude_user_id=user.id)
+    remaining = count_active_permission_admin_users(db, exclude_user_id=user.id)
     if remaining < 1:
-        return False, "At least one active system administrator account must be retained"
+        return False, "必须至少保留一个可进入功能权限配置页面的系统管理员账号"
     return True, None
 
 
@@ -443,19 +443,18 @@ def create_user(db: Session, payload: UserCreate) -> tuple[User | None, str | No
     if pwd_error:
         return None, pwd_error
 
-    roles, roles_error = _resolve_roles(db, payload.role_codes)
-    if roles_error:
-        return None, roles_error
+    role, role_error = _resolve_role(db, payload.role_code)
+    if role_error:
+        return None, role_error
 
-    role_codes = [role.code for role in roles or []]
-    stage, stage_error = _resolve_stage(db, role_codes=role_codes, stage_id=payload.stage_id)
+    role_code = role.code if role else None
+    stage, stage_error = _resolve_stage(db, role_code=role_code, stage_id=payload.stage_id)
     if stage_error:
         return None, stage_error
     processes, processes_error = _resolve_processes(
         db,
-        role_codes=role_codes,
+        role_code=role_code,
         stage=stage,
-        process_codes=payload.process_codes,
     )
     if processes_error:
         return None, processes_error
@@ -471,7 +470,7 @@ def create_user(db: Session, payload: UserCreate) -> tuple[User | None, str | No
         must_change_password=True,
         stage_id=stage.id if stage else None,
     )
-    user.roles = roles or []
+    user.roles = [role] if role else []
     user.processes = processes or []
     db.add(user)
     db.commit()
@@ -556,8 +555,7 @@ def approve_registration_request(
     request: RegistrationRequest,
     account: str,
     password: str,
-    role_codes: list[str],
-    process_codes: list[str],
+    role_code: str,
     stage_id: int | None,
     reviewer: User | None,
 ) -> tuple[User | None, str | None]:
@@ -579,19 +577,18 @@ def approve_registration_request(
     if existing:
         return None, "Username already exists"
 
-    roles, roles_error = _resolve_roles(db, role_codes)
-    if roles_error:
-        return None, roles_error
+    role, role_error = _resolve_role(db, role_code)
+    if role_error:
+        return None, role_error
 
-    resolved_role_codes = [role.code for role in roles or []]
-    stage, stage_error = _resolve_stage(db, role_codes=resolved_role_codes, stage_id=stage_id)
+    resolved_role_code = role.code if role else None
+    stage, stage_error = _resolve_stage(db, role_code=resolved_role_code, stage_id=stage_id)
     if stage_error:
         return None, stage_error
     processes, processes_error = _resolve_processes(
         db,
-        role_codes=resolved_role_codes,
+        role_code=resolved_role_code,
         stage=stage,
-        process_codes=process_codes,
     )
     if processes_error:
         return None, processes_error
@@ -607,7 +604,7 @@ def approve_registration_request(
         must_change_password=True,
         stage_id=stage.id if stage else None,
     )
-    user.roles = roles or []
+    user.roles = [role] if role else []
     user.processes = processes or []
     db.add(user)
 
@@ -645,7 +642,8 @@ def update_user(
     payload: UserUpdate,
     operator: User | None = None,
 ) -> tuple[User | None, str | None]:
-    role_codes_before = {role.code for role in user.roles}
+    primary_role_before = _pick_highest_priority_role(list(user.roles))
+    role_code_before = primary_role_before.code if primary_role_before else None
     was_active = user.is_active
 
     if payload.username is not None:
@@ -677,31 +675,30 @@ def update_user(
     elif payload.must_change_password is not None:
         user.must_change_password = payload.must_change_password
 
-    if payload.role_codes is not None:
-        roles, roles_error = _resolve_roles(db, payload.role_codes)
-        if roles_error:
-            return None, roles_error
-        user.roles = roles or []
+    if payload.role_code is not None:
+        role, role_error = _resolve_role(db, payload.role_code)
+        if role_error:
+            return None, role_error
+        user.roles = [role] if role else []
 
-    current_role_codes = [role.code for role in user.roles]
+    current_role = _pick_highest_priority_role(list(user.roles))
+    current_role_code = current_role.code if current_role else None
+    if current_role_code is None:
+        return None, "User role is required"
     stage_id_for_resolve = payload.stage_id
-    if stage_id_for_resolve is None and ROLE_OPERATOR in current_role_codes:
+    if stage_id_for_resolve is None and current_role_code == ROLE_OPERATOR:
         stage_id_for_resolve = user.stage_id
     stage, stage_error = _resolve_stage(
         db,
-        role_codes=current_role_codes,
+        role_code=current_role_code,
         stage_id=stage_id_for_resolve,
     )
     if stage_error:
         return None, stage_error
-    requested_process_codes = (
-        payload.process_codes if payload.process_codes is not None else [process.code for process in user.processes]
-    )
     processes, processes_error = _resolve_processes(
         db,
-        role_codes=current_role_codes,
+        role_code=current_role_code,
         stage=stage,
-        process_codes=requested_process_codes,
     )
     if processes_error:
         return None, processes_error
@@ -715,11 +712,11 @@ def update_user(
                 return None, message
         user.is_active = payload.is_active
 
-    role_codes_after = {role.code for role in user.roles}
-    if ROLE_SYSTEM_ADMIN in role_codes_before and ROLE_SYSTEM_ADMIN not in role_codes_after and was_active and user.is_active:
-        remaining = count_active_system_admin_users(db, exclude_user_id=user.id)
+    role_code_after = current_role_code
+    if role_code_before == ROLE_SYSTEM_ADMIN and role_code_after != ROLE_SYSTEM_ADMIN and was_active and user.is_active:
+        remaining = count_active_permission_admin_users(db, exclude_user_id=user.id)
         if remaining < 1:
-            return None, "At least one active system administrator account must be retained"
+            return None, "必须至少保留一个可进入功能权限配置页面的系统管理员账号"
 
     db.commit()
     db.refresh(user)

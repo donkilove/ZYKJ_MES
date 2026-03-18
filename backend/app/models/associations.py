@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Table
+from sqlalchemy import Column, ForeignKey, Table, UniqueConstraint
 
 from app.models.base import Base
 
@@ -8,6 +8,7 @@ user_roles = Table(
     Base.metadata,
     Column("user_id", ForeignKey("sys_user.id", ondelete="CASCADE"), primary_key=True),
     Column("role_id", ForeignKey("sys_role.id", ondelete="CASCADE"), primary_key=True),
+    UniqueConstraint("user_id", name="uq_sys_user_role_user_id"),
 )
 
 

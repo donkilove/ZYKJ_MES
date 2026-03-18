@@ -11,8 +11,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(min_length=6, max_length=128)
-    role_codes: list[str] = Field(default_factory=list)
-    process_codes: list[str] = Field(default_factory=list)
+    role_code: str = Field(min_length=2, max_length=64)
     stage_id: int | None = Field(default=None, gt=0)
     is_active: bool = True
 
@@ -22,8 +21,7 @@ class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, max_length=128)
     remark: str | None = Field(default=None, max_length=255)
     password: str | None = Field(default=None, min_length=6, max_length=128)
-    role_codes: list[str] | None = None
-    process_codes: list[str] | None = None
+    role_code: str | None = Field(default=None, min_length=2, max_length=64)
     stage_id: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
     must_change_password: bool | None = None
@@ -45,11 +43,8 @@ class UserItem(BaseModel):
     last_seen_at: datetime | None = None
     stage_id: int | None = None
     stage_name: str | None = None
-    role_codes: list[str]
-    role_names: list[str]
-    process_codes: list[str]
-    process_names: list[str]
-    stage_names: list[str]
+    role_code: str | None = None
+    role_name: str | None = None
     last_login_at: datetime | None = None
     last_login_ip: str | None = None
     password_changed_at: datetime | None = None

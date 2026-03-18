@@ -10,11 +10,9 @@ void main() {
         'full_name': '管理员',
         'is_online': true,
         'last_seen_at': '2026-03-01T10:00:00Z',
-        'role_codes': ['system_admin'],
-        'role_names': ['系统管理员'],
-        'process_codes': ['01-01'],
-        'process_names': ['切割'],
-        'stage_names': ['切割段'],
+        'role_code': 'system_admin',
+        'role_name': '系统管理员',
+        'stage_name': '切割段',
       });
 
       expect(item.id, 1);
@@ -22,7 +20,9 @@ void main() {
       expect(item.fullName, '管理员');
       expect(item.isOnline, isTrue);
       expect(item.lastSeenAt, DateTime.parse('2026-03-01T10:00:00Z'));
-      expect(item.stageNames, ['切割段']);
+      expect(item.roleCode, 'system_admin');
+      expect(item.roleName, '系统管理员');
+      expect(item.stageName, '切割段');
     });
 
     test('fromJson uses defaults when optional fields are missing', () {
@@ -30,15 +30,13 @@ void main() {
         'id': 2,
         'username': 'worker',
         'full_name': null,
-        'role_codes': <String>[],
-        'role_names': <String>[],
-        'process_codes': <String>[],
-        'process_names': <String>[],
       });
 
       expect(item.isOnline, isFalse);
       expect(item.lastSeenAt, isNull);
-      expect(item.stageNames, isEmpty);
+      expect(item.roleCode, isNull);
+      expect(item.roleName, isNull);
+      expect(item.stageName, isNull);
     });
   });
 

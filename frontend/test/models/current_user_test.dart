@@ -7,18 +7,20 @@ void main() {
       'id': 11,
       'username': 'operator_a',
       'full_name': '操作员A',
-      'role_codes': ['production_admin'],
-      'role_names': ['生产管理员'],
-      'process_codes': ['01-01'],
-      'process_names': ['切割'],
+      'role_code': 'production_admin',
+      'role_name': '生产管理员',
+      'stage_id': 1,
+      'stage_name': '切割段',
     });
 
     expect(user.id, 11);
-    expect(user.username, 'operator_a');
-    expect(user.fullName, '操作员A');
-    expect(user.displayName, '操作员A');
-    expect(user.roleCodes, ['production_admin']);
-    expect(user.processCodes, ['01-01']);
+      expect(user.username, 'operator_a');
+      expect(user.fullName, '操作员A');
+      expect(user.displayName, '操作员A');
+      expect(user.roleCode, 'production_admin');
+      expect(user.roleName, '生产管理员');
+      expect(user.stageId, 1);
+      expect(user.stageName, '切割段');
   });
 
   test('CurrentUser.displayName falls back to username when fullName is blank', () {
@@ -26,10 +28,6 @@ void main() {
       'id': 12,
       'username': 'operator_b',
       'full_name': '   ',
-      'role_codes': <String>[],
-      'role_names': <String>[],
-      'process_codes': <String>[],
-      'process_names': <String>[],
     });
 
     expect(user.displayName, 'operator_b');

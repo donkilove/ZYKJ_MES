@@ -18,6 +18,11 @@ const Map<String, String> _moduleNameFallbackZh = {
   'message': '消息中心',
 };
 
+const String _systemModuleCode = 'system';
+const String _systemAdminRoleCode = 'system_admin';
+const String _systemRolePermissionManageCapability =
+    'feature.system.role_permissions.manage';
+
 class _RoleDraft {
   const _RoleDraft({
     required this.moduleEnabled,
@@ -133,6 +138,16 @@ class _FunctionPermissionConfigPageState
   }
 
   bool _isReadonly(String roleCode) => _readonlyByRole[roleCode] ?? false;
+
+  bool _isSystemPermissionGuardRole(String roleCode) {
+    return _selectedModuleCode == _systemModuleCode &&
+        roleCode == _systemAdminRoleCode;
+  }
+
+  bool _isLockedCapability(String roleCode, String capabilityCode) {
+    return _isSystemPermissionGuardRole(roleCode) &&
+        capabilityCode == _systemRolePermissionManageCapability;
+  }
 
   bool _draftEquals(_RoleDraft a, _RoleDraft b) {
     if (a.moduleEnabled != b.moduleEnabled) {
@@ -481,6 +496,9 @@ class _FunctionPermissionConfigPageState
     required _RoleDraft draft,
     required bool value,
   }) {
+    if (_isSystemPermissionGuardRole(roleCode) && !value) {
+      return;
+    }
     setState(() {
       _draftByRole[roleCode] = draft.copyWith(
         moduleEnabled: value,
@@ -495,6 +513,9 @@ class _FunctionPermissionConfigPageState
     required String capabilityCode,
     required bool value,
   }) {
+    if (_isLockedCapability(roleCode, capabilityCode) && !value) {
+      return;
+    }
     final next = {...draft.capabilityCodes};
     if (value) {
       next.add(capabilityCode);
@@ -591,6 +612,14 @@ class _FunctionPermissionConfigPageState
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          if (_isSystemPermissionGuardRole(role.code))
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text(
+                '系统管理员的功能权限配置入口与保存能力为系统保底能力，不允许关闭。',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
           Row(
             children: [
               Expanded(
@@ -638,6 +667,10 @@ class _FunctionPermissionConfigPageState
                   final description = capability.description;
                   final hasDescription =
                       description != null && description.trim().isNotEmpty;
+                  final lockedCapability = _isLockedCapability(
+                    role.code,
+                    capability.capabilityCode,
+                  );
                   return SwitchListTile(
                     dense: true,
                     title: Text(capability.capabilityName),
@@ -646,7 +679,7 @@ class _FunctionPermissionConfigPageState
                           ? '入口：${capability.pageName}\n说明：$description'
                           : '入口：${capability.pageName}',
                     ),
-                    value: checked,
+                     value: checked,
                     onChanged: readonly || _saving
                         ? null
                         : (value) => _setCapabilityChecked(
@@ -655,6 +688,9 @@ class _FunctionPermissionConfigPageState
                             capabilityCode: capability.capabilityCode,
                             value: value,
                           ),
+                    secondary: lockedCapability
+                        ? const Icon(Icons.lock_outline, size: 18)
+                        : null,
                   );
                 }).toList(),
               ),

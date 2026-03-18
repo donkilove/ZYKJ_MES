@@ -45,6 +45,11 @@ from app.models.user import User
 
 ROLE_SORT_ORDER = {str(item["code"]): index for index, item in enumerate(ROLE_DEFINITIONS)}
 
+_SYSTEM_ADMIN_GUARDRAIL_PERMISSION_CODES = {
+    PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
+    PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
+}
+
 
 def _codes(*values: str | None) -> set[str]:
     return {value for value in values if isinstance(value, str) and value.strip()}
@@ -86,6 +91,33 @@ def _guard_role_permission_codes(
             and code not in _SYSTEM_ONLY_EXACT
         }
     return effective_codes
+
+
+def _count_active_system_admin_users(db: Session) -> int:
+    stmt = (
+        select(User.id)
+        .join(User.roles)
+        .where(
+            User.is_deleted.is_(False),
+            User.is_active.is_(True),
+            Role.code == ROLE_SYSTEM_ADMIN,
+        )
+    )
+    return len(db.execute(stmt).scalars().all())
+
+
+def _ensure_system_admin_permission_guardrail(db: Session) -> None:
+    active_admin_count = _count_active_system_admin_users(db)
+    if active_admin_count < 1:
+        raise ValueError("必须至少保留一个可进入功能权限配置页面的系统管理员账号")
+
+    effective_codes = _effective_permission_codes_for_role_codes(
+        db,
+        role_codes=[ROLE_SYSTEM_ADMIN],
+        module_code="system",
+    )
+    if not _SYSTEM_ADMIN_GUARDRAIL_PERMISSION_CODES.issubset(effective_codes):
+        raise ValueError("系统管理员必须固定拥有功能权限配置页面访问与保存权限")
 
 
 class AuthzRevisionConflictError(ValueError):
@@ -135,9 +167,27 @@ PAGE_NAME_FALLBACK_ZH_BY_CODE = {
 CAPABILITY_NAME_FALLBACK_ZH_BY_CODE = {
     "feature.system.permission_catalog.view": "查看权限目录",
     "feature.system.role_permissions.manage": "管理功能权限配置",
-    "feature.user.user_management.view": "查看用户与角色信息",
-    "feature.user.user_management.manage": "维护用户信息",
-    "feature.user.registration_approval.review": "处理注册审批",
+    "feature.user.user_management.view": "查看用户列表",
+    "feature.user.user_management.create": "新建用户",
+    "feature.user.user_management.update": "编辑用户",
+    "feature.user.user_management.lifecycle": "启用停用用户",
+    "feature.user.user_management.password_reset": "重置用户密码",
+    "feature.user.user_management.delete": "删除用户",
+    "feature.user.user_management.export": "导出用户列表",
+    "feature.user.registration_approval.view": "查看注册申请",
+    "feature.user.registration_approval.approve": "通过注册申请",
+    "feature.user.registration_approval.reject": "驳回注册申请",
+    "feature.user.role_management.view": "查看角色管理",
+    "feature.user.role_management.create": "新建角色",
+    "feature.user.role_management.update": "编辑角色",
+    "feature.user.role_management.lifecycle": "启用停用角色",
+    "feature.user.role_management.delete": "删除角色",
+    "feature.user.account_settings.profile_view": "查看个人资料",
+    "feature.user.account_settings.password_update": "修改本人密码",
+    "feature.user.account_settings.session_view": "查看当前会话",
+    "feature.user.login_session.login_logs_view": "查看登录日志",
+    "feature.user.login_session.online_view": "查看在线会话",
+    "feature.user.login_session.force_offline": "强制下线会话",
     "feature.product.catalog.read": "查看产品目录",
     "feature.product.product_management.manage": "维护产品主数据",
     "feature.product.version_analysis.view": "查看产品版本与影响分析",
@@ -177,9 +227,27 @@ CAPABILITY_GROUP_META_BY_CODE = {
         "功能权限配置",
         "维护角色的功能权限与配置",
     ),
-    "feature.user.user_management.view": ("user.accounts", "用户管理", "查看用户、角色和工序关联"),
-    "feature.user.user_management.manage": ("user.accounts", "用户管理", "创建、编辑、删除用户"),
-    "feature.user.registration_approval.review": ("user.registration", "注册审批", "处理注册申请"),
+    "feature.user.user_management.view": ("user.accounts", "用户管理", "查看用户列表与角色信息"),
+    "feature.user.user_management.create": ("user.accounts", "用户管理", "新建用户账号"),
+    "feature.user.user_management.update": ("user.accounts", "用户管理", "编辑用户账号"),
+    "feature.user.user_management.lifecycle": ("user.accounts", "用户管理", "启用或停用用户账号"),
+    "feature.user.user_management.password_reset": ("user.accounts", "用户管理", "重置用户密码"),
+    "feature.user.user_management.delete": ("user.accounts", "用户管理", "逻辑删除用户账号"),
+    "feature.user.user_management.export": ("user.accounts", "用户管理", "导出用户列表"),
+    "feature.user.registration_approval.view": ("user.registration", "注册审批", "查看注册申请记录"),
+    "feature.user.registration_approval.approve": ("user.registration", "注册审批", "通过注册申请"),
+    "feature.user.registration_approval.reject": ("user.registration", "注册审批", "驳回注册申请"),
+    "feature.user.role_management.view": ("user.roles", "角色管理", "查看角色列表与详情"),
+    "feature.user.role_management.create": ("user.roles", "角色管理", "新建角色"),
+    "feature.user.role_management.update": ("user.roles", "角色管理", "编辑角色"),
+    "feature.user.role_management.lifecycle": ("user.roles", "角色管理", "启用或停用角色"),
+    "feature.user.role_management.delete": ("user.roles", "角色管理", "删除角色"),
+    "feature.user.account_settings.profile_view": ("user.account", "个人中心", "查看个人资料"),
+    "feature.user.account_settings.password_update": ("user.account", "个人中心", "修改本人密码"),
+    "feature.user.account_settings.session_view": ("user.account", "个人中心", "查看当前会话"),
+    "feature.user.login_session.login_logs_view": ("user.session", "登录会话", "查看登录日志"),
+    "feature.user.login_session.online_view": ("user.session", "登录会话", "查看在线会话"),
+    "feature.user.login_session.force_offline": ("user.session", "登录会话", "强制下线在线会话"),
     "feature.product.catalog.read": ("product.catalog", "产品目录", "查看产品列表"),
     "feature.product.product_management.manage": ("product.catalog", "产品目录", "维护产品主数据"),
     "feature.product.version_analysis.view": ("product.version", "版本分析", "查看版本与影响分析"),
@@ -2077,6 +2145,12 @@ def update_capability_pack_role_config(
             changed_codes=changed_codes,
             after_granted_codes=set(result["after_granted_codes"]),
         )
+        if str(result["module_code"]) == "system":
+            try:
+                _ensure_system_admin_permission_guardrail(db)
+            except ValueError:
+                db.rollback()
+                raise
         if updated_count > 0:
             current_revision = _bump_authz_module_revision(
                 db,
@@ -2185,6 +2259,13 @@ def apply_capability_pack_role_configs(
                 after_granted_codes=set(result["after_granted_codes"]),
             )
         results.append(result)
+
+    if normalized_module == "system":
+        try:
+            _ensure_system_admin_permission_guardrail(db)
+        except ValueError:
+            db.rollback()
+            raise
 
     if total_updated_count > 0:
         current_revision = _bump_authz_module_revision(

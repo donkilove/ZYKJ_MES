@@ -3,19 +3,19 @@ class CurrentUser {
     required this.id,
     required this.username,
     required this.fullName,
-    required this.roleCodes,
-    required this.roleNames,
-    required this.processCodes,
-    required this.processNames,
+    required this.roleCode,
+    required this.roleName,
+    required this.stageId,
+    required this.stageName,
   });
 
   final int id;
   final String username;
   final String? fullName;
-  final List<String> roleCodes;
-  final List<String> roleNames;
-  final List<String> processCodes;
-  final List<String> processNames;
+  final String? roleCode;
+  final String? roleName;
+  final int? stageId;
+  final String? stageName;
 
   String get displayName => (fullName != null && fullName!.trim().isNotEmpty) ? fullName! : username;
 
@@ -24,10 +24,10 @@ class CurrentUser {
       id: json['id'] as int,
       username: json['username'] as String,
       fullName: json['full_name'] as String?,
-      roleCodes: (json['role_codes'] as List<dynamic>).cast<String>(),
-      roleNames: (json['role_names'] as List<dynamic>).cast<String>(),
-      processCodes: (json['process_codes'] as List<dynamic>).cast<String>(),
-      processNames: (json['process_names'] as List<dynamic>).cast<String>(),
+      roleCode: json['role_code'] as String?,
+      roleName: json['role_name'] as String?,
+      stageId: json['stage_id'] as int?,
+      stageName: json['stage_name'] as String?,
     );
   }
 }

@@ -46,22 +46,31 @@ class _UserPageState extends State<UserPage> {
   bool _hasPermission(String code) => widget.capabilityCodes.contains(code);
 
   bool get _canManageUsers =>
-      _hasPermission(UserFeaturePermissionCodes.userManagementManage);
+      _hasPermission(UserFeaturePermissionCodes.userManagementCreate) ||
+      _hasPermission(UserFeaturePermissionCodes.userManagementUpdate) ||
+      _hasPermission(UserFeaturePermissionCodes.userManagementLifecycle) ||
+      _hasPermission(UserFeaturePermissionCodes.userManagementPasswordReset) ||
+      _hasPermission(UserFeaturePermissionCodes.userManagementDelete);
 
   bool get _canReviewAction =>
-      _hasPermission(UserFeaturePermissionCodes.registrationApprovalReview);
+      _hasPermission(UserFeaturePermissionCodes.registrationApprovalApprove) ||
+      _hasPermission(UserFeaturePermissionCodes.registrationApprovalReject);
 
   bool get _canManageRoles =>
-      _hasPermission(UserFeaturePermissionCodes.roleManagementManage);
+      _hasPermission(UserFeaturePermissionCodes.roleManagementCreate) ||
+      _hasPermission(UserFeaturePermissionCodes.roleManagementUpdate) ||
+      _hasPermission(UserFeaturePermissionCodes.roleManagementLifecycle) ||
+      _hasPermission(UserFeaturePermissionCodes.roleManagementDelete);
 
   bool get _canChangeMyPassword =>
-      _hasPermission(UserFeaturePermissionCodes.accountSettingsManage);
+      _hasPermission(UserFeaturePermissionCodes.accountSettingsPasswordUpdate);
 
   bool get _canViewMySession =>
-      _hasPermission(UserFeaturePermissionCodes.accountSettingsView);
+      _hasPermission(UserFeaturePermissionCodes.accountSettingsProfileView) ||
+      _hasPermission(UserFeaturePermissionCodes.accountSettingsSessionView);
 
   bool get _canManageSessions =>
-      _hasPermission(UserFeaturePermissionCodes.loginSessionManage);
+      _hasPermission(UserFeaturePermissionCodes.loginSessionForceOffline);
 
   List<String> _sortedVisibleTabCodes() {
     final visibleSet = widget.visibleTabCodes.toSet();

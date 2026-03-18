@@ -38,10 +38,10 @@ void main() {
                 'id': 1,
                 'username': 'admin',
                 'full_name': '管理员',
-                'role_codes': ['system_admin'],
-                'role_names': ['系统管理员'],
-                'process_codes': ['01-01'],
-                'process_names': ['切割'],
+                'role_code': 'system_admin',
+                'role_name': '系统管理员',
+                'stage_id': 1,
+                'stage_name': '切割段',
               },
             },
           );
@@ -74,6 +74,8 @@ void main() {
       expect(token.token, 'token-abc');
       expect(accounts, ['admin', 'worker']);
       expect(currentUser.displayName, '管理员');
+      expect(currentUser.roleCode, 'system_admin');
+      expect(currentUser.stageName, '切割段');
       expect(server.requests.length, 5);
     });
 

@@ -33,15 +33,16 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   late final UserService _userService;
   late final CraftService _craftService;
   final ScrollController _requestListScrollController = ScrollController();
+  final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
   String _message = '';
   int _total = 0;
   List<RegistrationRequestItem> _items = const [];
   List<RoleItem> _roles = const [];
-  List<ProcessItem> _processes = const [];
   List<CraftStageItem> _stages = const [];
   int _requestPage = 1;
+  String? _statusFilter = 'pending';
 
   int get _requestTotalPages {
     if (_total <= 0) {
@@ -61,6 +62,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   @override
   void dispose() {
     _requestListScrollController.dispose();
+    _keywordController.dispose();
     super.dispose();
   }
 
@@ -124,24 +126,26 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   }
 
   String? _defaultRoleCode() {
-    if (_roles.isEmpty) {
+    final roles = _assignableRoles();
+    if (roles.isEmpty) {
       return null;
     }
-    for (final role in _roles) {
+    for (final role in roles) {
       if (role.code == _operatorRoleCode) {
         return role.code;
       }
     }
-    return _roles.first.code;
+    return roles.first.code;
   }
 
   bool _isOperator(String? roleCode) => roleCode == _operatorRoleCode;
 
-  List<String> _getProcessCodesByStage(int stageId) {
-    return _processes
-        .where((p) => p.stageId == stageId)
-        .map((p) => p.code)
-        .toList();
+  List<RoleItem> _assignableRoles({String? includeRoleCode}) {
+    final items = _roles
+        .where((role) => role.isEnabled || role.code == includeRoleCode)
+        .toList()
+      ..sort((a, b) => a.id.compareTo(b.id));
+    return items;
   }
 
   Future<void> _loadInitialData({int? page}) async {
@@ -156,16 +160,17 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         _userService.listRegistrationRequests(
           page: targetPage,
           pageSize: _requestPageSize,
-          status: 'pending',
+          keyword: _keywordController.text.trim().isEmpty
+              ? null
+              : _keywordController.text.trim(),
+          status: _statusFilter,
         ),
         _userService.listAllRoles(),
-        _userService.listProcesses(),
         _craftService.listStages(pageSize: 500, enabled: true),
       ]);
       final requests = result[0] as RegistrationRequestListResult;
       final roles = result[1] as RoleListResult;
-      final processes = result[2] as ProcessListResult;
-      final stages = result[3] as CraftStageListResult;
+      final stages = result[2] as CraftStageListResult;
 
       if (!mounted) {
         return;
@@ -180,7 +185,6 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         _items = requests.items;
         _total = requests.total;
         _roles = roles.items;
-        _processes = processes.items;
         _stages = stages.items;
         _requestPage = resolvedPage;
       });
@@ -220,7 +224,10 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       final result = await _userService.listRegistrationRequests(
         page: targetPage,
         pageSize: _requestPageSize,
-        status: 'pending',
+        keyword: _keywordController.text.trim().isEmpty
+            ? null
+            : _keywordController.text.trim(),
+        status: _statusFilter,
       );
       if (!mounted) {
         return;
@@ -265,7 +272,6 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     required RegistrationRequestItem item,
     required String account,
     required String roleCode,
-    required List<String> processCodes,
     String? password,
     int? stageId,
   }) async {
@@ -273,8 +279,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       await _userService.approveRegistrationRequest(
         requestId: item.id,
         account: account,
-        roleCodes: [roleCode],
-        processCodes: processCodes,
+        roleCode: roleCode,
         password: password,
         stageId: stageId,
       );
@@ -306,9 +311,10 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       _showNoPermission();
       return;
     }
-    if (_roles.isEmpty) {
+    final assignableRoles = _assignableRoles();
+    if (assignableRoles.isEmpty) {
       setState(() {
-        _message = '角色数据为空，无法审批。';
+        _message = '当前没有可分配的启用角色。';
       });
       return;
     }
@@ -318,7 +324,6 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     final passwordController = TextEditingController();
     String? selectedRoleCode = _defaultRoleCode();
     int? selectedStageId;
-    Set<String> selectedProcessCodes = <String>{};
 
     final approved = await showLockedFormDialog<bool>(
       context: context,
@@ -385,17 +390,18 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                               selectedRoleCode = value;
                               if (!_isOperator(selectedRoleCode)) {
                                 selectedStageId = null;
-                                selectedProcessCodes = <String>{};
                               }
                             });
                           },
                           child: Column(
-                            children: _roles.map((role) {
+                            children: assignableRoles.map((role) {
                               return RadioListTile<String>(
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
                                 title: Text(role.name),
-                                subtitle: Text(role.code),
+                                subtitle: Text(
+                                  '${role.code} · ${role.roleType == 'builtin' ? '系统内置' : '自定义'}',
+                                ),
                                 value: role.code,
                               );
                             }).toList(),
@@ -432,10 +438,6 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                       }
                                       setDialogState(() {
                                         selectedStageId = value;
-                                        selectedProcessCodes =
-                                            _getProcessCodesByStage(
-                                              value,
-                                            ).toSet();
                                       });
                                     },
                                     child: Column(
@@ -484,13 +486,10 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                         selectedStageId == null) {
                       return;
                     }
-                    final orderedProcessCodes = selectedProcessCodes.toList()
-                      ..sort();
                     final success = await _approveRequest(
                       item: item,
                       account: accountController.text.trim(),
                       roleCode: selectedRoleCode!,
-                      processCodes: orderedProcessCodes,
                       password: passwordController.text.trim(),
                       stageId: selectedStageId,
                     );
@@ -631,7 +630,53 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('待审批数量：$_total', style: theme.textTheme.titleMedium),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _keywordController,
+                  decoration: const InputDecoration(
+                    labelText: '按用户名搜索',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadRequests(page: 1),
+                ),
+              ),
+              SizedBox(
+                width: 150,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _statusFilter,
+                  decoration: const InputDecoration(
+                    labelText: '申请状态',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem<String?>(value: null, child: Text('全部')),
+                    DropdownMenuItem<String?>(value: 'pending', child: Text('待审批')),
+                    DropdownMenuItem<String?>(value: 'approved', child: Text('已通过')),
+                    DropdownMenuItem<String?>(value: 'rejected', child: Text('已驳回')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _statusFilter = value);
+                    _loadRequests(page: 1);
+                  },
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: _loading ? null : () => _loadRequests(page: 1),
+                icon: const Icon(Icons.search),
+                label: const Text('查询'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('当前列表总数：$_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -647,7 +692,13 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _items.isEmpty
-                ? const Center(child: Text('暂无待审批注册申请'))
+                ? Center(
+                    child: Text(
+                      _statusFilter == null
+                          ? '暂无注册申请记录'
+                          : '当前状态下暂无注册申请记录',
+                    ),
+                  )
                 : Card(
                     child: SizedBox.expand(
                       child: Scrollbar(
@@ -664,6 +715,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                               DataColumn(label: Text('用户名')),
                               DataColumn(label: Text('申请时间')),
                               DataColumn(label: Text('申请状态')),
+                              DataColumn(label: Text('驳回原因')),
                               DataColumn(label: Text('操作')),
                             ],
                             rows: _items.map((item) {
@@ -680,6 +732,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                       ),
                                     ),
                                   ),
+                                  DataCell(Text(item.rejectedReason ?? '-')),
                                   DataCell(
                                     Row(
                                       mainAxisSize: MainAxisSize.min,

@@ -64,6 +64,7 @@ class UserService {
     String? keyword,
     String? roleCode,
     int? stageId,
+    bool? isOnline,
     bool? isActive,
     String format = 'csv',
   }) async {
@@ -76,6 +77,9 @@ class UserService {
     }
     if (stageId != null) {
       query['stage_id'] = '$stageId';
+    }
+    if (isOnline != null) {
+      query['is_online'] = '$isOnline';
     }
     if (isActive != null) {
       query['is_active'] = '$isActive';
@@ -289,8 +293,7 @@ class UserService {
   Future<void> approveRegistrationRequest({
     required int requestId,
     required String account,
-    required List<String> roleCodes,
-    required List<String> processCodes,
+    required String roleCode,
     String? password,
     int? stageId,
   }) async {
@@ -299,8 +302,7 @@ class UserService {
     );
     final payload = <String, dynamic>{
       'account': account.trim(),
-      'role_codes': roleCodes,
-      'process_codes': processCodes,
+      'role_code': roleCode,
     };
     if (password != null && password.isNotEmpty) {
       payload['password'] = password;
@@ -336,8 +338,7 @@ class UserService {
   Future<void> createUser({
     required String account,
     required String password,
-    required List<String> roleCodes,
-    required List<String> processCodes,
+    required String roleCode,
     String? remark,
     int? stageId,
     bool isActive = true,
@@ -351,8 +352,7 @@ class UserService {
         'password': password,
         'full_name': account.trim(),
         'remark': remark?.trim(),
-        'role_codes': roleCodes,
-        'process_codes': processCodes,
+        'role_code': roleCode,
         'stage_id': stageId,
         'is_active': isActive,
       }),
@@ -366,8 +366,7 @@ class UserService {
     required int userId,
     String? account,
     String? password,
-    List<String>? roleCodes,
-    List<String>? processCodes,
+    String? roleCode,
     String? remark,
     int? stageId,
     bool? isActive,
@@ -381,11 +380,8 @@ class UserService {
     if (password != null && password.isNotEmpty) {
       payload['password'] = password;
     }
-    if (roleCodes != null) {
-      payload['role_codes'] = roleCodes;
-    }
-    if (processCodes != null) {
-      payload['process_codes'] = processCodes;
+    if (roleCode != null && roleCode.trim().isNotEmpty) {
+      payload['role_code'] = roleCode.trim();
     }
     if (remark != null) {
       payload['remark'] = remark.trim();

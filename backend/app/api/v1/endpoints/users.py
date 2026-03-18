@@ -29,9 +29,7 @@ router = APIRouter()
 def to_user_item(user: User, *, online_user_ids: set[int] | None = None) -> UserItem:
     is_online = user.id in (online_user_ids or set())
     stage_name = user.stage.name if user.stage else None
-    stage_names = sorted(set(process.stage.name for process in user.processes if process.stage))
-    if stage_name and stage_name not in stage_names:
-        stage_names.insert(0, stage_name)
+    primary_role = sorted(user.roles, key=lambda role: role.code)[0] if user.roles else None
     return UserItem(
         id=user.id,
         username=user.username,
@@ -44,11 +42,8 @@ def to_user_item(user: User, *, online_user_ids: set[int] | None = None) -> User
         last_seen_at=user.last_login_at,
         stage_id=user.stage_id,
         stage_name=stage_name,
-        role_codes=sorted(role.code for role in user.roles),
-        role_names=sorted(role.name for role in user.roles),
-        process_codes=sorted(process.code for process in user.processes),
-        process_names=sorted(process.name for process in user.processes),
-        stage_names=stage_names,
+        role_code=primary_role.code if primary_role else None,
+        role_name=primary_role.name if primary_role else None,
         last_login_at=user.last_login_at,
         last_login_ip=user.last_login_ip,
         password_changed_at=user.password_changed_at,
@@ -78,7 +73,7 @@ def _build_csv_export(users: list[User], online_user_ids: set[int]) -> str:
             [
                 user.id,
                 user.username,
-                " / ".join(sorted(role.name for role in user.roles)),
+                next(iter(sorted(role.name for role in user.roles)), "/"),
                 user.stage.name if user.stage else "/",
                 "在线" if user.id in online_user_ids else "离线",
                 "启用" if user.is_active else "停用",
@@ -97,6 +92,7 @@ def _build_excel_export(users: list[User], online_user_ids: set[int]) -> str:
         return ""
     wb = openpyxl.Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "用户列表"
     headers = ["id", "用户名", "角色", "工段", "在线状态", "账号状态", "首次登录需改密", "创建时间", "最近登录时间"]
     ws.append(headers)
@@ -104,7 +100,7 @@ def _build_excel_export(users: list[User], online_user_ids: set[int]) -> str:
         ws.append([
             user.id,
             user.username,
-            " / ".join(sorted(role.name for role in user.roles)),
+            next(iter(sorted(role.name for role in user.roles)), "/"),
             user.stage.name if user.stage else "/",
             "在线" if user.id in online_user_ids else "离线",
             "启用" if user.is_active else "停用",
@@ -153,21 +149,26 @@ def export_users(
     role_code: str | None = Query(default=None),
     stage_id: int | None = Query(default=None, ge=1),
     is_active: bool | None = Query(default=None),
+    is_online: bool | None = Query(default=None),
     format: str = Query(default="csv", pattern="^(csv|excel)$"),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("user.users.export")),
+    permission_user: User = Depends(require_permission("user.users.export")),
 ) -> ApiResponse[UserExportResult]:
-    _, users = list_users(
+    _ = permission_user
+    online_user_ids = list_online_user_ids(db)
+    total, users = list_users(
         db,
         page=1,
         page_size=5000,
         keyword=keyword,
         role_code=role_code,
         stage_id=stage_id,
+        is_online=is_online,
+        online_user_ids=online_user_ids,
         is_active=is_active,
         include_deleted=False,
     )
-    online_user_ids = list_online_user_ids(db)
+    _ = total
     if format == "excel":
         content_base64 = _build_excel_export(users, online_user_ids)
         if not content_base64:
@@ -210,7 +211,11 @@ def create_user_api(
         target_id=str(user.id),
         target_name=user.username,
         operator=current_user,
-        after_data={"username": user.username, "role_codes": [role.code for role in user.roles]},
+        after_data={
+            "username": user.username,
+            "role_code": user.roles[0].code if user.roles else None,
+            "stage_id": user.stage_id,
+        },
         ip_address=request.client.host if request and request.client else None,
         terminal_info=request.headers.get("user-agent") if request else None,
     )
@@ -246,7 +251,7 @@ def update_user_api(
         "username": user.username,
         "full_name": user.full_name,
         "is_active": user.is_active,
-        "role_codes": sorted(role.code for role in user.roles),
+        "role_code": user.roles[0].code if user.roles else None,
         "stage_id": user.stage_id,
     }
     updated, error_message = update_user(
@@ -273,7 +278,7 @@ def update_user_api(
             "username": updated.username,
             "full_name": updated.full_name,
             "is_active": updated.is_active,
-            "role_codes": sorted(role.code for role in updated.roles),
+            "role_code": updated.roles[0].code if updated.roles else None,
             "stage_id": updated.stage_id,
         },
         ip_address=request.client.host if request and request.client else None,

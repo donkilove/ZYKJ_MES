@@ -24,8 +24,9 @@ class OnlineSessionItem(BaseModel):
     session_token_id: str
     user_id: int
     username: str
-    role_codes: list[str] = Field(default_factory=list)
-    role_names: list[str] = Field(default_factory=list)
+    role_code: str | None = None
+    role_name: str | None = None
+    stage_id: int | None = None
     stage_name: str | None = None
     login_time: datetime
     last_active_at: datetime

@@ -70,6 +70,12 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
     return roleType == _roleTypeBuiltin ? '系统内置' : '自定义';
   }
 
+  String _statusLabel(bool enabled) => enabled ? '启用' : '停用';
+
+  Color _statusColor(BuildContext context, bool enabled) {
+    return enabled ? Colors.green : Theme.of(context).colorScheme.error;
+  }
+
   Future<void> _loadRoles({int? page}) async {
     final targetPage = page ?? _page;
     setState(() {
@@ -413,47 +419,110 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
-              : ListView.separated(
+              : _items.isEmpty
+              ? const Center(child: Text('暂无角色数据'))
+              : Padding(
                   padding: const EdgeInsets.all(12),
-                  itemCount: _items.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final role = _items[index];
-                    return Card(
-                      child: ListTile(
-                        title: Text('${role.name} (${role.code})'),
-                        subtitle: Text(
-                          '类型=${_roleTypeLabel(role.roleType)} | '
-                          '内置=${role.isBuiltin ? '是' : '否'} | 启用=${role.isEnabled ? '是' : '否'} | '
-                          '绑定用户=${role.userCount}\n'
-                          '${role.description ?? ''}',
-                        ),
-                        trailing: Wrap(
-                          spacing: 8,
-                          children: [
-                            OutlinedButton(
-                              onPressed: widget.canManage
-                                  ? () => _showRoleDialog(role: role)
-                                  : null,
-                              child: const Text('编辑'),
+                  child: Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: Scrollbar(
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 980),
+                          child: SingleChildScrollView(
+                            child: DataTable(
+                              columnSpacing: 20,
+                              headingRowHeight: 44,
+                              dataRowMinHeight: 60,
+                              dataRowMaxHeight: 84,
+                              columns: const [
+                                DataColumn(label: Text('角色名称')),
+                                DataColumn(label: Text('角色说明')),
+                                DataColumn(label: Text('角色类型')),
+                                DataColumn(label: Text('关联用户数')),
+                                DataColumn(label: Text('状态')),
+                                DataColumn(label: Text('操作')),
+                              ],
+                              rows: _items.map((role) {
+                                final canToggle = widget.canManage && !role.isBuiltin;
+                                final canDelete = widget.canManage && !role.isBuiltin;
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(role.name),
+                                          Text(
+                                            role.code,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        role.description?.trim().isNotEmpty == true
+                                            ? role.description!
+                                            : '-',
+                                      ),
+                                    ),
+                                    DataCell(Text(_roleTypeLabel(role.roleType))),
+                                    DataCell(Text('${role.userCount}')),
+                                    DataCell(
+                                      Text(
+                                        _statusLabel(role.isEnabled),
+                                        style: TextStyle(
+                                          color: _statusColor(
+                                            context,
+                                            role.isEnabled,
+                                          ),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          OutlinedButton(
+                                            onPressed: widget.canManage
+                                                ? () => _showRoleDialog(role: role)
+                                                : null,
+                                            child: const Text('编辑'),
+                                          ),
+                                          OutlinedButton(
+                                            onPressed: canToggle
+                                                ? () => _toggleRole(role)
+                                                : null,
+                                            child: Text(
+                                              role.isEnabled ? '停用' : '启用',
+                                            ),
+                                          ),
+                                          OutlinedButton(
+                                            onPressed: canDelete
+                                                ? () => _deleteRole(role)
+                                                : null,
+                                            child: const Text('删除'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
                             ),
-                            OutlinedButton(
-                              onPressed: widget.canManage && !role.isBuiltin
-                                  ? () => _toggleRole(role)
-                                  : null,
-                              child: Text(role.isEnabled ? '停用' : '启用'),
-                            ),
-                            OutlinedButton(
-                              onPressed: widget.canManage && !role.isBuiltin
-                                  ? () => _deleteRole(role)
-                                  : null,
-                              child: const Text('删除'),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 ),
         ),
         const SizedBox(height: 12),

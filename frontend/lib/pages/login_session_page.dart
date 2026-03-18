@@ -202,6 +202,32 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         '${twoDigits(local.hour)}:${twoDigits(local.minute)}:${twoDigits(local.second)}';
   }
 
+  String _sessionStatusLabel(String status) {
+    switch (status) {
+      case 'active':
+        return '在线';
+      case 'forced_offline':
+        return '已强制下线';
+      case 'expired':
+        return '已过期';
+      default:
+        return status;
+    }
+  }
+
+  Color _sessionStatusColor(BuildContext context, String status) {
+    switch (status) {
+      case 'active':
+        return Colors.green;
+      case 'forced_offline':
+        return Colors.deepOrange;
+      case 'expired':
+        return Theme.of(context).colorScheme.error;
+      default:
+        return Theme.of(context).colorScheme.onSurfaceVariant;
+    }
+  }
+
   Future<void> _forceOfflineSingle(String sessionTokenId) async {
     if (!widget.canManage) {
       return;
@@ -354,22 +380,61 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         Expanded(
           child: _loadingLogs
               ? const Center(child: CircularProgressIndicator())
-              : ListView.builder(
-                  itemCount: _loginLogs.length,
-                  itemBuilder: (context, index) {
-                    final item = _loginLogs[index];
-                    return ListTile(
-                      title: Text(
-                        '${item.username} | ${item.success ? '成功' : '失败'}',
+              : _loginLogs.isEmpty
+              ? const Center(child: Text('暂无登录日志'))
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: Scrollbar(
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 980),
+                          child: SingleChildScrollView(
+                            child: DataTable(
+                              columnSpacing: 20,
+                              headingRowHeight: 44,
+                              dataRowMinHeight: 56,
+                              dataRowMaxHeight: 72,
+                              columns: const [
+                                DataColumn(label: Text('用户名')),
+                                DataColumn(label: Text('结果')),
+                                DataColumn(label: Text('登录时间')),
+                                DataColumn(label: Text('IP 地址')),
+                                DataColumn(label: Text('终端信息')),
+                                DataColumn(label: Text('失败原因')),
+                              ],
+                              rows: _loginLogs.map((item) {
+                                final successColor = item.success
+                                    ? Colors.green
+                                    : Theme.of(context).colorScheme.error;
+                                return DataRow(
+                                  cells: [
+                                    DataCell(Text(item.username)),
+                                    DataCell(
+                                      Text(
+                                        item.success ? '成功' : '失败',
+                                        style: TextStyle(
+                                          color: successColor,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(Text(_formatDateTime(item.loginTime))),
+                                    DataCell(Text(item.ipAddress ?? '-')),
+                                    DataCell(Text(item.terminalInfo ?? '-')),
+                                    DataCell(Text(item.failureReason ?? '-')),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
                       ),
-                      subtitle: Text(
-                        '登录时间=${_formatDateTime(item.loginTime)}\n'
-                        'IP=${item.ipAddress ?? '-'} | 终端=${item.terminalInfo ?? '-'}\n'
-                        '失败原因=${item.failureReason ?? '-'}',
-                      ),
-                      isThreeLine: true,
-                    );
-                  },
+                    ),
+                  ),
                 ),
         ),
         Padding(
@@ -430,44 +495,108 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         Expanded(
           child: _loadingSessions
               ? const Center(child: CircularProgressIndicator())
-              : ListView.builder(
-                  itemCount: _onlineSessions.length,
-                  itemBuilder: (context, index) {
-                    final item = _onlineSessions[index];
-                    return CheckboxListTile(
-                      value: _selectedSessionIds.contains(item.sessionTokenId),
-                      onChanged: widget.canManage
-                          ? (checked) {
-                              setState(() {
-                                if (checked ?? false) {
-                                  _selectedSessionIds.add(item.sessionTokenId);
-                                } else {
-                                  _selectedSessionIds.remove(
-                                    item.sessionTokenId,
-                                  );
-                                }
-                              });
-                            }
-                          : null,
-                      title: Text(
-                        '${item.username}（${item.roleNames.join('、')}）',
+              : _onlineSessions.isEmpty
+              ? const Center(child: Text('暂无在线会话'))
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: Scrollbar(
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 1220),
+                          child: SingleChildScrollView(
+                            child: DataTable(
+                              columnSpacing: 16,
+                              headingRowHeight: 44,
+                              dataRowMinHeight: 60,
+                              dataRowMaxHeight: 76,
+                              columns: const [
+                                DataColumn(label: Text('选择')),
+                                DataColumn(label: Text('用户名')),
+                                DataColumn(label: Text('角色')),
+                                DataColumn(label: Text('工段')),
+                                DataColumn(label: Text('状态')),
+                                DataColumn(label: Text('登录时间')),
+                                DataColumn(label: Text('最后活跃')),
+                                DataColumn(label: Text('IP 地址')),
+                                DataColumn(label: Text('终端信息')),
+                                DataColumn(label: Text('操作')),
+                              ],
+                              rows: _onlineSessions.map((item) {
+                                final checked = _selectedSessionIds.contains(
+                                  item.sessionTokenId,
+                                );
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Checkbox(
+                                        value: checked,
+                                        onChanged: widget.canManage
+                                            ? (value) {
+                                                setState(() {
+                                                  if (value ?? false) {
+                                                    _selectedSessionIds.add(
+                                                      item.sessionTokenId,
+                                                    );
+                                                  } else {
+                                                    _selectedSessionIds.remove(
+                                                      item.sessionTokenId,
+                                                    );
+                                                  }
+                                                });
+                                              }
+                                            : null,
+                                      ),
+                                    ),
+                                    DataCell(Text(item.username)),
+                                    DataCell(
+                                      Text(
+                                        item.roleName?.trim().isNotEmpty == true
+                                            ? item.roleName!
+                                            : '-',
+                                      ),
+                                    ),
+                                    DataCell(Text(item.stageName ?? '-')),
+                                    DataCell(
+                                      Text(
+                                        _sessionStatusLabel(item.status),
+                                        style: TextStyle(
+                                          color: _sessionStatusColor(
+                                            context,
+                                            item.status,
+                                          ),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(Text(_formatDateTime(item.loginTime))),
+                                    DataCell(
+                                      Text(_formatDateTime(item.lastActiveAt)),
+                                    ),
+                                    DataCell(Text(item.ipAddress ?? '-')),
+                                    DataCell(Text(item.terminalInfo ?? '-')),
+                                    DataCell(
+                                      OutlinedButton(
+                                        onPressed: widget.canManage
+                                            ? () => _forceOfflineSingle(
+                                                item.sessionTokenId,
+                                              )
+                                            : null,
+                                        child: const Text('强制下线'),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
                       ),
-                      subtitle: Text(
-                        '工段=${item.stageName ?? '-'} | 状态=${item.status}\n'
-                        '登录时间=${_formatDateTime(item.loginTime)}\n'
-                        '最后活跃=${_formatDateTime(item.lastActiveAt)}\n'
-                        'IP=${item.ipAddress ?? '-'} | 终端=${item.terminalInfo ?? '-'}',
-                      ),
-                      isThreeLine: true,
-                      secondary: IconButton(
-                        onPressed: widget.canManage
-                            ? () => _forceOfflineSingle(item.sessionTokenId)
-                            : null,
-                        icon: const Icon(Icons.power_settings_new_outlined),
-                        tooltip: '强制下线',
-                      ),
-                    );
-                  },
+                    ),
+                  ),
                 ),
         ),
         Padding(

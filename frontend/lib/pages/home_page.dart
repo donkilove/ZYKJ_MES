@@ -143,7 +143,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (currentUser.roleNames.isEmpty)
+                if (currentUser.roleName?.trim().isNotEmpty != true)
                   Text(
                     '暂无角色',
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -156,28 +156,26 @@ class _HomePageState extends State<HomePage> {
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: currentUser.roleNames
-                        .map(
-                          (roleName) => Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.onPrimaryContainer
-                                  .withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              roleName,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onPrimaryContainer,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onPrimaryContainer
+                              .withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          currentUser.roleName!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w600,
                           ),
-                        )
-                        .toList(),
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ),

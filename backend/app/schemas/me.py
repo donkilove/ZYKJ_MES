@@ -7,8 +7,9 @@ class ProfileResult(BaseModel):
     id: int
     username: str
     full_name: str | None = None
-    role_codes: list[str] = Field(default_factory=list)
-    role_names: list[str] = Field(default_factory=list)
+    role_code: str | None = None
+    role_name: str | None = None
+    stage_id: int | None = None
     stage_name: str | None = None
     is_active: bool
     created_at: datetime

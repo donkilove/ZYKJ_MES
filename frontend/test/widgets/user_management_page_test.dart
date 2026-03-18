@@ -92,8 +92,9 @@ class _FakeUserService extends UserService {
       id: 99,
       username: 'admin',
       fullName: '管理员',
-      roleCodes: const ['system_admin'],
-      roleNames: const ['系统管理员'],
+      roleCode: 'system_admin',
+      roleName: '系统管理员',
+      stageId: null,
       stageName: null,
       isActive: true,
       createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
@@ -107,8 +108,7 @@ class _FakeUserService extends UserService {
   Future<void> createUser({
     required String account,
     required String password,
-    required List<String> roleCodes,
-    required List<String> processCodes,
+    required String roleCode,
     String? remark,
     int? stageId,
     bool isActive = true,
@@ -122,8 +122,7 @@ class _FakeUserService extends UserService {
     required int userId,
     String? account,
     String? password,
-    List<String>? roleCodes,
-    List<String>? processCodes,
+    String? roleCode,
     String? remark,
     int? stageId,
     bool? isActive,
@@ -174,9 +173,8 @@ class _FakeCraftService extends CraftService {
 UserItem _buildUser({
   required int id,
   required String username,
-  required List<String> roleCodes,
-  required List<String> roleNames,
-  required List<String> processCodes,
+  required String roleCode,
+  required String roleName,
   int? stageId,
 }) {
   return UserItem(
@@ -191,11 +189,8 @@ UserItem _buildUser({
     lastSeenAt: null,
     stageId: stageId,
     stageName: stageId == null ? null : '装配一段',
-    roleCodes: roleCodes,
-    roleNames: roleNames,
-    processCodes: processCodes,
-    processNames: processCodes,
-    stageNames: stageId == null ? const [] : const ['装配一段'],
+    roleCode: roleCode,
+    roleName: roleName,
     lastLoginAt: null,
     lastLoginIp: null,
     passwordChangedAt: null,
@@ -266,9 +261,8 @@ void main() {
         _buildUser(
           id: 1,
           username: 'op_edit',
-          roleCodes: const ['operator'],
-          roleNames: const ['操作员'],
-          processCodes: const ['10-01'],
+          roleCode: 'operator',
+          roleName: '操作员',
           stageId: 10,
         ),
       ],
@@ -297,15 +291,14 @@ void main() {
     expect(userService.lastUpdateStageId, 10);
   });
 
-  testWidgets('编辑操作员时工序不匹配不会错误回填工段', (tester) async {
+  testWidgets('编辑未配置工段的操作员时提示必须选择工段', (tester) async {
     final userService = _FakeUserService(
       initialUsers: [
         _buildUser(
           id: 2,
           username: 'op_unknown_process',
-          roleCodes: const ['operator'],
-          roleNames: const ['操作员'],
-          processCodes: const ['99-99'],
+          roleCode: 'operator',
+          roleName: '操作员',
           stageId: null,
         ),
       ],

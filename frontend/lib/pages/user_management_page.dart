@@ -39,16 +39,7 @@ class UserManagementPage extends StatefulWidget {
 
 class _UserManagementPageState extends State<UserManagementPage> {
   static const String _roleSystemAdmin = 'system_admin';
-  static const String _roleProductionAdmin = 'production_admin';
-  static const String _roleQualityAdmin = 'quality_admin';
   static const String _roleOperator = 'operator';
-
-  static const List<String> _rolePriority = [
-    _roleSystemAdmin,
-    _roleProductionAdmin,
-    _roleQualityAdmin,
-    _roleOperator,
-  ];
   static const int _userPageSize = 50;
 
   late final UserService _userService;
@@ -69,13 +60,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
   String _message = '';
   List<UserItem> _users = const [];
   List<RoleItem> _roles = const [];
-  List<ProcessItem> _processes = const [];
   List<CraftStageItem> _stages = const [];
   int _total = 0;
   int _userPage = 1;
-  List<String> _myRoleCodes = const [];
+  String? _myRoleCode;
 
-  bool _isCurrentUserSystemAdmin() => _myRoleCodes.contains(_roleSystemAdmin);
+  bool _isCurrentUserSystemAdmin() => _myRoleCode == _roleSystemAdmin;
 
   int get _userTotalPages {
     if (_total <= 0) {
@@ -125,19 +115,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
     ).showSnackBar(const SnackBar(content: Text('当前账号没有操作权限')));
   }
 
-  String? _pickPreferredRoleCode(List<String> roleCodes) {
-    for (final code in _rolePriority) {
-      if (roleCodes.contains(code)) {
-        return code;
-      }
-    }
-    if (roleCodes.isNotEmpty) {
-      return roleCodes.first;
-    }
-    return null;
-  }
-
   bool _isOperator(String? roleCode) => roleCode == _roleOperator;
+
+  List<RoleItem> _assignableRoles({String? includeRoleCode}) {
+    final items = _roles
+        .where((role) => role.isEnabled || role.code == includeRoleCode)
+        .toList()
+      ..sort((a, b) => a.id.compareTo(b.id));
+    return items;
+  }
 
   List<XTypeGroup> _exportTypeGroups(String format) {
     switch (format) {
@@ -151,25 +137,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
           XTypeGroup(label: 'CSV', extensions: ['csv']),
         ];
     }
-  }
-
-  List<String> _getProcessCodesByStage(int stageId) {
-    return _processes
-        .where((p) => p.stageId == stageId)
-        .map((p) => p.code)
-        .toList();
-  }
-
-  int? _getStageIdFromProcessCodes(Set<String> processCodes) {
-    if (processCodes.isEmpty) {
-      return null;
-    }
-    for (final process in _processes) {
-      if (processCodes.contains(process.code)) {
-        return process.stageId;
-      }
-    }
-    return null;
   }
 
   void _startOnlineStatusRefresh() {
@@ -201,7 +168,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
     try {
       final result = await Future.wait<dynamic>([
         _userService.listAllRoles(),
-        _userService.listProcesses(),
         _craftService.listStages(pageSize: 500, enabled: true),
         _userService.listUsers(
           page: targetPage,
@@ -215,10 +181,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
         _userService.getMyProfile(),
       ]);
       final roles = result[0] as RoleListResult;
-      final processes = result[1] as ProcessListResult;
-      final stages = result[2] as CraftStageListResult;
-      final users = result[3] as UserListResult;
-      final myProfile = result[4] as ProfileResult;
+      final stages = result[1] as CraftStageListResult;
+      final users = result[2] as UserListResult;
+      final myProfile = result[3] as ProfileResult;
 
       if (!mounted) {
         return;
@@ -231,12 +196,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
           : targetPage;
       setState(() {
         _roles = roles.items;
-        _processes = processes.items;
         _stages = stages.items;
         _users = users.items;
         _total = users.total;
         _userPage = resolvedPage;
-        _myRoleCodes = myProfile.roleCodes;
+        _myRoleCode = myProfile.roleCode;
       });
       if (resolvedPage != targetPage) {
         await _loadInitialData(page: resolvedPage);
@@ -328,6 +292,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
       _showNoPermission();
       return;
     }
+    final assignableRoles = _assignableRoles();
+    if (assignableRoles.isEmpty) {
+      setState(() {
+        _message = '当前没有可分配的启用角色。';
+      });
+      return;
+    }
     final accountController = TextEditingController();
     final passwordController = TextEditingController();
     final remarkController = TextEditingController();
@@ -335,7 +306,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final formKey = GlobalKey<FormState>();
     String? selectedRoleCode;
     int? selectedStageId;
-    Set<String> selectedProcessCodes = <String>{};
 
     final created = await showLockedFormDialog<bool>(
       context: context,
@@ -428,17 +398,18 @@ class _UserManagementPageState extends State<UserManagementPage> {
                               selectedRoleCode = value;
                               if (!_isOperator(selectedRoleCode)) {
                                 selectedStageId = null;
-                                selectedProcessCodes = <String>{};
                               }
                             });
                           },
                           child: Column(
-                            children: _roles.map((role) {
+                            children: assignableRoles.map((role) {
                               return RadioListTile<String>(
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
                                 title: Text(role.name),
-                                subtitle: Text(role.code),
+                                subtitle: Text(
+                                  '${role.code} · ${role.roleType == 'builtin' ? '系统内置' : '自定义'}',
+                                ),
                                 value: role.code,
                               );
                             }).toList(),
@@ -475,10 +446,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                       }
                                       setDialogState(() {
                                         selectedStageId = value;
-                                        selectedProcessCodes =
-                                            _getProcessCodesByStage(
-                                              value,
-                                            ).toSet();
                                       });
                                     },
                                     child: Column(
@@ -528,14 +495,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       return;
                     }
 
-                    final orderedProcessCodes = selectedProcessCodes.toList()
-                      ..sort();
                     try {
                       await _userService.createUser(
                         account: accountController.text.trim(),
                         password: passwordController.text,
-                        roleCodes: [selectedRoleCode!],
-                        processCodes: orderedProcessCodes,
+                        roleCode: selectedRoleCode!,
                         stageId: selectedStageId,
                         remark: remarkController.text.trim().isEmpty
                             ? null
@@ -578,20 +542,20 @@ class _UserManagementPageState extends State<UserManagementPage> {
       _showNoPermission();
       return;
     }
+    final assignableRoles = _assignableRoles(includeRoleCode: user.roleCode);
+    if (assignableRoles.isEmpty) {
+      setState(() {
+        _message = '当前没有可分配的启用角色。';
+      });
+      return;
+    }
     final accountController = TextEditingController(text: user.username);
     final passwordController = TextEditingController();
     final remarkController = TextEditingController(text: user.remark ?? '');
     final formKey = GlobalKey<FormState>();
-    final hasLegacyMultiRoles = user.roleCodes.length > 1;
     final canEditAccount = _isCurrentUserSystemAdmin();
-    String? selectedRoleCode = _pickPreferredRoleCode(user.roleCodes);
-    int? selectedStageId = _isOperator(selectedRoleCode)
-        ? (user.stageId ??
-              _getStageIdFromProcessCodes(user.processCodes.toSet()))
-        : null;
-    Set<String> selectedProcessCodes = _isOperator(selectedRoleCode)
-        ? user.processCodes.toSet()
-        : <String>{};
+    String? selectedRoleCode = user.roleCode;
+    int? selectedStageId = _isOperator(selectedRoleCode) ? user.stageId : null;
 
     final updated = await showLockedFormDialog<bool>(
       context: context,
@@ -605,156 +569,145 @@ class _UserManagementPageState extends State<UserManagementPage> {
               content: SizedBox(
                 width: 520,
                 child: SingleChildScrollView(
-                  child: Form(
-                    key: formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (hasLegacyMultiRoles)
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 10),
-                            child: Text(
-                              '检测到该用户存在历史多角色分配数据，保存后将收敛为单角色规则。',
-                              style: TextStyle(color: Colors.orange),
+                    child: Form(
+                      key: formKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TextFormField(
+                            controller: accountController,
+                            readOnly: !canEditAccount,
+                            decoration: InputDecoration(
+                              labelText: '账号（用户名与姓名统一）',
+                              helperText: canEditAccount ? null : '仅系统管理员可修改账号',
                             ),
-                          ),
-                        TextFormField(
-                          controller: accountController,
-                          readOnly: !canEditAccount,
-                          decoration: InputDecoration(
-                            labelText: '账号（用户名与姓名统一）',
-                            helperText: canEditAccount ? null : '仅系统管理员可修改账号',
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入账号';
-                            }
-                            if (value.trim().length < 2) {
-                              return '账号至少 2 个字符';
-                            }
-                            if (value.trim().length > 10) {
-                              return '账号最多 10 个字符';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: passwordController,
-                          decoration: const InputDecoration(
-                            labelText: '新密码（留空不修改）',
-                          ),
-                          validator: (value) {
-                            if (value != null &&
-                                value.isNotEmpty &&
-                                value.length < 6) {
-                              return '密码至少 6 个字符';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: remarkController,
-                          decoration: const InputDecoration(
-                            labelText: '备注（可选）',
-                          ),
-                          maxLines: 2,
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          '角色分配（单选）',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        RadioGroup<String>(
-                          groupValue: selectedRoleCode,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              selectedRoleCode = value;
-                              if (!_isOperator(selectedRoleCode)) {
-                                selectedStageId = null;
-                                selectedProcessCodes = <String>{};
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return '请输入账号';
                               }
-                            });
-                          },
-                          child: Column(
-                            children: _roles.map((role) {
-                              return RadioListTile<String>(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(role.name),
-                                subtitle: Text(role.code),
-                                value: role.code,
-                              );
-                            }).toList(),
+                              if (value.trim().length < 2) {
+                                return '账号至少 2 个字符';
+                              }
+                              if (value.trim().length > 10) {
+                                return '账号最多 10 个字符';
+                              }
+                              return null;
+                            },
                           ),
-                        ),
-                        if (selectedRoleCode == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Text(
-                              '请选择一个角色',
-                              style: TextStyle(color: Colors.red),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: passwordController,
+                            decoration: const InputDecoration(
+                              labelText: '新密码（留空不修改）',
                             ),
+                            validator: (value) {
+                              if (value != null &&
+                                  value.isNotEmpty &&
+                                  value.length < 6) {
+                                return '密码至少 6 个字符';
+                              }
+                              return null;
+                            },
                           ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '工段分配（单选，仅操作员角色可选）',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        Opacity(
-                          opacity: isOperatorSelected ? 1 : 0.5,
-                          child: IgnorePointer(
-                            ignoring: !isOperatorSelected,
-                            child: _stages.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text('暂无可分配工段'),
-                                  )
-                                : RadioGroup<int>(
-                                    groupValue: selectedStageId,
-                                    onChanged: (value) {
-                                      if (value == null) {
-                                        return;
-                                      }
-                                      setDialogState(() {
-                                        selectedStageId = value;
-                                        selectedProcessCodes =
-                                            _getProcessCodesByStage(
-                                              value,
-                                            ).toSet();
-                                      });
-                                    },
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: _stages.map((stage) {
-                                        return RadioListTile<int>(
-                                          dense: true,
-                                          contentPadding: EdgeInsets.zero,
-                                          title: Text(stage.name),
-                                          subtitle: Text(stage.code),
-                                          value: stage.id,
-                                        );
-                                      }).toList(),
-                                    ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: remarkController,
+                            decoration: const InputDecoration(
+                              labelText: '备注（可选）',
+                            ),
+                            maxLines: 2,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            '角色分配（单选）',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          RadioGroup<String>(
+                            groupValue: selectedRoleCode,
+                            onChanged: (value) {
+                              setDialogState(() {
+                                selectedRoleCode = value;
+                                if (!_isOperator(selectedRoleCode)) {
+                                  selectedStageId = null;
+                                }
+                              });
+                            },
+                            child: Column(
+                              children: assignableRoles.map((role) {
+                                return RadioListTile<String>(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(role.name),
+                                  subtitle: Text(
+                                    '${role.code} · ${role.roleType == 'builtin' ? '系统内置' : '自定义'}',
                                   ),
-                          ),
-                        ),
-                        if (isOperatorSelected && selectedStageId == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Text(
-                              '操作员角色必须选择一个工段',
-                              style: TextStyle(color: Colors.red),
+                                  value: role.code,
+                                );
+                              }).toList(),
                             ),
                           ),
-                      ],
+                          if (selectedRoleCode == null)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Text(
+                                '请选择一个角色',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            '工段分配（单选，仅操作员角色可选）',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          Opacity(
+                            opacity: isOperatorSelected ? 1 : 0.5,
+                            child: IgnorePointer(
+                              ignoring: !isOperatorSelected,
+                              child: _stages.isEmpty
+                                  ? const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 8),
+                                      child: Text('暂无可分配工段'),
+                                    )
+                                  : RadioGroup<int>(
+                                      groupValue: selectedStageId,
+                                      onChanged: (value) {
+                                        if (value == null) {
+                                          return;
+                                        }
+                                        setDialogState(() {
+                                          selectedStageId = value;
+                                        });
+                                      },
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: _stages.map((stage) {
+                                          return RadioListTile<int>(
+                                            dense: true,
+                                            contentPadding: EdgeInsets.zero,
+                                            title: Text(stage.name),
+                                            subtitle: Text(stage.code),
+                                            value: stage.id,
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          if (isOperatorSelected && selectedStageId == null)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Text(
+                                '操作员角色必须选择一个工段',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
                 ),
               ),
               actions: [
@@ -775,8 +728,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       return;
                     }
 
-                    final orderedProcessCodes = selectedProcessCodes.toList()
-                      ..sort();
                     try {
                       await _userService.updateUser(
                         userId: user.id,
@@ -786,8 +737,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         password: passwordController.text.trim().isEmpty
                             ? null
                             : passwordController.text.trim(),
-                        roleCodes: [selectedRoleCode!],
-                        processCodes: orderedProcessCodes,
+                        roleCode: selectedRoleCode!,
                         stageId: selectedStageId,
                         remark: remarkController.text.trim().isEmpty
                             ? null
@@ -830,7 +780,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
       builder: (context) {
         return AlertDialog(
           title: const Text('删除用户'),
-          content: Text('确认删除用户“${user.username}”吗？此操作不可恢复。'),
+          content: Text(
+            '确认逻辑删除用户“${user.username}”吗？删除后账号将被停用，并从常规列表中隐藏，且不可再登录。',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -854,7 +806,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('用户 ${user.username} 已删除')));
+        ).showSnackBar(
+          SnackBar(content: Text('用户 ${user.username} 已逻辑删除并停用')),
+        );
       }
       await _loadUsers();
     } catch (error) {
@@ -1004,6 +958,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
             : _keywordController.text.trim(),
         roleCode: _filterRoleCode,
         stageId: _filterStageId,
+        isOnline: _filterIsOnline,
         isActive: _filterIsActive,
         format: format,
       );
@@ -1308,16 +1263,16 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                   DataCell(Text(user.username)),
                                   DataCell(
                                     Text(
-                                      user.roleNames.isEmpty
-                                          ? '-'
-                                          : user.roleNames.join('、'),
+                                      user.roleName?.trim().isNotEmpty == true
+                                          ? user.roleName!
+                                          : '-',
                                     ),
                                   ),
                                   DataCell(
                                     Text(
-                                      user.stageNames.isEmpty
-                                          ? '/'
-                                          : user.stageNames.join('、'),
+                                      user.stageName?.trim().isNotEmpty == true
+                                          ? user.stageName!
+                                          : '/',
                                     ),
                                   ),
                                   DataCell(
