@@ -10,7 +10,7 @@ class CraftSystemMasterTemplateRevisionStep(Base, TimestampMixin):
         UniqueConstraint(
             "revision_id",
             "step_order",
-            name="uq_sys_craft_system_master_template_revision_step_revision_id_step_order",
+            name="uq_sys_craft_smtr_step_revision_id_step_order",
         ),
     )
 

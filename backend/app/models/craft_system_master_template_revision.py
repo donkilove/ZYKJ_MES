@@ -10,7 +10,7 @@ class CraftSystemMasterTemplateRevision(Base, TimestampMixin):
         UniqueConstraint(
             "template_id",
             "version",
-            name="uq_sys_craft_system_master_template_revision_template_id_version",
+            name="uq_sys_craft_smtr_template_id_version",
         ),
     )
 

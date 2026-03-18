@@ -11,7 +11,7 @@ class ProductProcessTemplate(Base, TimestampMixin):
             "product_id",
             "template_name",
             "version",
-            name="uq_mes_product_process_template_product_id_template_name_version",
+            name="uq_mes_pp_template_pid_tname_ver",
         ),
     )
 

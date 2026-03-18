@@ -33,7 +33,7 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "template_id",
             "version",
-            name="uq_sys_craft_system_master_template_revision_template_id_version",
+            name="uq_sys_craft_smtr_template_id_version",
         ),
     )
     op.create_index(
@@ -87,7 +87,7 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "revision_id",
             "step_order",
-            name="uq_sys_craft_system_master_template_revision_step_revision_id_step_order",
+            name="uq_sys_craft_smtr_step_revision_id_step_order",
         ),
     )
     op.create_index(
