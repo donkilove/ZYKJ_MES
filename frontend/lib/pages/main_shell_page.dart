@@ -128,6 +128,8 @@ class _MainShellPageState extends State<MainShellPage>
 
   int _unreadCount = 0;
 
+  String? _preferredTabCode;
+
   @override
   void initState() {
     super.initState();
@@ -533,6 +535,7 @@ class _MainShellPageState extends State<MainShellPage>
           onNavigateToPage: (pageCode) {
             setState(() {
               _selectedPageCode = pageCode;
+              _preferredTabCode = null;
             });
           },
         );
@@ -546,6 +549,8 @@ class _MainShellPageState extends State<MainShellPage>
           visibleTabCodes: _visibleUserTabCodes(),
 
           capabilityCodes: _capabilityCodesForModule('user'),
+
+          preferredTabCode: _selectedPageCode == _userPageCode ? _preferredTabCode : null,
 
           onVisibilityConfigSaved: () {
             _handleVisibilityConfigSaved();
@@ -561,6 +566,8 @@ class _MainShellPageState extends State<MainShellPage>
           visibleTabCodes: _visibleProductTabCodes(),
 
           capabilityCodes: _capabilityCodesForModule('product'),
+
+          preferredTabCode: _selectedPageCode == _productPageCode ? _preferredTabCode : null,
         );
 
       case _equipmentPageCode:
@@ -572,6 +579,8 @@ class _MainShellPageState extends State<MainShellPage>
           visibleTabCodes: _visibleEquipmentTabCodes(),
 
           capabilityCodes: _capabilityCodesForModule('equipment'),
+
+          preferredTabCode: _selectedPageCode == _equipmentPageCode ? _preferredTabCode : null,
         );
 
       case _productionPageCode:
@@ -583,6 +592,8 @@ class _MainShellPageState extends State<MainShellPage>
           visibleTabCodes: _visibleProductionTabCodes(),
 
           capabilityCodes: _capabilityCodesForModule('production'),
+
+          preferredTabCode: _selectedPageCode == _productionPageCode ? _preferredTabCode : null,
         );
 
       case _qualityPageCode:
@@ -594,6 +605,8 @@ class _MainShellPageState extends State<MainShellPage>
           visibleTabCodes: _visibleQualityTabCodes(),
 
           capabilityCodes: _capabilityCodesForModule('quality'),
+
+          preferredTabCode: _selectedPageCode == _qualityPageCode ? _preferredTabCode : null,
         );
 
       case _craftPageCode:
@@ -605,8 +618,12 @@ class _MainShellPageState extends State<MainShellPage>
           visibleTabCodes: _visibleCraftTabCodes(),
 
           capabilityCodes: _capabilityCodesForModule('craft'),
+          preferredTabCode: _selectedPageCode == _craftPageCode ? _preferredTabCode : null,
           onNavigateToPage: (pageCode) {
-            setState(() => _selectedPageCode = pageCode);
+            setState(() {
+              _selectedPageCode = pageCode;
+              _preferredTabCode = null;
+            });
           },
         );
 
@@ -619,14 +636,24 @@ class _MainShellPageState extends State<MainShellPage>
           },
           onNavigateToPage: (pageCode, {tabCode}) {
             if (!mounted) return;
-            final hasAccess = _menus.any((m) => m.code == pageCode);
+            var resolvedPageCode = pageCode;
+            var resolvedTabCode = tabCode;
+            final catalogItem = _catalog.where((item) => item.code == pageCode).firstOrNull;
+            if (catalogItem != null && catalogItem.pageType == 'tab') {
+              resolvedPageCode = catalogItem.parentCode ?? pageCode;
+              resolvedTabCode ??= pageCode;
+            }
+            final hasAccess = _menus.any((m) => m.code == resolvedPageCode);
             if (!hasAccess) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('您没有访问该页面的权限')),
               );
               return;
             }
-            setState(() => _selectedPageCode = pageCode);
+            setState(() {
+              _selectedPageCode = resolvedPageCode;
+              _preferredTabCode = resolvedTabCode;
+            });
           },
         );
 
@@ -836,6 +863,7 @@ class _MainShellPageState extends State<MainShellPage>
 
                             setState(() {
                               _selectedPageCode = menu.code;
+                              _preferredTabCode = null;
                             });
                           },
                         );

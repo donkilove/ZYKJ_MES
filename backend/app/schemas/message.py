@@ -35,6 +35,17 @@ class MessageListResult(BaseModel):
     page_size: int
 
 
+class MessageSummaryResult(BaseModel):
+    total_count: int
+    unread_count: int
+    todo_unread_count: int
+    urgent_unread_count: int
+
+
+class MessageBatchReadRequest(BaseModel):
+    message_ids: list[int]
+
+
 class UnreadCountResult(BaseModel):
     unread_count: int
 

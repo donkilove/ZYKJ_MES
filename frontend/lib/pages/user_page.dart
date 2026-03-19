@@ -27,6 +27,7 @@ class UserPage extends StatefulWidget {
     required this.onLogout,
     required this.visibleTabCodes,
     required this.capabilityCodes,
+    this.preferredTabCode,
     this.onVisibilityConfigSaved,
   });
 
@@ -34,6 +35,7 @@ class UserPage extends StatefulWidget {
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
+  final String? preferredTabCode;
   final VoidCallback? onVisibilityConfigSaved;
 
   @override
@@ -42,6 +44,18 @@ class UserPage extends StatefulWidget {
 
 class _UserPageState extends State<UserPage> {
   int _currentTabIndex = 0;
+
+  @override
+  void didUpdateWidget(covariant UserPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.preferredTabCode != oldWidget.preferredTabCode) {
+      final tabs = _buildTabs();
+      final preferredIndex = tabs.indexWhere((item) => item.code == widget.preferredTabCode);
+      if (preferredIndex >= 0) {
+        setState(() => _currentTabIndex = preferredIndex);
+      }
+    }
+  }
 
   bool _hasPermission(String code) => widget.capabilityCodes.contains(code);
 
@@ -203,6 +217,10 @@ class _UserPageState extends State<UserPage> {
     final tabs = _buildTabs();
     if (tabs.isEmpty) {
       return const Center(child: Text('当前账号没有可访问的用户模块页面'));
+    }
+    final preferredIndex = tabs.indexWhere((item) => item.code == widget.preferredTabCode);
+    if (preferredIndex >= 0 && preferredIndex != _currentTabIndex) {
+      _currentTabIndex = preferredIndex;
     }
 
     return Column(

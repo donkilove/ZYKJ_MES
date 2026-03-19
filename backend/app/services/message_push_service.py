@@ -27,3 +27,21 @@ async def push_message_created(user_id: int, message_id: int, unread_count: int)
         "occurred_at": datetime.now(UTC).isoformat(),
     }
     await message_connection_manager.push_to_user(user_id, payload)
+
+
+async def push_message_read_state_changed(
+    user_id: int,
+    *,
+    message_id: int | None,
+    unread_count: int,
+    is_read: bool,
+) -> None:
+    payload = {
+        "event": "message_read_state_changed",
+        "user_id": user_id,
+        "message_id": message_id,
+        "unread_count": unread_count,
+        "is_read": is_read,
+        "occurred_at": datetime.now(UTC).isoformat(),
+    }
+    await message_connection_manager.push_to_user(user_id, payload)

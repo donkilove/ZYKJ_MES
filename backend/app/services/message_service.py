@@ -49,6 +49,8 @@ def list_messages(
     source_module: str | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
+    todo_only: bool = False,
+    active_only: bool = True,
 ) -> tuple[list[MessageItem], int]:
     """查询当前用户的消息列表，返回 (items, total)"""
     base_stmt = (
@@ -79,6 +81,10 @@ def list_messages(
         base_stmt = base_stmt.where(Message.published_at >= start_time)
     if end_time:
         base_stmt = base_stmt.where(Message.published_at <= end_time)
+    if todo_only:
+        base_stmt = base_stmt.where(Message.message_type == "todo")
+    if active_only:
+        base_stmt = base_stmt.where(Message.status == "active")
 
     count_stmt = select(func.count()).select_from(base_stmt.subquery())
     total: int = db.execute(count_stmt).scalar_one()
@@ -98,6 +104,37 @@ def list_messages(
     rows = db.execute(data_stmt).all()
     items = [_to_item(msg, recipient) for msg, recipient in rows]
     return items, total
+
+
+def get_message_summary(db: Session, *, user_id: int) -> dict[str, int]:
+    base_stmt = (
+        select(Message, MessageRecipient)
+        .join(MessageRecipient, MessageRecipient.message_id == Message.id)
+        .where(
+            MessageRecipient.recipient_user_id == user_id,
+            MessageRecipient.is_deleted.is_(False),
+            Message.status == "active",
+        )
+    )
+    rows = db.execute(base_stmt).all()
+    total_count = len(rows)
+    unread_count = 0
+    todo_unread_count = 0
+    urgent_unread_count = 0
+    for msg, recipient in rows:
+        if recipient.is_read:
+            continue
+        unread_count += 1
+        if msg.message_type == "todo":
+            todo_unread_count += 1
+        if msg.priority == "urgent":
+            urgent_unread_count += 1
+    return {
+        "total_count": total_count,
+        "unread_count": unread_count,
+        "todo_unread_count": todo_unread_count,
+        "urgent_unread_count": urgent_unread_count,
+    }
 
 
 def get_unread_count(db: Session, *, user_id: int) -> int:
@@ -145,6 +182,26 @@ def mark_all_read(db: Session, *, user_id: int) -> int:
     for r in recipients:
         r.is_read = True
         r.read_at = now
+        count += 1
+    return count
+
+
+def mark_messages_read_batch(db: Session, *, user_id: int, message_ids: list[int]) -> int:
+    normalized_ids = sorted({int(value) for value in message_ids if int(value) > 0})
+    if not normalized_ids:
+        return 0
+    stmt = select(MessageRecipient).where(
+        MessageRecipient.recipient_user_id == user_id,
+        MessageRecipient.message_id.in_(normalized_ids),
+        MessageRecipient.is_read.is_(False),
+        MessageRecipient.is_deleted.is_(False),
+    )
+    recipients = db.execute(stmt).scalars().all()
+    now = datetime.now(UTC)
+    count = 0
+    for recipient in recipients:
+        recipient.is_read = True
+        recipient.read_at = now
         count += 1
     return count
 

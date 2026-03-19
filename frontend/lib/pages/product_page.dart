@@ -29,6 +29,7 @@ class ProductPage extends StatefulWidget {
     required this.onLogout,
     required this.visibleTabCodes,
     required this.capabilityCodes,
+    this.preferredTabCode,
     this.productVersionService,
   });
 
@@ -36,6 +37,7 @@ class ProductPage extends StatefulWidget {
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
+  final String? preferredTabCode;
   final ProductService? productVersionService;
 
   @override
@@ -54,7 +56,7 @@ class _ProductPageState extends State<ProductPage>
   void initState() {
     super.initState();
     _orderedVisibleTabCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
-    _rebuildTabController();
+    _rebuildTabController(preferredCode: widget.preferredTabCode);
   }
 
   @override
@@ -65,6 +67,8 @@ class _ProductPageState extends State<ProductPage>
       final selectedCode = _currentSelectedTabCode();
       _orderedVisibleTabCodes = updatedCodes;
       _rebuildTabController(preferredCode: selectedCode);
+    } else if (widget.preferredTabCode != oldWidget.preferredTabCode) {
+      _rebuildTabController(preferredCode: widget.preferredTabCode);
     }
   }
 

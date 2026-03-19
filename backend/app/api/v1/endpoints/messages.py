@@ -11,13 +11,15 @@ from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.message import MessageItem, MessageListResult, UnreadCountResult
+from app.schemas.message import MessageBatchReadRequest, MessageListResult, MessageSummaryResult, UnreadCountResult
 from app.services.audit_service import write_audit_log
 from app.services.message_connection_manager import message_connection_manager
 from app.services.message_service import (
+    get_message_summary,
     get_unread_count,
     list_messages,
     mark_all_read,
+    mark_messages_read_batch,
     mark_message_read,
 )
 from app.services.user_service import get_user_by_id
@@ -36,6 +38,15 @@ def api_unread_count(
     return success_response(UnreadCountResult(unread_count=count))
 
 
+@router.get("/summary", response_model=ApiResponse[MessageSummaryResult])
+def api_message_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("message.messages.unread_count")),
+) -> ApiResponse[MessageSummaryResult]:
+    payload = get_message_summary(db, user_id=current_user.id)
+    return success_response(MessageSummaryResult(**payload))
+
+
 @router.get("", response_model=ApiResponse[MessageListResult])
 def api_list_messages(
     page: int = Query(1, ge=1),
@@ -47,6 +58,7 @@ def api_list_messages(
     source_module: str | None = Query(None),
     start_time: datetime | None = Query(None),
     end_time: datetime | None = Query(None),
+    todo_only: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("message.messages.list")),
 ) -> ApiResponse[MessageListResult]:
@@ -62,6 +74,7 @@ def api_list_messages(
         source_module=source_module,
         start_time=start_time,
         end_time=end_time,
+        todo_only=todo_only,
     )
     return success_response(
         MessageListResult(items=items, total=total, page=page, page_size=page_size)
@@ -86,6 +99,23 @@ def api_mark_read(
         operator=current_user,
     )
     db.commit()
+    unread_count = get_unread_count(db, user_id=current_user.id)
+    try:
+        import asyncio
+
+        from app.services.message_push_service import push_message_read_state_changed
+
+        loop = asyncio.get_running_loop()
+        loop.create_task(
+            push_message_read_state_changed(
+                current_user.id,
+                message_id=message_id,
+                unread_count=unread_count,
+                is_read=True,
+            )
+        )
+    except RuntimeError:
+        pass
     return success_response({})
 
 
@@ -104,6 +134,63 @@ def api_mark_all_read(
         remark=f"共标记 {count} 条",
     )
     db.commit()
+    unread_count = get_unread_count(db, user_id=current_user.id)
+    try:
+        import asyncio
+
+        from app.services.message_push_service import push_message_read_state_changed
+
+        loop = asyncio.get_running_loop()
+        loop.create_task(
+            push_message_read_state_changed(
+                current_user.id,
+                message_id=None,
+                unread_count=unread_count,
+                is_read=True,
+            )
+        )
+    except RuntimeError:
+        pass
+    return success_response({"updated": count})
+
+
+@router.post("/read-batch", response_model=ApiResponse[dict])
+def api_mark_batch_read(
+    payload: MessageBatchReadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("message.messages.read_all")),
+) -> ApiResponse[dict]:
+    count = mark_messages_read_batch(
+        db,
+        user_id=current_user.id,
+        message_ids=payload.message_ids,
+    )
+    write_audit_log(
+        db,
+        action_code="message.mark_batch_read",
+        action_name="批量标记消息已读",
+        target_type="message",
+        operator=current_user,
+        remark=f"共标记 {count} 条",
+    )
+    db.commit()
+    unread_count = get_unread_count(db, user_id=current_user.id)
+    try:
+        import asyncio
+
+        from app.services.message_push_service import push_message_read_state_changed
+
+        loop = asyncio.get_running_loop()
+        loop.create_task(
+            push_message_read_state_changed(
+                current_user.id,
+                message_id=None,
+                unread_count=unread_count,
+                is_read=True,
+            )
+        )
+    except RuntimeError:
+        pass
     return success_response({"updated": count})
 
 

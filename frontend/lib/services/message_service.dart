@@ -27,6 +27,14 @@ class MessageService {
     return (data['unread_count'] as int?) ?? 0;
   }
 
+  Future<MessageSummaryResult> getSummary() async {
+    final uri = Uri.parse('$_base/summary');
+    final resp = await http.get(uri, headers: _headers);
+    _checkStatus(resp);
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    return MessageSummaryResult.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
   Future<MessageListResult> listMessages({
     int page = 1,
     int pageSize = 20,
@@ -37,6 +45,7 @@ class MessageService {
     String? sourceModule,
     DateTime? startTime,
     DateTime? endTime,
+    bool todoOnly = false,
   }) async {
     final params = <String, String>{
       'page': '$page',
@@ -48,6 +57,7 @@ class MessageService {
       if (sourceModule != null && sourceModule.isNotEmpty) 'source_module': sourceModule,
       if (startTime != null) 'start_time': startTime.toUtc().toIso8601String(),
       if (endTime != null) 'end_time': endTime.toUtc().toIso8601String(),
+      if (todoOnly) 'todo_only': 'true',
     };
     final uri = Uri.parse(_base).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
@@ -66,6 +76,19 @@ class MessageService {
     final uri = Uri.parse('$_base/read-all');
     final resp = await http.post(uri, headers: _headers);
     _checkStatus(resp);
+  }
+
+  Future<int> markBatchRead(List<int> messageIds) async {
+    final uri = Uri.parse('$_base/read-batch');
+    final resp = await http.post(
+      uri,
+      headers: _headers,
+      body: jsonEncode({'message_ids': messageIds}),
+    );
+    _checkStatus(resp);
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return (data['updated'] as int?) ?? 0;
   }
 
   void _checkStatus(http.Response resp) {

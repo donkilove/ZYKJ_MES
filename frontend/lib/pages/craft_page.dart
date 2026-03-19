@@ -27,6 +27,7 @@ class CraftPage extends StatefulWidget {
     required this.onLogout,
     required this.visibleTabCodes,
     required this.capabilityCodes,
+    this.preferredTabCode,
     this.onNavigateToPage,
   });
 
@@ -34,6 +35,7 @@ class CraftPage extends StatefulWidget {
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
+  final String? preferredTabCode;
   final void Function(String pageCode)? onNavigateToPage;
 
   @override
@@ -49,7 +51,7 @@ class _CraftPageState extends State<CraftPage>
   void initState() {
     super.initState();
     _orderedVisibleTabCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
-    _rebuildTabController();
+    _rebuildTabController(preferredCode: widget.preferredTabCode);
   }
 
   @override
@@ -60,6 +62,8 @@ class _CraftPageState extends State<CraftPage>
       final selectedCode = _currentSelectedTabCode();
       _orderedVisibleTabCodes = updatedCodes;
       _rebuildTabController(preferredCode: selectedCode);
+    } else if (widget.preferredTabCode != oldWidget.preferredTabCode) {
+      _rebuildTabController(preferredCode: widget.preferredTabCode);
     }
   }
 

@@ -14,12 +14,14 @@ class MessageCenterPage extends StatefulWidget {
     required this.onLogout,
     this.onUnreadCountChanged,
     this.onNavigateToPage,
+    this.service,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final void Function(int count)? onUnreadCountChanged;
   final void Function(String pageCode, {String? tabCode})? onNavigateToPage;
+  final MessageService? service;
 
   @override
   State<MessageCenterPage> createState() => _MessageCenterPageState();
@@ -27,10 +29,12 @@ class MessageCenterPage extends StatefulWidget {
 
 class _MessageCenterPageState extends State<MessageCenterPage> {
   late final MessageService _service;
+  Timer? _pollTimer;
 
   bool _loading = false;
   String _error = '';
   List<MessageItem> _items = [];
+  MessageItem? _selectedItem;
   int _total = 0;
   int _page = 1;
   static const int _pageSize = 20;
@@ -39,6 +43,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   int _unreadCount = 0;
   int _todoCount = 0;
   int _urgentCount = 0;
+  final Set<int> _selectedIds = <int>{};
 
   // 筛选条件
   final _keywordCtrl = TextEditingController();
@@ -47,16 +52,21 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   String _priorityFilter = '';
   String _sourceModuleFilter = '';
   DateTimeRange? _dateRange;
+  bool _todoOnly = false;
 
   @override
   void initState() {
     super.initState();
-    _service = MessageService(widget.session);
+    _service = widget.service ?? MessageService(widget.session);
     _load();
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _load(reset: false);
+    });
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _keywordCtrl.dispose();
     super.dispose();
   }
@@ -79,11 +89,19 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         sourceModule: _sourceModuleFilter.isEmpty ? null : _sourceModuleFilter,
         startTime: _dateRange?.start,
         endTime: _dateRange?.end,
+        todoOnly: _todoOnly,
       );
       if (!mounted) return;
       setState(() {
         _items = result.items;
         _total = result.total;
+        _selectedItem = result.items.isEmpty
+            ? null
+            : result.items.firstWhere(
+                (item) => item.id == _selectedItem?.id,
+                orElse: () => result.items.first,
+              );
+        _selectedIds.removeWhere((id) => !_items.any((item) => item.id == id));
       });
       _refreshStats();
     } on ApiException catch (e) {
@@ -103,15 +121,13 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
 
   Future<void> _refreshStats() async {
     try {
-      final count = await _service.getUnreadCount();
-      widget.onUnreadCountChanged?.call(count);
-      // 统计当前列表中的待处理和紧急数（全量统计需额外接口，此处用当前页近似）
-      final allResult = await _service.listMessages(pageSize: 200);
+      final summary = await _service.getSummary();
+      widget.onUnreadCountChanged?.call(summary.unreadCount);
       if (!mounted) return;
       setState(() {
-        _unreadCount = count;
-        _todoCount = allResult.items.where((m) => m.messageType == 'todo' && !m.isRead).length;
-        _urgentCount = allResult.items.where((m) => m.priority == 'urgent' && !m.isRead).length;
+        _unreadCount = summary.unreadCount;
+        _todoCount = summary.todoUnreadCount;
+        _urgentCount = summary.urgentUnreadCount;
       });
     } catch (_) {}
   }
@@ -125,6 +141,26 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       if (!mounted) return;
       if (e.statusCode == 401) widget.onLogout();
     } catch (_) {}
+  }
+
+  Future<void> _markBatchRead() async {
+    if (_selectedIds.isEmpty) {
+      return;
+    }
+    try {
+      await _service.markBatchRead(_selectedIds.toList()..sort());
+      await _load(reset: false);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 401) {
+        widget.onLogout();
+        return;
+      }
+      setState(() => _error = e.message);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
   }
 
   Future<void> _markAllRead() async {
@@ -145,8 +181,20 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       _priorityFilter = '';
       _sourceModuleFilter = '';
       _dateRange = null;
+      _todoOnly = false;
+      _selectedIds.clear();
     });
     _load();
+  }
+
+  void _toggleSelected(int messageId, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedIds.add(messageId);
+      } else {
+        _selectedIds.remove(messageId);
+      }
+    });
   }
 
   Future<void> _pickDateRange() async {
@@ -280,6 +328,12 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
             icon: const Icon(Icons.done_all, size: 16),
             label: const Text('全部已读'),
           ),
+          const SizedBox(width: 8),
+          FilledButton.tonalIcon(
+            onPressed: _loading || _selectedIds.isEmpty ? null : _markBatchRead,
+            icon: const Icon(Icons.playlist_add_check, size: 16),
+            label: Text('批量已读${_selectedIds.isEmpty ? '' : '(${_selectedIds.length})'}'),
+          ),
         ],
       ),
     );
@@ -376,6 +430,14 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
             'product': '产品',
             'craft': '工艺',
           }, (v) => setState(() { _sourceModuleFilter = v; _load(); })),
+          FilterChip(
+            label: const Text('仅看待处理'),
+            selected: _todoOnly,
+            onSelected: (value) {
+              setState(() => _todoOnly = value);
+              _load();
+            },
+          ),
           _dateRangeButton(theme),
         ],
       ),
@@ -442,25 +504,102 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         ),
       );
     }
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.separated(
-            itemCount: _items.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, index) => _buildMessageTile(_items[index], theme),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final list = Column(
+          children: [
+            Expanded(
+              child: ListView.separated(
+                itemCount: _items.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, index) => _buildMessageTile(_items[index], theme),
+              ),
+            ),
+            if (_total > _pageSize)
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text(
+                  '共 $_total 条，当前第 $_page 页',
+                  style: theme.textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ],
+        );
+        if (constraints.maxWidth < 1100) {
+          return list;
+        }
+        return Row(
+          children: [
+            Expanded(child: list),
+            const VerticalDivider(width: 1),
+            SizedBox(width: 360, child: _buildPreview(theme)),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPreview(ThemeData theme) {
+    final item = _selectedItem;
+    if (item == null) {
+      return Center(
+        child: Text(
+          '请选择一条消息查看详情预览',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.outline,
           ),
         ),
-        if (_total > _pageSize)
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              '共 $_total 条，当前第 $_page 页',
-              style: theme.textTheme.bodySmall,
-              textAlign: TextAlign.center,
-            ),
+      );
+    }
+    final isActive = item.status == 'active';
+    final disabledReason = !isActive ? '来源对象不可访问' : null;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('消息详情预览', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          _detailRow('标题', item.title, theme),
+          _detailRow('分类', item.messageTypeName, theme),
+          _detailRow('优先级', item.priorityName, theme),
+          if (item.summary != null && item.summary!.isNotEmpty)
+            _detailRow('摘要', item.summary!, theme),
+          if (item.content != null && item.content!.isNotEmpty)
+            _detailRow('正文', item.content!, theme),
+          if (item.sourceModuleName.isNotEmpty)
+            _detailRow('来源模块', item.sourceModuleName, theme),
+          if (item.sourceCode != null && item.sourceCode!.isNotEmpty)
+            _detailRow('来源对象', item.sourceCode!, theme),
+          if (item.publishedAt != null)
+            _detailRow('推送时间', _formatDateTime(item.publishedAt!), theme),
+          _detailRow('当前状态', item.isRead ? '已读' : '未读', theme),
+          if (item.readAt != null)
+            _detailRow('已读时间', _formatDateTime(item.readAt!), theme),
+          if (disabledReason != null)
+            _detailRow('跳转状态', disabledReason, theme),
+          const Spacer(),
+          Row(
+            children: [
+              TextButton(
+                onPressed: () => _showDetailDialog(item),
+                child: const Text('弹窗查看'),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: isActive && widget.onNavigateToPage != null
+                    ? () {
+                        _markRead(item);
+                        _navigateToPage(item);
+                      }
+                    : null,
+                child: const Text('跳转业务'),
+              ),
+            ],
           ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -473,11 +612,15 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
             : null;
     final isActive = item.status == 'active';
     final hasTarget = isActive && item.targetPageCode != null && item.targetPageCode!.isNotEmpty;
+    final inactiveReason = !isActive ? _inactiveReason(item) : null;
 
     return InkWell(
       onTap: () {
+        setState(() => _selectedItem = item);
         _markRead(item);
-        _showDetailDialog(item);
+        if (MediaQuery.of(context).size.width < 1100) {
+          _showDetailDialog(item);
+        }
       },
       child: Container(
         color: isUnread ? theme.colorScheme.primaryContainer.withAlpha(38) : null,
@@ -591,11 +734,16 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                Checkbox(
+                  value: _selectedIds.contains(item.id),
+                  onChanged: (value) => _toggleSelected(item.id, value ?? false),
+                  visualDensity: VisualDensity.compact,
+                ),
                 if (!isActive)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
-                      '来源已失效',
+                      inactiveReason!,
                       style: TextStyle(
                         fontSize: 11,
                         color: theme.colorScheme.outline,
@@ -642,5 +790,16 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     if (diff.inDays < 1) return '${diff.inHours}小时前';
     if (diff.inDays < 7) return '${diff.inDays}天前';
     return '${local.month}-${local.day}';
+  }
+
+  String _inactiveReason(MessageItem item) {
+    switch (item.status) {
+      case 'expired':
+        return '消息已失效';
+      case 'archived':
+        return '消息已归档';
+      default:
+        return '来源对象不可访问';
+    }
   }
 }

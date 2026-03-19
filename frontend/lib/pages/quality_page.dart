@@ -32,12 +32,14 @@ class QualityPage extends StatefulWidget {
     required this.onLogout,
     required this.visibleTabCodes,
     required this.capabilityCodes,
+    this.preferredTabCode,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
+  final String? preferredTabCode;
 
   @override
   State<QualityPage> createState() => _QualityPageState();
@@ -52,7 +54,7 @@ class _QualityPageState extends State<QualityPage>
   void initState() {
     super.initState();
     _orderedVisibleTabCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
-    _rebuildTabController();
+    _rebuildTabController(preferredCode: widget.preferredTabCode);
   }
 
   @override
@@ -63,6 +65,8 @@ class _QualityPageState extends State<QualityPage>
       final selectedCode = _currentSelectedTabCode();
       _orderedVisibleTabCodes = updatedCodes;
       _rebuildTabController(preferredCode: selectedCode);
+    } else if (widget.preferredTabCode != oldWidget.preferredTabCode) {
+      _rebuildTabController(preferredCode: widget.preferredTabCode);
     }
   }
 

@@ -137,6 +137,29 @@ class MessageListResult {
   }
 }
 
+class MessageSummaryResult {
+  const MessageSummaryResult({
+    required this.totalCount,
+    required this.unreadCount,
+    required this.todoUnreadCount,
+    required this.urgentUnreadCount,
+  });
+
+  final int totalCount;
+  final int unreadCount;
+  final int todoUnreadCount;
+  final int urgentUnreadCount;
+
+  factory MessageSummaryResult.fromJson(Map<String, dynamic> json) {
+    return MessageSummaryResult(
+      totalCount: (json['total_count'] as int?) ?? 0,
+      unreadCount: (json['unread_count'] as int?) ?? 0,
+      todoUnreadCount: (json['todo_unread_count'] as int?) ?? 0,
+      urgentUnreadCount: (json['urgent_unread_count'] as int?) ?? 0,
+    );
+  }
+}
+
 class WsEvent {
   const WsEvent({
     required this.event,
