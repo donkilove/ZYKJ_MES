@@ -55,7 +55,7 @@ String assistAuthorizationStatusLabel(String status) {
     case 'pending':
       return '待审批';
     case 'approved':
-      return '已生效';
+      return '已审批';
     case 'rejected':
       return '已拒绝';
     case 'consumed':
@@ -306,6 +306,11 @@ class ProductionRecordItem {
 class ProductionEventLogItem {
   ProductionEventLogItem({
     required this.id,
+    required this.orderId,
+    required this.orderCode,
+    required this.orderStatus,
+    required this.productName,
+    required this.processCode,
     required this.eventType,
     required this.eventTitle,
     required this.eventDetail,
@@ -316,6 +321,11 @@ class ProductionEventLogItem {
   });
 
   final int id;
+  final int? orderId;
+  final String? orderCode;
+  final String? orderStatus;
+  final String? productName;
+  final String? processCode;
   final String eventType;
   final String eventTitle;
   final String? eventDetail;
@@ -327,6 +337,11 @@ class ProductionEventLogItem {
   factory ProductionEventLogItem.fromJson(Map<String, dynamic> json) {
     return ProductionEventLogItem(
       id: json['id'] as int,
+      orderId: json['order_id'] as int?,
+      orderCode: json['order_code'] as String?,
+      orderStatus: json['order_status'] as String?,
+      productName: json['product_name'] as String?,
+      processCode: json['process_code'] as String?,
       eventType: (json['event_type'] as String?) ?? '',
       eventTitle: (json['event_title'] as String?) ?? '',
       eventDetail: json['event_detail'] as String?,

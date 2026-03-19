@@ -274,6 +274,11 @@ def _to_record_item(row: ProductionRecord) -> ProductionRecordItem:
 def _to_event_item(row: OrderEventLog) -> OrderEventLogItem:
     return OrderEventLogItem(
         id=row.id,
+        order_id=row.order_id,
+        order_code=row.order_code_snapshot,
+        order_status=row.order_status_snapshot,
+        product_name=row.product_name_snapshot,
+        process_code=row.process_code_snapshot,
         event_type=row.event_type,
         event_title=row.event_title,
         event_detail=row.event_detail,
@@ -1499,4 +1504,3 @@ def get_repair_order_detail_api(
         ).scalars().all()
 
     return success_response(_to_repair_order_detail_item(row, event_logs=event_logs))
-

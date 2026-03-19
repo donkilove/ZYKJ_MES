@@ -554,7 +554,7 @@ def complete_repair_order(
     db.refresh(repair_row)
 
     # 通知订单相关操作员：维修完成
-    if repair_row.source_order_id and repair_row.requester_user_id:
+    if repair_row.source_order_id and repair_row.sender_user_id:
         create_message_for_users(
             db,
             message_type="notice",
@@ -569,7 +569,7 @@ def complete_repair_order(
             source_id=str(repair_row.id),
             source_code=repair_row.repair_order_code,
             target_page_code="production_repair_orders",
-            recipient_user_ids=[repair_row.requester_user_id],
+            recipient_user_ids=[repair_row.sender_user_id],
             dedupe_key=f"repair_complete_{repair_row.id}",
             created_by_user_id=operator.id,
         )

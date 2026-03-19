@@ -254,6 +254,11 @@ void main() {
                 'events': [
                   {
                     'id': 14,
+                    'order_id': 1,
+                    'order_code': 'PO-1',
+                    'order_status': 'pending',
+                    'product_name': 'Product-A',
+                    'process_code': '01-01',
                     'event_type': 'created',
                     'event_title': 'created',
                     'event_detail': null,
@@ -726,7 +731,7 @@ void main() {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect((body['cause_items'] as List).length, 1);
             expect(body['scrap_replenished'], true);
-            expect((body['return_allocations'] as List).length, 0);
+            expect((body['return_allocations'] as List).length, 2);
             return TestResponse.json(
               200,
               body: {
@@ -741,6 +746,8 @@ void main() {
           'POST /production/repair-orders/export': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['status'], 'in_repair');
+            expect(body['start_date'], '2026-03-01');
+            expect(body['end_date'], '2026-03-02');
             return TestResponse.json(
               200,
               body: {
@@ -933,10 +940,15 @@ void main() {
             ),
           ],
           scrapReplenished: true,
-          returnAllocations: const [],
+          returnAllocations: const [
+            RepairReturnAllocationInput(targetOrderProcessId: 11, quantity: 1),
+            RepairReturnAllocationInput(targetOrderProcessId: 12, quantity: 1),
+          ],
         );
         final repairExport = await service.exportRepairOrders(
           status: 'in_repair',
+          startDate: DateTime(2026, 3, 1),
+          endDate: DateTime(2026, 3, 2),
         );
 
         expect(orders.items.single.orderCode, 'PO-1');

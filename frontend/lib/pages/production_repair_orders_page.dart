@@ -51,6 +51,20 @@ class _ReturnProcessOption {
   final String name;
 }
 
+class _ReturnAllocationDraft {
+  _ReturnAllocationDraft({this.targetProcessId, int? quantity})
+    : quantityController = TextEditingController(
+        text: quantity == null || quantity <= 0 ? '' : '$quantity',
+      );
+
+  int? targetProcessId;
+  final TextEditingController quantityController;
+
+  void dispose() {
+    quantityController.dispose();
+  }
+}
+
 class ProductionRepairOrdersPage extends StatefulWidget {
   const ProductionRepairOrdersPage({
     super.key,
@@ -341,6 +355,8 @@ class _ProductionRepairOrdersPageState
             ? null
             : _keywordController.text.trim(),
         status: _status,
+        startDate: _startDate,
+        endDate: _endDate,
       );
       final bytes = base64Decode(result.contentBase64);
       final location = await getSaveLocation(
@@ -507,9 +523,14 @@ class _ProductionRepairOrdersPageState
             ),
           )
           .toList();
-      var selectedTargetProcessId = processOptions.isNotEmpty
-          ? processOptions.first.id
-          : null;
+      final allocationDrafts = processOptions.isNotEmpty
+          ? <_ReturnAllocationDraft>[
+              _ReturnAllocationDraft(
+                targetProcessId: processOptions.first.id,
+                quantity: item.repairQuantity,
+              ),
+            ]
+          : <_ReturnAllocationDraft>[];
       var scrapReplenished = false;
       var dialogError = '';
       final result = await showLockedFormDialog<_RepairCompleteDialogResult?>(
@@ -580,27 +601,89 @@ class _ProductionRepairOrdersPageState
                       ],
                     ),
                     const SizedBox(height: 8),
-                    DropdownButtonFormField<int>(
-                      initialValue: selectedTargetProcessId,
-                      decoration: const InputDecoration(
-                        labelText: '回流目标工序（仅对非报废数量生效）',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: processOptions
-                          .map(
-                            (entry) => DropdownMenuItem<int>(
-                              value: entry.id,
-                              child: Text('${entry.code} ${entry.name}'),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setDialogState(() {
-                          selectedTargetProcessId = value;
-                        });
-                      },
+                    Row(
+                      children: [
+                        const Text('回流分配（仅对非报废数量生效）'),
+                        const Spacer(),
+                        OutlinedButton.icon(
+                          onPressed: processOptions.isEmpty
+                              ? null
+                              : () {
+                                  setDialogState(() {
+                                    allocationDrafts.add(
+                                      _ReturnAllocationDraft(
+                                        targetProcessId: processOptions.first.id,
+                                      ),
+                                    );
+                                  });
+                                },
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('新增回流项'),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 8),
+                    if (processOptions.isEmpty)
+                      const Text('当前无可选回流工序')
+                    else
+                      ...List.generate(allocationDrafts.length, (index) {
+                        final draft = allocationDrafts[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 4,
+                                child: DropdownButtonFormField<int>(
+                                  initialValue: draft.targetProcessId,
+                                  decoration: const InputDecoration(
+                                    labelText: '回流目标工序',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  items: processOptions
+                                      .map(
+                                        (entry) => DropdownMenuItem<int>(
+                                          value: entry.id,
+                                          child: Text('${entry.code} ${entry.name}'),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setDialogState(() {
+                                      draft.targetProcessId = value;
+                                    });
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: TextField(
+                                  controller: draft.quantityController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: '数量',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: allocationDrafts.length <= 1
+                                    ? null
+                                    : () {
+                                        setDialogState(() {
+                                          final removed = allocationDrafts.removeAt(index);
+                                          removed.dispose();
+                                        });
+                                      },
+                                icon: const Icon(Icons.delete_outline),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                     if (dialogError.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
@@ -655,18 +738,47 @@ class _ProductionRepairOrdersPageState
                   final repairedQuantity = item.repairQuantity - scrapTotal;
                   final allocations = <RepairReturnAllocationInput>[];
                   if (repairedQuantity > 0) {
-                    if (selectedTargetProcessId == null) {
+                    if (allocationDrafts.isEmpty) {
                       setDialogState(() {
-                        dialogError = '存在可回流数量时必须选择回流目标工序';
+                        dialogError = '存在可回流数量时必须至少配置一条回流分配';
                       });
                       return;
                     }
-                    allocations.add(
-                      RepairReturnAllocationInput(
-                        targetOrderProcessId: selectedTargetProcessId!,
-                        quantity: repairedQuantity,
-                      ),
-                    );
+                    final seenTargets = <int>{};
+                    var allocationTotal = 0;
+                    for (final draft in allocationDrafts) {
+                      final targetProcessId = draft.targetProcessId;
+                      final allocationQty = int.tryParse(
+                        draft.quantityController.text.trim(),
+                      );
+                      if (targetProcessId == null ||
+                          allocationQty == null ||
+                          allocationQty <= 0) {
+                        setDialogState(() {
+                          dialogError = '请为每条回流分配填写目标工序和正整数数量';
+                        });
+                        return;
+                      }
+                      if (!seenTargets.add(targetProcessId)) {
+                        setDialogState(() {
+                          dialogError = '回流目标工序不可重复，请合并相同目标的数量';
+                        });
+                        return;
+                      }
+                      allocationTotal += allocationQty;
+                      allocations.add(
+                        RepairReturnAllocationInput(
+                          targetOrderProcessId: targetProcessId,
+                          quantity: allocationQty,
+                        ),
+                      );
+                    }
+                    if (allocationTotal != repairedQuantity) {
+                      setDialogState(() {
+                        dialogError = '回流数量合计必须等于非报废数量 $repairedQuantity';
+                      });
+                      return;
+                    }
                   }
                   Navigator.of(context).pop(
                     _RepairCompleteDialogResult(
@@ -683,6 +795,9 @@ class _ProductionRepairOrdersPageState
         ),
       );
       for (final draft in causeDrafts) {
+        draft.dispose();
+      }
+      for (final draft in allocationDrafts) {
         draft.dispose();
       }
       if (result == null) {

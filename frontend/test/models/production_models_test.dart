@@ -17,6 +17,9 @@ void main() {
     expect(repairOrderStatusLabel('completed'), isNot('completed'));
     expect(scrapProgressLabel('pending_apply'), isNot('pending_apply'));
     expect(scrapProgressLabel('applied'), isNot('applied'));
+    expect(assistAuthorizationStatusLabel('approved'), '已审批');
+    expect(scrapProgressLabel('pending_apply'), '待处理');
+    expect(scrapProgressLabel('applied'), '已处理');
   });
 
   test('order and detail models parse nested payload', () {
@@ -101,6 +104,11 @@ void main() {
       'events': [
         {
           'id': 44,
+          'order_id': 1,
+          'order_code': 'PO-1',
+          'order_status': 'pending',
+          'product_name': '产品A',
+          'process_code': '01-01',
           'event_type': 'created',
           'event_title': '创建订单',
           'event_detail': null,
@@ -120,6 +128,7 @@ void main() {
     expect(detail.subOrders.single.isVisible, isTrue);
     expect(detail.records.single.productionQuantity, 5);
     expect(detail.events.single.eventType, 'created');
+    expect(detail.events.single.orderCode, 'PO-1');
     expect(ProductionOrderListResult(total: 1, items: [order]).items.length, 1);
   });
 

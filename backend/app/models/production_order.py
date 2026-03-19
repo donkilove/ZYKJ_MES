@@ -68,7 +68,7 @@ class ProductionOrder(Base, TimestampMixin):
     event_logs = relationship(
         "OrderEventLog",
         back_populates="order",
-        cascade="all, delete-orphan",
+        cascade="save-update, merge",
         passive_deletes=True,
     )
     pipeline_instances = relationship(

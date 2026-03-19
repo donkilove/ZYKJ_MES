@@ -124,6 +124,11 @@ class ProductionRecordItem(BaseModel):
 
 class OrderEventLogItem(BaseModel):
     id: int
+    order_id: int | None = None
+    order_code: str | None = None
+    order_status: str | None = None
+    product_name: str | None = None
+    process_code: str | None = None
     event_type: str
     event_title: str
     event_detail: str | None = None

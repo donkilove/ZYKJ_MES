@@ -386,8 +386,21 @@ def end_production(
     max_producible = min(process_remaining, sub_remaining)
     if max_producible <= 0:
         raise ValueError("No producible quantity available for current user")
-    if quantity > max_producible:
-        raise RuntimeError(f"Concurrent update detected. Max producible quantity is {max_producible}")
+    defect_quantity = 0
+    if defect_items:
+        defect_quantity = sum(
+            int(item.get("quantity") or 0)
+            for item in defect_items
+            if isinstance(item, dict)
+        )
+        if defect_quantity < 0:
+            raise ValueError("Defect quantity cannot be negative")
+    total_consumed_quantity = quantity + defect_quantity
+    if total_consumed_quantity > max_producible:
+        raise RuntimeError(
+            f"Concurrent update detected. Max producible quantity is {max_producible}, "
+            f"but report quantity plus defect quantity is {total_consumed_quantity}"
+        )
     if not _is_end_gate_allowed(db, order=order, process_row=process_row):
         raise ValueError("Current process is blocked by pipeline end gate")
 
@@ -437,11 +450,6 @@ def end_production(
 
     repair_row = None
     if defect_items:
-        defect_quantity = sum(
-            int(item.get("quantity") or 0)
-            for item in defect_items
-            if isinstance(item, dict)
-        )
         if defect_quantity > 0:
             repair_row = create_repair_order(
                 db,
@@ -478,6 +486,8 @@ def end_production(
             "order_process_id": process_row.id,
             "process_code": process_row.process_code,
             "quantity": quantity,
+            "defect_quantity": defect_quantity,
+            "total_consumed_quantity": total_consumed_quantity,
             "operator_user_id": operator.id,
             "effective_operator_user_id": effective_user_id,
             "assist_authorization_id": assist_row.id if assist_row else None,

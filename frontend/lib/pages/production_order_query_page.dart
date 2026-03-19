@@ -470,6 +470,20 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                       ),
                     );
                   }
+                  final defectTotal = defects.fold<int>(
+                    0,
+                    (sum, entry) => sum + entry.quantity,
+                  );
+                  if (qty + defectTotal > item.maxProducibleQuantity) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '报工数量与异常数量合计不能超过当前可生产数量 ${item.maxProducibleQuantity}',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
                   Navigator.of(context).pop(
                     _ProductionSubmitPayload(
                       quantity: qty,

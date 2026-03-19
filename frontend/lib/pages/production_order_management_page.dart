@@ -176,9 +176,30 @@ class _ProductionOrderManagementPageState
           (result['content_base64'] as String?) ??
           (result['data'] as String?) ??
           '';
-      final bytes = base64Decode(base64Data);
+      final csvText = utf8.decode(base64Decode(base64Data));
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('订单导出预览 - $filename'),
+          content: SizedBox(
+            width: 760,
+            height: 480,
+            child: SingleChildScrollView(
+              child: SelectableText(csvText),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功：$filename（${bytes.length} 字节）')),
+        SnackBar(content: Text('导出成功：$filename')),
       );
     } catch (error) {
       if (!mounted) return;

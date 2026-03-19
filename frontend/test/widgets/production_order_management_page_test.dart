@@ -86,10 +86,9 @@ class _FakeProductionOrderManagementService extends ProductionService {
     DateTime? dueDateFrom,
     DateTime? dueDateTo,
   }) async {
-
     return {
       'file_name': 'orders_export.csv',
-      'content_base64': base64Encode(const [1, 2, 3]),
+      'content_base64': base64Encode(utf8.encode('订单号,产品\nPO-1,产品A')),
     };
   }
 }
@@ -111,7 +110,7 @@ class _FakeCraftService extends CraftService {
 }
 
 void main() {
-  testWidgets('production order management export uses file_name fields', (
+  testWidgets('production order management export shows preview dialog', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1920, 1400);
@@ -148,6 +147,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.textContaining('导出成功：orders_export.csv（3 字节）'), findsOneWidget);
+    expect(find.text('订单导出预览 - orders_export.csv'), findsOneWidget);
+    expect(find.textContaining('PO-1,产品A'), findsOneWidget);
   });
 }

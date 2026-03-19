@@ -388,9 +388,9 @@ class _ProductionScrapStatisticsPageState
                     DropdownMenuItem(value: 'all', child: Text('全部')),
                     DropdownMenuItem(
                       value: 'pending_apply',
-                      child: Text('待申请'),
+                      child: Text('待处理'),
                     ),
-                    DropdownMenuItem(value: 'applied', child: Text('已申请')),
+                    DropdownMenuItem(value: 'applied', child: Text('已处理')),
                   ],
                   onChanged: (value) {
                     if (value == null) {

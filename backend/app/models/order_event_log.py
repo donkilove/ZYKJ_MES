@@ -9,10 +9,14 @@ class OrderEventLog(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     order_id: Mapped[int] = mapped_column(
-        ForeignKey("mes_order.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("mes_order.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
+    order_code_snapshot: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    order_status_snapshot: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    product_name_snapshot: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    process_code_snapshot: Mapped[str | None] = mapped_column(String(64), nullable=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     event_title: Mapped[str] = mapped_column(String(255), nullable=False)
     event_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
