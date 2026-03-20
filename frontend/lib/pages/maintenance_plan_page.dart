@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -43,6 +44,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   int? _equipmentFilterId;
   int? _itemFilterId;
   bool? _enabledFilter;
+  String? _executionStageCodeFilter;
+  int? _defaultExecutorFilterId;
 
   @override
   void initState() {
@@ -97,7 +100,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         );
         _equipmentOptions = equipmentResult.items;
         _itemOptions = itemResult.items;
-        _ownerOptions = await _equipmentService.listAllOwners();
+        try {
+          _ownerOptions = await _equipmentService.listAllOwners();
+        } catch (_) {}
         _stageOptions = [...stageResult.items]
           ..sort((a, b) {
             final orderCompare = a.sortOrder.compareTo(b.sortOrder);
@@ -123,6 +128,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         equipmentId: _equipmentFilterId,
         itemId: _itemFilterId,
         enabled: _enabledFilter,
+        executionProcessCode: _executionStageCodeFilter,
+        defaultExecutorUserId: _defaultExecutorFilterId,
       );
       if (!mounted) {
         return;
@@ -550,34 +557,27 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
       final csvBase64 = await _equipmentService.exportMaintenancePlans(
         equipmentId: _equipmentFilterId,
         itemId: _itemFilterId,
+        enabled: _enabledFilter,
+        executionProcessCode: _executionStageCodeFilter,
+        defaultExecutorUserId: _defaultExecutorFilterId,
       );
       if (!mounted) return;
       if (csvBase64.isEmpty) {
         setState(() => _message = '导出失败：服务端返回空数据');
         return;
       }
-      final csvText = utf8.decode(base64Decode(csvBase64));
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('导出保养计划'),
-          content: SizedBox(
-            width: 600,
-            height: 400,
-            child: SingleChildScrollView(
-              child: SelectableText(
-                csvText,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
+      final bytes = base64Decode(csvBase64);
+      final location = await getSaveLocation(
+        suggestedName: 'maintenance_plans.csv',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
+      );
+      if (location == null || !mounted) return;
+      await XFile.fromData(bytes, mimeType: 'text/csv', name: 'maintenance_plans.csv').saveTo(location.path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出成功：${location.path}')),
       );
     } catch (error) {
       if (!mounted) return;
@@ -699,6 +699,50 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                 ),
               ),
               const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _executionStageCodeFilter,
+                  items: [
+                    const DropdownMenuItem<String?>(value: null, child: Text('全部执行工段')),
+                    ..._stageOptions.map(
+                      (entry) => DropdownMenuItem<String?>(
+                        value: entry.code,
+                        child: Text(entry.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _executionStageCodeFilter = value);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '执行工段',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<int?>(
+                  initialValue: _defaultExecutorFilterId,
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('全部默认执行人')),
+                    ..._ownerOptions.map(
+                      (entry) => DropdownMenuItem<int?>(
+                        value: entry.userId,
+                        child: Text(entry.displayName),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _defaultExecutorFilterId = value);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '默认执行人',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
               FilledButton.icon(
                 onPressed: _loading ? null : _loadAll,
                 icon: const Icon(Icons.search),
@@ -743,6 +787,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                           DataColumn(label: Text('起始日期')),
                           DataColumn(label: Text('下次到期')),
                           DataColumn(label: Text('执行人')),
+                          DataColumn(label: Text('预计时长')),
+                          DataColumn(label: Text('创建时间')),
+                          DataColumn(label: Text('更新时间')),
                           DataColumn(label: Text('状态')),
                           DataColumn(label: Text('操作')),
                         ],
@@ -758,6 +805,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                               DataCell(
                                 Text(plan.defaultExecutorUsername ?? '-'),
                               ),
+                              DataCell(Text(plan.estimatedDurationMinutes == null ? '-' : '${plan.estimatedDurationMinutes} 分钟')),
+                              DataCell(Text(_formatDate(plan.createdAt))),
+                              DataCell(Text(_formatDate(plan.updatedAt))),
                               DataCell(Text(plan.isEnabled ? '启用' : '停用')),
                               DataCell(
                                 Row(

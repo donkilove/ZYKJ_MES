@@ -1,9 +1,11 @@
 import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/equipment_models.dart';
+import 'equipment_detail_page.dart';
 import '../services/api_exception.dart';
 import '../services/equipment_service.dart';
 import '../widgets/adaptive_table_container.dart';
@@ -28,6 +30,7 @@ class EquipmentLedgerPage extends StatefulWidget {
 class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
+  final TextEditingController _locationFilterController = TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -36,6 +39,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   List<EquipmentLedgerItem> _items = const [];
   List<EquipmentOwnerOption> _ownerOptions = const [];
   bool? _enabledFilter;
+  String? _ownerFilterName;
 
   @override
   void initState() {
@@ -47,6 +51,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   @override
   void dispose() {
     _keywordController.dispose();
+    _locationFilterController.dispose();
     super.dispose();
   }
 
@@ -80,14 +85,18 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
       _message = '';
     });
     try {
-      if (widget.canWrite && (reloadOwners || _ownerOptions.isEmpty)) {
-        _ownerOptions = await _equipmentService.listAllOwners();
+      if (reloadOwners || _ownerOptions.isEmpty) {
+        try {
+          _ownerOptions = await _equipmentService.listAllOwners();
+        } catch (_) {}
       }
       final result = await _equipmentService.listEquipment(
         page: 1,
         pageSize: 100,
         keyword: _keywordController.text.trim(),
         enabled: _enabledFilter,
+        locationKeyword: _locationFilterController.text.trim(),
+        ownerName: _ownerFilterName,
       );
       if (!mounted) {
         return;
@@ -191,6 +200,12 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                             labelText: '位置',
                             border: OutlineInputBorder(),
                           ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return '请输入位置';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
@@ -214,12 +229,6 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                             labelText: '负责人',
                             border: OutlineInputBorder(),
                           ),
-                          validator: (value) {
-                            if ((value ?? '').trim().isEmpty) {
-                              return '请选择负责人';
-                            }
-                            return null;
-                          },
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
@@ -304,98 +313,15 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   }
 
   Future<void> _showDetailDialog(EquipmentLedgerItem item) async {
-    if (!mounted) return;
-    setState(() => _loading = true);
-    EquipmentDetailResult? detail;
-    try {
-      detail = await _equipmentService.getEquipmentDetail(equipmentId: item.id);
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('加载设备详情失败: ${_errorMessage(error)}')),
-      );
-      setState(() => _loading = false);
-      return;
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('设备详情 - ${detail!.name}'),
-        content: SizedBox(
-          width: 560,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _detailRow('设备编号', detail.code),
-                _detailRow('设备名称', detail.name),
-                _detailRow('型号', detail.model.isEmpty ? '-' : detail.model),
-                _detailRow('位置', detail.location.isEmpty ? '-' : detail.location),
-                _detailRow('负责人', detail.ownerName.isEmpty ? '-' : detail.ownerName),
-                _detailRow('备注', detail.remark.isEmpty ? '-' : detail.remark),
-                _detailRow('状态', detail.isEnabled ? '启用' : '停用'),
-                _detailRow('启用保养计划数', '${detail.activePlanCount}'),
-                _detailRow('待执行工单数', '${detail.pendingWorkOrderCount}'),
-                if (detail.recentRecords.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Text('最近保养记录:', style: TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  ...detail.recentRecords.map(
-                    (r) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '${_formatDate(r.completedAt)}  ${r.itemName}  ${r.resultSummary}',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EquipmentDetailPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          equipmentId: item.id,
         ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
       ),
     );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              '$label：',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime value) {
-    final local = value.toLocal();
-    final mm = local.month.toString().padLeft(2, '0');
-    final dd = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$mm-$dd';
   }
 
   Future<void> _toggleItem(EquipmentLedgerItem item) async {
@@ -500,34 +426,37 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     try {
       final csvBase64 = await _equipmentService.exportEquipmentLedger(
         keyword: _keywordController.text.trim(),
+        enabled: _enabledFilter,
+        locationKeyword: _locationFilterController.text.trim().isEmpty
+            ? null
+            : _locationFilterController.text.trim(),
+        ownerName: _ownerFilterName,
       );
       if (!mounted) return;
       if (csvBase64.isEmpty) {
         setState(() => _message = '导出失败：服务端返回空数据');
         return;
       }
-      final csvText = utf8.decode(base64Decode(csvBase64));
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('导出设备台账'),
-          content: SizedBox(
-            width: 600,
-            height: 400,
-            child: SingleChildScrollView(
-              child: SelectableText(
-                csvText,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
+      final bytes = base64Decode(csvBase64);
+      final location = await getSaveLocation(
+        suggestedName: 'equipment_ledger.csv',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
+      );
+      if (location == null || !mounted) {
+        return;
+      }
+      await XFile.fromData(
+        bytes,
+        mimeType: 'text/csv',
+        name: 'equipment_ledger.csv',
+      ).saveTo(location.path);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出成功：${location.path}')),
       );
     } catch (error) {
       if (!mounted) return;
@@ -584,6 +513,45 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                     border: OutlineInputBorder(),
                   ),
                   onSubmitted: (_) => _loadItems(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: TextField(
+                  controller: _locationFilterController,
+                  decoration: const InputDecoration(
+                    labelText: '位置筛选',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _loadItems(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 180,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _ownerFilterName,
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('全部负责人'),
+                    ),
+                    ..._ownerOptions.map(
+                      (entry) => DropdownMenuItem<String?>(
+                        value: entry.username,
+                        child: Text(entry.displayName),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _ownerFilterName = value);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '负责人',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),

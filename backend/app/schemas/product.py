@@ -146,6 +146,7 @@ class ProductVersionItem(BaseModel):
     lifecycle_status: str
     action: str
     note: str | None = None
+    effective_at: datetime | None = None
     source_version: int | None = None
     source_version_label: str | None = None
     created_by_user_id: int | None = None

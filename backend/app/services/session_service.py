@@ -141,19 +141,24 @@ def list_online_sessions(
     page: int,
     page_size: int,
     keyword: str | None = None,
+    status_filter: str | None = None,
 ) -> tuple[int, list[tuple[UserSession, User]]]:
     cleanup_expired_sessions(db)
     stmt = (
         select(UserSession, User)
         .join(User, User.id == UserSession.user_id)
         .where(
-            UserSession.status == "active",
             User.is_deleted.is_(False),
         )
         .order_by(UserSession.login_time.desc(), UserSession.id.desc())
     )
     if keyword:
         stmt = stmt.where(User.username.ilike(f"%{keyword.strip()}%"))
+    if status_filter:
+        if status_filter == "offline":
+            stmt = stmt.where(UserSession.status != "active")
+        else:
+            stmt = stmt.where(UserSession.status == status_filter)
     total_stmt = select(func.count()).select_from(stmt.subquery())
     total = int(db.execute(total_stmt).scalar_one())
     rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).all()

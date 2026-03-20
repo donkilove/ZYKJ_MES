@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -42,6 +43,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
   int _total = 0;
   List<MaintenanceItemEntry> _items = const [];
   bool? _enabledFilter;
+  String? _categoryFilter;
 
   @override
   void initState() {
@@ -91,6 +93,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
         pageSize: 100,
         keyword: _keywordController.text.trim(),
         enabled: _enabledFilter,
+        category: _categoryFilter,
       );
       if (!mounted) {
         return;
@@ -431,34 +434,26 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     try {
       final csvBase64 = await _equipmentService.exportMaintenanceItems(
         keyword: _keywordController.text.trim(),
+        enabled: _enabledFilter,
+        category: _categoryFilter,
       );
       if (!mounted) return;
       if (csvBase64.isEmpty) {
         setState(() => _message = '导出失败：服务端返回空数据');
         return;
       }
-      final csvText = utf8.decode(base64Decode(csvBase64));
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('导出保养项目'),
-          content: SizedBox(
-            width: 600,
-            height: 400,
-            child: SingleChildScrollView(
-              child: SelectableText(
-                csvText,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
+      final bytes = base64Decode(csvBase64);
+      final location = await getSaveLocation(
+        suggestedName: 'maintenance_items.csv',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
+      );
+      if (location == null || !mounted) return;
+      await XFile.fromData(bytes, mimeType: 'text/csv', name: 'maintenance_items.csv').saveTo(location.path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出成功：${location.path}')),
       );
     } catch (error) {
       if (!mounted) return;
@@ -529,6 +524,28 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                   },
                   decoration: const InputDecoration(
                     labelText: '状态',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _categoryFilter,
+                  items: const [
+                    DropdownMenuItem<String?>(value: null, child: Text('全部类别')),
+                    DropdownMenuItem<String?>(value: '点检', child: Text('点检')),
+                    DropdownMenuItem<String?>(value: '润滑', child: Text('润滑')),
+                    DropdownMenuItem<String?>(value: '校准', child: Text('校准')),
+                    DropdownMenuItem<String?>(value: '清洁', child: Text('清洁')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _categoryFilter = value);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '类别',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),

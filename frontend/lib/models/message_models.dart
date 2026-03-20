@@ -166,12 +166,14 @@ class WsEvent {
     required this.userId,
     this.unreadCount,
     this.messageId,
+    this.isRead,
   });
 
   final String event;
   final int userId;
   final int? unreadCount;
   final int? messageId;
+  final bool? isRead;
 
   factory WsEvent.fromJson(Map<String, dynamic> json) {
     return WsEvent(
@@ -179,6 +181,7 @@ class WsEvent {
       userId: (json['user_id'] as int?) ?? 0,
       unreadCount: json['unread_count'] as int?,
       messageId: json['message_id'] as int?,
+      isRead: json['is_read'] as bool?,
     );
   }
 }

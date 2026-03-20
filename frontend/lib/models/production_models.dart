@@ -353,6 +353,13 @@ class ProductionEventLogItem {
   }
 }
 
+class ProductionEventLogListResult {
+  ProductionEventLogListResult({required this.total, required this.items});
+
+  final int total;
+  final List<ProductionEventLogItem> items;
+}
+
 class ProductionOrderDetail {
   ProductionOrderDetail({
     required this.order,
@@ -1479,6 +1486,7 @@ class ScrapStatisticsItem {
     required this.createdAt,
     required this.updatedAt,
     required this.relatedRepairOrders,
+    required this.relatedEventLogs,
   });
 
   final int id;
@@ -1497,6 +1505,7 @@ class ScrapStatisticsItem {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<ScrapRelatedRepairOrderItem> relatedRepairOrders;
+  final List<ScrapEventLogItem> relatedEventLogs;
 
   factory ScrapStatisticsItem.fromJson(Map<String, dynamic> json) {
     return ScrapStatisticsItem(
@@ -1523,6 +1532,55 @@ class ScrapStatisticsItem {
                 ),
               )
               .toList(),
+      relatedEventLogs:
+          (json['related_event_logs'] as List<dynamic>? ?? const [])
+              .map(
+                (entry) => ScrapEventLogItem.fromJson(
+                  entry as Map<String, dynamic>,
+                ),
+              )
+              .toList(),
+    );
+  }
+}
+
+class ScrapEventLogItem {
+  ScrapEventLogItem({
+    required this.id,
+    required this.orderCode,
+    required this.orderStatus,
+    required this.productName,
+    required this.processCode,
+    required this.eventType,
+    required this.eventTitle,
+    required this.eventDetail,
+    required this.payloadJson,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String? orderCode;
+  final String? orderStatus;
+  final String? productName;
+  final String? processCode;
+  final String eventType;
+  final String eventTitle;
+  final String? eventDetail;
+  final String? payloadJson;
+  final DateTime createdAt;
+
+  factory ScrapEventLogItem.fromJson(Map<String, dynamic> json) {
+    return ScrapEventLogItem(
+      id: (json['id'] as int?) ?? 0,
+      orderCode: json['order_code'] as String?,
+      orderStatus: json['order_status'] as String?,
+      productName: json['product_name'] as String?,
+      processCode: json['process_code'] as String?,
+      eventType: (json['event_type'] as String?) ?? '',
+      eventTitle: (json['event_title'] as String?) ?? '',
+      eventDetail: json['event_detail'] as String?,
+      payloadJson: json['payload_json'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
 }
@@ -1838,24 +1896,39 @@ class RepairOrderDetailItem {
 class RepairEventLogDetailItem {
   RepairEventLogDetailItem({
     required this.id,
+    required this.orderCode,
+    required this.orderStatus,
+    required this.productName,
+    required this.processCode,
     required this.eventType,
     required this.eventTitle,
     required this.eventDetail,
+    required this.payloadJson,
     required this.createdAt,
   });
 
   final int id;
+  final String? orderCode;
+  final String? orderStatus;
+  final String? productName;
+  final String? processCode;
   final String eventType;
   final String eventTitle;
   final String? eventDetail;
+  final String? payloadJson;
   final DateTime createdAt;
 
   factory RepairEventLogDetailItem.fromJson(Map<String, dynamic> json) {
     return RepairEventLogDetailItem(
       id: (json['id'] as int?) ?? 0,
+      orderCode: json['order_code'] as String?,
+      orderStatus: json['order_status'] as String?,
+      productName: json['product_name'] as String?,
+      processCode: json['process_code'] as String?,
       eventType: (json['event_type'] as String?) ?? '',
       eventTitle: (json['event_title'] as String?) ?? '',
       eventDetail: json['event_detail'] as String?,
+      payloadJson: json['payload_json'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }

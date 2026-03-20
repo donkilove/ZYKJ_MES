@@ -547,6 +547,13 @@ class _ProductVersionManagementPageState
     }
 
     final hasDraft = _versions.any((v) => v.lifecycleStatus == 'draft');
+    ProductVersionItem? effectiveRevision;
+    for (final version in _versions) {
+      if (version.lifecycleStatus == 'effective') {
+        effectiveRevision = version;
+        break;
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -584,6 +591,27 @@ class _ProductVersionManagementPageState
             child: Text(
               '已存在草稿版本，请先完成或删除当前草稿后再新建版本',
               style: TextStyle(color: Colors.orange[700], fontSize: 12),
+            ),
+          ),
+        if (effectiveRevision != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '最近一次生效结果：${effectiveRevision.versionLabel} 已生效'
+                        '${effectiveRevision.effectiveAt != null ? '（${_formatDate(effectiveRevision.effectiveAt!)}）' : ''}',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         const Divider(height: 1),
@@ -624,9 +652,8 @@ class _ProductVersionManagementPageState
     final isEffective = rev.lifecycleStatus == 'effective';
     final isObsolete = rev.lifecycleStatus == 'obsolete';
 
-    // 生效时间：仅对已生效/已失效/已停用版本显示 updatedAt
-    final effectiveTimeText = (!isDraft && rev.updatedAt != null)
-        ? _formatDate(rev.updatedAt!)
+    final effectiveTimeText = rev.effectiveAt != null
+        ? _formatDate(rev.effectiveAt!)
         : '-';
 
     return DataRow(
@@ -681,7 +708,7 @@ class _ProductVersionManagementPageState
                         value: 'activate',
                         child: Text('立即生效'),
                       ),
-                    if (isDraft || isEffective || isObsolete)
+                    if (isDraft || isEffective || isObsolete || rev.lifecycleStatus == 'disabled')
                       const PopupMenuItem(value: 'copy', child: Text('复制版本')),
                     const PopupMenuItem(
                       value: 'editNote',
@@ -695,7 +722,7 @@ class _ProductVersionManagementPageState
                       value: 'export',
                       child: Text('导出版本参数'),
                     ),
-                    if (isEffective || isObsolete)
+                    if (isObsolete)
                       const PopupMenuItem(
                         value: 'disable',
                         child: Text('停用版本'),

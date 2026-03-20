@@ -14,12 +14,14 @@ class DailyFirstArticlePage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    this.canViewDetail = false,
     this.canExport = false,
     this.canDispose = false,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canViewDetail;
   final bool canExport;
   final bool canDispose;
 
@@ -435,7 +437,7 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                                 const DataColumn(label: Text('结果')),
                                 const DataColumn(label: Text('校验日期')),
                                 const DataColumn(label: Text('备注')),
-                                if (widget.canDispose)
+                                if (widget.canViewDetail || widget.canDispose)
                                   const DataColumn(label: Text('操作')),
                               ],
                               rows: _items.map((item) {
@@ -461,12 +463,16 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                                       Text(_formatDate(item.verificationDate)),
                                     ),
                                     DataCell(Text(item.remark ?? '-')),
-                                    if (widget.canDispose)
+                                    if (widget.canViewDetail || widget.canDispose)
                                       DataCell(
                                         TextButton(
                                           onPressed: () =>
                                               _showDetailDialog(item),
-                                          child: const Text('详情/处置'),
+                                          child: Text(
+                                            widget.canDispose && item.result == 'failed'
+                                                ? '详情/处置'
+                                                : '详情',
+                                          ),
                                         ),
                                       ),
                                   ],

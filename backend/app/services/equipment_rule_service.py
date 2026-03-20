@@ -20,8 +20,10 @@ def _to_rule_item(row: EquipmentRule) -> EquipmentRuleItem:
     return EquipmentRuleItem(
         id=row.id,
         equipment_id=row.equipment_id,
+        equipment_type=row.equipment_type,
         equipment_code=row.equipment_code,
         equipment_name=row.equipment_name,
+        rule_code=row.rule_code,
         rule_name=row.rule_name,
         rule_type=row.rule_type,
         condition_desc=row.condition_desc,
@@ -37,6 +39,7 @@ def _to_param_item(row: EquipmentRuntimeParameter) -> EquipmentRuntimeParameterI
     return EquipmentRuntimeParameterItem(
         id=row.id,
         equipment_id=row.equipment_id,
+        equipment_type=row.equipment_type,
         equipment_code=row.equipment_code,
         equipment_name=row.equipment_name,
         param_code=row.param_code,
@@ -46,6 +49,7 @@ def _to_param_item(row: EquipmentRuntimeParameter) -> EquipmentRuntimeParameterI
         upper_limit=row.upper_limit,
         lower_limit=row.lower_limit,
         effective_at=row.effective_at,
+        is_enabled=row.is_enabled,
         remark=row.remark,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -59,8 +63,38 @@ def _resolve_equipment_fields(
         return None, None
     eq = db.get(Equipment, equipment_id)
     if eq is None:
-        return None, None
+        raise ValueError("Equipment not found")
     return eq.code, eq.name
+
+
+def _normalize_required_text(value: str, *, field_name: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} is required")
+    return normalized
+
+
+def _validate_parameter_limits(
+    *,
+    standard_value,
+    upper_limit,
+    lower_limit,
+) -> None:
+    if upper_limit is not None and lower_limit is not None and lower_limit > upper_limit:
+        raise ValueError("lower_limit cannot be greater than upper_limit")
+
+
+def _normalize_equipment_scope(
+    db: Session,
+    *,
+    equipment_id: int | None,
+    equipment_type: str | None,
+) -> tuple[int | None, str | None, str | None, str | None]:
+    normalized_type = (equipment_type or '').strip() or None
+    if equipment_id is None and normalized_type is None:
+        raise ValueError('Equipment scope is required')
+    code, name = _resolve_equipment_fields(db, equipment_id)
+    return equipment_id, normalized_type, code, name
 
 
 # ── 设备规则 ──────────────────────────────────────────────────────────────────
@@ -94,12 +128,23 @@ def list_equipment_rules(
 def create_equipment_rule(
     db: Session, *, payload: EquipmentRuleUpsertRequest
 ) -> EquipmentRule:
-    code, name = _resolve_equipment_fields(db, payload.equipment_id)
-    row = EquipmentRule(
+    equipment_id, equipment_type, code, name = _normalize_equipment_scope(
+        db,
         equipment_id=payload.equipment_id,
+        equipment_type=payload.equipment_type,
+    )
+    existing_rule = db.execute(
+        select(EquipmentRule).where(EquipmentRule.rule_code == payload.rule_code.strip())
+    ).scalars().first()
+    if existing_rule is not None:
+        raise ValueError("Equipment rule code already exists")
+    row = EquipmentRule(
+        equipment_id=equipment_id,
+        equipment_type=equipment_type,
         equipment_code=code,
         equipment_name=name,
-        rule_name=payload.rule_name.strip(),
+        rule_code=_normalize_required_text(payload.rule_code, field_name="Rule code"),
+        rule_name=_normalize_required_text(payload.rule_name, field_name="Rule name"),
         rule_type=payload.rule_type.strip(),
         condition_desc=payload.condition_desc.strip(),
         is_enabled=payload.is_enabled,
@@ -114,11 +159,25 @@ def create_equipment_rule(
 def update_equipment_rule(
     db: Session, *, row: EquipmentRule, payload: EquipmentRuleUpsertRequest
 ) -> EquipmentRule:
-    code, name = _resolve_equipment_fields(db, payload.equipment_id)
-    row.equipment_id = payload.equipment_id
+    equipment_id, equipment_type, code, name = _normalize_equipment_scope(
+        db,
+        equipment_id=payload.equipment_id,
+        equipment_type=payload.equipment_type,
+    )
+    existing_rule = db.execute(
+        select(EquipmentRule).where(
+            EquipmentRule.rule_code == payload.rule_code.strip(),
+            EquipmentRule.id != row.id,
+        )
+    ).scalars().first()
+    if existing_rule is not None:
+        raise ValueError("Equipment rule code already exists")
+    row.equipment_id = equipment_id
+    row.equipment_type = equipment_type
     row.equipment_code = code
     row.equipment_name = name
-    row.rule_name = payload.rule_name.strip()
+    row.rule_code = _normalize_required_text(payload.rule_code, field_name="Rule code")
+    row.rule_name = _normalize_required_text(payload.rule_name, field_name="Rule name")
     row.rule_type = payload.rule_type.strip()
     row.condition_desc = payload.condition_desc.strip()
     row.is_enabled = payload.is_enabled
@@ -148,12 +207,15 @@ def list_runtime_parameters(
     *,
     equipment_id: int | None = None,
     keyword: str | None = None,
+    is_enabled: bool | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> EquipmentRuntimeParameterListResult:
     stmt = select(EquipmentRuntimeParameter)
     if equipment_id is not None:
         stmt = stmt.where(EquipmentRuntimeParameter.equipment_id == equipment_id)
+    if is_enabled is not None:
+        stmt = stmt.where(EquipmentRuntimeParameter.is_enabled == is_enabled)
     if keyword:
         like = f"%{keyword.strip()}%"
         stmt = stmt.where(
@@ -174,18 +236,29 @@ def list_runtime_parameters(
 def create_runtime_parameter(
     db: Session, *, payload: EquipmentRuntimeParameterUpsertRequest
 ) -> EquipmentRuntimeParameter:
-    code, name = _resolve_equipment_fields(db, payload.equipment_id)
-    row = EquipmentRuntimeParameter(
+    equipment_id, equipment_type, code, name = _normalize_equipment_scope(
+        db,
         equipment_id=payload.equipment_id,
+        equipment_type=payload.equipment_type,
+    )
+    _validate_parameter_limits(
+        standard_value=payload.standard_value,
+        upper_limit=payload.upper_limit,
+        lower_limit=payload.lower_limit,
+    )
+    row = EquipmentRuntimeParameter(
+        equipment_id=equipment_id,
+        equipment_type=equipment_type,
         equipment_code=code,
         equipment_name=name,
-        param_code=payload.param_code.strip(),
-        param_name=payload.param_name.strip(),
+        param_code=_normalize_required_text(payload.param_code, field_name="Parameter code"),
+        param_name=_normalize_required_text(payload.param_name, field_name="Parameter name"),
         unit=payload.unit.strip(),
         standard_value=payload.standard_value,
         upper_limit=payload.upper_limit,
         lower_limit=payload.lower_limit,
         effective_at=payload.effective_at,
+        is_enabled=payload.is_enabled,
         remark=payload.remark.strip(),
     )
     db.add(row)
@@ -199,17 +272,28 @@ def update_runtime_parameter(
     row: EquipmentRuntimeParameter,
     payload: EquipmentRuntimeParameterUpsertRequest,
 ) -> EquipmentRuntimeParameter:
-    code, name = _resolve_equipment_fields(db, payload.equipment_id)
-    row.equipment_id = payload.equipment_id
+    equipment_id, equipment_type, code, name = _normalize_equipment_scope(
+        db,
+        equipment_id=payload.equipment_id,
+        equipment_type=payload.equipment_type,
+    )
+    _validate_parameter_limits(
+        standard_value=payload.standard_value,
+        upper_limit=payload.upper_limit,
+        lower_limit=payload.lower_limit,
+    )
+    row.equipment_id = equipment_id
+    row.equipment_type = equipment_type
     row.equipment_code = code
     row.equipment_name = name
-    row.param_code = payload.param_code.strip()
-    row.param_name = payload.param_name.strip()
+    row.param_code = _normalize_required_text(payload.param_code, field_name="Parameter code")
+    row.param_name = _normalize_required_text(payload.param_name, field_name="Parameter name")
     row.unit = payload.unit.strip()
     row.standard_value = payload.standard_value
     row.upper_limit = payload.upper_limit
     row.lower_limit = payload.lower_limit
     row.effective_at = payload.effective_at
+    row.is_enabled = payload.is_enabled
     row.remark = payload.remark.strip()
     db.flush()
     return row
@@ -220,3 +304,14 @@ def delete_runtime_parameter(
 ) -> None:
     db.delete(row)
     db.flush()
+
+
+def toggle_runtime_parameter(
+    db: Session,
+    *,
+    row: EquipmentRuntimeParameter,
+    enabled: bool,
+) -> EquipmentRuntimeParameter:
+    row.is_enabled = enabled
+    db.flush()
+    return row

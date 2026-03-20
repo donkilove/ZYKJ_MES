@@ -1,4 +1,4 @@
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -13,6 +13,7 @@ class EquipmentRuntimeParameter(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    equipment_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     equipment_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     equipment_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     param_code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -22,6 +23,13 @@ class EquipmentRuntimeParameter(Base, TimestampMixin):
     upper_limit: Mapped[object] = mapped_column(Numeric(18, 4), nullable=True)
     lower_limit: Mapped[object] = mapped_column(Numeric(18, 4), nullable=True)
     effective_at: Mapped[object] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+        index=True,
+    )
     remark: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     equipment = relationship("Equipment")

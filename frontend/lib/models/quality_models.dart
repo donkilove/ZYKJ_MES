@@ -327,6 +327,38 @@ class FirstArticleDispositionInfo {
   }
 }
 
+class FirstArticleDispositionHistoryItem {
+  const FirstArticleDispositionHistoryItem({
+    required this.id,
+    required this.version,
+    required this.dispositionOpinion,
+    required this.dispositionUsername,
+    required this.dispositionAt,
+    required this.recheckResult,
+    required this.finalJudgment,
+  });
+
+  final int id;
+  final int version;
+  final String dispositionOpinion;
+  final String dispositionUsername;
+  final DateTime? dispositionAt;
+  final String recheckResult;
+  final String finalJudgment;
+
+  factory FirstArticleDispositionHistoryItem.fromJson(Map<String, dynamic> json) {
+    return FirstArticleDispositionHistoryItem(
+      id: (json['id'] as int?) ?? 0,
+      version: (json['version'] as int?) ?? 0,
+      dispositionOpinion: (json['disposition_opinion'] as String?) ?? '',
+      dispositionUsername: (json['disposition_username'] as String?) ?? '',
+      dispositionAt: _parseDateTimeOrNull(json['disposition_at']),
+      recheckResult: (json['recheck_result'] as String?) ?? '',
+      finalJudgment: (json['final_judgment'] as String?) ?? '',
+    );
+  }
+}
+
 class FirstArticleDetail {
   const FirstArticleDetail({
     required this.id,
@@ -344,6 +376,7 @@ class FirstArticleDetail {
     required this.defectDescription,
     required this.checkAt,
     this.disposition,
+    this.dispositionHistory = const [],
   });
 
   final int id;
@@ -361,6 +394,7 @@ class FirstArticleDetail {
   final String defectDescription;
   final DateTime? checkAt;
   final FirstArticleDispositionInfo? disposition;
+  final List<FirstArticleDispositionHistoryItem> dispositionHistory;
 
   factory FirstArticleDetail.fromJson(Map<String, dynamic> json) {
     final nestedDisposition = json['disposition'];
@@ -423,6 +457,13 @@ class FirstArticleDetail {
           _parseDateTimeOrNull(json['check_at']) ??
           _parseDateTimeOrNull(json['created_at']),
       disposition: disposition,
+      dispositionHistory: (json['disposition_history'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => FirstArticleDispositionHistoryItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
     );
   }
 }

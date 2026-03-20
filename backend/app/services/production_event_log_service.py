@@ -19,6 +19,10 @@ def add_order_event_log(
     event_detail: str | None,
     operator_user_id: int | None = None,
     payload: dict[str, Any] | None = None,
+    order_code_snapshot: str | None = None,
+    order_status_snapshot: str | None = None,
+    product_name_snapshot: str | None = None,
+    process_code_snapshot: str | None = None,
 ) -> OrderEventLog:
     payload_json = None
     if payload is not None:
@@ -36,10 +40,10 @@ def add_order_event_log(
 
     row = OrderEventLog(
         order_id=order_id,
-        order_code_snapshot=order_row.order_code if order_row else None,
-        order_status_snapshot=order_row.status if order_row else None,
-        product_name_snapshot=order_row.product.name if order_row and order_row.product else None,
-        process_code_snapshot=order_row.current_process_code if order_row else None,
+        order_code_snapshot=order_code_snapshot or (order_row.order_code if order_row else None),
+        order_status_snapshot=order_status_snapshot or (order_row.status if order_row else None),
+        product_name_snapshot=product_name_snapshot or (order_row.product.name if order_row and order_row.product else None),
+        process_code_snapshot=process_code_snapshot or (order_row.current_process_code if order_row else None),
         event_type=event_type,
         event_title=event_title,
         event_detail=event_detail,
@@ -60,6 +64,24 @@ def list_order_event_logs(
     stmt = (
         select(OrderEventLog)
         .where(OrderEventLog.order_id == order_id)
+        .order_by(OrderEventLog.created_at.desc(), OrderEventLog.id.desc())
+        .limit(limit)
+    )
+    return db.execute(stmt).scalars().all()
+
+
+def search_order_event_logs_by_code(
+    db: Session,
+    *,
+    order_code: str,
+    limit: int = 200,
+) -> list[OrderEventLog]:
+    normalized_order_code = order_code.strip()
+    if not normalized_order_code:
+        return []
+    stmt = (
+        select(OrderEventLog)
+        .where(OrderEventLog.order_code_snapshot == normalized_order_code)
         .order_by(OrderEventLog.created_at.desc(), OrderEventLog.id.desc())
         .limit(limit)
     )

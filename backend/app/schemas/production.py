@@ -138,6 +138,11 @@ class OrderEventLogItem(BaseModel):
     created_at: datetime
 
 
+class OrderEventLogListResult(BaseModel):
+    total: int
+    items: list[OrderEventLogItem]
+
+
 class OrderItem(BaseModel):
     id: int
     order_code: str
@@ -695,6 +700,19 @@ class ScrapRelatedRepairItem(BaseModel):
     completed_at: datetime | None = None
 
 
+class ScrapEventLogItem(BaseModel):
+    id: int
+    order_code: str | None = None
+    order_status: str | None = None
+    product_name: str | None = None
+    process_code: str | None = None
+    event_type: str
+    event_title: str
+    event_detail: str | None = None
+    payload_json: str | None = None
+    created_at: datetime
+
+
 class ScrapStatisticsDetailItem(BaseModel):
     id: int
     order_id: int | None = None
@@ -712,6 +730,7 @@ class ScrapStatisticsDetailItem(BaseModel):
     created_at: datetime
     updated_at: datetime
     related_repair_orders: list[ScrapRelatedRepairItem] = Field(default_factory=list)
+    related_event_logs: list[ScrapEventLogItem] = Field(default_factory=list)
 
 
 class RepairDefectPhenomenonItem(BaseModel):
@@ -739,9 +758,14 @@ class RepairReturnRouteItem(BaseModel):
 class RepairEventLogItem(BaseModel):
     """维修详情中关联的订单事件日志摘要"""
     id: int
+    order_code: str | None = None
+    order_status: str | None = None
+    product_name: str | None = None
+    process_code: str | None = None
     event_type: str
     event_title: str
     event_detail: str | None = None
+    payload_json: str | None = None
     created_at: datetime
 
 

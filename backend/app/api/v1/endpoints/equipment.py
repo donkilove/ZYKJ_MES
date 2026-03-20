@@ -1,6 +1,7 @@
 from datetime import date as date_type
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permission
@@ -91,6 +92,7 @@ from app.services.equipment_rule_service import (
     delete_runtime_parameter,
     list_equipment_rules,
     list_runtime_parameters,
+    toggle_runtime_parameter,
     toggle_equipment_rule,
     update_equipment_rule,
     update_runtime_parameter,
@@ -160,9 +162,12 @@ def to_work_order_item(row: MaintenanceWorkOrder) -> MaintenanceWorkOrderItem:
         id=row.id,
         plan_id=row.plan_id,
         equipment_id=row.equipment_id,
-        equipment_name=row.equipment.name if row.equipment else "-",
+        equipment_name=row.source_equipment_name or (row.equipment.name if row.equipment else "-"),
+        source_equipment_code=row.source_equipment_code or None,
         item_id=row.item_id,
-        item_name=row.item.name if row.item else "-",
+        item_name=row.source_item_name or (row.item.name if row.item else "-"),
+        source_item_name=row.source_item_name or None,
+        source_execution_process_code=row.source_execution_process_code or None,
         due_date=row.due_date,
         status=row.status,  # type: ignore[arg-type]
         executor_user_id=row.executor_user_id,
@@ -218,6 +223,8 @@ def get_equipment_ledger(
     page_size: int = Query(default=50, ge=1, le=200),
     keyword: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
+    location_keyword: str | None = Query(default=None),
+    owner_name: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("equipment.ledger.list")),
 ) -> ApiResponse[EquipmentLedgerListResult]:
@@ -227,6 +234,8 @@ def get_equipment_ledger(
         page_size=page_size,
         keyword=keyword,
         enabled=enabled,
+        location_keyword=location_keyword,
+        owner_name=owner_name,
     )
     return success_response(
         EquipmentLedgerListResult(total=total, items=[to_equipment_item(row) for row in rows])
@@ -360,6 +369,7 @@ def get_maintenance_items(
     page_size: int = Query(default=50, ge=1, le=200),
     keyword: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("equipment.items.list")),
 ) -> ApiResponse[MaintenanceItemListResult]:
@@ -369,6 +379,7 @@ def get_maintenance_items(
         page_size=page_size,
         keyword=keyword,
         enabled=enabled,
+        category=category,
     )
     return success_response(
         MaintenanceItemListResult(
@@ -479,6 +490,8 @@ def get_maintenance_plans(
     equipment_id: int | None = Query(default=None, ge=1),
     item_id: int | None = Query(default=None, ge=1),
     enabled: bool | None = Query(default=None),
+    execution_process_code: str | None = Query(default=None),
+    default_executor_user_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("equipment.plans.list")),
 ) -> ApiResponse[MaintenancePlanListResult]:
@@ -489,6 +502,8 @@ def get_maintenance_plans(
         equipment_id=equipment_id,
         item_id=item_id,
         enabled=enabled,
+        execution_process_code=execution_process_code,
+        default_executor_user_id=default_executor_user_id,
     )
     return success_response(
         MaintenancePlanListResult(
@@ -801,7 +816,7 @@ def get_equipment_detail_api(
     result = get_equipment_detail(db, equipment_id)
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipment not found")
-    row, active_plan_count, pending_work_order_count, recent_records = result
+    row, active_plan_count, pending_work_order_count, active_plans, pending_work_orders, recent_records = result
     return success_response(
         EquipmentDetailResult(
             id=row.id,
@@ -816,6 +831,8 @@ def get_equipment_detail_api(
             updated_at=row.updated_at,
             active_plan_count=active_plan_count,
             pending_work_order_count=pending_work_order_count,
+            active_plans=[to_maintenance_plan_item(db, plan) for plan in active_plans],
+            pending_work_orders=[to_work_order_item(work_order) for work_order in pending_work_orders],
             recent_records=[to_maintenance_record_item(r) for r in recent_records],
         )
     )
@@ -831,12 +848,20 @@ def get_work_order_detail_api(
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work order not found")
     base = to_work_order_item(row)
+    record_row = db.execute(
+        select(MaintenanceRecord.id).where(MaintenanceRecord.work_order_id == row.id).limit(1)
+    ).scalars().first()
     return success_response(
         MaintenanceWorkOrderDetail(
             **base.model_dump(),
             source_plan_id=row.source_plan_id,
             source_plan_cycle_days=row.source_plan_cycle_days,
+            source_plan_start_date=row.source_plan_start_date,
             source_execution_process_code=row.source_execution_process_code,
+            source_equipment_name=row.source_equipment_name or None,
+            source_item_id=row.source_item_id,
+            source_item_name=row.source_item_name or None,
+            record_id=record_row,
         )
     )
 
@@ -894,8 +919,10 @@ def get_maintenance_record_detail_api(
             **base.model_dump(),
             source_plan_id=row.source_plan_id,
             source_plan_cycle_days=row.source_plan_cycle_days,
+            source_plan_start_date=row.source_plan_start_date,
             source_equipment_code=row.source_equipment_code,
             source_item_id=row.source_item_id,
+            source_item_name=row.source_item_name or None,
         )
     )
 
@@ -904,10 +931,18 @@ def get_maintenance_record_detail_api(
 def export_equipment_ledger_api(
     keyword: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
+    location_keyword: str | None = Query(default=None),
+    owner_name: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("equipment.ledger.list")),
 ) -> ApiResponse[EquipmentExportResult]:
-    result = export_equipment_ledger_csv(db, keyword=keyword, enabled=enabled)
+    result = export_equipment_ledger_csv(
+        db,
+        keyword=keyword,
+        enabled=enabled,
+        location_keyword=location_keyword,
+        owner_name=owner_name,
+    )
     return success_response(EquipmentExportResult(**result))
 
 
@@ -915,10 +950,11 @@ def export_equipment_ledger_api(
 def export_maintenance_items_api(
     keyword: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("equipment.items.list")),
 ) -> ApiResponse[EquipmentExportResult]:
-    result = export_maintenance_items_csv(db, keyword=keyword, enabled=enabled)
+    result = export_maintenance_items_csv(db, keyword=keyword, enabled=enabled, category=category)
     return success_response(EquipmentExportResult(**result))
 
 
@@ -927,10 +963,19 @@ def export_maintenance_plans_api(
     equipment_id: int | None = Query(default=None, ge=1),
     item_id: int | None = Query(default=None, ge=1),
     enabled: bool | None = Query(default=None),
+    execution_process_code: str | None = Query(default=None),
+    default_executor_user_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("equipment.plans.list")),
 ) -> ApiResponse[EquipmentExportResult]:
-    result = export_maintenance_plans_csv(db, equipment_id=equipment_id, item_id=item_id, enabled=enabled)
+    result = export_maintenance_plans_csv(
+        db,
+        equipment_id=equipment_id,
+        item_id=item_id,
+        enabled=enabled,
+        execution_process_code=execution_process_code,
+        default_executor_user_id=default_executor_user_id,
+    )
     return success_response(EquipmentExportResult(**result))
 
 
@@ -1008,9 +1053,13 @@ def create_equipment_rule_api(
     current_user: User = Depends(require_permission("equipment.rules.manage")),
 ) -> ApiResponse[EquipmentRuleItem]:
     from app.schemas.equipment_rule import EquipmentRuleItem as _Item
-    row = create_equipment_rule(db, payload=payload)
+    try:
+        row = create_equipment_rule(db, payload=payload)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     write_audit_log(
         db,
+        action_code="equipment.rules.create",
         action_name="新增设备规则",
         target_type="equipment_rule",
         target_id=str(row.id),
@@ -1034,9 +1083,13 @@ def update_equipment_rule_api(
     row = db.get(EquipmentRule, rule_id)
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found")
-    row = update_equipment_rule(db, row=row, payload=payload)
+    try:
+        row = update_equipment_rule(db, row=row, payload=payload)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     write_audit_log(
         db,
+        action_code="equipment.rules.update",
         action_name="编辑设备规则",
         target_type="equipment_rule",
         target_id=str(row.id),
@@ -1060,9 +1113,10 @@ def toggle_equipment_rule_api(
     row = db.get(EquipmentRule, rule_id)
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found")
-    row = toggle_equipment_rule(db, row=row, enabled=payload.is_enabled)
+    row = toggle_equipment_rule(db, row=row, enabled=payload.enabled)
     write_audit_log(
         db,
+        action_code="equipment.rules.toggle",
         action_name="启停设备规则",
         target_type="equipment_rule",
         target_id=str(row.id),
@@ -1088,6 +1142,7 @@ def delete_equipment_rule_api(
     delete_equipment_rule(db, row=row)
     write_audit_log(
         db,
+        action_code="equipment.rules.delete",
         action_name="删除设备规则",
         target_type="equipment_rule",
         target_id=str(rule_id),
@@ -1104,6 +1159,7 @@ def delete_equipment_rule_api(
 def list_runtime_parameters_api(
     equipment_id: int | None = Query(default=None),
     keyword: str | None = Query(default=None),
+    is_enabled: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -1113,6 +1169,7 @@ def list_runtime_parameters_api(
         db,
         equipment_id=equipment_id,
         keyword=keyword,
+        is_enabled=is_enabled,
         page=page,
         page_size=page_size,
     )
@@ -1126,9 +1183,13 @@ def create_runtime_parameter_api(
     current_user: User = Depends(require_permission("equipment.runtime_parameters.manage")),
 ) -> ApiResponse[EquipmentRuntimeParameterItem]:
     from app.schemas.equipment_rule import EquipmentRuntimeParameterItem as _Item
-    row = create_runtime_parameter(db, payload=payload)
+    try:
+        row = create_runtime_parameter(db, payload=payload)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     write_audit_log(
         db,
+        action_code="equipment.runtime_parameters.create",
         action_name="新增运行参数",
         target_type="equipment_runtime_parameter",
         target_id=str(row.id),
@@ -1152,9 +1213,13 @@ def update_runtime_parameter_api(
     row = db.get(EquipmentRuntimeParameter, param_id)
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parameter not found")
-    row = update_runtime_parameter(db, row=row, payload=payload)
+    try:
+        row = update_runtime_parameter(db, row=row, payload=payload)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     write_audit_log(
         db,
+        action_code="equipment.runtime_parameters.update",
         action_name="编辑运行参数",
         target_type="equipment_runtime_parameter",
         target_id=str(row.id),
@@ -1180,6 +1245,7 @@ def delete_runtime_parameter_api(
     delete_runtime_parameter(db, row=row)
     write_audit_log(
         db,
+        action_code="equipment.runtime_parameters.delete",
         action_name="删除运行参数",
         target_type="equipment_runtime_parameter",
         target_id=str(param_id),
@@ -1188,3 +1254,31 @@ def delete_runtime_parameter_api(
     )
     db.commit()
     return success_response(None, message="deleted")
+
+
+@router.patch("/runtime-parameters/{param_id}/toggle", response_model=ApiResponse[EquipmentRuntimeParameterItem])
+def toggle_runtime_parameter_api(
+    param_id: int,
+    payload: ToggleEnabledRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("equipment.runtime_parameters.manage")),
+) -> ApiResponse[EquipmentRuntimeParameterItem]:
+    from app.schemas.equipment_rule import EquipmentRuntimeParameterItem as _Item
+
+    row = db.get(EquipmentRuntimeParameter, param_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parameter not found")
+    row = toggle_runtime_parameter(db, row=row, enabled=payload.enabled)
+    write_audit_log(
+        db,
+        action_code="equipment.runtime_parameters.toggle",
+        action_name="启停运行参数",
+        target_type="equipment_runtime_parameter",
+        target_id=str(row.id),
+        target_name=row.param_name,
+        operator=current_user,
+        after_data={"is_enabled": row.is_enabled},
+    )
+    db.commit()
+    db.refresh(row)
+    return success_response(_Item.model_validate(row, from_attributes=True))

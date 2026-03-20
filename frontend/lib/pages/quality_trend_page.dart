@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
@@ -14,10 +15,12 @@ class QualityTrendPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    this.canExport = false,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canExport;
 
   @override
   State<QualityTrendPage> createState() => _QualityTrendPageState();
@@ -30,9 +33,11 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
   final TextEditingController _operatorController = TextEditingController();
 
   bool _loading = false;
+  bool _exporting = false;
   String _message = '';
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 29));
   DateTime _endDate = DateTime.now();
+  String? _resultFilter;
   List<QualityTrendItem> _items = const [];
 
   @override
@@ -93,6 +98,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         productName: _productController.text.trim(),
         processCode: _processController.text.trim(),
         operatorUsername: _operatorController.text.trim(),
+        result: _resultFilter,
       );
       if (!mounted) return;
       setState(() => _items = items);
@@ -102,6 +108,51 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
       setState(() => _message = '加载质量趋势失败：${_errorMessage(error)}');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _exportTrend() async {
+    setState(() {
+      _exporting = true;
+      _message = '';
+    });
+    try {
+      final csvBase64 = await _service.exportQualityTrend(
+        startDate: _startDate,
+        endDate: _endDate,
+        productName: _productController.text.trim(),
+        processCode: _processController.text.trim(),
+        operatorUsername: _operatorController.text.trim(),
+        result: _resultFilter,
+      );
+      if (!mounted) return;
+      final csvText = utf8.decode(base64Decode(csvBase64));
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('导出质量趋势'),
+          content: SizedBox(
+            width: 600,
+            height: 400,
+            child: SelectableText(csvText),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() => _message = '导出质量趋势失败：${_errorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
     }
   }
   Widget _buildChart() {
@@ -165,6 +216,15 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
           Row(children: [
             Text('质量趋势', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
             const Spacer(),
+            if (widget.canExport)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: OutlinedButton.icon(
+                  onPressed: (_loading || _exporting) ? null : _exportTrend,
+                  icon: const Icon(Icons.download),
+                  label: const Text('导出'),
+                ),
+              ),
             IconButton(tooltip: '刷新', onPressed: _loading ? null : _loadTrend, icon: const Icon(Icons.refresh)),
           ]),
           const SizedBox(height: 12),
@@ -180,6 +240,18 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
             SizedBox(width: 130, child: TextField(controller: _productController, decoration: const InputDecoration(labelText: '产品名称', border: OutlineInputBorder(), isDense: true), onSubmitted: (_) => _loadTrend())),
             SizedBox(width: 120, child: TextField(controller: _processController, decoration: const InputDecoration(labelText: '工序编码', border: OutlineInputBorder(), isDense: true), onSubmitted: (_) => _loadTrend())),
             SizedBox(width: 120, child: TextField(controller: _operatorController, decoration: const InputDecoration(labelText: '操作员', border: OutlineInputBorder(), isDense: true), onSubmitted: (_) => _loadTrend())),
+            DropdownButton<String?>(
+              value: _resultFilter,
+              hint: const Text('全部结果'),
+              items: const [
+                DropdownMenuItem(value: null, child: Text('全部结果')),
+                DropdownMenuItem(value: 'passed', child: Text('合格')),
+                DropdownMenuItem(value: 'failed', child: Text('不合格')),
+              ],
+              onChanged: _loading
+                  ? null
+                  : (v) => setState(() => _resultFilter = v),
+            ),
             FilledButton.icon(onPressed: _loading ? null : _loadTrend, icon: const Icon(Icons.search), label: const Text('查询')),
           ]),
           const SizedBox(height: 12),

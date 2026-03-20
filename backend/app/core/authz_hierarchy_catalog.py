@@ -472,6 +472,22 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         action_permission_codes=("quality.first_articles.list",),
     ),
     FeatureDefinition(
+        permission_code="feature.quality.first_articles.detail",
+        permission_name="查看首件详情",
+        module_code="quality",
+        page_code="first_article_management",
+        action_permission_codes=("quality.first_articles.detail",),
+        dependency_permission_codes=("feature.quality.first_articles.view",),
+    ),
+    FeatureDefinition(
+        permission_code="feature.quality.first_articles.disposition",
+        permission_name="首件处置",
+        module_code="quality",
+        page_code="first_article_management",
+        action_permission_codes=("quality.first_articles.disposition",),
+        dependency_permission_codes=("feature.quality.first_articles.detail",),
+    ),
+    FeatureDefinition(
         permission_code="feature.quality.stats.view",
         permission_name="查看质量数据统计",
         module_code="quality",
@@ -480,6 +496,8 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
             "quality.stats.overview",
             "quality.stats.processes",
             "quality.stats.operators",
+            "quality.stats.products",
+            "quality.trend",
         ),
     ),
     FeatureDefinition(
@@ -487,7 +505,10 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         permission_name="查看报废统计（品质归口）",
         module_code="quality",
         page_code="quality_scrap_statistics",
-        action_permission_codes=("production.scrap_statistics.list",),
+        action_permission_codes=(
+            "production.scrap_statistics.list",
+            "production.scrap_statistics.detail",
+        ),
     ),
     FeatureDefinition(
         permission_code="feature.quality.scrap_statistics.export",
@@ -504,6 +525,7 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         page_code="quality_repair_orders",
         action_permission_codes=(
             "production.repair_orders.list",
+            "production.repair_orders.detail",
             "production.repair_orders.phenomena_summary",
             "production.repair_orders.complete",
         ),

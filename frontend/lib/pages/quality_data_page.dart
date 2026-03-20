@@ -49,6 +49,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
   List<QualityProcessStatItem> _processItems = const [];
   List<QualityOperatorStatItem> _operatorItems = const [];
   List<QualityProductStatItem> _productItems = const [];
+  List<QualityTrendItem> _trendItems = const [];
 
   @override
   void initState() {
@@ -165,6 +166,14 @@ class _QualityDataPageState extends State<QualityDataPage> {
         operatorUsername: _operatorUsernameController.text.trim(),
         result: _resultFilter,
       );
+      final trendItems = await _service.getQualityTrend(
+        startDate: _startDate,
+        endDate: _endDate,
+        productName: _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim(),
+        operatorUsername: _operatorUsernameController.text.trim(),
+        result: _resultFilter,
+      );
       if (!mounted) {
         return;
       }
@@ -173,6 +182,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
         _processItems = processItems;
         _operatorItems = operatorItems;
         _productItems = productItems;
+        _trendItems = trendItems;
       });
     } catch (error) {
       if (!mounted) {
@@ -271,6 +281,38 @@ class _QualityDataPageState extends State<QualityDataPage> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrendSection(ThemeData theme) {
+    if (_trendItems.isEmpty) {
+      return const Text('暂无趋势数据');
+    }
+    return Card(
+      child: AdaptiveTableContainer(
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('日期')),
+            DataColumn(label: Text('首件总数')),
+            DataColumn(label: Text('通过数')),
+            DataColumn(label: Text('不通过数')),
+            DataColumn(label: Text('通过率')),
+            DataColumn(label: Text('报废数')),
+            DataColumn(label: Text('维修数')),
+          ],
+          rows: _trendItems.map((item) {
+            return DataRow(cells: [
+              DataCell(Text(item.date)),
+              DataCell(Text('${item.firstArticleTotal}')),
+              DataCell(Text('${item.passedTotal}')),
+              DataCell(Text('${item.failedTotal}')),
+              DataCell(Text(_formatRate(item.passRatePercent))),
+              DataCell(Text('${item.scrapTotal}')),
+              DataCell(Text('${item.repairTotal}')),
+            ]);
+          }).toList(),
         ),
       ),
     );
@@ -464,6 +506,10 @@ class _QualityDataPageState extends State<QualityDataPage> {
                 ),
               ),
             ),
+          Text('趋势分析', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          _buildTrendSection(theme),
+          const SizedBox(height: 12),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())

@@ -125,6 +125,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
     return items;
   }
 
+  Future<List<CraftStageItem>> _fetchLatestStages() async {
+    final result = await _craftService.listStages(pageSize: 500, enabled: true);
+    if (mounted) {
+      setState(() => _stages = result.items);
+    }
+    return result.items;
+  }
+
   List<XTypeGroup> _exportTypeGroups(String format) {
     switch (format) {
       case 'excel':
@@ -292,6 +300,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
       _showNoPermission();
       return;
     }
+    List<CraftStageItem> currentStages = _stages;
+    try {
+      currentStages = await _fetchLatestStages();
+    } catch (_) {}
     final assignableRoles = _assignableRoles();
     if (assignableRoles.isEmpty) {
       setState(() {
@@ -433,11 +445,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           opacity: isOperatorSelected ? 1 : 0.5,
                           child: IgnorePointer(
                             ignoring: !isOperatorSelected,
-                            child: _stages.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text('暂无可分配工段'),
-                                  )
+                              child: currentStages.isEmpty
+                                  ? const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 8),
+                                      child: Text('暂无可分配工段'),
+                                    )
                                 : RadioGroup<int>(
                                     groupValue: selectedStageId,
                                     onChanged: (value) {
@@ -451,8 +463,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
-                                      children: _stages.map((stage) {
-                                        return RadioListTile<int>(
+                                        children: currentStages.map((stage) {
+                                          return RadioListTile<int>(
                                           dense: true,
                                           contentPadding: EdgeInsets.zero,
                                           title: Text(stage.name),
@@ -542,6 +554,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
       _showNoPermission();
       return;
     }
+    List<CraftStageItem> currentStages = _stages;
+    try {
+      currentStages = await _fetchLatestStages();
+    } catch (_) {}
     final assignableRoles = _assignableRoles(includeRoleCode: user.roleCode);
     if (assignableRoles.isEmpty) {
       setState(() {
@@ -666,7 +682,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             opacity: isOperatorSelected ? 1 : 0.5,
                             child: IgnorePointer(
                               ignoring: !isOperatorSelected,
-                              child: _stages.isEmpty
+                              child: currentStages.isEmpty
                                   ? const Padding(
                                       padding: EdgeInsets.symmetric(vertical: 8),
                                       child: Text('暂无可分配工段'),
@@ -684,7 +700,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
-                                        children: _stages.map((stage) {
+                                        children: currentStages.map((stage) {
                                           return RadioListTile<int>(
                                             dense: true,
                                             contentPadding: EdgeInsets.zero,
@@ -1130,6 +1146,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 width: 150,
                 child: DropdownButtonFormField<int?>(
                   initialValue: _filterStageId,
+                  onTap: () {
+                    unawaited(_fetchLatestStages());
+                  },
                   decoration: const InputDecoration(
                     labelText: '工段',
                     border: OutlineInputBorder(),

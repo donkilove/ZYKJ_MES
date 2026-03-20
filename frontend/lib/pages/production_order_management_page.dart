@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -48,6 +49,7 @@ class _ProductionOrderManagementPageState
   late final ProductionService _service;
   late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
+  final TextEditingController _deletedOrderCodeController = TextEditingController();
 
   bool _loading = false;
   String _message = '';
@@ -77,6 +79,7 @@ class _ProductionOrderManagementPageState
   void dispose() {
     _keywordController.dispose();
     _productNameController.dispose();
+    _deletedOrderCodeController.dispose();
     super.dispose();
   }
 
@@ -176,30 +179,18 @@ class _ProductionOrderManagementPageState
           (result['content_base64'] as String?) ??
           (result['data'] as String?) ??
           '';
-      final csvText = utf8.decode(base64Decode(base64Data));
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text('订单导出预览 - $filename'),
-          content: SizedBox(
-            width: 760,
-            height: 480,
-            child: SingleChildScrollView(
-              child: SelectableText(csvText),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
+      final bytes = base64Decode(base64Data);
+      final location = await getSaveLocation(
+        suggestedName: filename,
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
       );
+      if (location == null || !mounted) return;
+      await XFile.fromData(bytes, mimeType: 'text/csv', name: filename).saveTo(location.path);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功：$filename')),
+        SnackBar(content: Text('导出成功：${location.path}')),
       );
     } catch (error) {
       if (!mounted) return;
@@ -210,6 +201,70 @@ class _ProductionOrderManagementPageState
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('导出失败：${_errorMessage(error)}')));
+    }
+  }
+
+  Future<void> _showDeletedOrderTraceDialog() async {
+    final orderCode = _deletedOrderCodeController.text.trim();
+    if (orderCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请输入订单号后再查询删除追溯')),
+      );
+      return;
+    }
+    try {
+      final result = await _service.searchOrderEvents(orderCode: orderCode);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('删除追溯 - $orderCode'),
+          content: SizedBox(
+            width: 760,
+            height: 420,
+            child: result.items.isEmpty
+                ? const Center(child: Text('未查到相关事件日志'))
+                : ListView.separated(
+                    itemCount: result.items.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final item = result.items[index];
+                      final snapshotSegments = <String>[];
+                      if ((item.orderCode ?? '').trim().isNotEmpty) snapshotSegments.add(item.orderCode!.trim());
+                      if ((item.productName ?? '').trim().isNotEmpty) snapshotSegments.add(item.productName!.trim());
+                      if ((item.processCode ?? '').trim().isNotEmpty) snapshotSegments.add(item.processCode!.trim());
+                      if ((item.orderStatus ?? '').trim().isNotEmpty) snapshotSegments.add(item.orderStatus!.trim());
+                      final payload = (item.payloadJson ?? '').trim();
+                      return ListTile(
+                        title: Text(item.eventTitle),
+                        subtitle: Text(
+                          '${_formatDateTime(item.createdAt)}  ${item.eventDetail ?? ''}'
+                          '${snapshotSegments.isEmpty ? '' : '\n快照：${snapshotSegments.join(' ｜ ')}'}'
+                          '${payload.isEmpty ? '' : '\n载荷：$payload'}',
+                        ),
+                        isThreeLine: snapshotSegments.isNotEmpty || payload.isNotEmpty,
+                        trailing: Text(item.operatorUsername ?? '-'),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('查询删除追溯失败：${_errorMessage(error)}')),
+      );
     }
   }
 
@@ -733,6 +788,25 @@ class _ProductionOrderManagementPageState
                 onPressed: _loading ? null : _loadOrders,
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _deletedOrderCodeController,
+                  decoration: const InputDecoration(
+                    labelText: '删除追溯订单号',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _showDeletedOrderTraceDialog(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _showDeletedOrderTraceDialog,
+                icon: const Icon(Icons.history),
+                label: const Text('删除追溯'),
               ),
               const SizedBox(width: 8),
               OutlinedButton.icon(

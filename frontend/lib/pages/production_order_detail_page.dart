@@ -358,11 +358,28 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final item = sortedEvents[index];
+                      final snapshotParts = <String>[];
+                      if ((item.orderCode ?? '').trim().isNotEmpty) {
+                        snapshotParts.add(item.orderCode!.trim());
+                      }
+                      if ((item.productName ?? '').trim().isNotEmpty) {
+                        snapshotParts.add(item.productName!.trim());
+                      }
+                      if ((item.processCode ?? '').trim().isNotEmpty) {
+                        snapshotParts.add(item.processCode!.trim());
+                      }
+                      if ((item.orderStatus ?? '').trim().isNotEmpty) {
+                        snapshotParts.add(item.orderStatus!.trim());
+                      }
+                      final payload = (item.payloadJson ?? '').trim();
                       return ListTile(
                         title: Text(item.eventTitle),
                         subtitle: Text(
-                          '${_formatDateTime(item.createdAt)}  ${item.eventDetail ?? ''}',
+                          '${_formatDateTime(item.createdAt)}  ${item.eventDetail ?? ''}'
+                          '${snapshotParts.isEmpty ? '' : '\n快照：${snapshotParts.join(' ｜ ')}'}'
+                          '${payload.isEmpty ? '' : '\n载荷：$payload'}',
                         ),
+                        isThreeLine: snapshotParts.isNotEmpty || payload.isNotEmpty,
                         trailing: Text(item.operatorUsername ?? '-'),
                       );
                     },

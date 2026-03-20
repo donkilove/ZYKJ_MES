@@ -312,6 +312,7 @@ class ProductVersionItem {
     required this.lifecycleStatus,
     required this.action,
     required this.note,
+    this.effectiveAt,
     required this.sourceVersion,
     required this.sourceVersionLabel,
     required this.createdByUserId,
@@ -325,6 +326,7 @@ class ProductVersionItem {
   final String lifecycleStatus;
   final String action;
   final String? note;
+  final DateTime? effectiveAt;
   final int? sourceVersion;
   final String? sourceVersionLabel;
   final int? createdByUserId;
@@ -341,6 +343,7 @@ class ProductVersionItem {
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? '',
       action: (json['action'] as String?) ?? '',
       note: json['note'] as String?,
+      effectiveAt: json['effective_at'] != null ? DateTime.parse(json['effective_at'] as String) : null,
       sourceVersion: json['source_version'] as int?,
       sourceVersionLabel: json['source_version_label'] as String?,
       createdByUserId: json['created_by_user_id'] as int?,

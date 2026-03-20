@@ -558,10 +558,14 @@ class UserService {
     required int page,
     required int pageSize,
     String? keyword,
+    String? statusFilter,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
+    }
+    if (statusFilter != null && statusFilter.trim().isNotEmpty) {
+      query['status_filter'] = statusFilter.trim();
     }
 
     final uri = Uri.parse(

@@ -1,9 +1,11 @@
 import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/equipment_models.dart';
+import 'maintenance_record_detail_page.dart';
 import '../services/api_exception.dart';
 import '../services/equipment_service.dart';
 import '../widgets/adaptive_table_container.dart';
@@ -36,6 +38,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   DateTime? _endDate;
   String? _resultSummaryFilter;
   List<EquipmentLedgerItem> _equipmentList = const [];
+  List<EquipmentOwnerOption> _ownerOptions = const [];
   int? _equipmentIdFilter;
 
   @override
@@ -56,8 +59,12 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   Future<void> _loadEquipmentList() async {
     try {
       final result = await _equipmentService.listEquipment(page: 1, pageSize: 500);
+      final owners = await _equipmentService.listAllOwners();
       if (mounted) {
-        setState(() => _equipmentList = result.items);
+        setState(() {
+          _equipmentList = result.items;
+          _ownerOptions = owners;
+        });
       }
     } catch (_) {}
   }
@@ -112,16 +119,24 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
       _message = '';
     });
     try {
-      final executorKeyword = _executorController.text.trim();
       final keyword = _keywordController.text.trim().isNotEmpty
           ? _keywordController.text.trim()
-          : executorKeyword.isNotEmpty
-              ? executorKeyword
-              : null;
+          : null;
+      int? executorId;
+      final executorKeyword = _executorController.text.trim();
+      if (executorKeyword.isNotEmpty) {
+        for (final owner in _ownerOptions) {
+          if (owner.username == executorKeyword) {
+            executorId = owner.userId;
+            break;
+          }
+        }
+      }
       final result = await _equipmentService.listRecords(
         page: 1,
         pageSize: 200,
         keyword: keyword,
+        executorId: executorId,
         startDate: _startDate,
         endDate: _endDate,
         resultSummary: _resultSummaryFilter,
@@ -155,61 +170,13 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   }
 
   Future<void> _showDetail(MaintenanceRecordItem item) async {
-    if (!mounted) return;
-    setState(() => _loading = true);
-    MaintenanceRecordDetail? detail;
-    try {
-      detail = await _equipmentService.getRecordDetail(recordId: item.id);
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('加载详情失败：${_errorMessage(error)}')),
-      );
-      setState(() => _loading = false);
-      return;
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('保养记录详情 #${detail!.id}'),
-        content: SizedBox(
-          width: 480,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _detailRow('设备', detail.equipmentName),
-                if (detail.sourceEquipmentCode != null)
-                  _detailRow('设备编号', detail.sourceEquipmentCode!),
-                _detailRow('项目', detail.itemName),
-                _detailRow('到期日期', _formatDate(detail.dueDate)),
-                _detailRow('完成时间', _formatDateTime(detail.completedAt)),
-                _detailRow('执行人', detail.executorUsername ?? '-'),
-                _detailRow('结果摘要', detail.resultSummary),
-                if (detail.resultRemark != null)
-                  _detailRow('备注', detail.resultRemark!),
-                if (detail.attachmentLink != null)
-                  _detailRow('附件链接', detail.attachmentLink!),
-                if (detail.sourcePlanCycleDays != null)
-                  _detailRow('计划周期(天)', '${detail.sourcePlanCycleDays}'),
-              ],
-            ),
-          ),
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MaintenanceRecordDetailPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          recordId: item.id,
         ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
       ),
     );
   }
@@ -217,10 +184,21 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   Future<void> _exportCsv() async {
     setState(() { _exporting = true; _message = ''; });
     try {
+      int? executorId;
+      final executorKeyword = _executorController.text.trim();
+      if (executorKeyword.isNotEmpty) {
+        for (final owner in _ownerOptions) {
+          if (owner.username == executorKeyword) {
+            executorId = owner.userId;
+            break;
+          }
+        }
+      }
       final csvBase64 = await _equipmentService.exportMaintenanceRecords(
         keyword: _keywordController.text.trim().isNotEmpty
             ? _keywordController.text.trim()
             : null,
+        executorId: executorId,
         startDate: _startDate,
         endDate: _endDate,
         resultSummary: _resultSummaryFilter,
@@ -231,23 +209,18 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
         setState(() => _message = '导出失败：服务端返回空数据');
         return;
       }
-      final csvText = utf8.decode(base64Decode(csvBase64));
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('导出保养记录'),
-          content: SizedBox(
-            width: 600,
-            height: 400,
-            child: SelectableText(csvText),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
+      final bytes = base64Decode(csvBase64);
+      final location = await getSaveLocation(
+        suggestedName: 'maintenance_records.csv',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
+      );
+      if (location == null || !mounted) return;
+      await XFile.fromData(bytes, mimeType: 'text/csv', name: 'maintenance_records.csv').saveTo(location.path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出成功：${location.path}')),
       );
     } catch (error) {
       if (!mounted) return;
@@ -256,22 +229,6 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text('$label：', style: const TextStyle(fontWeight: FontWeight.w500)),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
   }
 
   @override
@@ -469,6 +426,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                           DataColumn(label: Text('执行人')),
                           DataColumn(label: Text('结果摘要')),
                           DataColumn(label: Text('备注')),
+                          DataColumn(label: Text('附件')),
                           DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
@@ -484,6 +442,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                               DataCell(Text(item.executorUsername ?? '-')),
                               DataCell(Text(item.resultSummary)),
                               DataCell(Text(item.resultRemark ?? '-')),
+                              DataCell(Text(item.attachmentLink?.trim().isNotEmpty == true ? '有附件' : '-')),
                               DataCell(
                                 TextButton(
                                   onPressed: () => _showDetail(item),

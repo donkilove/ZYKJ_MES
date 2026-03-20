@@ -114,6 +114,8 @@ class _MainShellPageState extends State<MainShellPage>
 
   String _message = '';
 
+  int _messageRefreshTick = 0;
+
   CurrentUser? _currentUser;
 
   AuthzSnapshotResult? _authzSnapshot;
@@ -188,11 +190,23 @@ class _MainShellPageState extends State<MainShellPage>
       if (count != null) {
         setState(() => _unreadCount = count);
       }
+    } else if (event.event == 'message_read_state_changed') {
+      final count = event.unreadCount;
+      setState(() {
+        if (count != null) {
+          _unreadCount = count;
+        }
+        _messageRefreshTick += 1;
+      });
     } else if (event.event == 'message_created') {
       final count = event.unreadCount;
       if (count != null) {
-        setState(() => _unreadCount = count);
+        setState(() {
+          _unreadCount = count;
+          _messageRefreshTick += 1;
+        });
       } else {
+        setState(() => _messageRefreshTick += 1);
         _refreshUnreadCount();
       }
     }
@@ -631,10 +645,11 @@ class _MainShellPageState extends State<MainShellPage>
         return MessageCenterPage(
           session: widget.session,
           onLogout: widget.onLogout,
+          refreshTick: _messageRefreshTick,
           onUnreadCountChanged: (count) {
             if (mounted) setState(() => _unreadCount = count);
           },
-          onNavigateToPage: (pageCode, {tabCode}) {
+          onNavigateToPage: (pageCode, {tabCode, routePayloadJson}) {
             if (!mounted) return;
             var resolvedPageCode = pageCode;
             var resolvedTabCode = tabCode;

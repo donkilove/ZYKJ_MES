@@ -167,6 +167,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         return '删除';
       case 'rollback':
         return '回滚';
+      case 'update_product':
+        return '编辑产品';
+      case 'lifecycle':
+        return '变更状态';
+      case 'update_version_note':
+        return '编辑版本备注';
       default:
         return '编辑';
     }
@@ -1220,6 +1226,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
             : _selectedEffectiveVersionFilter == 'no'
             ? false
             : null,
+        updatedAfter: _updatedAfter,
+        updatedBefore: _updatedBefore,
       );
       final location = await getSaveLocation(
         suggestedName: 'products.csv',
@@ -1609,7 +1617,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
           items.add(
             const PopupMenuItem(
               value: _ProductTableAction.reactivate,
-              child: Text('启用'),
+              child: Text('去版本管理生效'),
             ),
           );
           break;
@@ -1678,7 +1686,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         await _showEditProductDialog(product);
         return;
       case _ProductTableAction.reactivate:
-        await _changeLifecycle(product, 'active');
+        await _showVersionDialog(product);
         return;
       case _ProductTableAction.deactivate:
         await _changeLifecycle(product, 'inactive');
@@ -1737,7 +1745,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       final historyResult = await _productService.listProductParameterHistory(
         productId: product.id,
         page: 1,
-        pageSize: 20,
+        pageSize: 1000,
       );
       history = historyResult.items;
     } catch (error) {

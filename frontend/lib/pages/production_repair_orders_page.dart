@@ -248,7 +248,11 @@ class _ProductionRepairOrdersPageState
                         ...detail.eventLogs.map(
                           (event) => Text(
                             '• ${_formatDateTime(event.createdAt)} | ${event.eventTitle}'
-                            '${(event.eventDetail ?? '').trim().isEmpty ? '' : ' | ${event.eventDetail}'}',
+                            '${(event.eventDetail ?? '').trim().isEmpty ? '' : ' | ${event.eventDetail}'}'
+                            '${(event.orderCode ?? '').trim().isEmpty ? '' : ' | ${event.orderCode}'}'
+                            '${(event.processCode ?? '').trim().isEmpty ? '' : ' | ${event.processCode}'}'
+                            '${(event.orderStatus ?? '').trim().isEmpty ? '' : ' | ${event.orderStatus}'}'
+                            '${(event.payloadJson ?? '').trim().isEmpty ? '' : '\n  载荷：${event.payloadJson}'}',
                           ),
                         ),
                       ],

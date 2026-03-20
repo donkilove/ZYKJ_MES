@@ -133,6 +133,7 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final canSubmitDisposition = widget.canDispose && (_detail?.checkResult == 'failed' || _detail?.checkResult == 'fail');
     return AlertDialog(
       title: Text('首件详情 #${widget.recordId}'),
       content: SizedBox(
@@ -203,7 +204,39 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
                       ),
                       const SizedBox(height: 8),
                     ],
-                    if (widget.canDispose) ...[
+                    if (_detail!.dispositionHistory.isNotEmpty) ...[
+                      const Divider(height: 16),
+                      Text('处置历史', style: Theme.of(context).textTheme.labelMedium),
+                      const SizedBox(height: 8),
+                      ..._detail!.dispositionHistory.map(
+                        (history) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: Theme.of(context).colorScheme.outlineVariant,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('版本 ${history.version}'),
+                                const SizedBox(height: 4),
+                                Text('处置人：${history.dispositionUsername}'),
+                                Text('处置时间：${_formatDateTime(history.dispositionAt)}'),
+                                Text('复检结果：${_recheckResultLabel(history.recheckResult)}'),
+                                Text('最终判定：${_finalJudgmentLabel(history.finalJudgment)}'),
+                                Text('处置意见：${history.dispositionOpinion}'),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (canSubmitDisposition) ...[
                       DropdownButtonFormField<String>(
                         initialValue: _recheckResult,
                         decoration: const InputDecoration(
@@ -268,7 +301,7 @@ class _FirstArticleDetailDialogState extends State<FirstArticleDetailDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('关闭'),
         ),
-        if (widget.canDispose && !_loading && _detail != null)
+        if (canSubmitDisposition && !_loading && _detail != null)
           FilledButton(
             onPressed: _submitting ? null : _submitDisposition,
             child: _submitting

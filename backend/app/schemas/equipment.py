@@ -11,7 +11,7 @@ class EquipmentLedgerUpsertRequest(BaseModel):
     code: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=128)
     model: str = Field(default="", min_length=0, max_length=128)
-    location: str = Field(default="", min_length=0, max_length=255)
+    location: str = Field(min_length=1, max_length=255)
     owner_name: str = Field(default="", min_length=0, max_length=64)
     remark: str = Field(default="", max_length=1024)
 
@@ -131,8 +131,11 @@ class MaintenanceWorkOrderItem(BaseModel):
     plan_id: int | None
     equipment_id: int | None
     equipment_name: str
+    source_equipment_code: str | None = None
     item_id: int | None
     item_name: str
+    source_item_name: str | None = None
+    source_execution_process_code: str | None = None
     due_date: date
     status: WorkOrderStatus
     executor_user_id: int | None
@@ -185,20 +188,29 @@ class EquipmentDetailResult(BaseModel):
     updated_at: datetime
     active_plan_count: int
     pending_work_order_count: int
+    active_plans: list[MaintenancePlanItem]
+    pending_work_orders: list[MaintenanceWorkOrderItem]
     recent_records: list[MaintenanceRecordItem]
 
 
 class MaintenanceWorkOrderDetail(MaintenanceWorkOrderItem):
     source_plan_id: int | None
     source_plan_cycle_days: int | None
+    source_plan_start_date: date | None = None
     source_execution_process_code: str | None
+    source_equipment_name: str | None = None
+    source_item_id: int | None = None
+    source_item_name: str | None = None
+    record_id: int | None = None
 
 
 class MaintenanceRecordDetail(MaintenanceRecordItem):
     source_plan_id: int | None
     source_plan_cycle_days: int | None
+    source_plan_start_date: date | None = None
     source_equipment_code: str | None
     source_item_id: int | None
+    source_item_name: str | None = None
 
 
 class EquipmentExportResult(BaseModel):
@@ -206,4 +218,3 @@ class EquipmentExportResult(BaseModel):
     mime_type: str
     content_base64: str
     exported_count: int = 0
-

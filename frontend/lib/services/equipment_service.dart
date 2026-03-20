@@ -92,6 +92,8 @@ class EquipmentService {
     required int pageSize,
     String? keyword,
     bool? enabled,
+    String? locationKeyword,
+    String? ownerName,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -99,6 +101,12 @@ class EquipmentService {
     }
     if (enabled != null) {
       query['enabled'] = '$enabled';
+    }
+    if (locationKeyword != null && locationKeyword.trim().isNotEmpty) {
+      query['location_keyword'] = locationKeyword.trim();
+    }
+    if (ownerName != null && ownerName.trim().isNotEmpty) {
+      query['owner_name'] = ownerName.trim();
     }
     final uri = Uri.parse('$_basePath/ledger').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
@@ -220,6 +228,7 @@ class EquipmentService {
     required int pageSize,
     String? keyword,
     bool? enabled,
+    String? category,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -227,6 +236,9 @@ class EquipmentService {
     }
     if (enabled != null) {
       query['enabled'] = '$enabled';
+    }
+    if (category != null && category.trim().isNotEmpty) {
+      query['category'] = category.trim();
     }
     final uri = Uri.parse('$_basePath/items').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
@@ -345,6 +357,8 @@ class EquipmentService {
     int? equipmentId,
     int? itemId,
     bool? enabled,
+    String? executionProcessCode,
+    int? defaultExecutorUserId,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (equipmentId != null) {
@@ -355,6 +369,12 @@ class EquipmentService {
     }
     if (enabled != null) {
       query['enabled'] = '$enabled';
+    }
+    if (executionProcessCode != null && executionProcessCode.trim().isNotEmpty) {
+      query['execution_process_code'] = executionProcessCode.trim();
+    }
+    if (defaultExecutorUserId != null) {
+      query['default_executor_user_id'] = '$defaultExecutorUserId';
     }
     final uri = Uri.parse('$_basePath/plans').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
@@ -397,7 +417,7 @@ class EquipmentService {
         'start_date': _formatDate(startDate),
         'next_due_date': nextDueDate == null ? null : _formatDate(nextDueDate),
         'default_executor_user_id': defaultExecutorUserId,
-        'cycle_days': ?cycleDays,
+        'cycle_days': cycleDays,
       }),
     );
     final json = _decodeBody(response);
@@ -432,7 +452,7 @@ class EquipmentService {
         'start_date': _formatDate(startDate),
         'next_due_date': nextDueDate == null ? null : _formatDate(nextDueDate),
         'default_executor_user_id': defaultExecutorUserId,
-        'cycle_days': ?cycleDays,
+        'cycle_days': cycleDays,
       }),
     );
     final json = _decodeBody(response);
@@ -650,6 +670,10 @@ class EquipmentService {
     return '${date.year}-$mm-$dd';
   }
 
+  String _formatDateTimeIso(DateTime value) {
+    return value.toUtc().toIso8601String();
+  }
+
   // ── 设备规则 ────────────────────────────────────────────────────────────────
 
   Future<EquipmentRuleListResult> listEquipmentRules({
@@ -681,19 +705,25 @@ class EquipmentService {
 
   Future<void> createEquipmentRule({
     int? equipmentId,
+    String? equipmentType,
+    required String ruleCode,
     required String ruleName,
     String ruleType = '',
     String conditionDesc = '',
     bool isEnabled = true,
+    DateTime? effectiveAt,
     String remark = '',
   }) async {
     final uri = Uri.parse('$_basePath/rules');
     final body = jsonEncode({
       'equipment_id': equipmentId,
+      'equipment_type': equipmentType,
+      'rule_code': ruleCode,
       'rule_name': ruleName,
       'rule_type': ruleType,
       'condition_desc': conditionDesc,
       'is_enabled': isEnabled,
+      'effective_at': effectiveAt == null ? null : _formatDateTimeIso(effectiveAt),
       'remark': remark,
     });
     final response = await http.post(uri, headers: _authHeaders, body: body);
@@ -706,19 +736,25 @@ class EquipmentService {
   Future<void> updateEquipmentRule({
     required int ruleId,
     int? equipmentId,
+    String? equipmentType,
+    required String ruleCode,
     required String ruleName,
     String ruleType = '',
     String conditionDesc = '',
     required bool isEnabled,
+    DateTime? effectiveAt,
     String remark = '',
   }) async {
     final uri = Uri.parse('$_basePath/rules/$ruleId');
     final body = jsonEncode({
       'equipment_id': equipmentId,
+      'equipment_type': equipmentType,
+      'rule_code': ruleCode,
       'rule_name': ruleName,
       'rule_type': ruleType,
       'condition_desc': conditionDesc,
       'is_enabled': isEnabled,
+      'effective_at': effectiveAt == null ? null : _formatDateTimeIso(effectiveAt),
       'remark': remark,
     });
     final response = await http.put(uri, headers: _authHeaders, body: body);
@@ -733,7 +769,7 @@ class EquipmentService {
     required bool isEnabled,
   }) async {
     final uri = Uri.parse('$_basePath/rules/$ruleId/toggle');
-    final body = jsonEncode({'is_enabled': isEnabled});
+    final body = jsonEncode({'enabled': isEnabled});
     final response = await http.patch(uri, headers: _authHeaders, body: body);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -755,6 +791,7 @@ class EquipmentService {
   Future<EquipmentRuntimeParameterListResult> listRuntimeParameters({
     int? equipmentId,
     String? keyword,
+    bool? isEnabled,
     int page = 1,
     int pageSize = 20,
   }) async {
@@ -764,6 +801,7 @@ class EquipmentService {
     };
     if (equipmentId != null) query['equipment_id'] = '$equipmentId';
     if (keyword != null && keyword.isNotEmpty) query['keyword'] = keyword;
+    if (isEnabled != null) query['is_enabled'] = '$isEnabled';
     final uri = Uri.parse('$_basePath/runtime-parameters').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
@@ -779,17 +817,21 @@ class EquipmentService {
 
   Future<void> createRuntimeParameter({
     int? equipmentId,
+    String? equipmentType,
     required String paramCode,
     required String paramName,
     String unit = '',
     String? standardValue,
     String? upperLimit,
     String? lowerLimit,
+    DateTime? effectiveAt,
+    bool isEnabled = true,
     String remark = '',
   }) async {
     final uri = Uri.parse('$_basePath/runtime-parameters');
     final body = jsonEncode({
       'equipment_id': equipmentId,
+      'equipment_type': equipmentType,
       'param_code': paramCode,
       'param_name': paramName,
       'unit': unit,
@@ -802,6 +844,8 @@ class EquipmentService {
       'lower_limit': lowerLimit != null && lowerLimit.isNotEmpty
           ? double.tryParse(lowerLimit)
           : null,
+      'effective_at': effectiveAt == null ? null : _formatDateTimeIso(effectiveAt),
+      'is_enabled': isEnabled,
       'remark': remark,
     });
     final response = await http.post(uri, headers: _authHeaders, body: body);
@@ -814,17 +858,21 @@ class EquipmentService {
   Future<void> updateRuntimeParameter({
     required int paramId,
     int? equipmentId,
+    String? equipmentType,
     required String paramCode,
     required String paramName,
     String unit = '',
     String? standardValue,
     String? upperLimit,
     String? lowerLimit,
+    DateTime? effectiveAt,
+    bool isEnabled = true,
     String remark = '',
   }) async {
     final uri = Uri.parse('$_basePath/runtime-parameters/$paramId');
     final body = jsonEncode({
       'equipment_id': equipmentId,
+      'equipment_type': equipmentType,
       'param_code': paramCode,
       'param_name': paramName,
       'unit': unit,
@@ -837,6 +885,8 @@ class EquipmentService {
       'lower_limit': lowerLimit != null && lowerLimit.isNotEmpty
           ? double.tryParse(lowerLimit)
           : null,
+      'effective_at': effectiveAt == null ? null : _formatDateTimeIso(effectiveAt),
+      'is_enabled': isEnabled,
       'remark': remark,
     });
     final response = await http.put(uri, headers: _authHeaders, body: body);
@@ -855,12 +905,39 @@ class EquipmentService {
     }
   }
 
+  Future<void> toggleRuntimeParameter({
+    required int paramId,
+    required bool enabled,
+  }) async {
+    final uri = Uri.parse('$_basePath/runtime-parameters/$paramId/toggle');
+    final response = await http.patch(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'enabled': enabled}),
+    );
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+  }
+
   // ── 导出 ────────────────────────────────────────────────────────────────────
 
-  Future<String> exportEquipmentLedger({String? keyword, bool? enabled}) async {
+  Future<String> exportEquipmentLedger({
+    String? keyword,
+    bool? enabled,
+    String? locationKeyword,
+    String? ownerName,
+  }) async {
     final query = <String, String>{};
     if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
     if (enabled != null) query['enabled'] = '$enabled';
+    if (locationKeyword != null && locationKeyword.trim().isNotEmpty) {
+      query['location_keyword'] = locationKeyword.trim();
+    }
+    if (ownerName != null && ownerName.trim().isNotEmpty) {
+      query['owner_name'] = ownerName.trim();
+    }
     final uri = Uri.parse('$_basePath/ledger/export').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
@@ -871,10 +948,11 @@ class EquipmentService {
     return (data['content_base64'] as String?) ?? '';
   }
 
-  Future<String> exportMaintenanceItems({String? keyword, bool? enabled}) async {
+  Future<String> exportMaintenanceItems({String? keyword, bool? enabled, String? category}) async {
     final query = <String, String>{};
     if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
     if (enabled != null) query['enabled'] = '$enabled';
+    if (category != null && category.trim().isNotEmpty) query['category'] = category.trim();
     final uri = Uri.parse('$_basePath/items/export').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
@@ -885,11 +963,23 @@ class EquipmentService {
     return (data['content_base64'] as String?) ?? '';
   }
 
-  Future<String> exportMaintenancePlans({int? equipmentId, int? itemId, bool? enabled}) async {
+  Future<String> exportMaintenancePlans({
+    int? equipmentId,
+    int? itemId,
+    bool? enabled,
+    String? executionProcessCode,
+    int? defaultExecutorUserId,
+  }) async {
     final query = <String, String>{};
     if (equipmentId != null) query['equipment_id'] = '$equipmentId';
     if (itemId != null) query['item_id'] = '$itemId';
     if (enabled != null) query['enabled'] = '$enabled';
+    if (executionProcessCode != null && executionProcessCode.trim().isNotEmpty) {
+      query['execution_process_code'] = executionProcessCode.trim();
+    }
+    if (defaultExecutorUserId != null) {
+      query['default_executor_user_id'] = '$defaultExecutorUserId';
+    }
     final uri = Uri.parse('$_basePath/plans/export').replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
@@ -902,6 +992,7 @@ class EquipmentService {
 
   Future<String> exportMaintenanceRecords({
     String? keyword,
+    int? executorId,
     DateTime? startDate,
     DateTime? endDate,
     String? resultSummary,
@@ -909,6 +1000,7 @@ class EquipmentService {
   }) async {
     final query = <String, String>{};
     if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
+    if (executorId != null) query['executor_id'] = '$executorId';
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
     if (resultSummary != null) query['result_summary'] = resultSummary;

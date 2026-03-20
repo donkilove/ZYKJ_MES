@@ -189,8 +189,12 @@ class _EquipmentPageState extends State<EquipmentPage>
         return EquipmentRuleParameterPage(
           session: widget.session,
           onLogout: widget.onLogout,
+          canViewRules: _hasPermission(EquipmentFeaturePermissionCodes.rulesManage),
           canManageRules: _hasPermission(
             EquipmentFeaturePermissionCodes.rulesManage,
+          ),
+          canViewParameters: _hasPermission(
+            EquipmentFeaturePermissionCodes.runtimeParametersManage,
           ),
           canManageParameters: _hasPermission(
             EquipmentFeaturePermissionCodes.runtimeParametersManage,

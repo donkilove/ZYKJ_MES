@@ -91,6 +91,32 @@ class _FakeProductionOrderManagementService extends ProductionService {
       'content_base64': base64Encode(utf8.encode('订单号,产品\nPO-1,产品A')),
     };
   }
+
+  @override
+  Future<ProductionEventLogListResult> searchOrderEvents({
+    required String orderCode,
+  }) async {
+    return ProductionEventLogListResult(
+      total: 1,
+      items: [
+        ProductionEventLogItem(
+          id: 1,
+          orderId: null,
+          orderCode: orderCode,
+          orderStatus: 'pending',
+          productName: '产品A',
+          processCode: '01-01',
+          eventType: 'order_deleted',
+          eventTitle: '订单已删除',
+          eventDetail: '删除订单 PO-1',
+          operatorUserId: 1,
+          operatorUsername: 'admin',
+          payloadJson: '{"deleted":true}',
+          createdAt: DateTime(2026, 3, 1, 10),
+        ),
+      ],
+    );
+  }
 }
 
 class _FakeCraftService extends CraftService {
@@ -110,7 +136,7 @@ class _FakeCraftService extends CraftService {
 }
 
 void main() {
-  testWidgets('production order management export shows preview dialog', (
+  testWidgets('production order management export action does not crash', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1920, 1400);
@@ -147,7 +173,44 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('订单导出预览 - orders_export.csv'), findsOneWidget);
-    expect(find.textContaining('PO-1,产品A'), findsOneWidget);
+    expect(find.text('总数：1'), findsOneWidget);
+  });
+
+  testWidgets('production order management can query deleted order trace', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1920, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canCreateOrder: true,
+            canEditOrder: true,
+            canDeleteOrder: true,
+            canCompleteOrder: true,
+            canUpdatePipelineMode: true,
+            service: _FakeProductionOrderManagementService(),
+            craftService: _FakeCraftService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.enterText(find.widgetWithText(TextField, '删除追溯订单号'), 'PO-1');
+    await tester.tap(find.widgetWithText(OutlinedButton, '删除追溯'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除追溯 - PO-1'), findsOneWidget);
+    expect(find.textContaining('订单已删除'), findsOneWidget);
   });
 }

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:convert';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -38,6 +39,9 @@ class _QualityDefectAnalysisPageState
   DateTime? _endDate;
   final _processCodeController = TextEditingController();
   final _productNameController = TextEditingController();
+  final _operatorController = TextEditingController();
+  final _phenomenonController = TextEditingController();
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -50,6 +54,8 @@ class _QualityDefectAnalysisPageState
   void dispose() {
     _processCodeController.dispose();
     _productNameController.dispose();
+    _operatorController.dispose();
+    _phenomenonController.dispose();
     super.dispose();
   }
 
@@ -74,6 +80,12 @@ class _QualityDefectAnalysisPageState
         processCode: _processCodeController.text.trim().isEmpty
             ? null
             : _processCodeController.text.trim(),
+        operatorUsername: _operatorController.text.trim().isEmpty
+            ? null
+            : _operatorController.text.trim(),
+        phenomenon: _phenomenonController.text.trim().isEmpty
+            ? null
+            : _phenomenonController.text.trim(),
       );
       if (!mounted) return;
       setState(() => _result = result);
@@ -104,6 +116,49 @@ class _QualityDefectAnalysisPageState
         _endDate = picked;
       }
     });
+  }
+
+  Future<void> _export() async {
+    setState(() {
+      _exporting = true;
+      _message = '';
+    });
+    try {
+      final csvBase64 = await _service.exportDefectAnalysis(
+        startDate: _startDate,
+        endDate: _endDate,
+        productName: _productNameController.text.trim().isEmpty
+            ? null
+            : _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim().isEmpty
+            ? null
+            : _processCodeController.text.trim(),
+        operatorUsername: _operatorController.text.trim().isEmpty
+            ? null
+            : _operatorController.text.trim(),
+        phenomenon: _phenomenonController.text.trim().isEmpty
+            ? null
+            : _phenomenonController.text.trim(),
+      );
+      if (!mounted) return;
+      final csvText = utf8.decode(base64Decode(csvBase64));
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('导出不良分析'),
+          content: SizedBox(width: 600, height: 400, child: SelectableText(csvText)),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('关闭')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      if (_isUnauthorized(e)) { widget.onLogout(); return; }
+      setState(() => _message = '导出失败：${_errMsg(e)}');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   @override
@@ -178,8 +233,38 @@ class _QualityDefectAnalysisPageState
             onSubmitted: (_) => _load(),
           ),
         ),
+        SizedBox(
+          width: 150,
+          child: TextField(
+            controller: _operatorController,
+            decoration: const InputDecoration(
+              labelText: '操作员',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _load(),
+          ),
+        ),
+        SizedBox(
+          width: 150,
+          child: TextField(
+            controller: _phenomenonController,
+            decoration: const InputDecoration(
+              labelText: '不良类型',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _load(),
+          ),
+        ),
         IconButton(tooltip: '查询', onPressed: _loading ? null : _load, icon: const Icon(Icons.search)),
         IconButton(tooltip: '刷新', onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh)),
+        if (widget.canExport)
+          OutlinedButton.icon(
+            onPressed: (_loading || _exporting) ? null : _export,
+            icon: const Icon(Icons.download),
+            label: const Text('导出'),
+          ),
       ],
     );
   }

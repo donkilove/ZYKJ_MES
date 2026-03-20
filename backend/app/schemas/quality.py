@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class FirstArticleListItem(BaseModel):
@@ -52,6 +52,7 @@ class FirstArticleDetail(BaseModel):
     disposition_at: datetime | None = None
     recheck_result: str | None = None
     final_judgment: str | None = None
+    disposition_history: list["FirstArticleDispositionHistoryItem"] = []
 
 
 class FirstArticleExportRequest(BaseModel):
@@ -153,7 +154,17 @@ class QualityStatsExportResult(BaseModel):
 
 
 class FirstArticleDispositionRequest(BaseModel):
+    disposition_opinion: str = Field(min_length=1)
+    recheck_result: str | None = None
+    final_judgment: str
+
+
+class FirstArticleDispositionHistoryItem(BaseModel):
+    id: int
+    version: int
     disposition_opinion: str
+    disposition_username: str | None = None
+    disposition_at: datetime | None = None
     recheck_result: str | None = None
     final_judgment: str
 

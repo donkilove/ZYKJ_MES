@@ -59,6 +59,7 @@ def api_list_messages(
     start_time: datetime | None = Query(None),
     end_time: datetime | None = Query(None),
     todo_only: bool = Query(False),
+    active_only: bool = Query(True),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("message.messages.list")),
 ) -> ApiResponse[MessageListResult]:
@@ -75,6 +76,7 @@ def api_list_messages(
         start_time=start_time,
         end_time=end_time,
         todo_only=todo_only,
+        active_only=active_only,
     )
     return success_response(
         MessageListResult(items=items, total=total, page=page, page_size=page_size)

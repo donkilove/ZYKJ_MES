@@ -115,8 +115,11 @@ void main() {
       'plan_id': 2,
       'equipment_id': 1,
       'equipment_name': '机台1',
+      'source_equipment_code': 'EQ-01',
       'item_id': 3,
       'item_name': '点检',
+      'source_item_name': '点检',
+      'source_execution_process_code': '01-01',
       'due_date': '2026-03-08',
       'status': 'pending',
       'executor_user_id': null,
@@ -157,6 +160,7 @@ void main() {
     expect(plan.executionProcessName, '切割');
     expect(generate.workOrderId, 5);
     expect(workOrder.startedAt, isNull);
+    expect(workOrder.sourceEquipmentCode, 'EQ-01');
     expect(record.resultSummary, '完成');
 
     expect(EquipmentLedgerListResult(total: 1, items: [equipment]).total, 1);

@@ -145,6 +145,7 @@ class _QualityPageState extends State<QualityPage>
         return DailyFirstArticlePage(
           session: widget.session,
           onLogout: widget.onLogout,
+          canViewDetail: widget.capabilityCodes.contains('quality.first_articles.detail'),
           canExport: widget.capabilityCodes.contains('quality.first_articles.export'),
           canDispose: widget.capabilityCodes.contains('quality.first_articles.disposition'),
         );
@@ -171,6 +172,7 @@ class _QualityPageState extends State<QualityPage>
         return QualityTrendPage(
           session: widget.session,
           onLogout: widget.onLogout,
+          canExport: widget.capabilityCodes.contains('quality.trend'),
         );
       case qualityDefectAnalysisTabCode:
         return QualityDefectAnalysisPage(

@@ -63,8 +63,11 @@ Map<String, dynamic> _workOrderJson() {
     'plan_id': 3,
     'equipment_id': 1,
     'equipment_name': '设备1',
+    'source_equipment_code': 'EQ-01',
     'item_id': 2,
     'item_name': '点检',
+    'source_item_name': '点检',
+    'source_execution_process_code': '01-01',
     'due_date': '2026-03-31',
     'status': 'pending',
     'executor_user_id': 8,
@@ -84,7 +87,11 @@ Map<String, dynamic> _workOrderDetailJson() {
     ..._workOrderJson(),
     'source_plan_id': 3,
     'source_plan_cycle_days': 30,
+    'source_plan_start_date': '2026-03-01',
     'source_execution_process_code': '01-01',
+    'source_equipment_name': '设备1',
+    'source_item_id': 2,
+    'source_item_name': '点检',
   };
 }
 
@@ -111,8 +118,10 @@ Map<String, dynamic> _recordDetailJson() {
     ..._recordJson(),
     'source_plan_id': 3,
     'source_plan_cycle_days': 30,
+    'source_plan_start_date': '2026-03-01',
     'source_equipment_code': 'EQ-01',
     'source_item_id': 2,
+    'source_item_name': '点检',
   };
 }
 
@@ -121,6 +130,8 @@ Map<String, dynamic> _equipmentDetailJson() {
     ..._equipmentJson(),
     'active_plan_count': 2,
     'pending_work_order_count': 1,
+    'active_plans': [_maintenancePlanJson()],
+    'pending_work_orders': [_workOrderJson()],
     'recent_records': [_recordJson()],
   };
 }
@@ -148,6 +159,8 @@ void main() {
           expect(request.uri.queryParameters['page_size'], '20');
           expect(request.uri.queryParameters['keyword'], '设备');
           expect(request.uri.queryParameters['enabled'], 'true');
+          expect(request.uri.queryParameters['location_keyword'], 'A区');
+          expect(request.uri.queryParameters['owner_name'], 'admin');
           return TestResponse.json(
             200,
             body: {
@@ -180,6 +193,7 @@ void main() {
         'GET /equipment/items': (request) {
           expect(request.uri.queryParameters['keyword'], '点检');
           expect(request.uri.queryParameters['enabled'], 'true');
+          expect(request.uri.queryParameters['category'], '常规');
           return TestResponse.json(
             200,
             body: {
@@ -214,6 +228,8 @@ void main() {
           expect(request.uri.queryParameters['equipment_id'], '1');
           expect(request.uri.queryParameters['item_id'], '2');
           expect(request.uri.queryParameters['enabled'], 'true');
+          expect(request.uri.queryParameters['execution_process_code'], '01-01');
+          expect(request.uri.queryParameters['default_executor_user_id'], '8');
           return TestResponse.json(
             200,
             body: {
@@ -320,6 +336,8 @@ void main() {
         pageSize: 20,
         keyword: '  设备 ',
         enabled: true,
+        locationKeyword: 'A区',
+        ownerName: 'admin',
       );
       await service.createEquipment(
         code: 'EQ-02',
@@ -347,6 +365,7 @@ void main() {
         pageSize: 20,
         keyword: '  点检 ',
         enabled: true,
+        category: '常规',
       );
       await service.createMaintenanceItem(
         name: '润滑',
@@ -373,6 +392,8 @@ void main() {
         equipmentId: 1,
         itemId: 2,
         enabled: true,
+        executionProcessCode: '01-01',
+        defaultExecutorUserId: 8,
       );
       await service.createMaintenancePlan(
         equipmentId: 1,

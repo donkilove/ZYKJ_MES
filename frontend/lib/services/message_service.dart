@@ -46,6 +46,7 @@ class MessageService {
     DateTime? startTime,
     DateTime? endTime,
     bool todoOnly = false,
+    bool activeOnly = true,
   }) async {
     final params = <String, String>{
       'page': '$page',
@@ -58,6 +59,7 @@ class MessageService {
       if (startTime != null) 'start_time': startTime.toUtc().toIso8601String(),
       if (endTime != null) 'end_time': endTime.toUtc().toIso8601String(),
       if (todoOnly) 'todo_only': 'true',
+      if (!activeOnly) 'active_only': 'false',
     };
     final uri = Uri.parse(_base).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);

@@ -153,7 +153,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     try {
       final result = await _productService.listProducts(
         page: 1,
-        pageSize: 100,
+        pageSize: 10000,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         lifecycleStatus: _selectedStatusFilter,
@@ -189,7 +189,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     final versionFilter = _versionFilterController.text.trim().toLowerCase();
     if (versionFilter.isEmpty) return _products;
     return _products.where((p) {
-      final label = p.effectiveVersion > 0 ? 'v1.${p.effectiveVersion}' : '';
+      final label = p.effectiveVersion > 0 ? 'v1.${p.effectiveVersion - 1}' : '';
       return label.contains(versionFilter);
     }).toList();
   }
@@ -270,6 +270,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       final bytes = await _productService.exportProductParameters(
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
+        lifecycleStatus: _selectedStatusFilter,
+        versionKeyword: _versionFilterController.text.trim(),
+        effectiveOnly: true,
       );
       final fileName = '产品参数查询_${DateTime.now().millisecondsSinceEpoch}.csv';
       final location = await getSaveLocation(
@@ -551,7 +554,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                               cells: [
                                 DataCell(Text(product.name)),
                                 DataCell(Text(product.category.isEmpty ? '-' : product.category)),
-                                DataCell(Text(product.effectiveVersion > 0 ? 'V1.${product.effectiveVersion}' : '-')),
+                                DataCell(Text(product.effectiveVersion > 0 ? 'V1.${product.effectiveVersion - 1}' : '-')),
                                 DataCell(Text(_lifecycleLabel(product.lifecycleStatus))),
                                 DataCell(Text(_formatTime(product.createdAt))),
                                 DataCell(

@@ -156,6 +156,8 @@ def list_equipment(
     page_size: int,
     keyword: str | None,
     enabled: bool | None,
+    location_keyword: str | None = None,
+    owner_name: str | None = None,
 ) -> tuple[int, list[Equipment]]:
     stmt = select(Equipment)
     if keyword:
@@ -171,6 +173,10 @@ def list_equipment(
         )
     if enabled is not None:
         stmt = stmt.where(Equipment.is_enabled.is_(enabled))
+    if location_keyword:
+        stmt = stmt.where(Equipment.location.ilike(f"%{location_keyword.strip()}%"))
+    if owner_name:
+        stmt = stmt.where(Equipment.owner_name == owner_name.strip())
 
     stmt = stmt.order_by(Equipment.id.asc())
     total_stmt = select(func.count()).select_from(stmt.subquery())
@@ -196,12 +202,13 @@ def create_equipment(
         raise ValueError("Equipment code already exists")
 
     normalized_name = _normalize_name(name, field_name="Equipment name")
+    normalized_location = _normalize_name(location, field_name="Equipment location")
 
     row = Equipment(
         code=normalized_code,
         name=normalized_name,
         model=_normalize_optional_text(model),
-        location=_normalize_optional_text(location),
+        location=normalized_location,
         owner_name=_normalize_optional_text(owner_name),
         remark=_normalize_optional_text(remark),
         is_enabled=True,
@@ -231,7 +238,7 @@ def update_equipment(
     row.code = normalized_code
     row.name = _normalize_name(name, field_name="Equipment name")
     row.model = _normalize_optional_text(model)
-    row.location = _normalize_optional_text(location)
+    row.location = _normalize_name(location, field_name="Equipment location")
     row.owner_name = _normalize_optional_text(owner_name)
     row.remark = _normalize_optional_text(remark)
     db.commit()
@@ -306,7 +313,7 @@ def list_active_owners(db: Session) -> list[User]:
 def get_equipment_detail(
     db: Session,
     equipment_id: int,
-) -> tuple[Equipment, int, int, list[MaintenanceRecord]] | None:
+) -> tuple[Equipment, int, int, list[MaintenancePlan], list[MaintenanceWorkOrder], list[MaintenanceRecord]] | None:
     row = get_equipment_by_id(db, equipment_id)
     if row is None:
         return None
@@ -329,6 +336,34 @@ def get_equipment_detail(
         )
     ).scalar_one()
 
+    active_plans = db.execute(
+        select(MaintenancePlan)
+        .where(
+            MaintenancePlan.equipment_id == equipment_id,
+            MaintenancePlan.is_enabled.is_(True),
+        )
+        .options(
+            selectinload(MaintenancePlan.equipment),
+            selectinload(MaintenancePlan.item),
+            selectinload(MaintenancePlan.default_executor),
+        )
+        .order_by(MaintenancePlan.next_due_date.asc(), MaintenancePlan.id.asc())
+    ).scalars().all()
+
+    pending_work_orders = db.execute(
+        select(MaintenanceWorkOrder)
+        .where(
+            MaintenanceWorkOrder.source_equipment_id == equipment_id,
+            MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
+        )
+        .options(
+            selectinload(MaintenanceWorkOrder.equipment),
+            selectinload(MaintenanceWorkOrder.item),
+            selectinload(MaintenanceWorkOrder.executor),
+        )
+        .order_by(MaintenanceWorkOrder.due_date.asc(), MaintenanceWorkOrder.id.asc())
+    ).scalars().all()
+
     recent_records = db.execute(
         select(MaintenanceRecord)
         .where(MaintenanceRecord.source_equipment_id == equipment_id)
@@ -339,7 +374,7 @@ def get_equipment_detail(
         .limit(EQUIPMENT_DETAIL_RECENT_RECORD_LIMIT)
     ).scalars().all()
 
-    return row, active_plan_count, pending_work_order_count, recent_records
+    return row, active_plan_count, pending_work_order_count, active_plans, pending_work_orders, recent_records
 
 
 def get_maintenance_item_by_id(db: Session, item_id: int) -> MaintenanceItem | None:
@@ -359,6 +394,7 @@ def list_maintenance_items(
     page_size: int,
     keyword: str | None,
     enabled: bool | None,
+    category: str | None = None,
 ) -> tuple[int, list[MaintenanceItem]]:
     stmt = select(MaintenanceItem)
     if keyword:
@@ -366,6 +402,8 @@ def list_maintenance_items(
         stmt = stmt.where(MaintenanceItem.name.ilike(like_pattern))
     if enabled is not None:
         stmt = stmt.where(MaintenanceItem.is_enabled.is_(enabled))
+    if category:
+        stmt = stmt.where(MaintenanceItem.category == category.strip())
 
     stmt = stmt.order_by(MaintenanceItem.id.asc())
     total_stmt = select(func.count()).select_from(stmt.subquery())
@@ -529,6 +567,8 @@ def list_maintenance_plans(
     equipment_id: int | None,
     item_id: int | None,
     enabled: bool | None,
+    execution_process_code: str | None = None,
+    default_executor_user_id: int | None = None,
 ) -> tuple[int, list[MaintenancePlan]]:
     filters = []
     if equipment_id is not None:
@@ -537,6 +577,10 @@ def list_maintenance_plans(
         filters.append(MaintenancePlan.item_id == item_id)
     if enabled is not None:
         filters.append(MaintenancePlan.is_enabled.is_(enabled))
+    if execution_process_code is not None:
+        filters.append(MaintenancePlan.execution_process_code == execution_process_code)
+    if default_executor_user_id is not None:
+        filters.append(MaintenancePlan.default_executor_user_id == default_executor_user_id)
 
     count_stmt = select(func.count()).select_from(
         select(MaintenancePlan.id).where(*filters).subquery()
@@ -1162,8 +1206,18 @@ def export_equipment_ledger_csv(
     *,
     keyword: str | None = None,
     enabled: bool | None = None,
+    location_keyword: str | None = None,
+    owner_name: str | None = None,
 ) -> dict[str, Any]:
-    _, rows = list_equipment(db, page=1, page_size=200000, keyword=keyword, enabled=enabled)
+    _, rows = list_equipment(
+        db,
+        page=1,
+        page_size=200000,
+        keyword=keyword,
+        enabled=enabled,
+        location_keyword=location_keyword,
+        owner_name=owner_name,
+    )
     csv_rows: list[list[Any]] = []
     for row in rows:
         csv_rows.append([
@@ -1194,8 +1248,16 @@ def export_maintenance_items_csv(
     *,
     keyword: str | None = None,
     enabled: bool | None = None,
+    category: str | None = None,
 ) -> dict[str, Any]:
-    _, rows = list_maintenance_items(db, page=1, page_size=200000, keyword=keyword, enabled=enabled)
+    _, rows = list_maintenance_items(
+        db,
+        page=1,
+        page_size=200000,
+        keyword=keyword,
+        enabled=enabled,
+        category=category,
+    )
     csv_rows: list[list[Any]] = []
     for row in rows:
         csv_rows.append([
@@ -1225,10 +1287,16 @@ def export_maintenance_plans_csv(
     equipment_id: int | None = None,
     item_id: int | None = None,
     enabled: bool | None = None,
+    execution_process_code: str | None = None,
+    default_executor_user_id: int | None = None,
 ) -> dict[str, Any]:
     _, rows = list_maintenance_plans(
         db, page=1, page_size=200000,
-        equipment_id=equipment_id, item_id=item_id, enabled=enabled,
+        equipment_id=equipment_id,
+        item_id=item_id,
+        enabled=enabled,
+        execution_process_code=execution_process_code,
+        default_executor_user_id=default_executor_user_id,
     )
     csv_rows: list[list[Any]] = []
     for row in rows:
@@ -1240,10 +1308,13 @@ def export_maintenance_plans_csv(
             row.start_date.strftime("%Y-%m-%d"),
             row.next_due_date.strftime("%Y-%m-%d"),
             row.default_executor.username if row.default_executor else "",
+            row.estimated_duration_minutes or "",
+            row.created_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+            row.updated_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
             "启用" if row.is_enabled else "停用",
         ])
     content_base64 = _build_csv_base64(
-        ["设备", "保养项目", "执行工段", "周期(天)", "起始日期", "下次到期", "默认执行人", "状态"],
+        ["设备", "保养项目", "执行工段", "周期(天)", "起始日期", "下次到期", "默认执行人", "预计时长(分钟)", "创建时间", "更新时间", "状态"],
         csv_rows,
     )
     now = _now_utc()
@@ -1320,7 +1391,7 @@ def export_work_orders_csv(
         db, page=1, page_size=200000,
         status=status, keyword=keyword,
         mine=False, current_user_id=None,
-        current_user_role_codes=[], current_user_stage_codes=[],
+        current_user_role_codes=[ROLE_SYSTEM_ADMIN], current_user_stage_codes=[],
         done_only=False, executor_user_id=None,
         start_date=None, end_date=None,
         due_date_start=due_date_start, due_date_end=due_date_end,

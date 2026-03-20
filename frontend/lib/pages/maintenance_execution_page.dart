@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/craft_models.dart';
 import '../models/equipment_models.dart';
+import 'maintenance_execution_detail_page.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/equipment_service.dart';
@@ -370,82 +372,13 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   }
 
   Future<void> _showDetail(MaintenanceWorkOrderItem item) async {
-    if (!mounted) return;
-    setState(() => _loading = true);
-    MaintenanceWorkOrderDetail? detail;
-    try {
-      detail = await _equipmentService.getWorkOrderDetail(workOrderId: item.id);
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('加载详情失败：${_errorMessage(error)}')),
-      );
-      setState(() => _loading = false);
-      return;
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('工单详情 #${detail!.id}'),
-        content: SizedBox(
-          width: 480,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _detailRow('设备', detail.equipmentName),
-                _detailRow('项目', detail.itemName),
-                _detailRow('到期日期', _formatDate(detail.dueDate)),
-                _detailRow('状态', _statusLabel(detail.status)),
-                _detailRow('执行人', detail.executorUsername ?? '-'),
-                if (detail.startedAt != null)
-                  _detailRow('开始时间', _formatDateTime(detail.startedAt!)),
-                if (detail.completedAt != null)
-                  _detailRow('完成时间', _formatDateTime(detail.completedAt!)),
-                if (detail.resultSummary != null)
-                  _detailRow('结果摘要', detail.resultSummary!),
-                if (detail.resultRemark != null)
-                  _detailRow('备注', detail.resultRemark!),
-                if (detail.attachmentLink != null)
-                  _detailRow('附件链接', detail.attachmentLink!),
-                if (detail.sourcePlanCycleDays != null)
-                  _detailRow('计划周期(天)', '${detail.sourcePlanCycleDays}'),
-                if (detail.sourceExecutionProcessCode != null)
-                  _detailRow('执行工段', detail.sourceExecutionProcessCode!),
-              ],
-            ),
-          ),
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MaintenanceExecutionDetailPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          workOrderId: item.id,
         ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text('$label：', style: const TextStyle(fontWeight: FontWeight.w500)),
-          ),
-          Expanded(child: Text(value)),
-        ],
       ),
     );
   }
@@ -476,23 +409,18 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         setState(() => _message = '导出失败：服务端返回空数据');
         return;
       }
-      final csvText = utf8.decode(base64Decode(csvBase64));
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('导出保养执行'),
-          content: SizedBox(
-            width: 600,
-            height: 400,
-            child: SelectableText(csvText),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
+      final bytes = base64Decode(csvBase64);
+      final location = await getSaveLocation(
+        suggestedName: 'maintenance_executions.csv',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
+      );
+      if (location == null || !mounted) return;
+      await XFile.fromData(bytes, mimeType: 'text/csv', name: 'maintenance_executions.csv').saveTo(location.path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出成功：${location.path}')),
       );
     } catch (error) {
       if (!mounted) return;

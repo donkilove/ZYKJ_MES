@@ -33,6 +33,7 @@ class _FakeMessageService extends MessageService {
     DateTime? startTime,
     DateTime? endTime,
     bool todoOnly = false,
+    bool activeOnly = true,
   }) async {
     lastTodoOnly = todoOnly;
     final items = <MessageItem>[
@@ -110,7 +111,7 @@ void main() {
               session: AppSession(baseUrl: '', accessToken: ''),
               onLogout: () {},
               service: service,
-              onNavigateToPage: (pageCode, {tabCode}) {
+              onNavigateToPage: (pageCode, {tabCode, routePayloadJson}) {
                 navigatedPage = pageCode;
                 navigatedTab = tabCode;
               },

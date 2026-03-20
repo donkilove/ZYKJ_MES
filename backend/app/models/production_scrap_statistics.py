@@ -33,6 +33,12 @@ class ProductionScrapStatistics(Base, TimestampMixin):
     )
     process_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     process_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    operator_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sys_user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    operator_username: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     scrap_reason: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     scrap_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     last_scrap_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
@@ -42,3 +48,4 @@ class ProductionScrapStatistics(Base, TimestampMixin):
     order = relationship("ProductionOrder")
     product = relationship("Product")
     process = relationship("ProductionOrderProcess")
+    operator = relationship("User")

@@ -5,7 +5,8 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permission
+from app.api.deps import get_current_active_user, require_permission
+from app.services.authz_service import has_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
@@ -99,8 +100,13 @@ def get_first_articles_api(
 def get_first_article_detail_api(
     record_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("quality.first_articles.detail")),
+    current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[FirstArticleDetail]:
+    if not (
+        has_permission(db, user=current_user, permission_code="quality.first_articles.detail")
+        or has_permission(db, user=current_user, permission_code="quality.first_articles.disposition")
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     detail = get_first_article_by_id(db, record_id=record_id)
     if detail is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="首件记录不存在")
@@ -319,6 +325,7 @@ def get_quality_trend_api(
     product_name: str | None = Query(default=None),
     process_code: str | None = Query(default=None),
     operator_username: str | None = Query(default=None),
+    result: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("quality.trend")),
 ) -> ApiResponse[QualityTrendResult]:
@@ -330,8 +337,50 @@ def get_quality_trend_api(
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
+        result_filter=result,
     )
     return success_response(QualityTrendResult(items=[QualityTrendItem(**item) for item in rows]))
+
+
+@router.post("/trend/export", response_model=ApiResponse[QualityStatsExportResult])
+def export_quality_trend_api(
+    payload: QualityStatsExportRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("quality.trend")),
+) -> ApiResponse[QualityStatsExportResult]:
+    _validate_date_range(payload.start_date, payload.end_date)
+    rows = get_quality_trend(
+        db,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        product_name=payload.product_name,
+        process_code=payload.process_code,
+        operator_username=payload.operator_username,
+        result_filter=payload.result,
+    )
+    import base64, csv, io
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["日期", "首件总数", "通过数", "不通过数", "通过率", "报废数", "维修数"])
+    for item in rows:
+        writer.writerow([
+            item["stat_date"],
+            item["first_article_total"],
+            item["passed_total"],
+            item["failed_total"],
+            item["pass_rate_percent"],
+            item["scrap_total"],
+            item["repair_total"],
+        ])
+    csv_bytes = output.getvalue().encode("utf-8-sig")
+    return success_response(
+        QualityStatsExportResult(
+            filename="quality_trend.csv",
+            content_base64=base64.b64encode(csv_bytes).decode("ascii"),
+            total_rows=len(rows),
+        )
+    )
 
 
 @router.get("/defect-analysis", response_model=ApiResponse[DefectAnalysisResult])
@@ -341,6 +390,8 @@ def get_defect_analysis_api(
     product_id: int | None = Query(default=None),
     product_name: str | None = Query(default=None),
     process_code: str | None = Query(default=None),
+    operator_username: str | None = Query(default=None),
+    phenomenon: str | None = Query(default=None),
     top_n: int = Query(default=10, ge=1, le=50),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("quality.defect_analysis.list")),
@@ -353,6 +404,8 @@ def get_defect_analysis_api(
         product_id=product_id,
         product_name=product_name,
         process_code=process_code,
+        operator_username=operator_username,
+        phenomenon=phenomenon,
         top_n=top_n,
     )
     return success_response(result)
@@ -363,7 +416,10 @@ def export_defect_analysis_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     product_id: int | None = Query(default=None),
+    product_name: str | None = Query(default=None),
     process_code: str | None = Query(default=None),
+    operator_username: str | None = Query(default=None),
+    phenomenon: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("quality.defect_analysis.export")),
 ) -> ApiResponse[DefectAnalysisExportResult]:
@@ -373,6 +429,9 @@ def export_defect_analysis_api(
         start_date=start_date,
         end_date=end_date,
         product_id=product_id,
+        product_name=product_name,
         process_code=process_code,
+        operator_username=operator_username,
+        phenomenon=phenomenon,
     )
     return success_response(result)

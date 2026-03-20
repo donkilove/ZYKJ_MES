@@ -79,6 +79,7 @@ from app.schemas.production import (
     OrderCreate,
     OrderDetail,
     OrderEventLogItem,
+    OrderEventLogListResult,
     OrderItem,
     OrderListResult,
     OrderPipelineModeItem,
@@ -132,6 +133,7 @@ from app.services.production_order_service import (
     update_order_pipeline_mode,
     update_order,
 )
+from app.services.production_event_log_service import search_order_event_logs_by_code
 from app.services.production_data_query_service import (
     build_manual_filters,
     build_today_filters,
@@ -592,6 +594,24 @@ def delete_order_api(
     except Exception as error:
         _raise_service_error(error)
     return success_response({"deleted": True}, message="deleted")
+
+
+@router.get(
+    "/order-events/search",
+    response_model=ApiResponse[OrderEventLogListResult],
+)
+def search_order_events_api(
+    order_code: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_PROD_ORDERS_DETAIL)),
+) -> ApiResponse[OrderEventLogListResult]:
+    rows = search_order_event_logs_by_code(db, order_code=order_code)
+    return success_response(
+        OrderEventLogListResult(
+            total=len(rows),
+            items=[_to_event_item(item) for item in rows],
+        )
+    )
 
 
 @router.post(
@@ -1342,9 +1362,14 @@ def _to_repair_order_detail_item(row: object, event_logs: list | None = None) ->
         event_logs=[
             RepairEventLogItem(
                 id=e.id,
+                order_code=e.order_code_snapshot,
+                order_status=e.order_status_snapshot,
+                product_name=e.product_name_snapshot,
+                process_code=e.process_code_snapshot,
                 event_type=e.event_type,
                 event_title=e.event_title,
                 event_detail=e.event_detail,
+                payload_json=e.payload_json,
                 created_at=e.created_at,
             )
             for e in (event_logs or [])
@@ -1427,7 +1452,8 @@ def get_scrap_statistics_detail_api(
 ) -> ApiResponse[ScrapStatisticsDetailItem]:
     from sqlalchemy import select as sa_select
     from app.models.production_scrap_statistics import ProductionScrapStatistics
-    from app.schemas.production import ScrapRelatedRepairItem
+    from app.models.order_event_log import OrderEventLog
+    from app.schemas.production import ScrapEventLogItem, ScrapRelatedRepairItem
     row = db.execute(
         sa_select(ProductionScrapStatistics).where(ProductionScrapStatistics.id == scrap_id)
     ).scalars().first()
@@ -1457,6 +1483,36 @@ def get_scrap_statistics_detail_api(
             )
             for r in repair_rows
         ]
+    related_logs: list[ScrapEventLogItem] = []
+    if row.order_id is not None:
+        log_rows = [
+            log
+            for log in db.execute(
+                select(OrderEventLog)
+                .where(OrderEventLog.order_id == row.order_id)
+                .order_by(OrderEventLog.created_at.desc())
+                .limit(100)
+            ).scalars().all()
+            if (
+                log.process_code_snapshot == row.process_code
+                or log.event_type == "scrap_statistics_export"
+            )
+        ]
+        related_logs = [
+            ScrapEventLogItem(
+                id=log.id,
+                order_code=log.order_code_snapshot,
+                order_status=log.order_status_snapshot,
+                product_name=log.product_name_snapshot,
+                process_code=log.process_code_snapshot,
+                event_type=log.event_type,
+                event_title=log.event_title,
+                event_detail=log.event_detail,
+                payload_json=log.payload_json,
+                created_at=log.created_at,
+            )
+            for log in log_rows
+        ]
 
     return success_response(
         ScrapStatisticsDetailItem(
@@ -1476,6 +1532,7 @@ def get_scrap_statistics_detail_api(
             created_at=row.created_at,
             updated_at=row.updated_at,
             related_repair_orders=related_repairs,
+            related_event_logs=related_logs,
         )
     )
 
@@ -1496,11 +1553,18 @@ def get_repair_order_detail_api(
     # Query latest related order events for context.
     event_logs = []
     if row.source_order_id is not None:
-        event_logs = db.execute(
-            select(OrderEventLog)
-            .where(OrderEventLog.order_id == row.source_order_id)
-            .order_by(OrderEventLog.created_at.desc())
-            .limit(50)
-        ).scalars().all()
+        event_logs = [
+            event
+            for event in db.execute(
+                select(OrderEventLog)
+                .where(OrderEventLog.order_id == row.source_order_id)
+                .order_by(OrderEventLog.created_at.desc())
+                .limit(100)
+            ).scalars().all()
+            if (
+                event.process_code_snapshot == row.source_process_code
+                or (event.payload_json and f'"repair_order_id":{row.id}' in event.payload_json)
+            )
+        ]
 
     return success_response(_to_repair_order_detail_item(row, event_logs=event_logs))

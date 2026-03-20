@@ -70,10 +70,23 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     try {
       final currentSession = await _userService.getMySession();
       if (!mounted) return;
+      if (currentSession.status != 'active') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('当前登录会话已失效，请重新登录。')),
+        );
+        widget.onLogout();
+        return;
+      }
       setState(() => _session = currentSession);
       _checkSessionTimeout(currentSession);
-    } catch (_) {
-      // 静默失败，不影响页面
+    } catch (error) {
+      if (!mounted) return;
+      if (_isSessionUnavailable(error)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('登录状态已失效，请重新登录。')),
+        );
+        widget.onLogout();
+      }
     }
   }
 
@@ -118,6 +131,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   bool _isUnauthorized(Object error) =>
       error is ApiException && error.statusCode == 401;
 
+  bool _isSessionUnavailable(Object error) =>
+      error is ApiException && (error.statusCode == 401 || error.statusCode == 404);
+
   String _errorMessage(Object error) {
     if (error is ApiException) {
       return error.message;
@@ -136,7 +152,23 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       if (widget.canViewSession) {
         try {
           currentSession = await _userService.getMySession();
-        } catch (_) {
+          if (currentSession.status != 'active') {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('当前登录会话已失效，请重新登录。')),
+            );
+            widget.onLogout();
+            return;
+          }
+        } catch (error) {
+          if (_isSessionUnavailable(error)) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('登录状态已失效，请重新登录。')),
+            );
+            widget.onLogout();
+            return;
+          }
           currentSession = null;
         }
       }

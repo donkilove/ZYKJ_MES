@@ -36,20 +36,21 @@ ProductItem _buildProduct({
   );
 }
 
-ProductVersionItem _buildVersion({
-  required int version,
-  required String versionLabel,
-  required String lifecycleStatus,
-}) {
-  return ProductVersionItem(
-    version: version,
-    versionLabel: versionLabel,
-    lifecycleStatus: lifecycleStatus,
-    action: 'create',
-    note: null,
-    sourceVersion: null,
-    sourceVersionLabel: null,
-    createdByUserId: 1,
+  ProductVersionItem _buildVersion({
+    required int version,
+    required String versionLabel,
+    required String lifecycleStatus,
+  }) {
+    return ProductVersionItem(
+      version: version,
+      versionLabel: versionLabel,
+      lifecycleStatus: lifecycleStatus,
+      action: 'create',
+      note: null,
+      effectiveAt: null,
+      sourceVersion: null,
+      sourceVersionLabel: null,
+      createdByUserId: 1,
     createdByUsername: 'admin',
     createdAt: _fixedDate,
   );
@@ -72,6 +73,9 @@ class _VersionListService extends ProductService {
     bool? hasEffectiveVersion,
     DateTime? updatedAfter,
     DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
   }) async {
     return ProductListResult(total: products.length, items: products);
   }
@@ -127,6 +131,9 @@ class _ProductListOnlyService extends ProductService {
     bool? hasEffectiveVersion,
     DateTime? updatedAfter,
     DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
   }) async {
     return ProductListResult(total: products.length, items: products);
   }

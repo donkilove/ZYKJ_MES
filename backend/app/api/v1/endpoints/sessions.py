@@ -70,6 +70,7 @@ def get_online_sessions(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     keyword: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("user.sessions.online.list")),
 ) -> ApiResponse[OnlineSessionListResult]:
@@ -78,6 +79,7 @@ def get_online_sessions(
         page=page,
         page_size=page_size,
         keyword=keyword,
+        status_filter=status_filter,
     )
     items = []
     for session_row, user in rows:

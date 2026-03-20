@@ -38,6 +38,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   bool _loadingLogs = false;
   bool _loadingSessions = false;
   String _message = '';
+  String? _sessionStatusFilter;
 
   int _logTotal = 0;
   int _sessionTotal = 0;
@@ -152,6 +153,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         page: targetPage,
         pageSize: _sessionPageSize,
         keyword: _sessionKeywordController.text.trim(),
+        statusFilter: _sessionStatusFilter,
       );
       if (!mounted) {
         return;
@@ -207,9 +209,11 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
       case 'active':
         return '在线';
       case 'forced_offline':
-        return '已强制下线';
+        return '离线';
       case 'expired':
-        return '已过期';
+        return '离线';
+      case 'logged_out':
+        return '离线';
       default:
         return status;
     }
@@ -223,6 +227,8 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         return Colors.deepOrange;
       case 'expired':
         return Theme.of(context).colorScheme.error;
+      case 'logged_out':
+        return Theme.of(context).colorScheme.primary;
       default:
         return Theme.of(context).colorScheme.onSurfaceVariant;
     }
@@ -240,6 +246,10 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
       await _loadOnlineSessions();
     } catch (error) {
       if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
         return;
       }
       ScaffoldMessenger.of(
@@ -265,6 +275,10 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
       await _loadOnlineSessions();
     } catch (error) {
       if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
         return;
       }
       ScaffoldMessenger.of(
@@ -474,6 +488,19 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
               OutlinedButton(
                 onPressed: () => _loadOnlineSessions(page: 1),
                 child: const Text('查询'),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<String?>(
+                value: _sessionStatusFilter,
+                items: const [
+                  DropdownMenuItem<String?>(value: null, child: Text('全部状态')),
+                  DropdownMenuItem<String?>(value: 'active', child: Text('在线')),
+                  DropdownMenuItem<String?>(value: 'offline', child: Text('离线')),
+                ],
+                onChanged: (value) {
+                  setState(() => _sessionStatusFilter = value);
+                  _loadOnlineSessions(page: 1);
+                },
               ),
               const SizedBox(width: 8),
               FilledButton(

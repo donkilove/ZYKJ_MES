@@ -11,13 +11,17 @@ class EquipmentRuleParameterPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    required this.canViewRules,
     required this.canManageRules,
+    required this.canViewParameters,
     required this.canManageParameters,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canViewRules;
   final bool canManageRules;
+  final bool canViewParameters;
   final bool canManageParameters;
 
   @override
@@ -29,50 +33,77 @@ class _EquipmentRuleParameterPageState
     extends State<EquipmentRuleParameterPage>
     with SingleTickerProviderStateMixin {
   late final EquipmentService _service;
-  late final TabController _innerTabController;
+  TabController? _innerTabController;
+  List<EquipmentLedgerItem> _equipmentOptions = const [];
 
   @override
   void initState() {
     super.initState();
     _service = EquipmentService(widget.session);
-    _innerTabController = TabController(length: 2, vsync: this);
+    final tabCount = (widget.canViewRules ? 1 : 0) + (widget.canViewParameters ? 1 : 0);
+    if (tabCount > 0) {
+      _innerTabController = TabController(length: tabCount, vsync: this);
+    }
+    _loadEquipmentOptions();
+  }
+
+  Future<void> _loadEquipmentOptions() async {
+    try {
+      final result = await _service.listEquipment(page: 1, pageSize: 200, enabled: null);
+      if (mounted) {
+        setState(() => _equipmentOptions = result.items);
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
-    _innerTabController.dispose();
+    _innerTabController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final tabs = <Tab>[];
+    final children = <Widget>[];
+    if (widget.canViewRules) {
+      tabs.add(const Tab(text: '设备规则'));
+      children.add(
+        _RulesTab(
+          service: _service,
+          onLogout: widget.onLogout,
+          canManage: widget.canManageRules,
+          equipmentOptions: _equipmentOptions,
+        ),
+      );
+    }
+    if (widget.canViewParameters) {
+      tabs.add(const Tab(text: '运行参数'));
+      children.add(
+        _ParametersTab(
+          service: _service,
+          onLogout: widget.onLogout,
+          canManage: widget.canManageParameters,
+          equipmentOptions: _equipmentOptions,
+        ),
+      );
+    }
+    if (tabs.isEmpty || _innerTabController == null) {
+      return const Center(child: Text('当前账号没有可访问的规则/参数页面。'));
+    }
     return Column(
       children: [
         Material(
           color: Theme.of(context).colorScheme.surface,
           child: TabBar(
             controller: _innerTabController,
-            tabs: const [
-              Tab(text: '设备规则'),
-              Tab(text: '运行参数'),
-            ],
+            tabs: tabs,
           ),
         ),
         Expanded(
           child: TabBarView(
             controller: _innerTabController,
-            children: [
-              _RulesTab(
-                service: _service,
-                onLogout: widget.onLogout,
-                canManage: widget.canManageRules,
-              ),
-              _ParametersTab(
-                service: _service,
-                onLogout: widget.onLogout,
-                canManage: widget.canManageParameters,
-              ),
-            ],
+            children: children,
           ),
         ),
       ],
@@ -87,11 +118,13 @@ class _RulesTab extends StatefulWidget {
     required this.service,
     required this.onLogout,
     required this.canManage,
+    required this.equipmentOptions,
   });
 
   final EquipmentService service;
   final VoidCallback onLogout;
   final bool canManage;
+  final List<EquipmentLedgerItem> equipmentOptions;
 
   @override
   State<_RulesTab> createState() => _RulesTabState();
@@ -102,6 +135,7 @@ class _RulesTabState extends State<_RulesTab> {
   String _message = '';
   int _total = 0;
   bool? _isEnabledFilter;
+  int? _equipmentFilterId;
   final _keywordController = TextEditingController();
   List<EquipmentRuleItem> _items = const [];
 
@@ -120,10 +154,31 @@ class _RulesTabState extends State<_RulesTab> {
   bool _isUnauthorized(Object e) => e is ApiException && e.statusCode == 401;
   String _errMsg(Object e) => e is ApiException ? e.message : e.toString();
 
+  Future<DateTime?> _pickEffectiveDate(DateTime? current) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    return picked;
+  }
+
+  String _formatDateTime(DateTime? value) {
+    if (value == null) return '-';
+    final local = value.toLocal();
+    final mm = local.month.toString().padLeft(2, '0');
+    final dd = local.day.toString().padLeft(2, '0');
+    final hh = local.hour.toString().padLeft(2, '0');
+    final min = local.minute.toString().padLeft(2, '0');
+    return '${local.year}-$mm-$dd $hh:$min';
+  }
+
   Future<void> _load() async {
     setState(() { _loading = true; _message = ''; });
     try {
       final result = await widget.service.listEquipmentRules(
+        equipmentId: _equipmentFilterId,
         keyword: _keywordController.text.trim().isEmpty
             ? null
             : _keywordController.text.trim(),
@@ -141,11 +196,15 @@ class _RulesTabState extends State<_RulesTab> {
   }
 
   Future<void> _showUpsertDialog({EquipmentRuleItem? item}) async {
+    final codeCtrl = TextEditingController(text: item?.ruleCode ?? '');
     final nameCtrl = TextEditingController(text: item?.ruleName ?? '');
     final typeCtrl = TextEditingController(text: item?.ruleType ?? '');
     final condCtrl = TextEditingController(text: item?.conditionDesc ?? '');
     final remarkCtrl = TextEditingController(text: item?.remark ?? '');
     bool isEnabled = item?.isEnabled ?? true;
+    int? selectedEquipmentId = item?.equipmentId;
+    final equipmentTypeCtrl = TextEditingController(text: item?.equipmentType ?? '');
+    DateTime? selectedEffectiveAt = item?.effectiveAt;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -156,6 +215,11 @@ class _RulesTabState extends State<_RulesTab> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                TextField(
+                  controller: codeCtrl,
+                  decoration: const InputDecoration(labelText: '规则编码 *'),
+                ),
+                const SizedBox(height: 8),
                 TextField(
                   controller: nameCtrl,
                   decoration: const InputDecoration(labelText: '规则名称 *'),
@@ -183,6 +247,39 @@ class _RulesTabState extends State<_RulesTab> {
                   onChanged: (v) => setS(() => isEnabled = v),
                   contentPadding: EdgeInsets.zero,
                 ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<int?>(
+                  initialValue: selectedEquipmentId,
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('适用全部设备')),
+                    ...widget.equipmentOptions.map(
+                      (entry) => DropdownMenuItem<int?>(
+                        value: entry.id,
+                        child: Text('${entry.code} ${entry.name}'),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) => setS(() => selectedEquipmentId = value),
+                  decoration: const InputDecoration(labelText: '适用设备'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: equipmentTypeCtrl,
+                  decoration: const InputDecoration(labelText: '适用设备类型'),
+                ),
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () async {
+                    final picked = await _pickEffectiveDate(selectedEffectiveAt);
+                    if (picked != null) {
+                      setS(() => selectedEffectiveAt = picked);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(labelText: '生效时间'),
+                    child: Text(_formatDateTime(selectedEffectiveAt)),
+                  ),
+                ),
               ],
             ),
           ),
@@ -201,9 +298,15 @@ class _RulesTabState extends State<_RulesTab> {
     );
 
     if (confirmed != true || !mounted) return;
-    if (nameCtrl.text.trim().isEmpty) {
+    if (codeCtrl.text.trim().isEmpty || nameCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('规则名称不能为空')),
+        const SnackBar(content: Text('规则编码和名称不能为空')),
+      );
+      return;
+    }
+    if (selectedEquipmentId == null && equipmentTypeCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请至少选择适用设备或填写设备类型')),
       );
       return;
     }
@@ -211,19 +314,27 @@ class _RulesTabState extends State<_RulesTab> {
     try {
       if (item == null) {
         await widget.service.createEquipmentRule(
+          equipmentId: selectedEquipmentId,
+          equipmentType: equipmentTypeCtrl.text.trim().isEmpty ? null : equipmentTypeCtrl.text.trim(),
+          ruleCode: codeCtrl.text.trim(),
           ruleName: nameCtrl.text.trim(),
           ruleType: typeCtrl.text.trim(),
           conditionDesc: condCtrl.text.trim(),
           isEnabled: isEnabled,
+          effectiveAt: selectedEffectiveAt,
           remark: remarkCtrl.text.trim(),
         );
       } else {
         await widget.service.updateEquipmentRule(
           ruleId: item.id,
+          equipmentId: selectedEquipmentId,
+          equipmentType: equipmentTypeCtrl.text.trim().isEmpty ? null : equipmentTypeCtrl.text.trim(),
+          ruleCode: codeCtrl.text.trim(),
           ruleName: nameCtrl.text.trim(),
           ruleType: typeCtrl.text.trim(),
           conditionDesc: condCtrl.text.trim(),
           isEnabled: isEnabled,
+          effectiveAt: selectedEffectiveAt,
           remark: remarkCtrl.text.trim(),
         );
       }
@@ -300,6 +411,33 @@ class _RulesTabState extends State<_RulesTab> {
               ),
               const SizedBox(width: 12),
               SizedBox(
+                width: 200,
+                child: DropdownButtonFormField<int?>(
+                  initialValue: _equipmentFilterId,
+                  decoration: const InputDecoration(
+                    labelText: '适用设备',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('全部设备')),
+                    ...widget.equipmentOptions.map(
+                      (entry) => DropdownMenuItem<int?>(
+                        value: entry.id,
+                        child: Text(entry.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (v) {
+                          setState(() => _equipmentFilterId = v);
+                          _load();
+                        },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
                 width: 140,
                 child: DropdownButtonFormField<bool?>(
                   key: ValueKey(_isEnabledFilter),
@@ -357,9 +495,13 @@ class _RulesTabState extends State<_RulesTab> {
                       child: DataTable(
                         columns: [
                           const DataColumn(label: Text('ID')),
+                          const DataColumn(label: Text('适用设备')),
+                          const DataColumn(label: Text('规则编码')),
                           const DataColumn(label: Text('规则名称')),
                           const DataColumn(label: Text('规则类型')),
                           const DataColumn(label: Text('触发条件')),
+                          const DataColumn(label: Text('生效时间')),
+                          const DataColumn(label: Text('备注')),
                           const DataColumn(label: Text('状态')),
                           if (widget.canManage)
                             const DataColumn(label: Text('操作')),
@@ -367,6 +509,8 @@ class _RulesTabState extends State<_RulesTab> {
                         rows: _items.map((item) {
                           return DataRow(cells: [
                             DataCell(Text('${item.id}')),
+                            DataCell(Text(item.equipmentName?.trim().isNotEmpty == true ? item.equipmentName! : item.equipmentType?.trim().isNotEmpty == true ? item.equipmentType! : '未配置')),
+                            DataCell(Text(item.ruleCode.isEmpty ? '-' : item.ruleCode)),
                             DataCell(Text(item.ruleName)),
                             DataCell(Text(item.ruleType.isEmpty ? '-' : item.ruleType)),
                             DataCell(
@@ -378,6 +522,8 @@ class _RulesTabState extends State<_RulesTab> {
                                 ),
                               ),
                             ),
+                            DataCell(Text(_formatDateTime(item.effectiveAt))),
+                            DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
                             DataCell(Text(item.isEnabled ? '启用' : '停用')),
                             if (widget.canManage)
                               DataCell(Row(
@@ -419,11 +565,13 @@ class _ParametersTab extends StatefulWidget {
     required this.service,
     required this.onLogout,
     required this.canManage,
+    required this.equipmentOptions,
   });
 
   final EquipmentService service;
   final VoidCallback onLogout;
   final bool canManage;
+  final List<EquipmentLedgerItem> equipmentOptions;
 
   @override
   State<_ParametersTab> createState() => _ParametersTabState();
@@ -434,6 +582,8 @@ class _ParametersTabState extends State<_ParametersTab> {
   String _message = '';
   int _total = 0;
   final _keywordController = TextEditingController();
+  int? _equipmentFilterId;
+  bool? _isEnabledFilter;
   List<EquipmentRuntimeParameterItem> _items = const [];
 
   @override
@@ -451,13 +601,35 @@ class _ParametersTabState extends State<_ParametersTab> {
   bool _isUnauthorized(Object e) => e is ApiException && e.statusCode == 401;
   String _errMsg(Object e) => e is ApiException ? e.message : e.toString();
 
+  Future<DateTime?> _pickEffectiveDate(DateTime? current) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    return picked;
+  }
+
+  String _formatDateTime(DateTime? value) {
+    if (value == null) return '-';
+    final local = value.toLocal();
+    final mm = local.month.toString().padLeft(2, '0');
+    final dd = local.day.toString().padLeft(2, '0');
+    final hh = local.hour.toString().padLeft(2, '0');
+    final min = local.minute.toString().padLeft(2, '0');
+    return '${local.year}-$mm-$dd $hh:$min';
+  }
+
   Future<void> _load() async {
     setState(() { _loading = true; _message = ''; });
     try {
       final result = await widget.service.listRuntimeParameters(
+        equipmentId: _equipmentFilterId,
         keyword: _keywordController.text.trim().isEmpty
             ? null
             : _keywordController.text.trim(),
+        isEnabled: _isEnabledFilter,
       );
       if (!mounted) return;
       setState(() { _items = result.items; _total = result.total; });
@@ -478,35 +650,85 @@ class _ParametersTabState extends State<_ParametersTab> {
     final upperCtrl = TextEditingController(text: item?.upperLimit ?? '');
     final lowerCtrl = TextEditingController(text: item?.lowerLimit ?? '');
     final remarkCtrl = TextEditingController(text: item?.remark ?? '');
+    int? selectedEquipmentId = item?.equipmentId;
+    final equipmentTypeCtrl = TextEditingController(text: item?.equipmentType ?? '');
+    DateTime? selectedEffectiveAt = item?.effectiveAt;
+    bool isEnabled = item?.isEnabled ?? true;
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(item == null ? '新增运行参数' : '编辑运行参数'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: '参数编码 *')),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateDialog) => AlertDialog(
+          title: Text(item == null ? '新增运行参数' : '编辑运行参数'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: '参数编码 *')),
+                const SizedBox(height: 8),
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: '参数名称 *')),
+                const SizedBox(height: 8),
+                TextField(controller: unitCtrl, decoration: const InputDecoration(labelText: '单位')),
+                const SizedBox(height: 8),
+              TextField(controller: stdCtrl, decoration: const InputDecoration(labelText: '默认值'), keyboardType: TextInputType.number),
+                const SizedBox(height: 8),
+                TextField(controller: upperCtrl, decoration: const InputDecoration(labelText: '上限'), keyboardType: TextInputType.number),
+                const SizedBox(height: 8),
+                TextField(controller: lowerCtrl, decoration: const InputDecoration(labelText: '下限'), keyboardType: TextInputType.number),
+                const SizedBox(height: 8),
+                TextField(controller: remarkCtrl, decoration: const InputDecoration(labelText: '备注')),
+                const SizedBox(height: 8),
+              DropdownButtonFormField<int?>(
+                  initialValue: selectedEquipmentId,
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('适用全部设备')),
+                    ...widget.equipmentOptions.map(
+                      (entry) => DropdownMenuItem<int?>(
+                        value: entry.id,
+                        child: Text('${entry.code} ${entry.name}'),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setStateDialog(() => selectedEquipmentId = value);
+                  },
+                decoration: const InputDecoration(labelText: '适用设备'),
+              ),
               const SizedBox(height: 8),
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: '参数名称 *')),
+              TextField(
+                controller: equipmentTypeCtrl,
+                decoration: const InputDecoration(labelText: '适用设备类型'),
+              ),
               const SizedBox(height: 8),
-              TextField(controller: unitCtrl, decoration: const InputDecoration(labelText: '单位')),
-              const SizedBox(height: 8),
-              TextField(controller: stdCtrl, decoration: const InputDecoration(labelText: '标准值'), keyboardType: TextInputType.number),
-              const SizedBox(height: 8),
-              TextField(controller: upperCtrl, decoration: const InputDecoration(labelText: '上限'), keyboardType: TextInputType.number),
-              const SizedBox(height: 8),
-              TextField(controller: lowerCtrl, decoration: const InputDecoration(labelText: '下限'), keyboardType: TextInputType.number),
-              const SizedBox(height: 8),
-              TextField(controller: remarkCtrl, decoration: const InputDecoration(labelText: '备注')),
-            ],
+              InkWell(
+                  onTap: () async {
+                    final picked = await _pickEffectiveDate(selectedEffectiveAt);
+                    if (picked != null) {
+                      setStateDialog(() => selectedEffectiveAt = picked);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(labelText: '生效时间'),
+                    child: Text(_formatDateTime(selectedEffectiveAt)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  title: const Text('启用'),
+                  value: isEnabled,
+                  onChanged: (value) {
+                    setStateDialog(() => isEnabled = value);
+                  },
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('保存')),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('保存')),
-        ],
       ),
     );
 
@@ -517,27 +739,61 @@ class _ParametersTabState extends State<_ParametersTab> {
       );
       return;
     }
+    final standardValue = stdCtrl.text.trim();
+    final upperLimit = upperCtrl.text.trim();
+    final lowerLimit = lowerCtrl.text.trim();
+    final parsedStandard = standardValue.isEmpty ? null : double.tryParse(standardValue);
+    final parsedUpper = upperLimit.isEmpty ? null : double.tryParse(upperLimit);
+    final parsedLower = lowerLimit.isEmpty ? null : double.tryParse(lowerLimit);
+    if ((standardValue.isNotEmpty && parsedStandard == null) ||
+        (upperLimit.isNotEmpty && parsedUpper == null) ||
+        (lowerLimit.isNotEmpty && parsedLower == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('默认值、上限、下限必须为有效数字')),
+      );
+      return;
+    }
+    if (parsedUpper != null && parsedLower != null && parsedLower > parsedUpper) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('下限不能大于上限')),
+      );
+      return;
+    }
+    if (selectedEquipmentId == null && equipmentTypeCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请至少选择适用设备或填写设备类型')),
+      );
+      return;
+    }
 
     try {
       if (item == null) {
         await widget.service.createRuntimeParameter(
+          equipmentId: selectedEquipmentId,
+          equipmentType: equipmentTypeCtrl.text.trim().isEmpty ? null : equipmentTypeCtrl.text.trim(),
           paramCode: codeCtrl.text.trim(),
           paramName: nameCtrl.text.trim(),
           unit: unitCtrl.text.trim(),
-          standardValue: stdCtrl.text.trim().isEmpty ? null : stdCtrl.text.trim(),
-          upperLimit: upperCtrl.text.trim().isEmpty ? null : upperCtrl.text.trim(),
-          lowerLimit: lowerCtrl.text.trim().isEmpty ? null : lowerCtrl.text.trim(),
+          standardValue: standardValue.isEmpty ? null : standardValue,
+          upperLimit: upperLimit.isEmpty ? null : upperLimit,
+          lowerLimit: lowerLimit.isEmpty ? null : lowerLimit,
+          effectiveAt: selectedEffectiveAt,
+          isEnabled: isEnabled,
           remark: remarkCtrl.text.trim(),
         );
       } else {
         await widget.service.updateRuntimeParameter(
           paramId: item.id,
+          equipmentId: selectedEquipmentId,
+          equipmentType: equipmentTypeCtrl.text.trim().isEmpty ? null : equipmentTypeCtrl.text.trim(),
           paramCode: codeCtrl.text.trim(),
           paramName: nameCtrl.text.trim(),
           unit: unitCtrl.text.trim(),
-          standardValue: stdCtrl.text.trim().isEmpty ? null : stdCtrl.text.trim(),
-          upperLimit: upperCtrl.text.trim().isEmpty ? null : upperCtrl.text.trim(),
-          lowerLimit: lowerCtrl.text.trim().isEmpty ? null : lowerCtrl.text.trim(),
+          standardValue: standardValue.isEmpty ? null : standardValue,
+          upperLimit: upperLimit.isEmpty ? null : upperLimit,
+          lowerLimit: lowerLimit.isEmpty ? null : lowerLimit,
+          effectiveAt: selectedEffectiveAt,
+          isEnabled: isEnabled,
           remark: remarkCtrl.text.trim(),
         );
       }
@@ -572,6 +828,20 @@ class _ParametersTabState extends State<_ParametersTab> {
     }
   }
 
+  Future<void> _toggleParam(EquipmentRuntimeParameterItem item) async {
+    try {
+      await widget.service.toggleRuntimeParameter(
+        paramId: item.id,
+        enabled: !item.isEnabled,
+      );
+      if (mounted) _load();
+    } catch (e) {
+      if (!mounted) return;
+      if (_isUnauthorized(e)) { widget.onLogout(); return; }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errMsg(e))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -592,6 +862,56 @@ class _ParametersTabState extends State<_ParametersTab> {
                     isDense: true,
                   ),
                   onSubmitted: (_) => _load(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 200,
+                child: DropdownButtonFormField<int?>(
+                  initialValue: _equipmentFilterId,
+                  decoration: const InputDecoration(
+                    labelText: '适用设备',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('全部设备')),
+                    ...widget.equipmentOptions.map(
+                      (entry) => DropdownMenuItem<int?>(
+                        value: entry.id,
+                        child: Text(entry.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (value) {
+                          setState(() => _equipmentFilterId = value);
+                          _load();
+                        },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<bool?>(
+                  initialValue: _isEnabledFilter,
+                  decoration: const InputDecoration(
+                    labelText: '状态',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem<bool?>(value: null, child: Text('全部')),
+                    DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+                    DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (value) {
+                          setState(() => _isEnabledFilter = value);
+                          _load();
+                        },
                 ),
               ),
               const SizedBox(width: 12),
@@ -624,24 +944,32 @@ class _ParametersTabState extends State<_ParametersTab> {
                       child: DataTable(
                         columns: [
                           const DataColumn(label: Text('ID')),
+                          const DataColumn(label: Text('适用设备')),
                           const DataColumn(label: Text('参数编码')),
                           const DataColumn(label: Text('参数名称')),
                           const DataColumn(label: Text('单位')),
-                          const DataColumn(label: Text('标准值')),
+                          const DataColumn(label: Text('默认值')),
                           const DataColumn(label: Text('上限')),
                           const DataColumn(label: Text('下限')),
+                          const DataColumn(label: Text('生效时间')),
+                          const DataColumn(label: Text('状态')),
+                          const DataColumn(label: Text('备注')),
                           if (widget.canManage)
                             const DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
                           return DataRow(cells: [
                             DataCell(Text('${item.id}')),
+                            DataCell(Text(item.equipmentName?.trim().isNotEmpty == true ? item.equipmentName! : item.equipmentType?.trim().isNotEmpty == true ? item.equipmentType! : '未配置')),
                             DataCell(Text(item.paramCode)),
                             DataCell(Text(item.paramName)),
                             DataCell(Text(item.unit.isEmpty ? '-' : item.unit)),
                             DataCell(Text(item.standardValue ?? '-')),
                             DataCell(Text(item.upperLimit ?? '-')),
                             DataCell(Text(item.lowerLimit ?? '-')),
+                            DataCell(Text(_formatDateTime(item.effectiveAt))),
+                            DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                            DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
                             if (widget.canManage)
                               DataCell(Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -649,6 +977,10 @@ class _ParametersTabState extends State<_ParametersTab> {
                                   TextButton(
                                     onPressed: () => _showUpsertDialog(item: item),
                                     child: const Text('编辑'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _toggleParam(item),
+                                    child: Text(item.isEnabled ? '停用' : '启用'),
                                   ),
                                   TextButton(
                                     onPressed: () => _deleteParam(item),

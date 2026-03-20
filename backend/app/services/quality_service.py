@@ -74,6 +74,27 @@ def _round_rate(passed: int, total: int) -> float:
     return round((passed * 100.0) / total, 2)
 
 
+def _collect_quality_scope(rows: list[FirstArticleRecord]) -> dict[str, set[int] | set[str]]:
+    return {
+        "product_ids": {
+            int(row.order.product_id)
+            for row in rows
+            if row.order is not None and row.order.product_id is not None
+        },
+        "order_ids": {int(row.order_id) for row in rows if row.order_id is not None},
+        "order_process_ids": {
+            int(row.order_process_id)
+            for row in rows
+            if row.order_process_id is not None
+        },
+        "process_codes": {
+            row.order_process.process_code
+            for row in rows
+            if row.order_process is not None and row.order_process.process_code
+        },
+    }
+
+
 def list_first_articles(
     db: Session,
     *,
@@ -425,6 +446,18 @@ def get_first_article_by_id(
         .scalars()
         .first()
     )
+    disposition_history = (
+        db.execute(
+            select(FirstArticleDispositionHistory)
+            .where(FirstArticleDispositionHistory.first_article_record_id == record_id)
+            .order_by(
+                FirstArticleDispositionHistory.version.desc(),
+                FirstArticleDispositionHistory.id.desc(),
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return {
         "id": row.id,
@@ -448,6 +481,18 @@ def get_first_article_by_id(
         "disposition_at": disposition.disposition_at if disposition else None,
         "recheck_result": disposition.recheck_result if disposition else None,
         "final_judgment": disposition.final_judgment if disposition else None,
+        "disposition_history": [
+            {
+                "id": history.id,
+                "version": history.version,
+                "disposition_opinion": history.disposition_opinion,
+                "disposition_username": history.disposition_username,
+                "disposition_at": history.disposition_at,
+                "recheck_result": history.recheck_result,
+                "final_judgment": history.final_judgment,
+            }
+            for history in disposition_history
+        ],
     }
 
 
@@ -549,6 +594,8 @@ def get_quality_product_stats(
         elif row.result == "failed":
             item["failed_total"] = int(item["failed_total"]) + 1
 
+    scope = _collect_quality_scope(rows)
+
     # 补充报废和维修数量
     if grouped:
         product_ids = list(grouped.keys())
@@ -566,6 +613,26 @@ def get_quality_product_stats(
                 .where(
                     ProductionScrapStatistics.product_id.in_(product_ids),
                     *scrap_time_filters,
+                )
+                .where(
+                    ProductionScrapStatistics.process_code == process_code
+                    if process_code and process_code.strip()
+                    else True,
+                )
+                .where(
+                    ProductionScrapStatistics.operator_username.ilike(f"%{operator_username.strip()}%")
+                    if operator_username and operator_username.strip()
+                    else True,
+                )
+                .where(
+                    ProductionScrapStatistics.process_id.in_(scope["order_process_ids"])
+                    if scope["order_process_ids"]
+                    else True,
+                )
+                .where(
+                    ProductionScrapStatistics.order_id.in_(scope["order_ids"])
+                    if scope["order_ids"]
+                    else True,
                 )
                 .group_by(ProductionScrapStatistics.product_id)
             )
@@ -589,6 +656,26 @@ def get_quality_product_stats(
                 .where(
                     RepairOrder.product_id.in_(product_ids),
                     *repair_time_filters,
+                )
+                .where(
+                    RepairOrder.source_process_code == process_code
+                    if process_code and process_code.strip()
+                    else True,
+                )
+                .where(
+                    RepairOrder.sender_username.ilike(f"%{operator_username.strip()}%")
+                    if operator_username and operator_username.strip()
+                    else True,
+                )
+                .where(
+                    RepairOrder.source_order_process_id.in_(scope["order_process_ids"])
+                    if scope["order_process_ids"]
+                    else True,
+                )
+                .where(
+                    RepairOrder.source_order_id.in_(scope["order_ids"])
+                    if scope["order_ids"]
+                    else True,
                 )
                 .group_by(RepairOrder.product_id)
             )
@@ -616,26 +703,32 @@ def get_quality_trend(
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
+    result_filter: str | None = None,
 ) -> list[dict[str, Any]]:
     resolved_start = start_date or (date.today() - timedelta(days=29))
     resolved_end = end_date or date.today()
 
-    extra_filters: list[object] = []
+    base_filters: list[object] = []
+    joined_filters: list[object] = []
     need_joins = False
     if product_name and product_name.strip():
-        extra_filters.append(Product.name.ilike(f"%{product_name.strip()}%"))
+        joined_filters.append(Product.name.ilike(f"%{product_name.strip()}%"))
         need_joins = True
     if process_code and process_code.strip():
-        extra_filters.append(ProductionOrderProcess.process_code.ilike(f"%{process_code.strip()}%"))
+        joined_filters.append(ProductionOrderProcess.process_code.ilike(f"%{process_code.strip()}%"))
         need_joins = True
     if operator_username and operator_username.strip():
-        extra_filters.append(User.username.ilike(f"%{operator_username.strip()}%"))
+        joined_filters.append(User.username.ilike(f"%{operator_username.strip()}%"))
         need_joins = True
+    if result_filter and result_filter.strip():
+        base_filters.append(FirstArticleRecord.result == result_filter.strip())
 
     stmt = (
         select(FirstArticleRecord)
         .where(*_build_created_at_filters(start_date=resolved_start, end_date=resolved_end))
     )
+    if base_filters:
+        stmt = stmt.where(*base_filters)
     if need_joins:
         stmt = (
             stmt
@@ -643,7 +736,7 @@ def get_quality_trend(
             .join(ProductionOrder.product)
             .join(FirstArticleRecord.order_process)
             .join(FirstArticleRecord.operator)
-            .where(*extra_filters)
+            .where(*joined_filters)
         )
 
     rows = db.execute(stmt).scalars().all()
@@ -673,41 +766,97 @@ def get_quality_trend(
         elif row.result == "failed":
             item["failed_total"] = int(item["failed_total"]) + 1
 
+    scope = _collect_quality_scope(rows)
+
     # 补充报废数量
-    scrap_rows = (
-        db.execute(
-            select(
-                func.date(ProductionScrapStatistics.last_scrap_time).label("d"),
-                func.sum(ProductionScrapStatistics.scrap_quantity).label("total"),
+    scrap_rows = []
+    if scope["product_ids"] or scope["order_ids"]:
+        scrap_rows = (
+            db.execute(
+                select(
+                    func.date(ProductionScrapStatistics.last_scrap_time).label("d"),
+                    func.sum(ProductionScrapStatistics.scrap_quantity).label("total"),
+                )
+                .where(
+                    ProductionScrapStatistics.last_scrap_time >= datetime.combine(resolved_start, time.min),
+                    ProductionScrapStatistics.last_scrap_time < datetime.combine(resolved_end + timedelta(days=1), time.min),
+                )
+                .where(
+                    ProductionScrapStatistics.product_id.in_(scope["product_ids"])
+                    if scope["product_ids"]
+                    else True,
+                )
+                .where(
+                    ProductionScrapStatistics.process_code == process_code
+                    if process_code and process_code.strip()
+                    else True,
+                )
+                .where(
+                    ProductionScrapStatistics.operator_username.ilike(f"%{operator_username.strip()}%")
+                    if operator_username and operator_username.strip()
+                    else True,
+                )
+                .where(
+                    ProductionScrapStatistics.process_id.in_(scope["order_process_ids"])
+                    if scope["order_process_ids"]
+                    else True,
+                )
+                .where(
+                    ProductionScrapStatistics.order_id.in_(scope["order_ids"])
+                    if scope["order_ids"]
+                    else True,
+                )
+                .group_by(func.date(ProductionScrapStatistics.last_scrap_time))
             )
-            .where(
-                ProductionScrapStatistics.last_scrap_time >= datetime.combine(resolved_start, time.min),
-                ProductionScrapStatistics.last_scrap_time < datetime.combine(resolved_end + timedelta(days=1), time.min),
-            )
-            .group_by(func.date(ProductionScrapStatistics.last_scrap_time))
+            .all()
         )
-        .all()
-    )
     for sr in scrap_rows:
         stat_date = _normalize_stat_date(sr.d)
         if stat_date is not None and stat_date in grouped:
             grouped[stat_date]["scrap_total"] = int(sr.total or 0)
 
     # 补充维修数量（按维修单创建日期聚合）
-    repair_rows = (
-        db.execute(
-            select(
-                func.date(RepairOrder.repair_time).label("d"),
-                func.count(RepairOrder.id).label("total"),
+    repair_rows = []
+    if scope["product_ids"] or scope["order_ids"]:
+        repair_rows = (
+            db.execute(
+                select(
+                    func.date(RepairOrder.repair_time).label("d"),
+                    func.count(RepairOrder.id).label("total"),
+                )
+                .where(
+                    RepairOrder.repair_time >= datetime.combine(resolved_start, time.min),
+                    RepairOrder.repair_time < datetime.combine(resolved_end + timedelta(days=1), time.min),
+                )
+                .where(
+                    RepairOrder.product_id.in_(scope["product_ids"])
+                    if scope["product_ids"]
+                    else True,
+                )
+                .where(
+                    RepairOrder.source_process_code == process_code
+                    if process_code and process_code.strip()
+                    else True,
+                )
+                .where(
+                    RepairOrder.sender_username.ilike(f"%{operator_username.strip()}%")
+                    if operator_username and operator_username.strip()
+                    else True,
+                )
+                .where(
+                    RepairOrder.source_order_process_id.in_(scope["order_process_ids"])
+                    if scope["order_process_ids"]
+                    else True,
+                )
+                .where(
+                    RepairOrder.source_order_id.in_(scope["order_ids"])
+                    if scope["order_ids"]
+                    else True,
+                )
+                .group_by(func.date(RepairOrder.repair_time))
             )
-            .where(
-                RepairOrder.repair_time >= datetime.combine(resolved_start, time.min),
-                RepairOrder.repair_time < datetime.combine(resolved_end + timedelta(days=1), time.min),
-            )
-            .group_by(func.date(RepairOrder.repair_time))
+            .all()
         )
-        .all()
-    )
     for rr in repair_rows:
         stat_date = _normalize_stat_date(rr.d)
         if stat_date is not None and stat_date in grouped:
@@ -760,6 +909,24 @@ def export_quality_stats_csv(
         operator_username=operator_username,
         result_filter=result_filter,
     )
+    product_stats = get_quality_product_stats(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result_filter,
+    )
+    trend_stats = get_quality_trend(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result_filter,
+    )
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -804,10 +971,38 @@ def export_quality_stats_csv(
             str(item["latest_first_article_at"])[:19] if item["latest_first_article_at"] else "",
         ])
 
+    writer.writerow([])
+    writer.writerow(["== 产品统计 =="])
+    writer.writerow(["产品名称", "首件总数", "通过数", "不通过数", "通过率", "报废数", "维修数"])
+    for item in product_stats:
+        writer.writerow([
+            item["product_name"],
+            item["first_article_total"],
+            item["passed_total"],
+            item["failed_total"],
+            f"{item['pass_rate_percent']}%",
+            item["scrap_total"],
+            item["repair_order_count"],
+        ])
+
+    writer.writerow([])
+    writer.writerow(["== 趋势分析 =="])
+    writer.writerow(["日期", "首件总数", "通过数", "不通过数", "通过率", "报废数", "维修数"])
+    for item in trend_stats:
+        writer.writerow([
+            item["stat_date"],
+            item["first_article_total"],
+            item["passed_total"],
+            item["failed_total"],
+            f"{item['pass_rate_percent']}%",
+            item["scrap_total"],
+            item["repair_total"],
+        ])
+
     csv_bytes = output.getvalue().encode("utf-8-sig")
     content_base64 = base64.b64encode(csv_bytes).decode("ascii")
     filename = f"品质统计_{uuid4().hex[:8]}.csv"
-    total_rows = len(process_stats) + len(operator_stats)
+    total_rows = len(process_stats) + len(operator_stats) + len(product_stats) + len(trend_stats)
     return {
         "filename": filename,
         "content_base64": content_base64,
@@ -826,6 +1021,18 @@ def submit_first_article_disposition(
 ) -> FirstArticleDisposition:
     from datetime import UTC
     now = datetime.now(UTC)
+
+    record = (
+        db.execute(
+            select(FirstArticleRecord).where(FirstArticleRecord.id == record_id)
+        )
+        .scalars()
+        .first()
+    )
+    if record is None:
+        raise ValueError("首件记录不存在")
+    if record.result != "failed":
+        raise ValueError("仅不通过首件记录允许执行处置")
 
     existing = (
         db.execute(
@@ -895,6 +1102,8 @@ def get_defect_analysis(
     product_id: int | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
+    operator_username: str | None = None,
+    phenomenon: str | None = None,
     top_n: int = 10,
 ) -> dict:
     from app.schemas.quality import DefectAnalysisResult, DefectTopItem, DefectByProcessItem, DefectByProductItem
@@ -914,6 +1123,10 @@ def get_defect_analysis(
         stmt = stmt.where(RepairDefectPhenomenon.product_name.ilike(f"%{product_name.strip()}%"))
     if process_code:
         stmt = stmt.where(RepairDefectPhenomenon.process_code == process_code)
+    if operator_username and operator_username.strip():
+        stmt = stmt.where(RepairDefectPhenomenon.operator_username.ilike(f"%{operator_username.strip()}%"))
+    if phenomenon and phenomenon.strip():
+        stmt = stmt.where(RepairDefectPhenomenon.phenomenon.ilike(f"%{phenomenon.strip()}%"))
 
     rows = db.execute(stmt).scalars().all()
 
@@ -967,7 +1180,10 @@ def export_defect_analysis_csv(
     start_date: date | None = None,
     end_date: date | None = None,
     product_id: int | None = None,
+    product_name: str | None = None,
     process_code: str | None = None,
+    operator_username: str | None = None,
+    phenomenon: str | None = None,
 ) -> dict:
     from app.schemas.quality import DefectAnalysisExportResult
 
@@ -982,8 +1198,14 @@ def export_defect_analysis_csv(
         )
     if product_id is not None:
         stmt = stmt.where(RepairDefectPhenomenon.product_id == product_id)
+    if product_name and product_name.strip():
+        stmt = stmt.where(RepairDefectPhenomenon.product_name.ilike(f"%{product_name.strip()}%"))
     if process_code:
         stmt = stmt.where(RepairDefectPhenomenon.process_code == process_code)
+    if operator_username and operator_username.strip():
+        stmt = stmt.where(RepairDefectPhenomenon.operator_username.ilike(f"%{operator_username.strip()}%"))
+    if phenomenon and phenomenon.strip():
+        stmt = stmt.where(RepairDefectPhenomenon.phenomenon.ilike(f"%{phenomenon.strip()}%"))
 
     rows = db.execute(stmt).scalars().all()
 

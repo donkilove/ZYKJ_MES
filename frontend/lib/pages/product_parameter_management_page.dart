@@ -67,6 +67,7 @@ class _ProductParameterManagementPageState
   DateTime? _updatedBefore;
   final TextEditingController _versionFilterController = TextEditingController();
   final TextEditingController _paramNameFilterController = TextEditingController();
+  final TextEditingController _paramCategoryFilterController = TextEditingController();
 
   int _handledJumpSeq = 0;
 
@@ -111,6 +112,7 @@ class _ProductParameterManagementPageState
     _keywordController.dispose();
     _versionFilterController.dispose();
     _paramNameFilterController.dispose();
+    _paramCategoryFilterController.dispose();
     _remarkController.dispose();
     _editorVerticalController.dispose();
     _editorHorizontalController.dispose();
@@ -266,9 +268,14 @@ class _ProductParameterManagementPageState
     try {
       final result = await _productService.listProducts(
         page: 1,
-        pageSize: 100,
+        pageSize: 10000,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
+        updatedAfter: _updatedAfter,
+        updatedBefore: _updatedBefore,
+        currentVersionKeyword: _versionFilterController.text.trim(),
+        currentParamNameKeyword: _paramNameFilterController.text.trim(),
+        currentParamCategoryKeyword: _paramCategoryFilterController.text.trim(),
       );
       if (!mounted) {
         return;
@@ -298,22 +305,7 @@ class _ProductParameterManagementPageState
   }
 
   List<ProductItem> get _filteredProducts {
-    final versionFilter = _versionFilterController.text.trim().toLowerCase();
-    final paramFilter = _paramNameFilterController.text.trim().toLowerCase();
-    if (versionFilter.isEmpty && paramFilter.isEmpty && _updatedAfter == null && _updatedBefore == null) return _products;
-    return _products.where((p) {
-      if (versionFilter.isNotEmpty) {
-        final label = p.effectiveVersion > 0 ? 'v1.${p.effectiveVersion}' : '';
-        if (!label.contains(versionFilter)) return false;
-      }
-      if (paramFilter.isNotEmpty) {
-        final summary = (p.lastParameterSummary ?? '').toLowerCase();
-        if (!summary.contains(paramFilter)) return false;
-      }
-      if (_updatedAfter != null && p.updatedAt.isBefore(_updatedAfter!)) return false;
-      if (_updatedBefore != null && p.updatedAt.isAfter(_updatedBefore!)) return false;
-      return true;
-    }).toList();
+    return _products;
   }
 
   Future<void> _handleJumpCommand(ProductJumpCommand command) async {
@@ -342,6 +334,11 @@ class _ProductParameterManagementPageState
       final bytes = await _productService.exportProductParameters(
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
+        versionKeyword: _versionFilterController.text.trim(),
+        paramKeyword: _paramNameFilterController.text.trim(),
+        paramCategoryKeyword: _paramCategoryFilterController.text.trim(),
+        updatedAfter: _updatedAfter,
+        updatedBefore: _updatedBefore,
       );
       final location = await getSaveLocation(
         suggestedName: 'product_parameters.csv',
@@ -1373,7 +1370,19 @@ class _ProductParameterManagementPageState
                   labelText: '参数名称筛选',
                   border: OutlineInputBorder(),
                 ),
-                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => _loadProducts(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 200,
+              child: TextField(
+                controller: _paramCategoryFilterController,
+                decoration: const InputDecoration(
+                  labelText: '参数分组筛选',
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (_) => _loadProducts(),
               ),
             ),
             const SizedBox(width: 12),
@@ -1476,8 +1485,8 @@ class _ProductParameterManagementPageState
                             cells: [
                               DataCell(Text(product.name)),
                               DataCell(Text(product.category.isEmpty ? '-' : product.category)),
-                              DataCell(Text('V1.${product.currentVersion}')),
-                              DataCell(Text(product.effectiveVersion > 0 ? 'V1.${product.effectiveVersion}' : '-')),
+                              DataCell(Text(product.currentVersion > 0 ? 'V1.${product.currentVersion - 1}' : '-')),
+                              DataCell(Text(product.effectiveVersion > 0 ? 'V1.${product.effectiveVersion - 1}' : '-')),
                               DataCell(Text(_formatTime(product.createdAt))),
                               DataCell(Text(_formatTime(product.updatedAt))),
                               DataCell(

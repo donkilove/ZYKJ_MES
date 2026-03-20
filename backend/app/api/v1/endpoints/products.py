@@ -1,6 +1,8 @@
+from collections.abc import Sequence
 from datetime import datetime
 import csv
 import io
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -66,6 +68,7 @@ from app.services.product_service import (
     list_product_parameters,
     list_product_versions,
     list_products,
+    append_product_history_event,
     rollback_product_to_version,
     summarize_changed_keys,
     update_product_parameters,
@@ -110,7 +113,7 @@ def _to_parameter_list_result(
     version: int,
     version_label: str,
     lifecycle_status: str,
-    parameters: tuple[object, ...] | list[object],
+    parameters: Sequence[object],
 ) -> ProductParameterListResult:
     items = [
         ProductParameterItem(
@@ -145,6 +148,9 @@ def get_products(
     has_effective_version: bool | None = Query(default=None),
     updated_after: datetime | None = Query(default=None),
     updated_before: datetime | None = Query(default=None),
+    current_version_keyword: str | None = Query(default=None),
+    current_param_name_keyword: str | None = Query(default=None),
+    current_param_category_keyword: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("product.products.list")),
 ) -> ApiResponse[ProductListResult]:
@@ -153,6 +159,9 @@ def get_products(
         has_effective_version=has_effective_version,
         updated_after=updated_after,
         updated_before=updated_before,
+        current_version_keyword=current_version_keyword,
+        current_param_name_keyword=current_param_name_keyword,
+        current_param_category_keyword=current_param_category_keyword,
     )
     return success_response(
         ProductListResult(
@@ -231,9 +240,40 @@ def update_product_api(
         if existing and existing.id != product.id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Product name already exists")
 
+    before_snapshot = json.dumps(
+        {
+            "name": product.name,
+            "category": product.category,
+            "remark": product.remark,
+            "lifecycle_status": product.lifecycle_status,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
     product.name = normalized_name
     product.category = payload.category
     product.remark = (payload.remark or "").strip()
+    after_snapshot = json.dumps(
+        {
+            "name": product.name,
+            "category": product.category,
+            "remark": product.remark,
+            "lifecycle_status": product.lifecycle_status,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    append_product_history_event(
+        db,
+        product=product,
+        operator=current_user,
+        change_type="update_product",
+        remark="编辑产品基础信息",
+        changed_keys=["name", "category", "remark"],
+        before_snapshot=before_snapshot,
+        after_snapshot=after_snapshot,
+    )
     db.commit()
     db.refresh(product)
 
@@ -532,6 +572,14 @@ def update_product_lifecycle(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
     try:
+        before_snapshot = json.dumps(
+            {
+                "lifecycle_status": product.lifecycle_status,
+                "inactive_reason": product.inactive_reason,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
         updated = change_product_lifecycle(
             db,
             product=product,
@@ -543,6 +591,24 @@ def update_product_lifecycle(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    after_snapshot = json.dumps(
+        {
+            "lifecycle_status": updated.lifecycle_status,
+            "inactive_reason": updated.inactive_reason,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    append_product_history_event(
+        db,
+        product=updated,
+        operator=current_user,
+        change_type="lifecycle",
+        remark=f"变更产品状态为 {payload.target_status}",
+        changed_keys=["lifecycle_status", "inactive_reason"],
+        before_snapshot=before_snapshot,
+        after_snapshot=after_snapshot,
+    )
     write_audit_log(
         db,
         action_code="product.lifecycle",
@@ -557,13 +623,18 @@ def update_product_lifecycle(
     return success_response(to_product_item(updated, None), message="updated")
 
 
-def _to_version_item(row: "ProductRevision") -> ProductVersionItem:
+def _to_version_item(
+    row: "ProductRevision",
+    *,
+    effective_at: datetime | None = None,
+) -> ProductVersionItem:
     return ProductVersionItem(
         version=row.version,
         version_label=row.version_label,
         lifecycle_status=row.lifecycle_status,
         action=row.action,
         note=row.note,
+        effective_at=effective_at,
         source_version=row.source_revision.version if row.source_revision else None,
         source_version_label=row.source_revision.version_label if row.source_revision else None,
         created_by_user_id=row.created_by_user_id,
@@ -586,7 +657,15 @@ def get_product_versions(
     return success_response(
         ProductVersionListResult(
             total=len(rows),
-            items=[_to_version_item(row) for row in rows],
+            items=[
+                _to_version_item(
+                    row,
+                    effective_at=product.effective_at
+                    if product.effective_version == row.version and row.lifecycle_status == "effective"
+                    else None,
+                )
+                for row in rows
+            ],
         )
     )
 
@@ -789,7 +868,11 @@ def update_product_version_note_api(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
     try:
         revision = update_product_version_note(
-            db, product_id=product_id, version=version, note=body.note
+            db,
+            product_id=product_id,
+            version=version,
+            note=body.note,
+            operator=current_user,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -907,7 +990,7 @@ def get_parameter_history(
         ProductParameterHistoryItem(
             id=row.id,
             version=row.version,
-            version_label=f"V1.{row.version - 1}" if row.version is not None else None,
+            version_label=row.revision.version_label if row.revision is not None else (f"V1.{row.version - 1}" if row.version is not None else None),
             remark=row.remark,
             change_type=row.change_type or "edit",
             changed_keys=[str(value) for value in (row.changed_keys or [])],
@@ -953,7 +1036,7 @@ def get_version_parameter_history(
         ProductParameterHistoryItem(
             id=row.id,
             version=row.version,
-            version_label=f"V1.{row.version - 1}" if row.version is not None else None,
+            version_label=row.revision.version_label if row.revision is not None else (f"V1.{row.version - 1}" if row.version is not None else None),
             remark=row.remark,
             change_type=row.change_type or "edit",
             changed_keys=[str(value) for value in (row.changed_keys or [])],
@@ -1060,24 +1143,71 @@ def export_product_version_parameters(
 def export_product_parameters(
     keyword: str | None = Query(default=None),
     category: str | None = Query(default=None),
+    lifecycle_status: str | None = Query(default=None),
+    version_keyword: str | None = Query(default=None),
+    param_keyword: str | None = Query(default=None),
+    param_category_keyword: str | None = Query(default=None),
+    updated_after: datetime | None = Query(default=None),
+    updated_before: datetime | None = Query(default=None),
+    effective_only: bool = Query(default=False),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("product.parameters.view")),
 ) -> StreamingResponse:
-    _, products, _ = list_products(db, 1, 10000, keyword, category, None)
+    _, products, latest_history_map = list_products(
+        db,
+        1,
+        10000,
+        keyword,
+        category,
+        lifecycle_status,
+        updated_after=updated_after,
+        updated_before=updated_before,
+    )
+    normalized_version_keyword = (version_keyword or '').strip().lower()
+    normalized_param_keyword = (param_keyword or '').strip().lower()
+    normalized_param_category_keyword = (param_category_keyword or '').strip().lower()
+    if normalized_version_keyword or normalized_param_keyword or normalized_param_category_keyword:
+        filtered_products: list[Product] = []
+        for product in products:
+            version_source = product.effective_version if effective_only else product.current_version
+            version_label = f"v1.{version_source - 1}" if version_source > 0 else ''
+            latest_summary = latest_history_map.get(product.id)
+            summary_text = (
+                (summarize_changed_keys(latest_summary.changed_keys or []) or '').lower()
+                if latest_summary is not None
+                else ''
+            )
+            if normalized_version_keyword and normalized_version_keyword not in version_label:
+                continue
+            if normalized_param_keyword and normalized_param_keyword not in summary_text:
+                continue
+            filtered_products.append(product)
+        products = filtered_products
     header = ["产品名称", "生效版本", "参数名称", "参数分组", "类型", "参数值", "参数说明"]
     rows: list[list[str]] = [header]
     for product in products:
-        effective_revision = get_effective_revision(db, product=product)
-        if effective_revision is None:
+        target_revision = get_effective_revision(db, product=product) if effective_only else get_current_revision(db, product=product)
+        if target_revision is None:
             continue
-        params = get_effective_product_parameters(
+        params = get_product_version_parameters(
             db,
             product=product,
+            version=target_revision.version,
         )[1]
+        if normalized_param_keyword:
+            params = [param for param in params if normalized_param_keyword in param.param_key.lower()]
+        if normalized_param_category_keyword:
+            params = [
+                param
+                for param in params
+                if normalized_param_category_keyword in (param.param_category or '').lower()
+            ]
+        if not params:
+            continue
         for param in params:
             rows.append([
                 product.name,
-                effective_revision.version_label,
+                target_revision.version_label,
                 param.param_key,
                 param.param_category or "",
                 param.param_type,

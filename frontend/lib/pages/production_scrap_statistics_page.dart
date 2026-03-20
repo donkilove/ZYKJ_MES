@@ -301,6 +301,28 @@ class _ProductionScrapStatisticsPageState
                               '送修:${repair.repairQuantity} 已修:${repair.repairedQuantity} 报废:${repair.scrapQuantity} | '
                               '${_formatDateTime(repair.repairTime)}',
                             ),
+                            ),
+                          ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        '相关日志',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 6),
+                      if (d.relatedEventLogs.isEmpty)
+                        const Text('无')
+                      else
+                        ...d.relatedEventLogs.map(
+                          (event) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              '${_formatDateTime(event.createdAt)} | ${event.eventTitle}'
+                              '${(event.eventDetail ?? '').trim().isEmpty ? '' : ' | ${event.eventDetail!.trim()}'}'
+                              '${(event.orderCode ?? '').trim().isEmpty ? '' : ' | ${event.orderCode}'}'
+                              '${(event.processCode ?? '').trim().isEmpty ? '' : ' | ${event.processCode}'}'
+                              '${(event.orderStatus ?? '').trim().isEmpty ? '' : ' | ${event.orderStatus}'}'
+                              '${(event.payloadJson ?? '').trim().isEmpty ? '' : '\n载荷：${event.payloadJson!.trim()}'}',
+                            ),
                           ),
                         ),
                     ],

@@ -27,6 +27,9 @@ class ProductService {
     bool? hasEffectiveVersion,
     DateTime? updatedAfter,
     DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -46,6 +49,15 @@ class ProductService {
     }
     if (updatedBefore != null) {
       query['updated_before'] = updatedBefore.toUtc().toIso8601String();
+    }
+    if (currentVersionKeyword != null && currentVersionKeyword.trim().isNotEmpty) {
+      query['current_version_keyword'] = currentVersionKeyword.trim();
+    }
+    if (currentParamNameKeyword != null && currentParamNameKeyword.trim().isNotEmpty) {
+      query['current_param_name_keyword'] = currentParamNameKeyword.trim();
+    }
+    if (currentParamCategoryKeyword != null && currentParamCategoryKeyword.trim().isNotEmpty) {
+      query['current_param_category_keyword'] = currentParamCategoryKeyword.trim();
     }
     final uri = Uri.parse(
       '${session.baseUrl}/products',
@@ -514,6 +526,8 @@ class ProductService {
     String? category,
     String? lifecycleStatus,
     bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
   }) async {
     final query = <String, String>{};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -527,6 +541,12 @@ class ProductService {
     }
     if (hasEffectiveVersion != null) {
       query['has_effective_version'] = hasEffectiveVersion ? 'true' : 'false';
+    }
+    if (updatedAfter != null) {
+      query['updated_after'] = updatedAfter.toUtc().toIso8601String();
+    }
+    if (updatedBefore != null) {
+      query['updated_before'] = updatedBefore.toUtc().toIso8601String();
     }
     final uri = Uri.parse(
       '${session.baseUrl}/products/export/list',
@@ -563,6 +583,13 @@ class ProductService {
   Future<List<int>> exportProductParameters({
     String? keyword,
     String? category,
+    String? lifecycleStatus,
+    String? versionKeyword,
+    String? paramKeyword,
+    String? paramCategoryKeyword,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    bool effectiveOnly = false,
   }) async {
     final query = <String, String>{};
     if (keyword != null && keyword.trim().isNotEmpty) {
@@ -570,6 +597,27 @@ class ProductService {
     }
     if (category != null && category.trim().isNotEmpty) {
       query['category'] = category.trim();
+    }
+    if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
+      query['lifecycle_status'] = lifecycleStatus.trim();
+    }
+    if (versionKeyword != null && versionKeyword.trim().isNotEmpty) {
+      query['version_keyword'] = versionKeyword.trim();
+    }
+    if (paramKeyword != null && paramKeyword.trim().isNotEmpty) {
+      query['param_keyword'] = paramKeyword.trim();
+    }
+    if (paramCategoryKeyword != null && paramCategoryKeyword.trim().isNotEmpty) {
+      query['param_category_keyword'] = paramCategoryKeyword.trim();
+    }
+    if (updatedAfter != null) {
+      query['updated_after'] = updatedAfter.toUtc().toIso8601String();
+    }
+    if (updatedBefore != null) {
+      query['updated_before'] = updatedBefore.toUtc().toIso8601String();
+    }
+    if (effectiveOnly) {
+      query['effective_only'] = 'true';
     }
     final uri = Uri.parse(
       '${session.baseUrl}/products/parameters/export',

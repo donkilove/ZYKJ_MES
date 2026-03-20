@@ -250,6 +250,7 @@ class QualityService {
     String? productName,
     String? processCode,
     String? operatorUsername,
+    String? result,
   }) async {
     final query = <String, String>{};
     if (startDate != null) query['start_date'] = _formatDate(startDate);
@@ -257,6 +258,7 @@ class QualityService {
     if (productName != null && productName.trim().isNotEmpty) query['product_name'] = productName.trim();
     if (processCode != null && processCode.trim().isNotEmpty) query['process_code'] = processCode.trim();
     if (operatorUsername != null && operatorUsername.trim().isNotEmpty) query['operator_username'] = operatorUsername.trim();
+    if (result != null && result.isNotEmpty) query['result'] = result;
     final uri = Uri.parse(
       '$_basePath/trend',
     ).replace(queryParameters: query.isEmpty ? null : query);
@@ -272,6 +274,39 @@ class QualityService {
     return (data['items'] as List<dynamic>? ?? const [])
         .map((e) => QualityTrendItem.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<String> exportQualityTrend({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
+    String? result,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (startDate != null) payload['start_date'] = _formatDate(startDate);
+    if (endDate != null) payload['end_date'] = _formatDate(endDate);
+    if (productName != null && productName.trim().isNotEmpty) {
+      payload['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      payload['process_code'] = processCode.trim();
+    }
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      payload['operator_username'] = operatorUsername.trim();
+    }
+    if (result != null && result.isNotEmpty) {
+      payload['result'] = result;
+    }
+    final uri = Uri.parse('$_basePath/trend/export');
+    final response = await http.post(uri, headers: _authHeaders, body: jsonEncode(payload));
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(body, response.statusCode), response.statusCode);
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return (data['content_base64'] as String?) ?? '';
   }
 
   Future<QualityStatsOverview> getQualityOverview({
@@ -442,6 +477,8 @@ class QualityService {
     int? productId,
     String? productName,
     String? processCode,
+    String? operatorUsername,
+    String? phenomenon,
     int topN = 10,
   }) async {
     final query = <String, String>{'top_n': '$topN'};
@@ -451,6 +488,12 @@ class QualityService {
     if (productName != null && productName.isNotEmpty) query['product_name'] = productName;
     if (processCode != null && processCode.isNotEmpty) {
       query['process_code'] = processCode;
+    }
+    if (operatorUsername != null && operatorUsername.isNotEmpty) {
+      query['operator_username'] = operatorUsername;
+    }
+    if (phenomenon != null && phenomenon.isNotEmpty) {
+      query['phenomenon'] = phenomenon;
     }
     final uri = Uri.parse('${session.baseUrl}/quality/defect-analysis')
         .replace(queryParameters: query);
@@ -465,5 +508,32 @@ class QualityService {
     return DefectAnalysisResult.fromJson(
       json['data'] as Map<String, dynamic>,
     );
+  }
+
+  Future<String> exportDefectAnalysis({
+    DateTime? startDate,
+    DateTime? endDate,
+    int? productId,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
+    String? phenomenon,
+  }) async {
+    final query = <String, String>{};
+    if (startDate != null) query['start_date'] = _formatDate(startDate);
+    if (endDate != null) query['end_date'] = _formatDate(endDate);
+    if (productId != null) query['product_id'] = '$productId';
+    if (productName != null && productName.isNotEmpty) query['product_name'] = productName;
+    if (processCode != null && processCode.isNotEmpty) query['process_code'] = processCode;
+    if (operatorUsername != null && operatorUsername.isNotEmpty) query['operator_username'] = operatorUsername;
+    if (phenomenon != null && phenomenon.isNotEmpty) query['phenomenon'] = phenomenon;
+    final uri = Uri.parse('${session.baseUrl}/quality/defect-analysis/export').replace(queryParameters: query);
+    final response = await http.post(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+    }
+    final data = json['data'] as Map<String, dynamic>? ?? const {};
+    return (data['content_base64'] as String?) ?? '';
   }
 }

@@ -15,13 +15,16 @@ class MessageCenterPage extends StatefulWidget {
     this.onUnreadCountChanged,
     this.onNavigateToPage,
     this.service,
+    this.refreshTick = 0,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final void Function(int count)? onUnreadCountChanged;
-  final void Function(String pageCode, {String? tabCode})? onNavigateToPage;
+  final void Function(String pageCode, {String? tabCode, String? routePayloadJson})?
+  onNavigateToPage;
   final MessageService? service;
+  final int refreshTick;
 
   @override
   State<MessageCenterPage> createState() => _MessageCenterPageState();
@@ -53,6 +56,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   String _sourceModuleFilter = '';
   DateTimeRange? _dateRange;
   bool _todoOnly = false;
+  bool _includeInactive = false;
 
   @override
   void initState() {
@@ -62,6 +66,14 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _load(reset: false);
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant MessageCenterPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshTick != oldWidget.refreshTick) {
+      _load(reset: false);
+    }
   }
 
   @override
@@ -90,6 +102,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         startTime: _dateRange?.start,
         endTime: _dateRange?.end,
         todoOnly: _todoOnly,
+        activeOnly: !_includeInactive,
       );
       if (!mounted) return;
       setState(() {
@@ -182,6 +195,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       _sourceModuleFilter = '';
       _dateRange = null;
       _todoOnly = false;
+      _includeInactive = false;
       _selectedIds.clear();
     });
     _load();
@@ -214,7 +228,11 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   void _navigateToPage(MessageItem item) {
     final pageCode = item.targetPageCode;
     if (pageCode == null || pageCode.isEmpty) return;
-    widget.onNavigateToPage?.call(pageCode, tabCode: item.targetTabCode);
+    widget.onNavigateToPage?.call(
+      pageCode,
+      tabCode: item.targetTabCode,
+      routePayloadJson: item.targetRoutePayloadJson,
+    );
   }
 
   String _formatDateTime(DateTime dt) {
@@ -435,6 +453,14 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
             selected: _todoOnly,
             onSelected: (value) {
               setState(() => _todoOnly = value);
+              _load();
+            },
+          ),
+          FilterChip(
+            label: const Text('包含历史消息'),
+            selected: _includeInactive,
+            onSelected: (value) {
+              setState(() => _includeInactive = value);
               _load();
             },
           ),

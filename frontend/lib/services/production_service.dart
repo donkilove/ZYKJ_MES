@@ -131,6 +131,30 @@ class ProductionService {
     return body['data'] as Map<String, dynamic>;
   }
 
+  Future<ProductionEventLogListResult> searchOrderEvents({
+    required String orderCode,
+  }) async {
+    final uri = Uri.parse('$_basePath/order-events/search').replace(
+      queryParameters: {'order_code': orderCode.trim()},
+    );
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map((entry) => ProductionEventLogItem.fromJson(entry as Map<String, dynamic>))
+        .toList();
+    return ProductionEventLogListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
   Future<ProductionOrderItem> createOrder({
     required String orderCode,
     required int productId,

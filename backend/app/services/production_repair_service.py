@@ -288,6 +288,7 @@ def create_repair_order(
         event_title="维修单已创建",
         event_detail=f"工序 {process_row.process_name} 创建维修单 {repair_row.repair_order_code}",
         operator_user_id=sender.id if sender else None,
+        process_code_snapshot=process_row.process_code,
         payload={
             "repair_order_id": repair_row.id,
             "repair_order_code": repair_row.repair_order_code,
@@ -511,6 +512,8 @@ def complete_repair_order(
                         process_id=repair_row.source_order_process_id,
                         process_code=repair_row.source_process_code,
                         process_name=repair_row.source_process_name,
+                        operator_user_id=repair_row.sender_user_id,
+                        operator_username=repair_row.sender_username,
                         scrap_reason=reason,
                         scrap_quantity=qty,
                         last_scrap_time=now,
@@ -520,6 +523,8 @@ def complete_repair_order(
             else:
                 existing.scrap_quantity = int(existing.scrap_quantity) + qty
                 existing.last_scrap_time = now
+                existing.operator_user_id = repair_row.sender_user_id
+                existing.operator_username = repair_row.sender_username
 
     repair_row.repaired_quantity = repaired_quantity
     repair_row.scrap_quantity = scrap_quantity
@@ -540,6 +545,7 @@ def complete_repair_order(
                 f"报废 {scrap_quantity}，回流 {repaired_quantity}"
             ),
             operator_user_id=operator.id,
+            process_code_snapshot=repair_row.source_process_code,
             payload={
                 "repair_order_id": repair_row.id,
                 "repair_order_code": repair_row.repair_order_code,
@@ -782,29 +788,8 @@ def export_scrap_statistics_csv(
         ],
         csv_rows,
     )
-    now = _now_utc()
-    exported_ids = [int(row.id) for row in rows]
-    for row in rows:
-        if row.progress == SCRAP_PROGRESS_PENDING_APPLY:
-            row.progress = SCRAP_PROGRESS_APPLIED
-            row.applied_at = now
-    unique_order_ids = sorted({int(row.order_id) for row in rows if row.order_id})
-    for order_id in unique_order_ids:
-        add_order_event_log(
-            db,
-            order_id=order_id,
-            event_type="scrap_statistics_export",
-            event_title="报废统计已导出",
-            event_detail=f"导出记录数：{len(rows)}",
-            operator_user_id=operator.id,
-            payload={
-                "exported_count": len(rows),
-                "exported_ids": exported_ids,
-            },
-        )
-    db.commit()
     return {
-        "file_name": f"production_scrap_statistics_{now.strftime('%Y%m%d_%H%M%S')}.csv",
+        "file_name": f"production_scrap_statistics_{_now_utc().strftime('%Y%m%d_%H%M%S')}.csv",
         "mime_type": "text/csv",
         "content_base64": content_base64,
         "exported_count": len(rows),

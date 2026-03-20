@@ -148,6 +148,14 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     return items;
   }
 
+  Future<List<CraftStageItem>> _fetchLatestStages() async {
+    final result = await _craftService.listStages(pageSize: 500, enabled: true);
+    if (mounted) {
+      setState(() => _stages = result.items);
+    }
+    return result.items;
+  }
+
   Future<void> _loadInitialData({int? page}) async {
     final targetPage = page ?? _requestPage;
     setState(() {
@@ -311,6 +319,10 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       _showNoPermission();
       return;
     }
+    List<CraftStageItem> currentStages = _stages;
+    try {
+      currentStages = await _fetchLatestStages();
+    } catch (_) {}
     final assignableRoles = _assignableRoles();
     if (assignableRoles.isEmpty) {
       setState(() {
@@ -425,7 +437,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                           opacity: isOperatorSelected ? 1 : 0.5,
                           child: IgnorePointer(
                             ignoring: !isOperatorSelected,
-                            child: _stages.isEmpty
+                            child: currentStages.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
                                     child: Text('暂无可分配工段'),
@@ -443,7 +455,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
-                                      children: _stages.map((stage) {
+                                      children: currentStages.map((stage) {
                                         return RadioListTile<int>(
                                           dense: true,
                                           contentPadding: EdgeInsets.zero,
