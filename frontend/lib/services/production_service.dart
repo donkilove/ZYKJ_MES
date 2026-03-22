@@ -133,10 +133,29 @@ class ProductionService {
 
   Future<ProductionEventLogListResult> searchOrderEvents({
     required String orderCode,
+    String? eventType,
+    String? operatorUsername,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
-    final uri = Uri.parse('$_basePath/order-events/search').replace(
-      queryParameters: {'order_code': orderCode.trim()},
-    );
+    final query = <String, String>{'order_code': orderCode.trim()};
+    if (eventType != null && eventType.trim().isNotEmpty) {
+      query['event_type'] = eventType.trim();
+    }
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      query['operator_username'] = operatorUsername.trim();
+    }
+    final startDateText = _formatDateOrNull(startDate);
+    if (startDateText != null) {
+      query['start_date'] = startDateText;
+    }
+    final endDateText = _formatDateOrNull(endDate);
+    if (endDateText != null) {
+      query['end_date'] = endDateText;
+    }
+    final uri = Uri.parse(
+      '$_basePath/order-events/search',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -147,7 +166,10 @@ class ProductionService {
     }
     final data = body['data'] as Map<String, dynamic>;
     final items = (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => ProductionEventLogItem.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) =>
+              ProductionEventLogItem.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
     return ProductionEventLogListResult(
       total: (data['total'] as int?) ?? 0,
@@ -661,6 +683,8 @@ class ProductionService {
     required int page,
     required int pageSize,
     String? keyword,
+    String? productName,
+    String? processCode,
     String progress = 'all',
     DateTime? startDate,
     DateTime? endDate,
@@ -672,6 +696,12 @@ class ProductionService {
     };
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      query['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      query['process_code'] = processCode.trim();
     }
     final startDateText = _formatDateOrNull(startDate);
     if (startDateText != null) {
@@ -707,6 +737,8 @@ class ProductionService {
 
   Future<ProductionExportResult> exportScrapStatistics({
     String? keyword,
+    String? productName,
+    String? processCode,
     String progress = 'all',
     DateTime? startDate,
     DateTime? endDate,
@@ -717,6 +749,8 @@ class ProductionService {
       headers: _authHeaders,
       body: jsonEncode({
         'keyword': keyword,
+        'product_name': productName,
+        'process_code': processCode,
         'progress': progress,
         'start_date': _formatDateOrNull(startDate),
         'end_date': _formatDateOrNull(endDate),
@@ -1110,6 +1144,8 @@ class ProductionService {
     String? orderCode,
     int? orderProcessId,
     int? subOrderId,
+    String? processKeyword,
+    String? pipelineSubOrderNo,
     bool? isActive,
     int page = 1,
     int pageSize = 200,
@@ -1124,6 +1160,12 @@ class ProductionService {
     }
     if (orderProcessId != null) query['order_process_id'] = '$orderProcessId';
     if (subOrderId != null) query['sub_order_id'] = '$subOrderId';
+    if (processKeyword != null && processKeyword.trim().isNotEmpty) {
+      query['process_keyword'] = processKeyword.trim();
+    }
+    if (pipelineSubOrderNo != null && pipelineSubOrderNo.trim().isNotEmpty) {
+      query['pipeline_sub_order_no'] = pipelineSubOrderNo.trim();
+    }
     if (isActive != null) query['is_active'] = isActive ? 'true' : 'false';
     final uri = Uri.parse(
       '$_basePath/pipeline-instances',

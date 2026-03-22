@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:convert';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/app_session.dart';
 import '../models/quality_models.dart';
 import '../services/api_exception.dart';
+import '../services/export_file_service.dart';
 import '../services/quality_service.dart';
 import '../widgets/adaptive_table_container.dart';
 
@@ -27,9 +27,9 @@ class QualityDefectAnalysisPage extends StatefulWidget {
       _QualityDefectAnalysisPageState();
 }
 
-class _QualityDefectAnalysisPageState
-    extends State<QualityDefectAnalysisPage> {
+class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
   late final QualityService _service;
+  final ExportFileService _exportFileService = const ExportFileService();
 
   bool _loading = false;
   String _message = '';
@@ -69,7 +69,10 @@ class _QualityDefectAnalysisPageState
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _message = ''; });
+    setState(() {
+      _loading = true;
+      _message = '';
+    });
     try {
       final result = await _service.getDefectAnalysis(
         startDate: _startDate,
@@ -91,7 +94,10 @@ class _QualityDefectAnalysisPageState
       setState(() => _result = result);
     } catch (e) {
       if (!mounted) return;
-      if (_isUnauthorized(e)) { widget.onLogout(); return; }
+      if (_isUnauthorized(e)) {
+        widget.onLogout();
+        return;
+      }
       setState(() => _message = _errMsg(e));
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -124,7 +130,7 @@ class _QualityDefectAnalysisPageState
       _message = '';
     });
     try {
-      final csvBase64 = await _service.exportDefectAnalysis(
+      final exportFile = await _service.exportDefectAnalysis(
         startDate: _startDate,
         endDate: _endDate,
         productName: _productNameController.text.trim().isEmpty
@@ -141,20 +147,26 @@ class _QualityDefectAnalysisPageState
             : _phenomenonController.text.trim(),
       );
       if (!mounted) return;
-      final csvText = utf8.decode(base64Decode(csvBase64));
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('导出不良分析'),
-          content: SizedBox(width: 600, height: 400, child: SelectableText(csvText)),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('关闭')),
-          ],
-        ),
+      if (exportFile.contentBase64.isEmpty) {
+        setState(() => _message = '导出失败：服务端返回空数据');
+        return;
+      }
+      final savedPath = await _exportFileService.saveCsvBase64(
+        filename: exportFile.filename,
+        contentBase64: exportFile.contentBase64,
       );
+      if (savedPath == null || !mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出成功：$savedPath')));
     } catch (e) {
       if (!mounted) return;
-      if (_isUnauthorized(e)) { widget.onLogout(); return; }
+      if (_isUnauthorized(e)) {
+        widget.onLogout();
+        return;
+      }
       setState(() => _message = '导出失败：${_errMsg(e)}');
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -174,7 +186,10 @@ class _QualityDefectAnalysisPageState
           if (_message.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text(_message, style: TextStyle(color: theme.colorScheme.error)),
+              child: Text(
+                _message,
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
             ),
           Expanded(
             child: _loading
@@ -206,7 +221,10 @@ class _QualityDefectAnalysisPageState
         ),
         if (_startDate != null || _endDate != null)
           TextButton(
-            onPressed: () => setState(() { _startDate = null; _endDate = null; }),
+            onPressed: () => setState(() {
+              _startDate = null;
+              _endDate = null;
+            }),
             child: const Text('清除日期'),
           ),
         SizedBox(
@@ -257,8 +275,16 @@ class _QualityDefectAnalysisPageState
             onSubmitted: (_) => _load(),
           ),
         ),
-        IconButton(tooltip: '查询', onPressed: _loading ? null : _load, icon: const Icon(Icons.search)),
-        IconButton(tooltip: '刷新', onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh)),
+        IconButton(
+          tooltip: '查询',
+          onPressed: _loading ? null : _load,
+          icon: const Icon(Icons.search),
+        ),
+        IconButton(
+          tooltip: '刷新',
+          onPressed: _loading ? null : _load,
+          icon: const Icon(Icons.refresh),
+        ),
         if (widget.canExport)
           OutlinedButton.icon(
             onPressed: (_loading || _exporting) ? null : _export,
@@ -288,26 +314,47 @@ class _QualityDefectAnalysisPageState
                 reservedSize: 60,
                 getTitlesWidget: (value, meta) {
                   final idx = value.toInt();
-                  if (idx < 0 || idx >= items.length) return const SizedBox.shrink();
+                  if (idx < 0 || idx >= items.length) {
+                    return const SizedBox.shrink();
+                  }
                   final label = items[idx].phenomenon;
                   return SideTitleWidget(
                     axisSide: meta.axisSide,
                     child: SizedBox(
                       width: 56,
-                      child: Text(label.length > 6 ? '${label.substring(0, 6)}…' : label, style: const TextStyle(fontSize: 9), textAlign: TextAlign.center, overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        label.length > 6 ? '${label.substring(0, 6)}…' : label,
+                        style: const TextStyle(fontSize: 9),
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   );
                 },
               ),
             ),
-            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(showTitles: true, reservedSize: 36),
+            ),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
           ),
           barGroups: items.asMap().entries.map((entry) {
-            return BarChartGroupData(x: entry.key, barRods: [
-              BarChartRodData(toY: entry.value.quantity.toDouble(), width: 24, borderRadius: BorderRadius.circular(4), color: theme.colorScheme.error),
-            ]);
+            return BarChartGroupData(
+              x: entry.key,
+              barRods: [
+                BarChartRodData(
+                  toY: entry.value.quantity.toDouble(),
+                  width: 24,
+                  borderRadius: BorderRadius.circular(4),
+                  color: theme.colorScheme.error,
+                ),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -343,6 +390,32 @@ class _QualityDefectAnalysisPageState
             ),
           ),
           const SizedBox(height: 16),
+          Text('Top 缺陷原因', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (result.topReasons.isEmpty)
+            const Text('暂无数据')
+          else
+            Card(
+              child: AdaptiveTableContainer(
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('缺陷原因')),
+                    DataColumn(label: Text('数量')),
+                    DataColumn(label: Text('占比 %')),
+                  ],
+                  rows: result.topReasons.map((item) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(item.reason)),
+                        DataCell(Text('${item.quantity}')),
+                        DataCell(Text('${item.ratio}')),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          const SizedBox(height: 16),
           Text('Top 缺陷现象', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           if (result.topDefects.isNotEmpty) ...[
@@ -361,11 +434,13 @@ class _QualityDefectAnalysisPageState
                     DataColumn(label: Text('占比 %')),
                   ],
                   rows: result.topDefects.map((item) {
-                    return DataRow(cells: [
-                      DataCell(Text(item.phenomenon)),
-                      DataCell(Text('${item.quantity}')),
-                      DataCell(Text('${item.ratio}')),
-                    ]);
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(item.phenomenon)),
+                        DataCell(Text('${item.quantity}')),
+                        DataCell(Text('${item.ratio}')),
+                      ],
+                    );
                   }).toList(),
                 ),
               ),
@@ -385,11 +460,13 @@ class _QualityDefectAnalysisPageState
                     DataColumn(label: Text('不良数量')),
                   ],
                   rows: result.byProcess.map((item) {
-                    return DataRow(cells: [
-                      DataCell(Text(item.processCode)),
-                      DataCell(Text(item.processName ?? '-')),
-                      DataCell(Text('${item.quantity}')),
-                    ]);
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(item.processCode)),
+                        DataCell(Text(item.processName ?? '-')),
+                        DataCell(Text('${item.quantity}')),
+                      ],
+                    );
                   }).toList(),
                 ),
               ),
@@ -408,10 +485,94 @@ class _QualityDefectAnalysisPageState
                     DataColumn(label: Text('不良数量')),
                   ],
                   rows: result.byProduct.map((item) {
-                    return DataRow(cells: [
-                      DataCell(Text(item.productName ?? '未知产品')),
-                      DataCell(Text('${item.quantity}')),
-                    ]);
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(item.productName ?? '未知产品')),
+                        DataCell(Text('${item.quantity}')),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          const SizedBox(height: 16),
+          Text('产品质量对比', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (result.productQualityComparison.isEmpty)
+            const Text('暂无数据')
+          else
+            Card(
+              child: AdaptiveTableContainer(
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('产品名称')),
+                    DataColumn(label: Text('首件总数')),
+                    DataColumn(label: Text('通过数')),
+                    DataColumn(label: Text('不通过数')),
+                    DataColumn(label: Text('通过率')),
+                    DataColumn(label: Text('报废数')),
+                    DataColumn(label: Text('维修数')),
+                  ],
+                  rows: result.productQualityComparison.map((item) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(item.productName)),
+                        DataCell(Text('${item.firstArticleTotal}')),
+                        DataCell(Text('${item.passedTotal}')),
+                        DataCell(Text('${item.failedTotal}')),
+                        DataCell(Text('${item.passRatePercent}%')),
+                        DataCell(Text('${item.scrapTotal}')),
+                        DataCell(Text('${item.repairTotal}')),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          const SizedBox(height: 16),
+          Text('按人员分布', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (result.byOperator.isEmpty)
+            const Text('暂无数据')
+          else
+            Card(
+              child: AdaptiveTableContainer(
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('操作员')),
+                    DataColumn(label: Text('不良数量')),
+                  ],
+                  rows: result.byOperator.map((item) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(item.operatorUsername ?? '未知人员')),
+                        DataCell(Text('${item.quantity}')),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          const SizedBox(height: 16),
+          Text('按日期趋势', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (result.byDate.isEmpty)
+            const Text('暂无数据')
+          else
+            Card(
+              child: AdaptiveTableContainer(
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('日期')),
+                    DataColumn(label: Text('不良数量')),
+                  ],
+                  rows: result.byDate.map((item) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(item.date)),
+                        DataCell(Text('${item.quantity}')),
+                      ],
+                    );
                   }).toList(),
                 ),
               ),

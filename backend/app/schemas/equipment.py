@@ -197,6 +197,7 @@ class MaintenanceWorkOrderDetail(MaintenanceWorkOrderItem):
     source_plan_id: int | None
     source_plan_cycle_days: int | None
     source_plan_start_date: date | None = None
+    source_plan_summary: str | None = None
     source_execution_process_code: str | None
     source_equipment_name: str | None = None
     source_item_id: int | None = None
@@ -208,7 +209,10 @@ class MaintenanceRecordDetail(MaintenanceRecordItem):
     source_plan_id: int | None
     source_plan_cycle_days: int | None
     source_plan_start_date: date | None = None
+    source_plan_summary: str | None = None
     source_equipment_code: str | None
+    source_equipment_name: str | None = None
+    source_execution_process_code: str | None = None
     source_item_id: int | None
     source_item_name: str | None = None
 

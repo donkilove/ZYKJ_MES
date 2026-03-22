@@ -80,8 +80,18 @@ class QualityService {
     return FirstArticleListResult.fromJson(data);
   }
 
-  Future<FirstArticleDetail> getFirstArticleDetail(int recordId) async {
-    final uri = Uri.parse('$_basePath/first-articles/$recordId');
+  Future<FirstArticleDetail> getFirstArticleDetail(int recordId) {
+    return _getFirstArticleDetail('$_basePath/first-articles/$recordId');
+  }
+
+  Future<FirstArticleDetail> getFirstArticleDispositionDetail(int recordId) {
+    return _getFirstArticleDetail(
+      '$_basePath/first-articles/$recordId/disposition-detail',
+    );
+  }
+
+  Future<FirstArticleDetail> _getFirstArticleDetail(String path) async {
+    final uri = Uri.parse(path);
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -94,7 +104,7 @@ class QualityService {
     return FirstArticleDetail.fromJson(data);
   }
 
-  Future<String> exportFirstArticles({
+  Future<QualityExportFile> exportFirstArticles({
     DateTime? date,
     String? keyword,
     String? result,
@@ -134,7 +144,10 @@ class QualityService {
       );
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
-    return (data['content_base64'] as String?) ?? '';
+    return QualityExportFile.fromJson(
+      data,
+      fallbackFilename: 'first_articles.csv',
+    );
   }
 
   Future<void> submitDisposition({
@@ -203,7 +216,7 @@ class QualityService {
         .toList();
   }
 
-  Future<String> exportQualityStats({
+  Future<QualityExportFile> exportQualityStats({
     DateTime? startDate,
     DateTime? endDate,
     String? productName,
@@ -241,7 +254,10 @@ class QualityService {
       );
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
-    return (data['content_base64'] as String?) ?? '';
+    return QualityExportFile.fromJson(
+      data,
+      fallbackFilename: 'quality_stats.csv',
+    );
   }
 
   Future<List<QualityTrendItem>> getQualityTrend({
@@ -255,10 +271,18 @@ class QualityService {
     final query = <String, String>{};
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
-    if (productName != null && productName.trim().isNotEmpty) query['product_name'] = productName.trim();
-    if (processCode != null && processCode.trim().isNotEmpty) query['process_code'] = processCode.trim();
-    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) query['operator_username'] = operatorUsername.trim();
-    if (result != null && result.isNotEmpty) query['result'] = result;
+    if (productName != null && productName.trim().isNotEmpty) {
+      query['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      query['process_code'] = processCode.trim();
+    }
+    if (operatorUsername != null && operatorUsername.trim().isNotEmpty) {
+      query['operator_username'] = operatorUsername.trim();
+    }
+    if (result != null && result.isNotEmpty) {
+      query['result'] = result;
+    }
     final uri = Uri.parse(
       '$_basePath/trend',
     ).replace(queryParameters: query.isEmpty ? null : query);
@@ -276,7 +300,7 @@ class QualityService {
         .toList();
   }
 
-  Future<String> exportQualityTrend({
+  Future<QualityExportFile> exportQualityTrend({
     DateTime? startDate,
     DateTime? endDate,
     String? productName,
@@ -300,13 +324,23 @@ class QualityService {
       payload['result'] = result;
     }
     final uri = Uri.parse('$_basePath/trend/export');
-    final response = await http.post(uri, headers: _authHeaders, body: jsonEncode(payload));
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode(payload),
+    );
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(body, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
-    return (data['content_base64'] as String?) ?? '';
+    return QualityExportFile.fromJson(
+      data,
+      fallbackFilename: 'quality_trend.csv',
+    );
   }
 
   Future<QualityStatsOverview> getQualityOverview({
@@ -485,7 +519,9 @@ class QualityService {
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
     if (productId != null) query['product_id'] = '$productId';
-    if (productName != null && productName.isNotEmpty) query['product_name'] = productName;
+    if (productName != null && productName.isNotEmpty) {
+      query['product_name'] = productName;
+    }
     if (processCode != null && processCode.isNotEmpty) {
       query['process_code'] = processCode;
     }
@@ -495,8 +531,9 @@ class QualityService {
     if (phenomenon != null && phenomenon.isNotEmpty) {
       query['phenomenon'] = phenomenon;
     }
-    final uri = Uri.parse('${session.baseUrl}/quality/defect-analysis')
-        .replace(queryParameters: query);
+    final uri = Uri.parse(
+      '${session.baseUrl}/quality/defect-analysis',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -505,12 +542,10 @@ class QualityService {
         response.statusCode,
       );
     }
-    return DefectAnalysisResult.fromJson(
-      json['data'] as Map<String, dynamic>,
-    );
+    return DefectAnalysisResult.fromJson(json['data'] as Map<String, dynamic>);
   }
 
-  Future<String> exportDefectAnalysis({
+  Future<QualityExportFile> exportDefectAnalysis({
     DateTime? startDate,
     DateTime? endDate,
     int? productId,
@@ -523,17 +558,33 @@ class QualityService {
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
     if (productId != null) query['product_id'] = '$productId';
-    if (productName != null && productName.isNotEmpty) query['product_name'] = productName;
-    if (processCode != null && processCode.isNotEmpty) query['process_code'] = processCode;
-    if (operatorUsername != null && operatorUsername.isNotEmpty) query['operator_username'] = operatorUsername;
-    if (phenomenon != null && phenomenon.isNotEmpty) query['phenomenon'] = phenomenon;
-    final uri = Uri.parse('${session.baseUrl}/quality/defect-analysis/export').replace(queryParameters: query);
+    if (productName != null && productName.isNotEmpty) {
+      query['product_name'] = productName;
+    }
+    if (processCode != null && processCode.isNotEmpty) {
+      query['process_code'] = processCode;
+    }
+    if (operatorUsername != null && operatorUsername.isNotEmpty) {
+      query['operator_username'] = operatorUsername;
+    }
+    if (phenomenon != null && phenomenon.isNotEmpty) {
+      query['phenomenon'] = phenomenon;
+    }
+    final uri = Uri.parse(
+      '${session.baseUrl}/quality/defect-analysis/export',
+    ).replace(queryParameters: query);
     final response = await http.post(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = json['data'] as Map<String, dynamic>? ?? const {};
-    return (data['content_base64'] as String?) ?? '';
+    return QualityExportFile.fromJson(
+      data,
+      fallbackFilename: 'defect_analysis.csv',
+    );
   }
 }

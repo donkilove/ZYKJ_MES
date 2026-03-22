@@ -50,14 +50,18 @@ class ProductService {
     if (updatedBefore != null) {
       query['updated_before'] = updatedBefore.toUtc().toIso8601String();
     }
-    if (currentVersionKeyword != null && currentVersionKeyword.trim().isNotEmpty) {
+    if (currentVersionKeyword != null &&
+        currentVersionKeyword.trim().isNotEmpty) {
       query['current_version_keyword'] = currentVersionKeyword.trim();
     }
-    if (currentParamNameKeyword != null && currentParamNameKeyword.trim().isNotEmpty) {
+    if (currentParamNameKeyword != null &&
+        currentParamNameKeyword.trim().isNotEmpty) {
       query['current_param_name_keyword'] = currentParamNameKeyword.trim();
     }
-    if (currentParamCategoryKeyword != null && currentParamCategoryKeyword.trim().isNotEmpty) {
-      query['current_param_category_keyword'] = currentParamCategoryKeyword.trim();
+    if (currentParamCategoryKeyword != null &&
+        currentParamCategoryKeyword.trim().isNotEmpty) {
+      query['current_param_category_keyword'] = currentParamCategoryKeyword
+          .trim();
     }
     final uri = Uri.parse(
       '${session.baseUrl}/products',
@@ -166,12 +170,101 @@ class ProductService {
     required int productId,
     int? version,
     bool effectiveOnly = false,
+  }) {
+    if (effectiveOnly) {
+      return getEffectiveProductParameters(productId: productId);
+    }
+    if (version != null) {
+      return getProductVersionParameters(
+        productId: productId,
+        version: version,
+      );
+    }
+    throw ArgumentError(
+      '参数查询必须显式指定 version，或设置 effectiveOnly=true。',
+      'version',
+    );
+  }
+
+  Future<ProductParameterVersionListResult> listProductParameterVersions({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? versionKeyword,
+    String? lifecycleStatus,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
   }) async {
-    final uri = effectiveOnly
-        ? Uri.parse('${session.baseUrl}/products/$productId/effective-parameters')
-        : version != null
-        ? Uri.parse('${session.baseUrl}/products/$productId/versions/$version/parameters')
-        : Uri.parse('${session.baseUrl}/products/$productId/parameters');
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (category != null && category.trim().isNotEmpty) {
+      query['category'] = category.trim();
+    }
+    if (versionKeyword != null && versionKeyword.trim().isNotEmpty) {
+      query['version_keyword'] = versionKeyword.trim();
+    }
+    if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
+      query['lifecycle_status'] = lifecycleStatus.trim();
+    }
+    if (updatedAfter != null) {
+      query['updated_after'] = updatedAfter.toUtc().toIso8601String();
+    }
+    if (updatedBefore != null) {
+      query['updated_before'] = updatedBefore.toUtc().toIso8601String();
+    }
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/parameter-versions',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) => ProductParameterVersionListItem.fromJson(
+            entry as Map<String, dynamic>,
+          ),
+        )
+        .toList();
+    return ProductParameterVersionListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<ProductParameterListResult> getProductVersionParameters({
+    required int productId,
+    required int version,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/$productId/versions/$version/parameters',
+    );
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    return ProductParameterListResult.fromJson(data);
+  }
+
+  Future<ProductParameterListResult> getEffectiveProductParameters({
+    required int productId,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/$productId/effective-parameters',
+    );
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -186,14 +279,14 @@ class ProductService {
 
   Future<ProductParameterUpdateResult> updateProductParameters({
     required int productId,
-    int? version,
+    required int version,
     required String remark,
     required List<ProductParameterUpdateItem> items,
     bool confirmed = false,
   }) async {
-    final uri = version != null
-        ? Uri.parse('${session.baseUrl}/products/$productId/versions/$version/parameters')
-        : Uri.parse('${session.baseUrl}/products/$productId/parameters');
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/$productId/versions/$version/parameters',
+    );
     final response = await http.put(
       uri,
       headers: _authHeaders,
@@ -607,7 +700,8 @@ class ProductService {
     if (paramKeyword != null && paramKeyword.trim().isNotEmpty) {
       query['param_keyword'] = paramKeyword.trim();
     }
-    if (paramCategoryKeyword != null && paramCategoryKeyword.trim().isNotEmpty) {
+    if (paramCategoryKeyword != null &&
+        paramCategoryKeyword.trim().isNotEmpty) {
       query['param_category_keyword'] = paramCategoryKeyword.trim();
     }
     if (updatedAfter != null) {

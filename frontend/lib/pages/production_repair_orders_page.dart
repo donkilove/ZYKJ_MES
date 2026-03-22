@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/production_models.dart';
+import 'production_repair_order_detail_page.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
@@ -72,6 +73,7 @@ class ProductionRepairOrdersPage extends StatefulWidget {
     required this.onLogout,
     required this.canComplete,
     required this.canExport,
+    this.jumpPayloadJson,
     this.service,
   });
 
@@ -79,6 +81,7 @@ class ProductionRepairOrdersPage extends StatefulWidget {
   final VoidCallback onLogout;
   final bool canComplete;
   final bool canExport;
+  final String? jumpPayloadJson;
   final ProductionService? service;
 
   @override
@@ -100,12 +103,24 @@ class _ProductionRepairOrdersPageState
   DateTime? _endDate;
   int _total = 0;
   List<RepairOrderItem> _items = const [];
+  String? _lastHandledJumpPayloadJson;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? ProductionService(widget.session);
     _loadItems();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumeJumpPayload(widget.jumpPayloadJson);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductionRepairOrdersPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.jumpPayloadJson != oldWidget.jumpPayloadJson) {
+      _consumeJumpPayload(widget.jumpPayloadJson);
+    }
   }
 
   @override
@@ -148,144 +163,59 @@ class _ProductionRepairOrdersPageState
   }
 
   Future<void> _showRepairDetail(RepairOrderItem item) async {
-    RepairOrderDetailItem? detail;
-    String? errorMsg;
-    try {
-      detail = await _service.getRepairOrderDetail(repairOrderId: item.id);
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      errorMsg = _errorMessage(error);
-    }
+    await _showRepairDetailById(
+      repairOrderId: item.id,
+      repairOrderCode: item.repairOrderCode,
+    );
+  }
+
+  Future<void> _showRepairDetailById({
+    required int repairOrderId,
+    String? repairOrderCode,
+  }) async {
     if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('维修详情 - ${item.repairOrderCode}'),
-        content: SizedBox(
-          width: 560,
-          child: errorMsg != null
-              ? Text(
-                  errorMsg,
-                  style: TextStyle(color: Theme.of(ctx).colorScheme.error),
-                )
-              : detail == null
-              ? const Text('无数据')
-              : SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Table(
-                        columnWidths: const {
-                          0: IntrinsicColumnWidth(),
-                          1: FlexColumnWidth(),
-                        },
-                        children: [
-                          _dRow('维修单号', detail.repairOrderCode),
-                          _dRow('来源订单', detail.sourceOrderCode ?? '-'),
-                          _dRow('产品', detail.productName ?? '-'),
-                          _dRow('工序', detail.sourceProcessName),
-                          _dRow('送修人', detail.senderUsername ?? '-'),
-                          _dRow('维修人', detail.repairOperatorUsername ?? '-'),
-                          _dRow('生产数量', '${detail.productionQuantity}'),
-                          _dRow('送修数量', '${detail.repairQuantity}'),
-                          _dRow('已修数量', '${detail.repairedQuantity}'),
-                          _dRow('报废数量', '${detail.scrapQuantity}'),
-                          _dRow('报废已补', detail.scrapReplenished ? '是' : '否'),
-                          _dRow('状态', repairOrderStatusLabel(detail.status)),
-                          _dRow('送修时间', _formatDateTime(detail.repairTime)),
-                          _dRow('完成时间', _formatDateTime(detail.completedAt)),
-                        ],
-                      ),
-                      if (detail.defectRows.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        const Text(
-                          '缺陷现象',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        ...detail.defectRows.map(
-                          (d) => Text('• ${d.phenomenon}（${d.quantity}件）'),
-                        ),
-                      ],
-                      if (detail.causeRows.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        const Text(
-                          '维修原因',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        ...detail.causeRows.map(
-                          (c) => Text(
-                            '• ${c.phenomenon} → ${c.reason}（${c.quantity}件${c.isScrap ? "，报废" : ""}）',
-                          ),
-                        ),
-                      ],
-                      if (detail.returnRoutes.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        const Text(
-                          '回流分配',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        ...detail.returnRoutes.map(
-                          (r) => Text(
-                            '• ${r.targetProcessName}（${r.returnQuantity}件）',
-                          ),
-                        ),
-                      ],
-                      if (detail.eventLogs.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        const Text(
-                          '相关事件记录',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        ...detail.eventLogs.map(
-                          (event) => Text(
-                            '• ${_formatDateTime(event.createdAt)} | ${event.eventTitle}'
-                            '${(event.eventDetail ?? '').trim().isEmpty ? '' : ' | ${event.eventDetail}'}'
-                            '${(event.orderCode ?? '').trim().isEmpty ? '' : ' | ${event.orderCode}'}'
-                            '${(event.processCode ?? '').trim().isEmpty ? '' : ' | ${event.processCode}'}'
-                            '${(event.orderStatus ?? '').trim().isEmpty ? '' : ' | ${event.orderStatus}'}'
-                            '${(event.payloadJson ?? '').trim().isEmpty ? '' : '\n  载荷：${event.payloadJson}'}',
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProductionRepairOrderDetailPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          repairOrderId: repairOrderId,
+          repairOrderCode: repairOrderCode,
+          service: _service,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
       ),
     );
   }
 
-  TableRow _dRow(String label, String value) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
-          child: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
-          child: Text(value),
-        ),
-      ],
-    );
+  void _consumeJumpPayload(String? rawPayload) {
+    if (!mounted ||
+        rawPayload == null ||
+        rawPayload.trim().isEmpty ||
+        rawPayload == _lastHandledJumpPayloadJson) {
+      return;
+    }
+    try {
+      final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
+      final action = (payload['action'] as String? ?? '').trim();
+      final rawRepairOrderId = payload['repair_order_id'];
+      final repairOrderId = rawRepairOrderId is int
+          ? rawRepairOrderId
+          : int.tryParse('${rawRepairOrderId ?? ''}');
+      if (action != 'detail' || repairOrderId == null || repairOrderId <= 0) {
+        return;
+      }
+      _lastHandledJumpPayloadJson = rawPayload;
+      final repairOrderCode = payload['repair_order_code'] as String?;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _showRepairDetailById(
+          repairOrderId: repairOrderId,
+          repairOrderCode: repairOrderCode,
+        );
+      });
+    } catch (_) {}
   }
 
   String _formatDateTime(DateTime? value) {
@@ -616,7 +546,8 @@ class _ProductionRepairOrdersPageState
                                   setDialogState(() {
                                     allocationDrafts.add(
                                       _ReturnAllocationDraft(
-                                        targetProcessId: processOptions.first.id,
+                                        targetProcessId:
+                                            processOptions.first.id,
                                       ),
                                     );
                                   });
@@ -649,7 +580,9 @@ class _ProductionRepairOrdersPageState
                                       .map(
                                         (entry) => DropdownMenuItem<int>(
                                           value: entry.id,
-                                          child: Text('${entry.code} ${entry.name}'),
+                                          child: Text(
+                                            '${entry.code} ${entry.name}',
+                                          ),
                                         ),
                                       )
                                       .toList(),
@@ -678,7 +611,8 @@ class _ProductionRepairOrdersPageState
                                     ? null
                                     : () {
                                         setDialogState(() {
-                                          final removed = allocationDrafts.removeAt(index);
+                                          final removed = allocationDrafts
+                                              .removeAt(index);
                                           removed.dispose();
                                         });
                                       },

@@ -24,7 +24,8 @@ class CraftReferenceAnalysisPage extends StatefulWidget {
 
   final AppSession session;
   final VoidCallback onLogout;
-  final void Function({required String moduleCode, String? jumpTarget}) onNavigate;
+  final void Function({required String moduleCode, String? jumpTarget})
+  onNavigate;
 
   @override
   State<CraftReferenceAnalysisPage> createState() =>
@@ -93,9 +94,18 @@ class _CraftReferenceAnalysisPageState
       _message = '';
     });
     try {
-      final stageResult = await _service.listStages(pageSize: 500, enabled: null);
-      final processResult = await _service.listProcesses(pageSize: 500, enabled: null);
-      final templateResult = await _service.listTemplates(pageSize: 500, enabled: null);
+      final stageResult = await _service.listStages(
+        pageSize: 500,
+        enabled: null,
+      );
+      final processResult = await _service.listProcesses(
+        pageSize: 500,
+        enabled: null,
+      );
+      final templateResult = await _service.listTemplates(
+        pageSize: 500,
+        enabled: null,
+      );
       if (!mounted) return;
       setState(() {
         _stages = [...stageResult.items]
@@ -110,10 +120,13 @@ class _CraftReferenceAnalysisPageState
         for (final item in _templates) {
           products[item.productId] = item.productName;
         }
-        final productRows = products.entries
-            .map((entry) => _ProductOption(id: entry.key, name: entry.value))
-            .toList()
-          ..sort((a, b) => a.name.compareTo(b.name));
+        final productRows =
+            products.entries
+                .map(
+                  (entry) => _ProductOption(id: entry.key, name: entry.value),
+                )
+                .toList()
+              ..sort((a, b) => a.name.compareTo(b.name));
         _productOptions = productRows;
       });
     } catch (error) {
@@ -207,7 +220,9 @@ class _CraftReferenceAnalysisPageState
       _loadingRef = true;
     });
     try {
-      final result = await _service.getTemplateReferences(templateId: template.id);
+      final result = await _service.getTemplateReferences(
+        templateId: template.id,
+      );
       if (!mounted) return;
       setState(() => _templateRefResult = result);
     } catch (error) {
@@ -264,7 +279,11 @@ class _CraftReferenceAnalysisPageState
     if (_stageKeyword.isEmpty) return _stages;
     final kw = _stageKeyword.toLowerCase();
     return _stages
-        .where((s) => s.code.toLowerCase().contains(kw) || s.name.toLowerCase().contains(kw))
+        .where(
+          (s) =>
+              s.code.toLowerCase().contains(kw) ||
+              s.name.toLowerCase().contains(kw),
+        )
         .toList();
   }
 
@@ -323,7 +342,9 @@ class _CraftReferenceAnalysisPageState
   }
 
   Widget _buildRiskChip(String? riskLevel) {
-    if (riskLevel == null || riskLevel == 'none') return const SizedBox.shrink();
+    if (riskLevel == null || riskLevel == 'none') {
+      return const SizedBox.shrink();
+    }
     final (label, color) = riskLevel == 'high'
         ? ('高风险', Colors.red)
         : ('低风险', Colors.amber);
@@ -372,6 +393,39 @@ class _CraftReferenceAnalysisPageState
     };
   }
 
+  String _jumpLabelForRow({String? jumpModule}) {
+    final module = (jumpModule ?? '').trim();
+    if (module.isEmpty) return '查看来源';
+    return switch (module) {
+      'production' => '跳转生产模块',
+      'user' => '跳转用户模块',
+      'product' => '跳转产品模块',
+      'equipment' => '跳转设备模块',
+      'quality' => '跳转品质模块',
+      'craft' => '跳转工艺模块',
+      _ => '查看来源',
+    };
+  }
+
+  void _navigateByTarget({
+    required BuildContext context,
+    required String? module,
+    required String? target,
+  }) {
+    final normalizedTarget = (target ?? '').trim();
+    final normalizedModule = (module ?? '').trim();
+    if (normalizedTarget.isEmpty || normalizedModule.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('暂无可跳转来源')));
+      return;
+    }
+    widget.onNavigate(
+      moduleCode: normalizedModule,
+      jumpTarget: normalizedTarget,
+    );
+  }
+
   Widget _buildReferenceList(List<CraftReferenceItem> items) {
     if (items.isEmpty) {
       return const Center(child: Text('无引用记录，可安全删除'));
@@ -407,7 +461,9 @@ class _CraftReferenceAnalysisPageState
                   item.riskNote!,
                   style: TextStyle(
                     fontSize: 11,
-                    color: item.riskLevel == 'high' ? Colors.red : Colors.amber.shade800,
+                    color: item.riskLevel == 'high'
+                        ? Colors.red
+                        : Colors.amber.shade800,
                   ),
                 ),
             ],
@@ -424,15 +480,11 @@ class _CraftReferenceAnalysisPageState
                 const SizedBox(width: 4),
                 TextButton(
                   onPressed: () {
-                    final target = (item.jumpTarget ?? '').trim();
-                    final module = (item.jumpModule ?? '').trim();
-                    if (target.isEmpty || module.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('暂无可跳转来源')),
-                      );
-                      return;
-                    }
-                    widget.onNavigate(moduleCode: module, jumpTarget: target);
+                    _navigateByTarget(
+                      context: context,
+                      module: item.jumpModule,
+                      target: item.jumpTarget,
+                    );
                   },
                   child: Text(_jumpLabel(item)),
                 ),
@@ -462,7 +514,10 @@ class _CraftReferenceAnalysisPageState
         children: [
           Row(
             children: [
-              Text('工段引用分析：${r.stageName} (${r.stageCode})', style: theme.textTheme.titleMedium),
+              Text(
+                '工段引用分析：${r.stageName} (${r.stageCode})',
+                style: theme.textTheme.titleMedium,
+              ),
               const SizedBox(width: 12),
               Chip(
                 label: Text('共 ${r.total} 处引用'),
@@ -485,7 +540,10 @@ class _CraftReferenceAnalysisPageState
         children: [
           Row(
             children: [
-              Text('工序引用分析：${r.processName} (${r.processCode})', style: theme.textTheme.titleMedium),
+              Text(
+                '工序引用分析：${r.processName} (${r.processCode})',
+                style: theme.textTheme.titleMedium,
+              ),
               const SizedBox(width: 12),
               Chip(
                 label: Text('共 ${r.total} 处引用'),
@@ -508,7 +566,10 @@ class _CraftReferenceAnalysisPageState
         children: [
           Row(
             children: [
-              Text('模板引用分析：${r.templateName}', style: theme.textTheme.titleMedium),
+              Text(
+                '模板引用分析：${r.templateName}',
+                style: theme.textTheme.titleMedium,
+              ),
               const SizedBox(width: 8),
               Text('(${r.productName})', style: theme.textTheme.bodySmall),
               const SizedBox(width: 12),
@@ -538,10 +599,15 @@ class _CraftReferenceAnalysisPageState
         children: [
           Row(
             children: [
-              Text('按产品查询：${r.productName}', style: theme.textTheme.titleMedium),
+              Text(
+                '按产品查询：${r.productName}',
+                style: theme.textTheme.titleMedium,
+              ),
               const SizedBox(width: 12),
               Chip(
-                label: Text('模板 ${r.totalTemplates} 个 / 引用 ${r.totalReferences} 条'),
+                label: Text(
+                  '模板 ${r.totalTemplates} 个 / 引用 ${r.totalReferences} 条',
+                ),
                 backgroundColor: Colors.blue.withValues(alpha: 0.12),
               ),
             ],
@@ -558,7 +624,9 @@ class _CraftReferenceAnalysisPageState
                       final rows = grouped[templateId] ?? const [];
                       final first = rows.first;
                       return ExpansionTile(
-                        title: Text('${first.templateName} (${first.lifecycleStatus})'),
+                        title: Text(
+                          '${first.templateName} (${first.lifecycleStatus})',
+                        ),
                         subtitle: Text('引用 ${rows.length} 条'),
                         children: rows
                             .map(
@@ -575,12 +643,45 @@ class _CraftReferenceAnalysisPageState
                                 ),
                                 subtitle: Text(
                                   [
-                                    if ((row.detail ?? '').trim().isNotEmpty) row.detail!.trim(),
-                                    if ((row.jumpTarget ?? '').trim().isNotEmpty) row.jumpTarget!.trim(),
-                                    if ((row.riskNote ?? '').trim().isNotEmpty) row.riskNote!.trim(),
+                                    if ((row.detail ?? '').trim().isNotEmpty)
+                                      row.detail!.trim(),
+                                    if ((row.jumpTarget ?? '')
+                                        .trim()
+                                        .isNotEmpty)
+                                      row.jumpTarget!.trim(),
+                                    if ((row.riskNote ?? '').trim().isNotEmpty)
+                                      row.riskNote!.trim(),
                                   ].join(' · '),
                                 ),
-                                trailing: Text('#${row.refId}'),
+                                trailing: SizedBox(
+                                  width: 180,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '#${row.refId}',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      TextButton(
+                                        onPressed: () {
+                                          _navigateByTarget(
+                                            context: context,
+                                            module: row.jumpModule,
+                                            target: row.jumpTarget,
+                                          );
+                                        },
+                                        child: Text(
+                                          _jumpLabelForRow(
+                                            jumpModule: row.jumpModule,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             )
                             .toList(),
@@ -640,7 +741,10 @@ class _CraftReferenceAnalysisPageState
                       prefixIcon: Icon(Icons.search, size: 18),
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: 6,
+                        horizontal: 8,
+                      ),
                     ),
                     onChanged: (v) => setState(() => _stageKeyword = v.trim()),
                   ),
@@ -654,8 +758,8 @@ class _CraftReferenceAnalysisPageState
                         return ListTile(
                           dense: true,
                           selected: selected,
-                          selectedTileColor:
-                              theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          selectedTileColor: theme.colorScheme.primaryContainer
+                              .withValues(alpha: 0.4),
                           title: Text(stage.name),
                           subtitle: Text(stage.code),
                           onTap: () => _loadStageReferences(stage),
@@ -686,9 +790,13 @@ class _CraftReferenceAnalysisPageState
                       prefixIcon: Icon(Icons.search, size: 18),
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: 6,
+                        horizontal: 8,
+                      ),
                     ),
-                    onChanged: (v) => setState(() => _processKeyword = v.trim()),
+                    onChanged: (v) =>
+                        setState(() => _processKeyword = v.trim()),
                   ),
                   const SizedBox(height: 6),
                   Expanded(
@@ -700,10 +808,12 @@ class _CraftReferenceAnalysisPageState
                         return ListTile(
                           dense: true,
                           selected: selected,
-                          selectedTileColor:
-                              theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          selectedTileColor: theme.colorScheme.primaryContainer
+                              .withValues(alpha: 0.4),
                           title: Text(process.name),
-                          subtitle: Text('${process.stageName ?? '-'} · ${process.code}'),
+                          subtitle: Text(
+                            '${process.stageName ?? '-'} · ${process.code}',
+                          ),
                           onTap: () => _loadProcessReferences(process),
                         );
                       },
@@ -732,9 +842,13 @@ class _CraftReferenceAnalysisPageState
                       prefixIcon: Icon(Icons.search, size: 18),
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: 6,
+                        horizontal: 8,
+                      ),
                     ),
-                    onChanged: (v) => setState(() => _templateKeyword = v.trim()),
+                    onChanged: (v) =>
+                        setState(() => _templateKeyword = v.trim()),
                   ),
                   const SizedBox(height: 6),
                   Expanded(
@@ -746,10 +860,12 @@ class _CraftReferenceAnalysisPageState
                         return ListTile(
                           dense: true,
                           selected: selected,
-                          selectedTileColor:
-                              theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          selectedTileColor: theme.colorScheme.primaryContainer
+                              .withValues(alpha: 0.4),
                           title: Text(template.templateName),
-                          subtitle: Text('${template.productName} · ${template.lifecycleStatus}'),
+                          subtitle: Text(
+                            '${template.productName} · ${template.lifecycleStatus}',
+                          ),
                           onTap: () => _loadTemplateReferences(template),
                         );
                       },
@@ -778,9 +894,13 @@ class _CraftReferenceAnalysisPageState
                       prefixIcon: Icon(Icons.search, size: 18),
                       isDense: true,
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: 6,
+                        horizontal: 8,
+                      ),
                     ),
-                    onChanged: (v) => setState(() => _productKeyword = v.trim()),
+                    onChanged: (v) =>
+                        setState(() => _productKeyword = v.trim()),
                   ),
                   const SizedBox(height: 6),
                   Expanded(
@@ -792,8 +912,8 @@ class _CraftReferenceAnalysisPageState
                         return ListTile(
                           dense: true,
                           selected: selected,
-                          selectedTileColor:
-                              theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          selectedTileColor: theme.colorScheme.primaryContainer
+                              .withValues(alpha: 0.4),
                           title: Text(product.name),
                           subtitle: Text('#${product.id}'),
                           onTap: () => _loadProductTemplateReferences(product),
@@ -822,7 +942,9 @@ class _CraftReferenceAnalysisPageState
             children: [
               Text(
                 '工艺引用分析',
-                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const Spacer(),
               IconButton(
@@ -839,7 +961,9 @@ class _CraftReferenceAnalysisPageState
               padding: const EdgeInsets.only(top: 8, bottom: 4),
               child: Text(
                 _message,
-                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
               ),
             ),
           const SizedBox(height: 12),

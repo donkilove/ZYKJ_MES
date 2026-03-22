@@ -20,6 +20,30 @@ const List<String> _defaultTabOrder = [
   craftReferenceAnalysisTabCode,
 ];
 
+class _ProcessManagementJumpTarget {
+  const _ProcessManagementJumpTarget({
+    required this.processId,
+    required this.requestId,
+  });
+
+  final int processId;
+  final int requestId;
+}
+
+class _ProcessConfigurationJumpTarget {
+  const _ProcessConfigurationJumpTarget({
+    required this.requestId,
+    this.templateId,
+    this.version,
+    this.systemMasterVersions = false,
+  });
+
+  final int requestId;
+  final int? templateId;
+  final int? version;
+  final bool systemMasterVersions;
+}
+
 class CraftPage extends StatefulWidget {
   const CraftPage({
     super.key,
@@ -46,6 +70,8 @@ class _CraftPageState extends State<CraftPage>
     with SingleTickerProviderStateMixin {
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
+  _ProcessManagementJumpTarget? _processManagementJumpTarget;
+  _ProcessConfigurationJumpTarget? _processConfigurationJumpTarget;
 
   @override
   void initState() {
@@ -154,19 +180,61 @@ class _CraftPageState extends State<CraftPage>
     }
   }
 
-  void _handleReferenceNavigation({required String moduleCode, String? jumpTarget}) {
+  int? _parsePositiveInt(String? rawValue) {
+    final value = int.tryParse((rawValue ?? '').trim());
+    if (value == null || value <= 0) {
+      return null;
+    }
+    return value;
+  }
+
+  Uri? _parseJumpTarget(String jumpTarget) {
+    try {
+      return Uri.parse(jumpTarget);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _handleReferenceNavigation({
+    required String moduleCode,
+    String? jumpTarget,
+  }) {
     final normalizedModule = moduleCode.trim();
     if (normalizedModule == 'craft') {
       final target = (jumpTarget ?? '').trim();
-      if (target.startsWith('process-management')) {
+      final uri = _parseJumpTarget(target);
+      final path = (uri?.path ?? target).trim();
+      if (path.startsWith('process-management')) {
+        setState(() {
+          _processManagementJumpTarget = _ProcessManagementJumpTarget(
+            processId:
+                _parsePositiveInt(uri?.queryParameters['process_id']) ?? 0,
+            requestId: (_processManagementJumpTarget?.requestId ?? 0) + 1,
+          );
+        });
         _selectCraftTab(processManagementTabCode);
         return;
       }
-      if (target.startsWith('process-configuration')) {
+      if (path.startsWith('process-configuration')) {
+        final templateId = _parsePositiveInt(
+          uri?.queryParameters['template_id'],
+        );
+        final version = _parsePositiveInt(uri?.queryParameters['version']);
+        final systemMasterVersions =
+            uri?.queryParameters['system_master_versions'] == '1';
+        setState(() {
+          _processConfigurationJumpTarget = _ProcessConfigurationJumpTarget(
+            requestId: (_processConfigurationJumpTarget?.requestId ?? 0) + 1,
+            templateId: templateId,
+            version: version,
+            systemMasterVersions: systemMasterVersions,
+          );
+        });
         _selectCraftTab(productionProcessConfigTabCode);
         return;
       }
-      if (target.startsWith('craft-kanban')) {
+      if (path.startsWith('craft-kanban')) {
         _selectCraftTab(craftKanbanTabCode);
         return;
       }
@@ -195,6 +263,10 @@ class _CraftPageState extends State<CraftPage>
           session: widget.session,
           onLogout: widget.onLogout,
           canWrite: _canWriteProcessBasics,
+          processId: (_processManagementJumpTarget?.processId ?? 0) > 0
+              ? _processManagementJumpTarget?.processId
+              : null,
+          jumpRequestId: _processManagementJumpTarget?.requestId ?? 0,
         );
       case productionProcessConfigTabCode:
         return ProcessConfigurationPage(
@@ -203,6 +275,11 @@ class _CraftPageState extends State<CraftPage>
           canViewTemplates: _canViewTemplates,
           canManageTemplates: _canManageTemplates,
           canManageSystemMasterTemplate: _canManageSystemMasterTemplate,
+          templateId: _processConfigurationJumpTarget?.templateId,
+          version: _processConfigurationJumpTarget?.version,
+          systemMasterVersions:
+              _processConfigurationJumpTarget?.systemMasterVersions ?? false,
+          jumpRequestId: _processConfigurationJumpTarget?.requestId ?? 0,
         );
       case craftKanbanTabCode:
         return CraftKanbanPage(

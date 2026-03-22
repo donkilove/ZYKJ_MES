@@ -101,7 +101,9 @@ def _resolve_plan_cycle_days(item: MaintenanceItem) -> int:
     return item.default_cycle_days
 
 
-def _recalculate_next_due_date(*, start_date: date, cycle_days: int, today: date | None = None) -> date:
+def _recalculate_next_due_date(
+    *, start_date: date, cycle_days: int, today: date | None = None
+) -> date:
     anchor = today or date.today()
     if anchor <= start_date:
         return start_date
@@ -118,6 +120,44 @@ def _can_execute_all_work_orders(role_codes: set[str]) -> bool:
     return bool(role_codes.intersection(WORK_ORDER_EXECUTE_ALL_ROLE_CODES))
 
 
+def _normalize_code_set(codes: list[str] | set[str]) -> set[str]:
+    return {code.strip() for code in codes if code and code.strip()}
+
+
+def _can_view_work_order_row(
+    *,
+    row: MaintenanceWorkOrder,
+    current_user_role_codes: set[str],
+    current_user_stage_codes: set[str],
+) -> bool:
+    if _can_view_all_work_orders(current_user_role_codes):
+        return True
+
+    stage_code = (row.source_execution_process_code or "").strip()
+    return bool(stage_code and stage_code in current_user_stage_codes)
+
+
+def ensure_work_order_view_permission(
+    *,
+    row: MaintenanceWorkOrder,
+    current_user_role_codes: list[str] | set[str],
+    current_user_stage_codes: list[str] | set[str],
+) -> None:
+    role_code_set = _normalize_code_set(current_user_role_codes)
+    stage_code_set = _normalize_code_set(current_user_stage_codes)
+    if _can_view_work_order_row(
+        row=row,
+        current_user_role_codes=role_code_set,
+        current_user_stage_codes=stage_code_set,
+    ):
+        return
+
+    stage_code = (row.source_execution_process_code or "").strip()
+    if not stage_code:
+        raise ValueError("Work order process is missing")
+    raise ValueError("Access denied")
+
+
 def _ensure_work_order_process_permission(
     *,
     row: MaintenanceWorkOrder,
@@ -131,6 +171,33 @@ def _ensure_work_order_process_permission(
     if not stage_code:
         raise ValueError("Work order process is missing")
     if stage_code not in current_user_stage_codes:
+        raise ValueError("Access denied")
+
+
+def ensure_maintenance_record_view_permission(
+    db: Session,
+    *,
+    row: MaintenanceRecord,
+    current_user_role_codes: list[str] | set[str],
+    current_user_stage_codes: list[str] | set[str],
+) -> None:
+    role_code_set = _normalize_code_set(current_user_role_codes)
+    if _can_view_all_work_orders(role_code_set):
+        return
+
+    stage_code_set = _normalize_code_set(current_user_stage_codes)
+    if not stage_code_set:
+        raise ValueError("Access denied")
+
+    work_order_stage_code = db.execute(
+        select(MaintenanceWorkOrder.source_execution_process_code).where(
+            MaintenanceWorkOrder.id == row.work_order_id
+        )
+    ).scalar_one_or_none()
+    normalized_stage_code = (work_order_stage_code or "").strip()
+    if not normalized_stage_code:
+        raise ValueError("Work order process is missing")
+    if normalized_stage_code not in stage_code_set:
         raise ValueError("Access denied")
 
 
@@ -258,9 +325,15 @@ def disable_equipment(db: Session, *, row: Equipment) -> Equipment:
 
 
 def delete_equipment(db: Session, *, row: Equipment) -> None:
-    has_plan = db.execute(
-        select(MaintenancePlan.id).where(MaintenancePlan.equipment_id == row.id).limit(1)
-    ).scalars().first()
+    has_plan = (
+        db.execute(
+            select(MaintenancePlan.id)
+            .where(MaintenancePlan.equipment_id == row.id)
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
     if has_plan is not None:
         raise ValueError("Equipment is referenced by maintenance plans")
 
@@ -269,7 +342,7 @@ def delete_equipment(db: Session, *, row: Equipment) -> None:
         .select_from(MaintenanceWorkOrder)
         .where(
             MaintenanceWorkOrder.equipment_id == row.id,
-            MaintenanceWorkOrder.status != WORK_ORDER_STATUS_DONE,
+            MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
         )
     ).scalar_one()
     if unfinished_count > 0:
@@ -279,7 +352,9 @@ def delete_equipment(db: Session, *, row: Equipment) -> None:
         update(MaintenanceWorkOrder)
         .where(
             MaintenanceWorkOrder.equipment_id == row.id,
-            MaintenanceWorkOrder.status == WORK_ORDER_STATUS_DONE,
+            MaintenanceWorkOrder.status.in_(
+                {WORK_ORDER_STATUS_DONE, WORK_ORDER_STATUS_CANCELLED}
+            ),
         )
         .values(equipment_id=None)
     )
@@ -302,18 +377,24 @@ def list_active_system_admin_owners(db: Session) -> list[User]:
 
 
 def list_active_owners(db: Session) -> list[User]:
-    stmt = (
-        select(User)
-        .where(User.is_active.is_(True))
-        .order_by(User.username.asc())
-    )
+    stmt = select(User).where(User.is_active.is_(True)).order_by(User.username.asc())
     return db.execute(stmt).scalars().all()
 
 
 def get_equipment_detail(
     db: Session,
     equipment_id: int,
-) -> tuple[Equipment, int, int, list[MaintenancePlan], list[MaintenanceWorkOrder], list[MaintenanceRecord]] | None:
+) -> (
+    tuple[
+        Equipment,
+        int,
+        int,
+        list[MaintenancePlan],
+        list[MaintenanceWorkOrder],
+        list[MaintenanceRecord],
+    ]
+    | None
+):
     row = get_equipment_by_id(db, equipment_id)
     if row is None:
         return None
@@ -336,45 +417,66 @@ def get_equipment_detail(
         )
     ).scalar_one()
 
-    active_plans = db.execute(
-        select(MaintenancePlan)
-        .where(
-            MaintenancePlan.equipment_id == equipment_id,
-            MaintenancePlan.is_enabled.is_(True),
+    active_plans = (
+        db.execute(
+            select(MaintenancePlan)
+            .where(
+                MaintenancePlan.equipment_id == equipment_id,
+                MaintenancePlan.is_enabled.is_(True),
+            )
+            .options(
+                selectinload(MaintenancePlan.equipment),
+                selectinload(MaintenancePlan.item),
+                selectinload(MaintenancePlan.default_executor),
+            )
+            .order_by(MaintenancePlan.next_due_date.asc(), MaintenancePlan.id.asc())
         )
-        .options(
-            selectinload(MaintenancePlan.equipment),
-            selectinload(MaintenancePlan.item),
-            selectinload(MaintenancePlan.default_executor),
-        )
-        .order_by(MaintenancePlan.next_due_date.asc(), MaintenancePlan.id.asc())
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
-    pending_work_orders = db.execute(
-        select(MaintenanceWorkOrder)
-        .where(
-            MaintenanceWorkOrder.source_equipment_id == equipment_id,
-            MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
+    pending_work_orders = (
+        db.execute(
+            select(MaintenanceWorkOrder)
+            .where(
+                MaintenanceWorkOrder.source_equipment_id == equipment_id,
+                MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
+            )
+            .options(
+                selectinload(MaintenanceWorkOrder.equipment),
+                selectinload(MaintenanceWorkOrder.item),
+                selectinload(MaintenanceWorkOrder.executor),
+            )
+            .order_by(
+                MaintenanceWorkOrder.due_date.asc(), MaintenanceWorkOrder.id.asc()
+            )
         )
-        .options(
-            selectinload(MaintenanceWorkOrder.equipment),
-            selectinload(MaintenanceWorkOrder.item),
-            selectinload(MaintenanceWorkOrder.executor),
-        )
-        .order_by(MaintenanceWorkOrder.due_date.asc(), MaintenanceWorkOrder.id.asc())
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
-    recent_records = db.execute(
-        select(MaintenanceRecord)
-        .where(MaintenanceRecord.source_equipment_id == equipment_id)
-        .order_by(
-            MaintenanceRecord.completed_at.desc(),
-            MaintenanceRecord.id.desc(),
+    recent_records = (
+        db.execute(
+            select(MaintenanceRecord)
+            .where(MaintenanceRecord.source_equipment_id == equipment_id)
+            .order_by(
+                MaintenanceRecord.completed_at.desc(),
+                MaintenanceRecord.id.desc(),
+            )
+            .limit(EQUIPMENT_DETAIL_RECENT_RECORD_LIMIT)
         )
-        .limit(EQUIPMENT_DETAIL_RECENT_RECORD_LIMIT)
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
-    return row, active_plan_count, pending_work_order_count, active_plans, pending_work_orders, recent_records
+    return (
+        row,
+        active_plan_count,
+        pending_work_order_count,
+        active_plans,
+        pending_work_orders,
+        recent_records,
+    )
 
 
 def get_maintenance_item_by_id(db: Session, item_id: int) -> MaintenanceItem | None:
@@ -433,7 +535,8 @@ def create_maintenance_item(
         name=normalized_name,
         category=category.strip(),
         default_cycle_days=default_cycle_days,
-        default_duration_minutes=default_duration_minutes or MAINTENANCE_ITEM_DEFAULT_DURATION_MINUTES,
+        default_duration_minutes=default_duration_minutes
+        or MAINTENANCE_ITEM_DEFAULT_DURATION_MINUTES,
         standard_description=standard_description.strip(),
         is_enabled=True,
     )
@@ -460,30 +563,22 @@ def update_maintenance_item(
     if default_cycle_days <= 0:
         raise ValueError("Default cycle days must be greater than 0")
 
-    cycle_changed = row.default_cycle_days != default_cycle_days
     row.name = normalized_name
     row.category = category.strip()
     row.default_cycle_days = default_cycle_days
-    row.default_duration_minutes = default_duration_minutes or MAINTENANCE_ITEM_DEFAULT_DURATION_MINUTES
+    row.default_duration_minutes = (
+        default_duration_minutes or MAINTENANCE_ITEM_DEFAULT_DURATION_MINUTES
+    )
     row.standard_description = standard_description.strip()
-
-    if cycle_changed:
-        plans = db.execute(
-            select(MaintenancePlan).where(MaintenancePlan.item_id == row.id)
-        ).scalars().all()
-        for plan in plans:
-            plan.cycle_days = default_cycle_days
-            plan.next_due_date = _recalculate_next_due_date(
-                start_date=plan.start_date,
-                cycle_days=default_cycle_days,
-            )
 
     db.commit()
     db.refresh(row)
     return row
 
 
-def toggle_maintenance_item(db: Session, *, row: MaintenanceItem, enabled: bool) -> MaintenanceItem:
+def toggle_maintenance_item(
+    db: Session, *, row: MaintenanceItem, enabled: bool
+) -> MaintenanceItem:
     row.is_enabled = enabled
     db.commit()
     db.refresh(row)
@@ -495,9 +590,13 @@ def disable_maintenance_item(db: Session, *, row: MaintenanceItem) -> Maintenanc
 
 
 def delete_maintenance_item(db: Session, *, row: MaintenanceItem) -> None:
-    has_plan = db.execute(
-        select(MaintenancePlan.id).where(MaintenancePlan.item_id == row.id).limit(1)
-    ).scalars().first()
+    has_plan = (
+        db.execute(
+            select(MaintenancePlan.id).where(MaintenancePlan.item_id == row.id).limit(1)
+        )
+        .scalars()
+        .first()
+    )
     if has_plan is not None:
         raise ValueError("Maintenance item is referenced by maintenance plans")
 
@@ -506,7 +605,7 @@ def delete_maintenance_item(db: Session, *, row: MaintenanceItem) -> None:
         .select_from(MaintenanceWorkOrder)
         .where(
             MaintenanceWorkOrder.item_id == row.id,
-            MaintenanceWorkOrder.status != WORK_ORDER_STATUS_DONE,
+            MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
         )
     ).scalar_one()
     if unfinished_count > 0:
@@ -516,7 +615,9 @@ def delete_maintenance_item(db: Session, *, row: MaintenanceItem) -> None:
         update(MaintenanceWorkOrder)
         .where(
             MaintenanceWorkOrder.item_id == row.id,
-            MaintenanceWorkOrder.status == WORK_ORDER_STATUS_DONE,
+            MaintenanceWorkOrder.status.in_(
+                {WORK_ORDER_STATUS_DONE, WORK_ORDER_STATUS_CANCELLED}
+            ),
         )
         .values(item_id=None)
     )
@@ -580,7 +681,9 @@ def list_maintenance_plans(
     if execution_process_code is not None:
         filters.append(MaintenancePlan.execution_process_code == execution_process_code)
     if default_executor_user_id is not None:
-        filters.append(MaintenancePlan.default_executor_user_id == default_executor_user_id)
+        filters.append(
+            MaintenancePlan.default_executor_user_id == default_executor_user_id
+        )
 
     count_stmt = select(func.count()).select_from(
         select(MaintenancePlan.id).where(*filters).subquery()
@@ -617,24 +720,36 @@ def create_maintenance_plan(
     cycle_days: int | None = None,
 ) -> MaintenancePlan:
     _, item = _validate_plan_relations(db, equipment_id=equipment_id, item_id=item_id)
-    resolved_cycle_days = cycle_days if (cycle_days and cycle_days > 0) else _resolve_plan_cycle_days(item)
-    normalized_process_code = _normalize_execution_process_code(db, execution_process_code)
+    resolved_cycle_days = (
+        cycle_days
+        if (cycle_days and cycle_days > 0)
+        else _resolve_plan_cycle_days(item)
+    )
+    normalized_process_code = _normalize_execution_process_code(
+        db, execution_process_code
+    )
     if estimated_duration_minutes is not None and estimated_duration_minutes <= 0:
         raise ValueError("Estimated duration minutes must be greater than 0")
 
-    existing = db.execute(
-        select(MaintenancePlan).where(
-            MaintenancePlan.equipment_id == equipment_id,
-            MaintenancePlan.item_id == item_id,
+    existing = (
+        db.execute(
+            select(MaintenancePlan).where(
+                MaintenancePlan.equipment_id == equipment_id,
+                MaintenancePlan.item_id == item_id,
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if existing:
         raise ValueError("Maintenance plan already exists for this equipment and item")
 
     if default_executor_user_id is not None:
-        executor = db.execute(
-            select(User).where(User.id == default_executor_user_id)
-        ).scalars().first()
+        executor = (
+            db.execute(select(User).where(User.id == default_executor_user_id))
+            .scalars()
+            .first()
+        )
         if not executor:
             raise ValueError("Default executor user not found")
 
@@ -673,25 +788,37 @@ def update_maintenance_plan(
     cycle_days: int | None = None,
 ) -> MaintenancePlan:
     _, item = _validate_plan_relations(db, equipment_id=equipment_id, item_id=item_id)
-    resolved_cycle_days = cycle_days if (cycle_days and cycle_days > 0) else _resolve_plan_cycle_days(item)
-    normalized_process_code = _normalize_execution_process_code(db, execution_process_code)
+    resolved_cycle_days = (
+        cycle_days
+        if (cycle_days and cycle_days > 0)
+        else _resolve_plan_cycle_days(item)
+    )
+    normalized_process_code = _normalize_execution_process_code(
+        db, execution_process_code
+    )
     if estimated_duration_minutes is not None and estimated_duration_minutes <= 0:
         raise ValueError("Estimated duration minutes must be greater than 0")
 
-    duplicate = db.execute(
-        select(MaintenancePlan).where(
-            MaintenancePlan.id != row.id,
-            MaintenancePlan.equipment_id == equipment_id,
-            MaintenancePlan.item_id == item_id,
+    duplicate = (
+        db.execute(
+            select(MaintenancePlan).where(
+                MaintenancePlan.id != row.id,
+                MaintenancePlan.equipment_id == equipment_id,
+                MaintenancePlan.item_id == item_id,
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if duplicate:
         raise ValueError("Maintenance plan already exists for this equipment and item")
 
     if default_executor_user_id is not None:
-        executor = db.execute(
-            select(User).where(User.id == default_executor_user_id)
-        ).scalars().first()
+        executor = (
+            db.execute(select(User).where(User.id == default_executor_user_id))
+            .scalars()
+            .first()
+        )
         if not executor:
             raise ValueError("Default executor user not found")
 
@@ -712,7 +839,9 @@ def update_maintenance_plan(
     return get_maintenance_plan_by_id(db, row.id) or row
 
 
-def toggle_maintenance_plan(db: Session, *, row: MaintenancePlan, enabled: bool) -> MaintenancePlan:
+def toggle_maintenance_plan(
+    db: Session, *, row: MaintenancePlan, enabled: bool
+) -> MaintenancePlan:
     row.is_enabled = enabled
     db.commit()
     db.refresh(row)
@@ -725,7 +854,7 @@ def delete_maintenance_plan(db: Session, *, row: MaintenancePlan) -> None:
         .select_from(MaintenanceWorkOrder)
         .where(
             MaintenanceWorkOrder.plan_id == row.id,
-            MaintenanceWorkOrder.status != WORK_ORDER_STATUS_DONE,
+            MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
         )
     ).scalar_one()
     if unfinished_count > 0:
@@ -735,7 +864,9 @@ def delete_maintenance_plan(db: Session, *, row: MaintenancePlan) -> None:
         update(MaintenanceWorkOrder)
         .where(
             MaintenanceWorkOrder.plan_id == row.id,
-            MaintenanceWorkOrder.status == WORK_ORDER_STATUS_DONE,
+            MaintenanceWorkOrder.status.in_(
+                {WORK_ORDER_STATUS_DONE, WORK_ORDER_STATUS_CANCELLED}
+            ),
         )
         .values(plan_id=None)
     )
@@ -745,12 +876,16 @@ def delete_maintenance_plan(db: Session, *, row: MaintenancePlan) -> None:
 
 def refresh_overdue_work_orders(db: Session) -> int:
     today = date.today()
-    rows = db.execute(
-        select(MaintenanceWorkOrder).where(
-            MaintenanceWorkOrder.status == WORK_ORDER_STATUS_PENDING,
-            MaintenanceWorkOrder.due_date < today,
+    rows = (
+        db.execute(
+            select(MaintenanceWorkOrder).where(
+                MaintenanceWorkOrder.status == WORK_ORDER_STATUS_PENDING,
+                MaintenanceWorkOrder.due_date < today,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if not rows:
         return 0
     for row in rows:
@@ -759,7 +894,9 @@ def refresh_overdue_work_orders(db: Session) -> int:
     return len(rows)
 
 
-def get_work_order_by_id(db: Session, work_order_id: int) -> MaintenanceWorkOrder | None:
+def get_work_order_by_id(
+    db: Session, work_order_id: int
+) -> MaintenanceWorkOrder | None:
     stmt = (
         select(MaintenanceWorkOrder)
         .where(MaintenanceWorkOrder.id == work_order_id)
@@ -772,7 +909,9 @@ def get_work_order_by_id(db: Session, work_order_id: int) -> MaintenanceWorkOrde
     return db.execute(stmt).scalars().first()
 
 
-def get_maintenance_record_by_id(db: Session, record_id: int) -> MaintenanceRecord | None:
+def get_maintenance_record_by_id(
+    db: Session, record_id: int
+) -> MaintenanceRecord | None:
     stmt = select(MaintenanceRecord).where(MaintenanceRecord.id == record_id)
     return db.execute(stmt).scalars().first()
 
@@ -787,12 +926,16 @@ def generate_work_order_for_plan(
 
     refresh_overdue_work_orders(db)
 
-    active_existing = db.execute(
-        select(MaintenanceWorkOrder).where(
-            MaintenanceWorkOrder.plan_id == row.id,
-            MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
+    active_existing = (
+        db.execute(
+            select(MaintenanceWorkOrder).where(
+                MaintenanceWorkOrder.plan_id == row.id,
+                MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if active_existing:
         existing = get_work_order_by_id(db, active_existing.id) or active_existing
         return existing, False
@@ -803,25 +946,38 @@ def generate_work_order_for_plan(
     item = row.item or get_maintenance_item_by_id(db, row.item_id)
     if equipment is None:
         raise ValueError("Equipment not found")
+    if not equipment.is_enabled:
+        raise ValueError("Equipment is disabled")
     if item is None:
         raise ValueError("Maintenance item not found")
-    current_cycle_days = _resolve_plan_cycle_days(item)
-    row.cycle_days = current_cycle_days
+    if not item.is_enabled:
+        raise ValueError("Maintenance item is disabled")
+    current_cycle_days = (
+        row.cycle_days if row.cycle_days > 0 else _resolve_plan_cycle_days(item)
+    )
+    if row.cycle_days != current_cycle_days:
+        row.cycle_days = current_cycle_days
     if not is_valid_stage_code(db, row.execution_process_code):
         row.execution_process_code = _fallback_execution_stage_code(db)
 
-    same_due_existing = db.execute(
-        select(MaintenanceWorkOrder).where(
-            MaintenanceWorkOrder.plan_id == row.id,
-            MaintenanceWorkOrder.due_date == due_date,
+    same_due_existing = (
+        db.execute(
+            select(MaintenanceWorkOrder).where(
+                MaintenanceWorkOrder.plan_id == row.id,
+                MaintenanceWorkOrder.due_date == due_date,
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if same_due_existing:
         existing = get_work_order_by_id(db, same_due_existing.id) or same_due_existing
         return existing, False
 
     status = (
-        WORK_ORDER_STATUS_OVERDUE if due_date < date.today() else WORK_ORDER_STATUS_PENDING
+        WORK_ORDER_STATUS_OVERDUE
+        if due_date < date.today()
+        else WORK_ORDER_STATUS_PENDING
     )
     work_order = MaintenanceWorkOrder(
         plan_id=row.id,
@@ -856,18 +1012,22 @@ def generate_due_work_orders_for_today(
     refresh_overdue_work_orders(db)
     today = date.today()
 
-    plans = db.execute(
-        select(MaintenancePlan)
-        .join(Equipment, MaintenancePlan.equipment_id == Equipment.id)
-        .join(MaintenanceItem, MaintenancePlan.item_id == MaintenanceItem.id)
-        .where(
-            MaintenancePlan.is_enabled.is_(True),
-            Equipment.is_enabled.is_(True),
-            MaintenanceItem.is_enabled.is_(True),
-            MaintenancePlan.next_due_date <= today,
+    plans = (
+        db.execute(
+            select(MaintenancePlan)
+            .join(Equipment, MaintenancePlan.equipment_id == Equipment.id)
+            .join(MaintenanceItem, MaintenancePlan.item_id == MaintenanceItem.id)
+            .where(
+                MaintenancePlan.is_enabled.is_(True),
+                Equipment.is_enabled.is_(True),
+                MaintenanceItem.is_enabled.is_(True),
+                MaintenancePlan.next_due_date <= today,
+            )
+            .order_by(MaintenancePlan.id.asc())
         )
-        .order_by(MaintenancePlan.id.asc())
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     created_count = 0
     existing_count = 0
@@ -906,13 +1066,19 @@ def list_work_orders(
     refresh_overdue_work_orders(db)
 
     filters = []
-    role_code_set = {code.strip() for code in current_user_role_codes if code and code.strip()}
-    stage_code_set = {code.strip() for code in current_user_stage_codes if code and code.strip()}
+    role_code_set = {
+        code.strip() for code in current_user_role_codes if code and code.strip()
+    }
+    stage_code_set = {
+        code.strip() for code in current_user_stage_codes if code and code.strip()
+    }
 
     if not _can_view_all_work_orders(role_code_set):
         if not stage_code_set:
             return 0, []
-        filters.append(MaintenanceWorkOrder.source_execution_process_code.in_(stage_code_set))
+        filters.append(
+            MaintenanceWorkOrder.source_execution_process_code.in_(stage_code_set)
+        )
 
     if done_only:
         filters.append(MaintenanceWorkOrder.status == WORK_ORDER_STATUS_DONE)
@@ -953,7 +1119,9 @@ def list_work_orders(
     if due_date_end is not None:
         filters.append(MaintenanceWorkOrder.due_date <= due_date_end)
     if stage_code_filter is not None:
-        filters.append(MaintenanceWorkOrder.source_execution_process_code == stage_code_filter)
+        filters.append(
+            MaintenanceWorkOrder.source_execution_process_code == stage_code_filter
+        )
 
     stmt = select(MaintenanceWorkOrder)
     if keyword:
@@ -972,19 +1140,23 @@ def list_work_orders(
     total = db.execute(total_stmt).scalar_one()
 
     offset = (page - 1) * page_size
-    rows = db.execute(
-        stmt.options(
-            selectinload(MaintenanceWorkOrder.equipment),
-            selectinload(MaintenanceWorkOrder.item),
-            selectinload(MaintenanceWorkOrder.executor),
+    rows = (
+        db.execute(
+            stmt.options(
+                selectinload(MaintenanceWorkOrder.equipment),
+                selectinload(MaintenanceWorkOrder.item),
+                selectinload(MaintenanceWorkOrder.executor),
+            )
+            .order_by(
+                MaintenanceWorkOrder.due_date.desc(),
+                MaintenanceWorkOrder.id.desc(),
+            )
+            .offset(offset)
+            .limit(page_size)
         )
-        .order_by(
-            MaintenanceWorkOrder.due_date.desc(),
-            MaintenanceWorkOrder.id.desc(),
-        )
-        .offset(offset)
-        .limit(page_size)
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return total, rows
 
 
@@ -997,10 +1169,27 @@ def list_maintenance_records(
     executor_user_id: int | None,
     result_summary: str | None = None,
     equipment_id: int | None = None,
+    current_user_role_codes: list[str],
+    current_user_stage_codes: list[str],
     start_date: date | None,
     end_date: date | None,
 ) -> tuple[int, list[MaintenanceRecord]]:
     filters = []
+    role_code_set = _normalize_code_set(current_user_role_codes)
+    stage_code_set = _normalize_code_set(current_user_stage_codes)
+
+    if not _can_view_all_work_orders(role_code_set):
+        if not stage_code_set:
+            return 0, []
+        filters.append(
+            MaintenanceRecord.work_order_id.in_(
+                select(MaintenanceWorkOrder.id).where(
+                    MaintenanceWorkOrder.source_execution_process_code.in_(
+                        stage_code_set
+                    )
+                )
+            )
+        )
 
     if executor_user_id is not None:
         filters.append(MaintenanceRecord.executor_user_id == executor_user_id)
@@ -1035,14 +1224,18 @@ def list_maintenance_records(
     total = db.execute(total_stmt).scalar_one()
 
     offset = (page - 1) * page_size
-    rows = db.execute(
-        stmt.order_by(
-            MaintenanceRecord.completed_at.desc(),
-            MaintenanceRecord.id.desc(),
+    rows = (
+        db.execute(
+            stmt.order_by(
+                MaintenanceRecord.completed_at.desc(),
+                MaintenanceRecord.id.desc(),
+            )
+            .offset(offset)
+            .limit(page_size)
         )
-        .offset(offset)
-        .limit(page_size)
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return total, rows
 
 
@@ -1059,12 +1252,8 @@ def start_work_order(
 
     _ensure_work_order_process_permission(
         row=row,
-        current_user_role_codes={
-            code.strip() for code in current_user_role_codes if code and code.strip()
-        },
-        current_user_stage_codes={
-            code.strip() for code in current_user_stage_codes if code and code.strip()
-        },
+        current_user_role_codes=_normalize_code_set(current_user_role_codes),
+        current_user_stage_codes=_normalize_code_set(current_user_stage_codes),
     )
 
     if row.status not in {WORK_ORDER_STATUS_PENDING, WORK_ORDER_STATUS_OVERDUE}:
@@ -1101,12 +1290,8 @@ def complete_work_order(
 
     _ensure_work_order_process_permission(
         row=row,
-        current_user_role_codes={
-            code.strip() for code in current_user_role_codes if code and code.strip()
-        },
-        current_user_stage_codes={
-            code.strip() for code in current_user_stage_codes if code and code.strip()
-        },
+        current_user_role_codes=_normalize_code_set(current_user_role_codes),
+        current_user_stage_codes=_normalize_code_set(current_user_stage_codes),
     )
 
     if row.status != WORK_ORDER_STATUS_IN_PROGRESS:
@@ -1120,9 +1305,15 @@ def complete_work_order(
     row.result_remark = normalized_remark or None
     row.attachment_link = _normalize_optional_text(attachment_link) or None
 
-    existing_record = db.execute(
-        select(MaintenanceRecord).where(MaintenanceRecord.work_order_id == row.id).limit(1)
-    ).scalars().first()
+    existing_record = (
+        db.execute(
+            select(MaintenanceRecord)
+            .where(MaintenanceRecord.work_order_id == row.id)
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
     if existing_record is None:
         if row.executor_user_id == operator.id:
             executor_username = operator.username
@@ -1130,7 +1321,9 @@ def complete_work_order(
             executor_username = ""
         else:
             executor_username = (
-                db.execute(select(User.username).where(User.id == row.executor_user_id)).scalar_one_or_none()
+                db.execute(
+                    select(User.username).where(User.id == row.executor_user_id)
+                ).scalar_one_or_none()
                 or ""
             )
 
@@ -1159,6 +1352,7 @@ def complete_work_order(
     db.refresh(row)
     return get_work_order_by_id(db, row.id) or row
 
+
 def cancel_work_order(
     db: Session,
     *,
@@ -1169,12 +1363,8 @@ def cancel_work_order(
 ) -> MaintenanceWorkOrder:
     _ensure_work_order_process_permission(
         row=row,
-        current_user_role_codes={
-            code.strip() for code in current_user_role_codes if code and code.strip()
-        },
-        current_user_stage_codes={
-            code.strip() for code in current_user_stage_codes if code and code.strip()
-        },
+        current_user_role_codes=_normalize_code_set(current_user_role_codes),
+        current_user_stage_codes=_normalize_code_set(current_user_stage_codes),
     )
     if row.status == WORK_ORDER_STATUS_DONE:
         raise ValueError("Completed work orders cannot be cancelled")
@@ -1187,6 +1377,7 @@ def cancel_work_order(
 
 
 # ── 导出工具 ──────────────────────────────────────────────────────────────────
+
 
 def _build_csv_base64(headers: list[str], rows: list[list[Any]]) -> str:
     output = io.StringIO()
@@ -1220,16 +1411,18 @@ def export_equipment_ledger_csv(
     )
     csv_rows: list[list[Any]] = []
     for row in rows:
-        csv_rows.append([
-            row.code,
-            row.name,
-            row.model or "",
-            row.location or "",
-            row.owner_name or "",
-            row.remark or "",
-            "启用" if row.is_enabled else "停用",
-            row.created_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
-        ])
+        csv_rows.append(
+            [
+                row.code,
+                row.name,
+                row.model or "",
+                row.location or "",
+                row.owner_name or "",
+                row.remark or "",
+                "启用" if row.is_enabled else "停用",
+                row.created_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+            ]
+        )
     content_base64 = _build_csv_base64(
         ["设备编号", "设备名称", "型号", "位置", "负责人", "备注", "状态", "创建时间"],
         csv_rows,
@@ -1260,14 +1453,16 @@ def export_maintenance_items_csv(
     )
     csv_rows: list[list[Any]] = []
     for row in rows:
-        csv_rows.append([
-            row.name,
-            row.category or "",
-            row.default_cycle_days,
-            row.default_duration_minutes or "",
-            row.standard_description or "",
-            "启用" if row.is_enabled else "停用",
-        ])
+        csv_rows.append(
+            [
+                row.name,
+                row.category or "",
+                row.default_cycle_days,
+                row.default_duration_minutes or "",
+                row.standard_description or "",
+                "启用" if row.is_enabled else "停用",
+            ]
+        )
     content_base64 = _build_csv_base64(
         ["项目名称", "类别", "默认周期(天)", "默认时长(分钟)", "标准描述", "状态"],
         csv_rows,
@@ -1291,7 +1486,9 @@ def export_maintenance_plans_csv(
     default_executor_user_id: int | None = None,
 ) -> dict[str, Any]:
     _, rows = list_maintenance_plans(
-        db, page=1, page_size=200000,
+        db,
+        page=1,
+        page_size=200000,
         equipment_id=equipment_id,
         item_id=item_id,
         enabled=enabled,
@@ -1300,21 +1497,35 @@ def export_maintenance_plans_csv(
     )
     csv_rows: list[list[Any]] = []
     for row in rows:
-        csv_rows.append([
-            row.equipment.name if row.equipment else "",
-            row.item.name if row.item else "",
-            row.execution_process_code or "",
-            row.cycle_days,
-            row.start_date.strftime("%Y-%m-%d"),
-            row.next_due_date.strftime("%Y-%m-%d"),
-            row.default_executor.username if row.default_executor else "",
-            row.estimated_duration_minutes or "",
-            row.created_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
-            row.updated_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
-            "启用" if row.is_enabled else "停用",
-        ])
+        csv_rows.append(
+            [
+                row.equipment.name if row.equipment else "",
+                row.item.name if row.item else "",
+                row.execution_process_code or "",
+                row.cycle_days,
+                row.start_date.strftime("%Y-%m-%d"),
+                row.next_due_date.strftime("%Y-%m-%d"),
+                row.default_executor.username if row.default_executor else "",
+                row.estimated_duration_minutes or "",
+                row.created_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+                row.updated_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+                "启用" if row.is_enabled else "停用",
+            ]
+        )
     content_base64 = _build_csv_base64(
-        ["设备", "保养项目", "执行工段", "周期(天)", "起始日期", "下次到期", "默认执行人", "预计时长(分钟)", "创建时间", "更新时间", "状态"],
+        [
+            "设备",
+            "保养项目",
+            "执行工段",
+            "周期(天)",
+            "起始日期",
+            "下次到期",
+            "默认执行人",
+            "预计时长(分钟)",
+            "创建时间",
+            "更新时间",
+            "状态",
+        ],
         csv_rows,
     )
     now = _now_utc()
@@ -1333,29 +1544,37 @@ def export_maintenance_records_csv(
     executor_user_id: int | None = None,
     result_summary: str | None = None,
     equipment_id: int | None = None,
+    current_user_role_codes: list[str],
+    current_user_stage_codes: list[str],
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> dict[str, Any]:
     _, rows = list_maintenance_records(
-        db, page=1, page_size=200000,
+        db,
+        page=1,
+        page_size=200000,
         keyword=keyword,
         executor_user_id=executor_user_id,
         result_summary=result_summary,
         equipment_id=equipment_id,
+        current_user_role_codes=current_user_role_codes,
+        current_user_stage_codes=current_user_stage_codes,
         start_date=start_date,
         end_date=end_date,
     )
     csv_rows: list[list[Any]] = []
     for row in rows:
-        csv_rows.append([
-            row.source_equipment_name or "",
-            row.source_item_name or "",
-            row.due_date.strftime("%Y-%m-%d"),
-            row.completed_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
-            row.executor_username or "",
-            row.result_summary or "",
-            row.result_remark or "",
-        ])
+        csv_rows.append(
+            [
+                row.source_equipment_name or "",
+                row.source_item_name or "",
+                row.due_date.strftime("%Y-%m-%d"),
+                row.completed_at.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+                row.executor_username or "",
+                row.result_summary or "",
+                row.result_remark or "",
+            ]
+        )
     content_base64 = _build_csv_base64(
         ["设备", "保养项目", "到期日期", "完成时间", "执行人", "结果摘要", "备注"],
         csv_rows,
@@ -1386,33 +1605,60 @@ def export_work_orders_csv(
     due_date_start: date | None = None,
     due_date_end: date | None = None,
     stage_code: str | None = None,
+    current_user_role_codes: list[str],
+    current_user_stage_codes: list[str],
 ) -> dict[str, Any]:
     _, rows = list_work_orders(
-        db, page=1, page_size=200000,
-        status=status, keyword=keyword,
-        mine=False, current_user_id=None,
-        current_user_role_codes=[ROLE_SYSTEM_ADMIN], current_user_stage_codes=[],
-        done_only=False, executor_user_id=None,
-        start_date=None, end_date=None,
-        due_date_start=due_date_start, due_date_end=due_date_end,
+        db,
+        page=1,
+        page_size=200000,
+        status=status,
+        keyword=keyword,
+        mine=False,
+        current_user_id=None,
+        current_user_role_codes=current_user_role_codes,
+        current_user_stage_codes=current_user_stage_codes,
+        done_only=False,
+        executor_user_id=None,
+        start_date=None,
+        end_date=None,
+        due_date_start=due_date_start,
+        due_date_end=due_date_end,
         stage_code_filter=stage_code,
     )
     csv_rows: list[list[Any]] = []
     for row in rows:
-        csv_rows.append([
-            row.id,
-            row.source_equipment_name or "",
-            row.source_item_name or "",
-            row.due_date.strftime("%Y-%m-%d"),
-            _WORK_ORDER_STATUS_LABELS.get(row.status, row.status),
-            row.executor.username if row.executor else "",
-            row.started_at.astimezone().strftime("%Y-%m-%d %H:%M") if row.started_at else "",
-            row.completed_at.astimezone().strftime("%Y-%m-%d %H:%M") if row.completed_at else "",
-            row.result_summary or "",
-            row.result_remark or "",
-        ])
+        csv_rows.append(
+            [
+                row.id,
+                row.source_equipment_name or "",
+                row.source_item_name or "",
+                row.due_date.strftime("%Y-%m-%d"),
+                _WORK_ORDER_STATUS_LABELS.get(row.status, row.status),
+                row.executor.username if row.executor else "",
+                row.started_at.astimezone().strftime("%Y-%m-%d %H:%M")
+                if row.started_at
+                else "",
+                row.completed_at.astimezone().strftime("%Y-%m-%d %H:%M")
+                if row.completed_at
+                else "",
+                row.result_summary or "",
+                row.result_remark or "",
+            ]
+        )
     content_base64 = _build_csv_base64(
-        ["工单编号", "设备", "保养项目", "到期日期", "状态", "执行人", "开始时间", "完成时间", "结果摘要", "备注"],
+        [
+            "工单编号",
+            "设备",
+            "保养项目",
+            "到期日期",
+            "状态",
+            "执行人",
+            "开始时间",
+            "完成时间",
+            "结果摘要",
+            "备注",
+        ],
         csv_rows,
     )
     now = _now_utc()

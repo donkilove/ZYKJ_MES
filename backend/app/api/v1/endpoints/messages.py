@@ -3,7 +3,15 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, require_permission
@@ -11,7 +19,14 @@ from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.message import MessageBatchReadRequest, MessageListResult, MessageSummaryResult, UnreadCountResult
+from app.schemas.message import (
+    AnnouncementPublishRequest,
+    AnnouncementPublishResult,
+    MessageBatchReadRequest,
+    MessageListResult,
+    MessageSummaryResult,
+    UnreadCountResult,
+)
 from app.services.audit_service import write_audit_log
 from app.services.message_connection_manager import message_connection_manager
 from app.services.message_service import (
@@ -21,6 +36,7 @@ from app.services.message_service import (
     mark_all_read,
     mark_messages_read_batch,
     mark_message_read,
+    publish_announcement,
 )
 from app.services.user_service import get_user_by_id
 
@@ -66,6 +82,7 @@ def api_list_messages(
     items, total = list_messages(
         db,
         user_id=current_user.id,
+        current_user=current_user,
         page=page,
         page_size=page_size,
         keyword=keyword,
@@ -91,7 +108,9 @@ def api_mark_read(
 ) -> ApiResponse[dict]:
     ok = mark_message_read(db, user_id=current_user.id, message_id=message_id)
     if not ok:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="消息不存在或无权访问")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="消息不存在或无权访问"
+        )
     write_audit_log(
         db,
         action_code="message.mark_read",
@@ -194,6 +213,47 @@ def api_mark_batch_read(
     except RuntimeError:
         pass
     return success_response({"updated": count})
+
+
+@router.post(
+    "/announcements",
+    response_model=ApiResponse[AnnouncementPublishResult],
+)
+def api_publish_announcement(
+    payload: AnnouncementPublishRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("message.announcements.publish")),
+) -> ApiResponse[AnnouncementPublishResult]:
+    try:
+        result = publish_announcement(db, req=payload, operator=current_user)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    write_audit_log(
+        db,
+        action_code="message.announcements.publish",
+        action_name="发布站内公告",
+        target_type="message",
+        target_id=str(result.message_id),
+        target_name=payload.title.strip(),
+        operator=current_user,
+        after_data={
+            "message_id": result.message_id,
+            "priority": payload.priority,
+            "range_type": payload.range_type,
+            "role_codes": payload.role_codes,
+            "user_ids": payload.user_ids,
+            "expires_at": payload.expires_at.isoformat()
+            if payload.expires_at is not None
+            else None,
+            "recipient_count": result.recipient_count,
+        },
+    )
+    db.commit()
+    return success_response(result)
 
 
 @router.websocket("/ws")

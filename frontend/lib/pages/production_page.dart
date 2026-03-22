@@ -17,7 +17,8 @@ const String productionAssistApprovalTabCode = 'production_assist_approval';
 const String productionDataQueryTabCode = 'production_data_query';
 const String productionScrapStatisticsTabCode = 'production_scrap_statistics';
 const String productionRepairOrdersTabCode = 'production_repair_orders';
-const String productionPipelineInstancesTabCode = 'production_pipeline_instances';
+const String productionPipelineInstancesTabCode =
+    'production_pipeline_instances';
 
 const List<String> _defaultTabOrder = [
   productionOrderManagementTabCode,
@@ -37,6 +38,7 @@ class ProductionPage extends StatefulWidget {
     required this.visibleTabCodes,
     required this.capabilityCodes,
     this.preferredTabCode,
+    this.routePayloadJson,
   });
 
   final AppSession session;
@@ -44,6 +46,7 @@ class ProductionPage extends StatefulWidget {
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
   final String? preferredTabCode;
+  final String? routePayloadJson;
 
   @override
   State<ProductionPage> createState() => _ProductionPageState();
@@ -196,6 +199,10 @@ class _ProductionPageState extends State<ProductionPage>
           canReview: _hasPermission(
             ProductionFeaturePermissionCodes.assistRecordsView,
           ),
+          routePayloadJson:
+              widget.preferredTabCode == productionAssistApprovalTabCode
+              ? widget.routePayloadJson
+              : null,
         );
       case productionDataQueryTabCode:
         return ProductionDataPage(
@@ -223,6 +230,10 @@ class _ProductionPageState extends State<ProductionPage>
           canExport: _hasPermission(
             ProductionFeaturePermissionCodes.repairOrdersExport,
           ),
+          jumpPayloadJson:
+              widget.preferredTabCode == productionRepairOrdersTabCode
+              ? widget.routePayloadJson
+              : null,
         );
       case productionPipelineInstancesTabCode:
         return ProductionPipelineInstancesPage(

@@ -130,6 +130,7 @@ class QualityTrendItem(BaseModel):
     passed_total: int
     failed_total: int
     pass_rate_percent: float
+    defect_total: int = 0
     scrap_total: int
     repair_total: int = 0
 
@@ -175,6 +176,12 @@ class DefectTopItem(BaseModel):
     ratio: float
 
 
+class DefectReasonItem(BaseModel):
+    reason: str
+    quantity: int
+    ratio: float
+
+
 class DefectByProcessItem(BaseModel):
     process_code: str
     process_name: str | None
@@ -187,11 +194,26 @@ class DefectByProductItem(BaseModel):
     quantity: int
 
 
+class DefectByOperatorItem(BaseModel):
+    operator_user_id: int | None
+    operator_username: str | None
+    quantity: int
+
+
+class DefectByDateItem(BaseModel):
+    stat_date: date
+    quantity: int
+
+
 class DefectAnalysisResult(BaseModel):
     total_defect_quantity: int
     top_defects: list[DefectTopItem]
+    top_reasons: list[DefectReasonItem]
+    product_quality_comparison: list[QualityProductStatItem]
     by_process: list[DefectByProcessItem]
     by_product: list[DefectByProductItem]
+    by_operator: list[DefectByOperatorItem]
+    by_date: list[DefectByDateItem]
 
 
 class DefectAnalysisExportResult(BaseModel):

@@ -95,7 +95,12 @@ class _FakeProductionOrderManagementService extends ProductionService {
   @override
   Future<ProductionEventLogListResult> searchOrderEvents({
     required String orderCode,
+    String? eventType,
+    String? operatorUsername,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
+    expect(eventType, 'order_deleted');
     return ProductionEventLogListResult(
       total: 1,
       items: [

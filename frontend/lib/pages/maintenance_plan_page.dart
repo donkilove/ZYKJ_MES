@@ -184,6 +184,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
       selectedExecutionProcessCode = _stageOptions.first.code;
     }
     var selectedStartDate = plan?.startDate ?? DateTime.now();
+    DateTime? selectedNextDueDate = plan?.nextDueDate;
     var selectedDefaultExecutorUserId = plan?.defaultExecutorUserId;
     final cycleDaysController = TextEditingController(
       text: plan?.cycleDays != null ? '${plan!.cycleDays}' : '',
@@ -288,7 +289,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                         TextFormField(
                           controller: cycleDaysController,
                           decoration: InputDecoration(
-                            labelText: '周期(天，留空使用项目默认: ${selectedItem.defaultCycleDays}天)',
+                            labelText:
+                                '周期(天，留空使用项目默认: ${selectedItem.defaultCycleDays}天)',
                             border: const OutlineInputBorder(),
                           ),
                           keyboardType: TextInputType.number,
@@ -323,6 +325,49 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                               border: OutlineInputBorder(),
                             ),
                             child: Text(_formatDate(selectedStartDate)),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: innerContext,
+                              initialDate:
+                                  selectedNextDueDate ?? selectedStartDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2099),
+                            );
+                            if (picked != null) {
+                              setInnerState(() {
+                                selectedNextDueDate = picked;
+                              });
+                            }
+                          },
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: '下次到期日（可选）',
+                              helperText: '留空时由系统按开始日期与周期自动计算',
+                              border: OutlineInputBorder(),
+                            ),
+                            child: Text(
+                              selectedNextDueDate == null
+                                  ? '未指定'
+                                  : _formatDate(selectedNextDueDate!),
+                            ),
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: selectedNextDueDate == null
+                                ? null
+                                : () {
+                                    setInnerState(() {
+                                      selectedNextDueDate = null;
+                                    });
+                                  },
+                            icon: const Icon(Icons.auto_awesome),
+                            label: const Text('改为自动计算'),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -384,9 +429,14 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                       return;
                     }
                     final cycleDaysText = cycleDaysController.text.trim();
-                    final cycleDays = cycleDaysText.isNotEmpty ? int.tryParse(cycleDaysText) : null;
-                    final durationText = estimatedDurationController.text.trim();
-                    final duration = durationText.isNotEmpty ? int.tryParse(durationText) : null;
+                    final cycleDays = cycleDaysText.isNotEmpty
+                        ? int.tryParse(cycleDaysText)
+                        : null;
+                    final durationText = estimatedDurationController.text
+                        .trim();
+                    final duration = durationText.isNotEmpty
+                        ? int.tryParse(durationText)
+                        : null;
                     try {
                       if (isCreate) {
                         await _equipmentService.createMaintenancePlan(
@@ -395,7 +445,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                           executionProcessCode: selectedExecutionProcessCode,
                           startDate: selectedStartDate,
                           estimatedDurationMinutes: duration,
-                          nextDueDate: null,
+                          nextDueDate: selectedNextDueDate,
                           defaultExecutorUserId: selectedDefaultExecutorUserId,
                           cycleDays: cycleDays,
                         );
@@ -407,7 +457,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                           executionProcessCode: selectedExecutionProcessCode,
                           startDate: selectedStartDate,
                           estimatedDurationMinutes: duration,
-                          nextDueDate: null,
+                          nextDueDate: selectedNextDueDate,
                           defaultExecutorUserId: selectedDefaultExecutorUserId,
                           cycleDays: cycleDays,
                         );
@@ -552,7 +602,10 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   }
 
   Future<void> _exportCsv() async {
-    setState(() { _exporting = true; _message = ''; });
+    setState(() {
+      _exporting = true;
+      _message = '';
+    });
     try {
       final csvBase64 = await _equipmentService.exportMaintenancePlans(
         equipmentId: _equipmentFilterId,
@@ -574,14 +627,21 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         ],
       );
       if (location == null || !mounted) return;
-      await XFile.fromData(bytes, mimeType: 'text/csv', name: 'maintenance_plans.csv').saveTo(location.path);
+      await XFile.fromData(
+        bytes,
+        mimeType: 'text/csv',
+        name: 'maintenance_plans.csv',
+      ).saveTo(location.path);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功：${location.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
     } catch (error) {
       if (!mounted) return;
-      if (_isUnauthorized(error)) { widget.onLogout(); return; }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
       setState(() => _message = '导出失败：${_errorMessage(error)}');
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -703,7 +763,10 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                 child: DropdownButtonFormField<String?>(
                   initialValue: _executionStageCodeFilter,
                   items: [
-                    const DropdownMenuItem<String?>(value: null, child: Text('全部执行工段')),
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('全部执行工段'),
+                    ),
                     ..._stageOptions.map(
                       (entry) => DropdownMenuItem<String?>(
                         value: entry.code,
@@ -725,7 +788,10 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                 child: DropdownButtonFormField<int?>(
                   initialValue: _defaultExecutorFilterId,
                   items: [
-                    const DropdownMenuItem<int?>(value: null, child: Text('全部默认执行人')),
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('全部默认执行人'),
+                    ),
                     ..._ownerOptions.map(
                       (entry) => DropdownMenuItem<int?>(
                         value: entry.userId,
@@ -805,7 +871,13 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                               DataCell(
                                 Text(plan.defaultExecutorUsername ?? '-'),
                               ),
-                              DataCell(Text(plan.estimatedDurationMinutes == null ? '-' : '${plan.estimatedDurationMinutes} 分钟')),
+                              DataCell(
+                                Text(
+                                  plan.estimatedDurationMinutes == null
+                                      ? '-'
+                                      : '${plan.estimatedDurationMinutes} 分钟',
+                                ),
+                              ),
                               DataCell(Text(_formatDate(plan.createdAt))),
                               DataCell(Text(_formatDate(plan.updatedAt))),
                               DataCell(Text(plan.isEnabled ? '启用' : '停用')),

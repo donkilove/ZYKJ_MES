@@ -1,6 +1,7 @@
 import sys
 import time
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -17,6 +18,9 @@ from app.models.process import Process  # noqa: E402
 from app.models.process_stage import ProcessStage  # noqa: E402
 from app.models.production_order import ProductionOrder  # noqa: E402
 from app.models.production_order_process import ProductionOrderProcess  # noqa: E402
+from app.models.production_scrap_statistics import (  # noqa: E402
+    ProductionScrapStatistics,
+)
 from app.models.production_sub_order import ProductionSubOrder  # noqa: E402
 from app.models.product import Product  # noqa: E402
 from app.models.repair_order import RepairOrder  # noqa: E402
@@ -35,10 +39,16 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.product_ids: list[int] = []
         self.order_ids: list[int] = []
         self.repair_order_ids: list[int] = []
+        self.scrap_statistics_ids: list[int] = []
 
     def tearDown(self) -> None:
         db = SessionLocal()
         try:
+            for scrap_id in reversed(self.scrap_statistics_ids):
+                row = db.get(ProductionScrapStatistics, scrap_id)
+                if row is not None:
+                    db.delete(row)
+                    db.commit()
             for repair_order_id in reversed(self.repair_order_ids):
                 row = db.get(RepairOrder, repair_order_id)
                 if row is not None:
@@ -93,7 +103,12 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         response = self.client.post(
             "/api/v1/craft/stages",
             headers=self._headers(),
-            json={"code": unique, "name": unique, "sort_order": 0, "remark": "生产集成测试"},
+            json={
+                "code": unique,
+                "name": unique,
+                "sort_order": 0,
+                "remark": "生产集成测试",
+            },
         )
         self.assertEqual(response.status_code, 201, response.text)
         row = response.json()["data"]
@@ -101,12 +116,17 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         return row
 
     def _create_process(self, *, stage_id: int, stage_code: str, suffix: str) -> dict:
-        serial = '01' if suffix.endswith('1') or suffix in {'A', 'B'} else '02'
+        serial = "01" if suffix.endswith("1") or suffix in {"A", "B"} else "02"
         unique = f"{stage_code}-{serial}"
         response = self.client.post(
             "/api/v1/craft/processes",
             headers=self._headers(),
-            json={"code": unique, "name": unique, "stage_id": stage_id, "remark": "生产集成测试"},
+            json={
+                "code": unique,
+                "name": unique,
+                "stage_id": stage_id,
+                "remark": "生产集成测试",
+            },
         )
         self.assertEqual(response.status_code, 201, response.text)
         row = response.json()["data"]
@@ -125,6 +145,30 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.product_ids.append(int(row["id"]))
         return row
 
+    def _activate_product(self, product: dict) -> dict:
+        version = int(product.get("current_version", 1))
+        expected_effective_version = int(product.get("effective_version", 0) or 0)
+        response = self.client.post(
+            f"/api/v1/products/{product['id']}/versions/{version}/activate",
+            headers=self._headers(),
+            json={
+                "confirmed": True,
+                "expected_effective_version": expected_effective_version,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        activated = response.json()["data"]
+
+        detail_response = self.client.get(
+            f"/api/v1/products/{product['id']}",
+            headers=self._headers(),
+        )
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        detail = detail_response.json()["data"]
+        self.assertEqual(detail["lifecycle_status"], "active")
+        self.assertEqual(int(detail["effective_version"]), version)
+        return activated
+
     def _create_order(self, *, product_id: int, steps: list[dict]) -> dict:
         order_code = f"PO-IT-{int(time.time() * 1000)}"
         response = self.client.post(
@@ -142,20 +186,67 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.order_ids.append(int(row["id"]))
         return row
 
-    def test_end_production_blocks_when_report_plus_defect_exceeds_visible_quantity(self) -> None:
+    def _create_scrap_statistics(
+        self,
+        *,
+        order_id: int,
+        order_code: str,
+        product_id: int,
+        product_name: str,
+        process_id: int,
+        process_code: str,
+        process_name: str,
+        scrap_reason: str,
+    ) -> int:
+        db = SessionLocal()
+        try:
+            row = ProductionScrapStatistics(
+                order_id=order_id,
+                order_code=order_code,
+                product_id=product_id,
+                product_name=product_name,
+                process_id=process_id,
+                process_code=process_code,
+                process_name=process_name,
+                operator_username="admin",
+                scrap_reason=scrap_reason,
+                scrap_quantity=1,
+                last_scrap_time=datetime.now(UTC),
+                progress="pending_apply",
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            self.scrap_statistics_ids.append(row.id)
+            return row.id
+        finally:
+            db.close()
+
+    def test_end_production_blocks_when_report_plus_defect_exceeds_visible_quantity(
+        self,
+    ) -> None:
         stage = self._create_stage("A")
-        process = self._create_process(stage_id=stage["id"], stage_code=stage["code"], suffix="A")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="A"
+        )
         product = self._create_product("数量口径")
+        self._activate_product(product)
         order = self._create_order(
             product_id=product["id"],
-            steps=[{"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
         )
 
         db = SessionLocal()
         try:
             order_row = db.get(ProductionOrder, int(order["id"]))
             assert order_row is not None
-            process_row = db.query(ProductionOrderProcess).filter(ProductionOrderProcess.order_id == order_row.id).first()
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .first()
+            )
             assert process_row is not None
             admin = db.query(User).filter(User.username == "admin").first()
             assert admin is not None
@@ -191,11 +282,16 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
 
     def test_delete_order_keeps_event_log_snapshot(self) -> None:
         stage = self._create_stage("B")
-        process = self._create_process(stage_id=stage["id"], stage_code=stage["code"], suffix="B")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="B"
+        )
         product = self._create_product("删除追溯")
+        self._activate_product(product)
         order = self._create_order(
             product_id=product["id"],
-            steps=[{"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
         )
 
         delete_response = self.client.delete(
@@ -221,19 +317,42 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             self.assertEqual(log_row.order_status_snapshot, "pending")
         finally:
             db.close()
+
+        trace_response = self.client.get(
+            f"/api/v1/production/order-events/search?order_code={order['order_code']}&event_type=order_deleted&operator_username=admin",
+            headers=self._headers(),
+        )
+        self.assertEqual(trace_response.status_code, 200, trace_response.text)
+        trace_items = trace_response.json()["data"]["items"]
+        self.assertEqual(len(trace_items), 1)
+        self.assertEqual(trace_items[0]["event_type"], "order_deleted")
+        self.assertEqual(trace_items[0]["operator_username"], "admin")
         self.order_ids.remove(int(order["id"]))
 
     def test_complete_repair_order_accepts_multiple_return_allocations(self) -> None:
         stage_a = self._create_stage("C1")
-        process_a = self._create_process(stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="C1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="C1"
+        )
         stage_b = self._create_stage("C2")
-        process_b = self._create_process(stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="C2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="C2"
+        )
         product = self._create_product("多回流")
+        self._activate_product(product)
         order = self._create_order(
             product_id=product["id"],
             steps=[
-                {"step_order": 1, "stage_id": stage_a["id"], "process_id": process_a["id"]},
-                {"step_order": 2, "stage_id": stage_b["id"], "process_id": process_b["id"]},
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                },
+                {
+                    "step_order": 2,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                },
             ],
         )
 
@@ -279,7 +398,12 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             headers=self._headers(),
             json={
                 "cause_items": [
-                    {"phenomenon": "毛刺", "reason": "调整刀具", "quantity": 2, "is_scrap": False}
+                    {
+                        "phenomenon": "毛刺",
+                        "reason": "调整刀具",
+                        "quantity": 2,
+                        "is_scrap": False,
+                    }
                 ],
                 "scrap_replenished": False,
                 "return_allocations": [
@@ -290,6 +414,201 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["data"]["status"], "completed")
+
+    def test_pipeline_instances_support_business_filters_and_process_name(self) -> None:
+        stage_a = self._create_stage("D1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="D1"
+        )
+        stage_b = self._create_stage("D2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="D2"
+        )
+        product = self._create_product("并行追踪")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                },
+                {
+                    "step_order": 2,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                },
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            assert order_row is not None
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(process_rows), 2)
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert admin is not None
+            for process_row in process_rows:
+                db.add(
+                    ProductionSubOrder(
+                        order_process_id=process_row.id,
+                        operator_user_id=admin.id,
+                        assigned_quantity=5,
+                        completed_quantity=0,
+                        status="pending",
+                        is_visible=True,
+                    )
+                )
+            db.commit()
+        finally:
+            db.close()
+
+        enable_response = self.client.put(
+            f"/api/v1/production/orders/{order['id']}/pipeline-mode",
+            headers=self._headers(),
+            json={
+                "enabled": True,
+                "process_codes": [process_a["code"], process_b["code"]],
+            },
+        )
+        self.assertEqual(enable_response.status_code, 200, enable_response.text)
+
+        list_response = self.client.get(
+            "/api/v1/production/pipeline-instances",
+            headers=self._headers(),
+            params={
+                "order_id": order["id"],
+                "process_keyword": process_a["name"],
+            },
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        items = list_response.json()["data"]["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["process_code"], process_a["code"])
+        self.assertEqual(items[0]["process_name"], process_a["name"])
+
+        instance_no = items[0]["pipeline_sub_order_no"]
+        no_response = self.client.get(
+            "/api/v1/production/pipeline-instances",
+            headers=self._headers(),
+            params={
+                "order_id": order["id"],
+                "pipeline_sub_order_no": instance_no[-8:],
+            },
+        )
+        self.assertEqual(no_response.status_code, 200, no_response.text)
+        no_items = no_response.json()["data"]["items"]
+        self.assertEqual(len(no_items), 1)
+        self.assertEqual(no_items[0]["pipeline_sub_order_no"], instance_no)
+
+    def test_scrap_statistics_support_exact_product_and_process_filters(self) -> None:
+        stage_a = self._create_stage("E1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="E1"
+        )
+        stage_b = self._create_stage("E2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="E2"
+        )
+        matched_product = self._create_product("报废精确匹配")
+        self._activate_product(matched_product)
+        other_product = self._create_product("报废精确匹配其他")
+        self._activate_product(other_product)
+        matched_order = self._create_order(
+            product_id=matched_product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                }
+            ],
+        )
+        other_order = self._create_order(
+            product_id=other_product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                }
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            matched_process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(matched_order["id"]))
+                .first()
+            )
+            other_process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(other_order["id"]))
+                .first()
+            )
+            assert matched_process_row is not None
+            assert other_process_row is not None
+            matched_process_id = matched_process_row.id
+            other_process_id = other_process_row.id
+        finally:
+            db.close()
+
+        matched_scrap_id = self._create_scrap_statistics(
+            order_id=int(matched_order["id"]),
+            order_code=matched_order["order_code"],
+            product_id=int(matched_product["id"]),
+            product_name=matched_product["name"],
+            process_id=matched_process_id,
+            process_code=process_a["code"],
+            process_name=process_a["name"],
+            scrap_reason="定位不良",
+        )
+        self._create_scrap_statistics(
+            order_id=int(other_order["id"]),
+            order_code=other_order["order_code"],
+            product_id=int(other_product["id"]),
+            product_name=other_product["name"],
+            process_id=other_process_id,
+            process_code=process_b["code"],
+            process_name=process_b["name"],
+            scrap_reason="毛刺",
+        )
+
+        list_response = self.client.get(
+            "/api/v1/production/scrap-statistics",
+            headers=self._headers(),
+            params={
+                "product_name": matched_product["name"],
+                "process_code": process_a["code"],
+            },
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        list_data = list_response.json()["data"]
+        self.assertEqual(list_data["total"], 1)
+        self.assertEqual(len(list_data["items"]), 1)
+        self.assertEqual(list_data["items"][0]["id"], matched_scrap_id)
+        self.assertEqual(list_data["items"][0]["product_name"], matched_product["name"])
+        self.assertEqual(list_data["items"][0]["process_code"], process_a["code"])
+
+        export_response = self.client.post(
+            "/api/v1/production/scrap-statistics/export",
+            headers=self._headers(),
+            json={
+                "product_name": matched_product["name"],
+                "process_code": process_a["code"],
+            },
+        )
+        self.assertEqual(export_response.status_code, 200, export_response.text)
+        export_data = export_response.json()["data"]
+        self.assertEqual(export_data["exported_count"], 1)
 
 
 if __name__ == "__main__":

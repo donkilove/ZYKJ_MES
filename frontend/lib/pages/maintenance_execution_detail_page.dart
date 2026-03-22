@@ -20,10 +20,12 @@ class MaintenanceExecutionDetailPage extends StatefulWidget {
   final int workOrderId;
 
   @override
-  State<MaintenanceExecutionDetailPage> createState() => _MaintenanceExecutionDetailPageState();
+  State<MaintenanceExecutionDetailPage> createState() =>
+      _MaintenanceExecutionDetailPageState();
 }
 
-class _MaintenanceExecutionDetailPageState extends State<MaintenanceExecutionDetailPage> {
+class _MaintenanceExecutionDetailPageState
+    extends State<MaintenanceExecutionDetailPage> {
   late final EquipmentService _service;
   bool _loading = true;
   String _message = '';
@@ -42,7 +44,9 @@ class _MaintenanceExecutionDetailPageState extends State<MaintenanceExecutionDet
       _message = '';
     });
     try {
-      final detail = await _service.getWorkOrderDetail(workOrderId: widget.workOrderId);
+      final detail = await _service.getWorkOrderDetail(
+        workOrderId: widget.workOrderId,
+      );
       if (!mounted) return;
       setState(() => _detail = detail);
     } catch (error) {
@@ -51,7 +55,10 @@ class _MaintenanceExecutionDetailPageState extends State<MaintenanceExecutionDet
         widget.onLogout();
         return;
       }
-      setState(() => _message = error is ApiException ? error.message : error.toString());
+      setState(
+        () =>
+            _message = error is ApiException ? error.message : error.toString(),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -91,6 +98,11 @@ class _MaintenanceExecutionDetailPageState extends State<MaintenanceExecutionDet
     }
   }
 
+  String _nonEmptyOrDash(String? value) {
+    final normalized = value?.trim() ?? '';
+    return normalized.isEmpty ? '-' : normalized;
+  }
+
   Future<void> _openAttachment(String urlText) async {
     final uri = Uri.tryParse(urlText.trim());
     if (uri == null) return;
@@ -103,7 +115,13 @@ class _MaintenanceExecutionDetailPageState extends State<MaintenanceExecutionDet
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 120, child: Text('$label：', style: const TextStyle(fontWeight: FontWeight.w600))),
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label：',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
           Expanded(child: SelectableText(value)),
         ],
       ),
@@ -124,10 +142,17 @@ class _MaintenanceExecutionDetailPageState extends State<MaintenanceExecutionDet
               child: ListView(
                 children: [
                   _row('设备', detail.equipmentName),
-                  if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty) _row('设备编号', detail.sourceEquipmentCode!),
-                  if ((detail.sourceEquipmentName ?? '').trim().isNotEmpty) _row('设备快照', detail.sourceEquipmentName!),
+                  _row('来源计划', _nonEmptyOrDash(detail.sourcePlanSummary)),
+                  _row('设备快照', _nonEmptyOrDash(detail.sourceEquipmentName)),
+                  _row(
+                    '执行工段快照',
+                    _nonEmptyOrDash(detail.sourceExecutionProcessCode),
+                  ),
+                  if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty)
+                    _row('设备编号', detail.sourceEquipmentCode!),
                   _row('项目', detail.itemName),
-                  if ((detail.sourceItemName ?? '').trim().isNotEmpty) _row('项目快照', detail.sourceItemName!),
+                  if ((detail.sourceItemName ?? '').trim().isNotEmpty)
+                    _row('项目快照', detail.sourceItemName!),
                   _row('到期日期', _formatDate(detail.dueDate)),
                   _row('状态', _statusLabel(detail.status)),
                   _row('执行人', detail.executorUsername ?? '-'),
@@ -135,15 +160,12 @@ class _MaintenanceExecutionDetailPageState extends State<MaintenanceExecutionDet
                   _row('完成时间', _formatDateTime(detail.completedAt)),
                   _row('结果摘要', detail.resultSummary ?? '-'),
                   _row('备注', detail.resultRemark ?? '-'),
-                  if (detail.sourcePlanId != null) _row('来源计划ID', '${detail.sourcePlanId}'),
-                  if (detail.sourcePlanCycleDays != null) _row('计划周期(天)', '${detail.sourcePlanCycleDays}'),
-                  if (detail.sourcePlanStartDate != null) _row('计划起始日期', _formatDate(detail.sourcePlanStartDate!)),
-                  if ((detail.sourceExecutionProcessCode ?? '').trim().isNotEmpty) _row('执行工段', detail.sourceExecutionProcessCode!),
                   if (detail.attachmentLink?.trim().isNotEmpty == true)
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
-                        onPressed: () => _openAttachment(detail.attachmentLink!),
+                        onPressed: () =>
+                            _openAttachment(detail.attachmentLink!),
                         icon: const Icon(Icons.attach_file),
                         label: const Text('查看附件'),
                       ),

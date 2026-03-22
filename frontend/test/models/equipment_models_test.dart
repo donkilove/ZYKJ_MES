@@ -9,20 +9,23 @@ void main() {
     expect(maintenanceCycleYearly, 365);
   });
 
-  test('EquipmentOwnerOption.displayName formats with and without full name', () {
-    final withFullName = EquipmentOwnerOption.fromJson({
-      'username': 'admin',
-      'full_name': '管理员',
-    });
-    final withoutFullName = EquipmentOwnerOption.fromJson({
-      'username': 'operator',
-      'full_name': '   ',
-    });
+  test(
+    'EquipmentOwnerOption.displayName formats with and without full name',
+    () {
+      final withFullName = EquipmentOwnerOption.fromJson({
+        'username': 'admin',
+        'full_name': '管理员',
+      });
+      final withoutFullName = EquipmentOwnerOption.fromJson({
+        'username': 'operator',
+        'full_name': '   ',
+      });
 
-    expect(withFullName.displayName, contains('admin'));
-    expect(withFullName.displayName, contains('管理员'));
-    expect(withoutFullName.displayName, 'operator');
-  });
+      expect(withFullName.displayName, contains('admin'));
+      expect(withFullName.displayName, contains('管理员'));
+      expect(withoutFullName.displayName, 'operator');
+    },
+  );
 
   test('MaintenanceItemEntry.executionDateLabel returns category labels', () {
     final weekly = MaintenanceItemEntry.fromJson({
@@ -70,7 +73,7 @@ void main() {
     expect(monthly.executionDateLabel, isNotEmpty);
     expect(quarterly.executionDateLabel, isNotEmpty);
     expect(yearly.executionDateLabel, isNotEmpty);
-    expect(custom.executionDateLabel, isNotEmpty);
+    expect(custom.executionDateLabel, '每10天执行');
     expect(custom.executionDateLabel, isNot(weekly.executionDateLabel));
   });
 
@@ -132,6 +135,35 @@ void main() {
       'created_at': '2026-03-01T10:00:00Z',
       'updated_at': '2026-03-01T10:00:00Z',
     });
+    final workOrderDetail = MaintenanceWorkOrderDetail.fromJson({
+      'id': 9,
+      'plan_id': 2,
+      'equipment_id': 1,
+      'equipment_name': '机台1',
+      'source_equipment_code': 'EQ-01',
+      'source_equipment_name': '机台1',
+      'item_id': 3,
+      'item_name': '点检',
+      'source_item_id': 3,
+      'source_item_name': '点检',
+      'source_execution_process_code': '01-01',
+      'source_plan_id': 2,
+      'source_plan_cycle_days': 30,
+      'source_plan_start_date': '2026-03-01',
+      'source_plan_summary': '计划#2 / 周期30天 / 起始2026-03-01',
+      'due_date': '2026-03-08',
+      'status': 'pending',
+      'executor_user_id': null,
+      'executor_username': null,
+      'started_at': null,
+      'completed_at': null,
+      'result_summary': null,
+      'result_remark': null,
+      'attachment_link': null,
+      'created_at': '2026-03-01T10:00:00Z',
+      'updated_at': '2026-03-01T10:00:00Z',
+      'record_id': 10,
+    });
     final record = MaintenanceRecordItem.fromJson({
       'id': 10,
       'work_order_id': 9,
@@ -147,6 +179,30 @@ void main() {
       'created_at': '2026-03-08T11:00:00Z',
       'updated_at': '2026-03-08T11:00:00Z',
     });
+    final recordDetail = MaintenanceRecordDetail.fromJson({
+      'id': 10,
+      'work_order_id': 9,
+      'equipment_name': '机台1',
+      'item_name': '点检',
+      'due_date': '2026-03-08',
+      'executor_user_id': 12,
+      'executor_username': 'worker',
+      'completed_at': '2026-03-08T11:00:00Z',
+      'result_summary': '完成',
+      'result_remark': '正常',
+      'attachment_link': 'http://example.com/file',
+      'created_at': '2026-03-08T11:00:00Z',
+      'updated_at': '2026-03-08T11:00:00Z',
+      'source_plan_id': 2,
+      'source_plan_cycle_days': 30,
+      'source_plan_start_date': '2026-03-01',
+      'source_plan_summary': '计划#2 / 周期30天 / 起始2026-03-01',
+      'source_equipment_code': 'EQ-01',
+      'source_equipment_name': '机台1',
+      'source_execution_process_code': '01-01',
+      'source_item_id': 3,
+      'source_item_name': '点检',
+    });
     final maintenanceItem = MaintenanceItemEntry.fromJson({
       'id': 6,
       'name': '点检',
@@ -161,15 +217,24 @@ void main() {
     expect(generate.workOrderId, 5);
     expect(workOrder.startedAt, isNull);
     expect(workOrder.sourceEquipmentCode, 'EQ-01');
+    expect(workOrderDetail.sourcePlanSummary, '计划#2 / 周期30天 / 起始2026-03-01');
     expect(record.resultSummary, '完成');
+    expect(recordDetail.sourceEquipmentName, '机台1');
+    expect(recordDetail.sourceExecutionProcessCode, '01-01');
 
     expect(EquipmentLedgerListResult(total: 1, items: [equipment]).total, 1);
-    expect(MaintenanceItemListResult(total: 1, items: [maintenanceItem]).total, 1);
+    expect(
+      MaintenanceItemListResult(total: 1, items: [maintenanceItem]).total,
+      1,
+    );
     expect(MaintenancePlanListResult(total: 1, items: [plan]).items.length, 1);
     expect(
       MaintenanceWorkOrderListResult(total: 1, items: [workOrder]).items.length,
       1,
     );
-    expect(MaintenanceRecordListResult(total: 1, items: [record]).items.length, 1);
+    expect(
+      MaintenanceRecordListResult(total: 1, items: [record]).items.length,
+      1,
+    );
   });
 }

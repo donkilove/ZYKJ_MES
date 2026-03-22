@@ -1,10 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/quality_models.dart';
 import '../services/api_exception.dart';
+import '../services/export_file_service.dart';
 import '../services/quality_service.dart';
 import '../widgets/adaptive_table_container.dart';
 
@@ -26,6 +25,7 @@ class QualityDataPage extends StatefulWidget {
 
 class _QualityDataPageState extends State<QualityDataPage> {
   late final QualityService _service;
+  final ExportFileService _exportFileService = const ExportFileService();
   final TextEditingController _productNameController = TextEditingController();
   final TextEditingController _processCodeController = TextEditingController();
   final TextEditingController _operatorUsernameController = TextEditingController();
@@ -210,7 +210,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
       _message = '';
     });
     try {
-      final csvBase64 = await _service.exportQualityStats(
+      final exportFile = await _service.exportQualityStats(
         startDate: _startDate,
         endDate: _endDate,
         productName: _productNameController.text.trim(),
@@ -219,33 +219,18 @@ class _QualityDataPageState extends State<QualityDataPage> {
         result: _resultFilter,
       );
       if (!mounted) return;
-      if (csvBase64.isEmpty) {
+      if (exportFile.contentBase64.isEmpty) {
         setState(() => _message = '导出失败：服务端返回空数据');
         return;
       }
-      final csvText = utf8.decode(base64Decode(csvBase64));
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('导出品质统计'),
-          content: SizedBox(
-            width: 600,
-            height: 400,
-            child: SingleChildScrollView(
-              child: SelectableText(
-                csvText,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
+      final savedPath = await _exportFileService.saveCsvBase64(
+        filename: exportFile.filename,
+        contentBase64: exportFile.contentBase64,
       );
+      if (savedPath == null || !mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出成功：$savedPath')));
     } catch (error) {
       if (!mounted) return;
       if (_isUnauthorized(error)) {

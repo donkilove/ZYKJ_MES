@@ -132,6 +132,8 @@ class _MainShellPageState extends State<MainShellPage>
 
   String? _preferredTabCode;
 
+  String? _preferredRoutePayloadJson;
+
   @override
   void initState() {
     super.initState();
@@ -550,6 +552,7 @@ class _MainShellPageState extends State<MainShellPage>
             setState(() {
               _selectedPageCode = pageCode;
               _preferredTabCode = null;
+              _preferredRoutePayloadJson = null;
             });
           },
         );
@@ -564,7 +567,12 @@ class _MainShellPageState extends State<MainShellPage>
 
           capabilityCodes: _capabilityCodesForModule('user'),
 
-          preferredTabCode: _selectedPageCode == _userPageCode ? _preferredTabCode : null,
+          preferredTabCode: _selectedPageCode == _userPageCode
+              ? _preferredTabCode
+              : null,
+          routePayloadJson: _selectedPageCode == _userPageCode
+              ? _preferredRoutePayloadJson
+              : null,
 
           onVisibilityConfigSaved: () {
             _handleVisibilityConfigSaved();
@@ -581,7 +589,9 @@ class _MainShellPageState extends State<MainShellPage>
 
           capabilityCodes: _capabilityCodesForModule('product'),
 
-          preferredTabCode: _selectedPageCode == _productPageCode ? _preferredTabCode : null,
+          preferredTabCode: _selectedPageCode == _productPageCode
+              ? _preferredTabCode
+              : null,
         );
 
       case _equipmentPageCode:
@@ -594,7 +604,12 @@ class _MainShellPageState extends State<MainShellPage>
 
           capabilityCodes: _capabilityCodesForModule('equipment'),
 
-          preferredTabCode: _selectedPageCode == _equipmentPageCode ? _preferredTabCode : null,
+          preferredTabCode: _selectedPageCode == _equipmentPageCode
+              ? _preferredTabCode
+              : null,
+          routePayloadJson: _selectedPageCode == _equipmentPageCode
+              ? _preferredRoutePayloadJson
+              : null,
         );
 
       case _productionPageCode:
@@ -607,7 +622,12 @@ class _MainShellPageState extends State<MainShellPage>
 
           capabilityCodes: _capabilityCodesForModule('production'),
 
-          preferredTabCode: _selectedPageCode == _productionPageCode ? _preferredTabCode : null,
+          preferredTabCode: _selectedPageCode == _productionPageCode
+              ? _preferredTabCode
+              : null,
+          routePayloadJson: _selectedPageCode == _productionPageCode
+              ? _preferredRoutePayloadJson
+              : null,
         );
 
       case _qualityPageCode:
@@ -620,7 +640,12 @@ class _MainShellPageState extends State<MainShellPage>
 
           capabilityCodes: _capabilityCodesForModule('quality'),
 
-          preferredTabCode: _selectedPageCode == _qualityPageCode ? _preferredTabCode : null,
+          preferredTabCode: _selectedPageCode == _qualityPageCode
+              ? _preferredTabCode
+              : null,
+          routePayloadJson: _selectedPageCode == _qualityPageCode
+              ? _preferredRoutePayloadJson
+              : null,
         );
 
       case _craftPageCode:
@@ -632,19 +657,26 @@ class _MainShellPageState extends State<MainShellPage>
           visibleTabCodes: _visibleCraftTabCodes(),
 
           capabilityCodes: _capabilityCodesForModule('craft'),
-          preferredTabCode: _selectedPageCode == _craftPageCode ? _preferredTabCode : null,
+          preferredTabCode: _selectedPageCode == _craftPageCode
+              ? _preferredTabCode
+              : null,
           onNavigateToPage: (pageCode) {
             setState(() {
               _selectedPageCode = pageCode;
               _preferredTabCode = null;
+              _preferredRoutePayloadJson = null;
             });
           },
         );
 
       case _messagePageCode:
+        final messageCapabilityCodes = _capabilityCodesForModule('message');
         return MessageCenterPage(
           session: widget.session,
           onLogout: widget.onLogout,
+          canPublishAnnouncement: messageCapabilityCodes.contains(
+            'feature.message.announcement.publish',
+          ),
           refreshTick: _messageRefreshTick,
           onUnreadCountChanged: (count) {
             if (mounted) setState(() => _unreadCount = count);
@@ -653,21 +685,24 @@ class _MainShellPageState extends State<MainShellPage>
             if (!mounted) return;
             var resolvedPageCode = pageCode;
             var resolvedTabCode = tabCode;
-            final catalogItem = _catalog.where((item) => item.code == pageCode).firstOrNull;
+            final catalogItem = _catalog
+                .where((item) => item.code == pageCode)
+                .firstOrNull;
             if (catalogItem != null && catalogItem.pageType == 'tab') {
               resolvedPageCode = catalogItem.parentCode ?? pageCode;
               resolvedTabCode ??= pageCode;
             }
             final hasAccess = _menus.any((m) => m.code == resolvedPageCode);
             if (!hasAccess) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('您没有访问该页面的权限')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('您没有访问该页面的权限')));
               return;
             }
             setState(() {
               _selectedPageCode = resolvedPageCode;
               _preferredTabCode = resolvedTabCode;
+              _preferredRoutePayloadJson = routePayloadJson;
             });
           },
         );
@@ -879,6 +914,7 @@ class _MainShellPageState extends State<MainShellPage>
                             setState(() {
                               _selectedPageCode = menu.code;
                               _preferredTabCode = null;
+                              _preferredRoutePayloadJson = null;
                             });
                           },
                         );

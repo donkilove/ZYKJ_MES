@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -72,7 +73,9 @@ async def run_maintenance_auto_generate_loop() -> None:
 
         db = SessionLocal()
         try:
-            total, created, existing, new_orders = generate_due_work_orders_for_today(db, include_new_orders=True)
+            total, created, existing, new_orders = generate_due_work_orders_for_today(
+                db, include_new_orders=True
+            )
             logger.info(
                 "[MAINT_SCHED] Scan done. plans=%s created=%s existing=%s.",
                 total,
@@ -81,15 +84,16 @@ async def run_maintenance_auto_generate_loop() -> None:
             )
             # 为每条新建工单推送消息给执行人和管理员
             if new_orders:
-                admin_ids = (
-                    get_active_user_ids_by_role(db, ROLE_SYSTEM_ADMIN)
-                    + get_active_user_ids_by_role(db, ROLE_PRODUCTION_ADMIN)
-                )
+                admin_ids = get_active_user_ids_by_role(
+                    db, ROLE_SYSTEM_ADMIN
+                ) + get_active_user_ids_by_role(db, ROLE_PRODUCTION_ADMIN)
                 for wo in new_orders:
-                    recipient_ids: list[int] = list({
-                        *(([wo.executor_user_id] if wo.executor_user_id else [])),
-                        *admin_ids,
-                    })
+                    recipient_ids: list[int] = list(
+                        {
+                            *([wo.executor_user_id] if wo.executor_user_id else []),
+                            *admin_ids,
+                        }
+                    )
                     if not recipient_ids:
                         continue
                     create_message_for_users(
@@ -104,6 +108,13 @@ async def run_maintenance_auto_generate_loop() -> None:
                         source_code=str(wo.id),
                         target_page_code="equipment",
                         target_tab_code="maintenance_execution",
+                        target_route_payload_json=json.dumps(
+                            {
+                                "action": "detail",
+                                "work_order_id": wo.id,
+                            },
+                            ensure_ascii=False,
+                        ),
                         recipient_user_ids=recipient_ids,
                         dedupe_key=f"maint_wo_created_{wo.id}",
                     )

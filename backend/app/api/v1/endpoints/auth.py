@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -72,8 +74,14 @@ def login(
 
     user = get_user_by_username(db, username)
     if not user:
-        pending_request = get_registration_request_by_account(db, username, pending_only=True)
-        reason = "Account is pending approval" if pending_request else "Incorrect username or password"
+        pending_request = get_registration_request_by_account(
+            db, username, pending_only=True
+        )
+        reason = (
+            "Account is pending approval"
+            if pending_request
+            else "Incorrect username or password"
+        )
         create_login_log(
             db,
             username=username,
@@ -113,7 +121,10 @@ def login(
             failure_reason="Incorrect username or password",
         )
         db.commit()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+        )
 
     session_row = create_user_session(
         db,
@@ -179,7 +190,11 @@ def logout(
     return success_response({"logged_out": True}, message="logged_out")
 
 
-@router.post("/register", response_model=ApiResponse[RegisterResult], status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/register",
+    response_model=ApiResponse[RegisterResult],
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def register(
     payload: RegisterRequest,
     db: Session = Depends(get_db),
@@ -190,9 +205,14 @@ def register(
         password=payload.password,
     )
     if error_message:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
     if not request_row:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to submit registration request")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to submit registration request",
+        )
     return success_response(
         RegisterResult(
             account=request_row.account,
@@ -214,9 +234,14 @@ def bootstrap_admin_account(
         )
         normalized_users_count = normalize_users_to_single_role(db)
     except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)
+        )
     except Exception:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to bootstrap admin")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to bootstrap admin",
+        )
 
     return success_response(
         BootstrapAdminResult(
@@ -237,7 +262,10 @@ def list_accounts(
     return success_response(AccountListResult(accounts=accounts))
 
 
-@router.get("/register-requests/{request_id}", response_model=ApiResponse[RegistrationRequestItem])
+@router.get(
+    "/register-requests/{request_id}",
+    response_model=ApiResponse[RegistrationRequestItem],
+)
 def get_registration_request(
     request_id: int,
     db: Session = Depends(get_db),
@@ -245,11 +273,16 @@ def get_registration_request(
 ) -> ApiResponse[RegistrationRequestItem]:
     request_row = get_registration_request_by_id(db, request_id)
     if not request_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration request not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registration request not found",
+        )
     return success_response(_to_registration_item(request_row))
 
 
-@router.get("/register-requests", response_model=ApiResponse[RegistrationRequestListResult])
+@router.get(
+    "/register-requests", response_model=ApiResponse[RegistrationRequestListResult]
+)
 def get_registration_requests(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
@@ -273,17 +306,25 @@ def get_registration_requests(
     )
 
 
-@router.post("/register-requests/{request_id}/approve", response_model=ApiResponse[RegistrationActionResult])
+@router.post(
+    "/register-requests/{request_id}/approve",
+    response_model=ApiResponse[RegistrationActionResult],
+)
 def approve_registration(
     request_id: int,
     payload: ApproveRegistrationRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("user.registration_requests.approve")),
+    current_user: User = Depends(
+        require_permission("user.registration_requests.approve")
+    ),
 ) -> ApiResponse[RegistrationActionResult]:
     request_row = get_registration_request_by_id(db, request_id)
     if not request_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration request not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registration request not found",
+        )
 
     account = request_row.account
     user, error_message = approve_registration_request(
@@ -296,9 +337,14 @@ def approve_registration(
         reviewer=current_user,
     )
     if error_message:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
     if not user:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to approve registration request")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to approve registration request",
+        )
 
     write_audit_log(
         db,
@@ -328,6 +374,9 @@ def approve_registration(
         source_type="registration_request",
         source_id=str(request_id),
         source_code=account,
+        target_page_code="user",
+        target_tab_code="account_settings",
+        target_route_payload_json=json.dumps({"action": "change_password"}),
         recipient_user_ids=[user.id],
         dedupe_key=f"reg_approved_{request_id}",
     )
@@ -346,17 +395,25 @@ def approve_registration(
     )
 
 
-@router.post("/register-requests/{request_id}/reject", response_model=ApiResponse[RegistrationActionResult])
+@router.post(
+    "/register-requests/{request_id}/reject",
+    response_model=ApiResponse[RegistrationActionResult],
+)
 def reject_registration(
     request_id: int,
     payload: RejectRegistrationRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("user.registration_requests.reject")),
+    current_user: User = Depends(
+        require_permission("user.registration_requests.reject")
+    ),
 ) -> ApiResponse[RegistrationActionResult]:
     request_row = get_registration_request_by_id(db, request_id)
     if not request_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration request not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registration request not found",
+        )
 
     account = request_row.account
     updated = reject_registration_request(
@@ -373,7 +430,10 @@ def reject_registration(
         target_id=str(request_id),
         target_name=account,
         operator=current_user,
-        after_data={"status": updated.status, "rejected_reason": updated.rejected_reason},
+        after_data={
+            "status": updated.status,
+            "rejected_reason": updated.rejected_reason,
+        },
         ip_address=request.client.host if request and request.client else None,
         terminal_info=request.headers.get("user-agent") if request else None,
     )

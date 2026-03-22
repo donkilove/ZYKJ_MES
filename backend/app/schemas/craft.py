@@ -118,13 +118,17 @@ class ProductProcessTemplateCreate(BaseModel):
     product_id: int = Field(gt=0)
     template_name: str = Field(min_length=1, max_length=128)
     is_default: bool = False
-    lifecycle_status: str = Field(default=TEMPLATE_LIFECYCLE_DRAFT, min_length=1, max_length=32)
+    lifecycle_status: str = Field(
+        default=TEMPLATE_LIFECYCLE_DRAFT, min_length=1, max_length=32
+    )
     remark: str = Field(default="", max_length=500)
     steps: list[TemplateStepPayload] = Field(default_factory=list, min_length=1)
 
     @field_validator("steps")
     @classmethod
-    def validate_steps(cls, value: list[TemplateStepPayload]) -> list[TemplateStepPayload]:
+    def validate_steps(
+        cls, value: list[TemplateStepPayload]
+    ) -> list[TemplateStepPayload]:
         step_orders = [item.step_order for item in value]
         if len(step_orders) != len(set(step_orders)):
             raise ValueError("step_order cannot be duplicated")
@@ -149,7 +153,9 @@ class ProductProcessTemplateUpdate(BaseModel):
 
     @field_validator("steps")
     @classmethod
-    def validate_steps(cls, value: list[TemplateStepPayload]) -> list[TemplateStepPayload]:
+    def validate_steps(
+        cls, value: list[TemplateStepPayload]
+    ) -> list[TemplateStepPayload]:
         step_orders = [item.step_order for item in value]
         if len(step_orders) != len(set(step_orders)):
             raise ValueError("step_order cannot be duplicated")
@@ -213,7 +219,9 @@ class SystemMasterTemplateUpsertRequest(BaseModel):
 
     @field_validator("steps")
     @classmethod
-    def validate_steps(cls, value: list[TemplateStepPayload]) -> list[TemplateStepPayload]:
+    def validate_steps(
+        cls, value: list[TemplateStepPayload]
+    ) -> list[TemplateStepPayload]:
         step_orders = [item.step_order for item in value]
         if len(step_orders) != len(set(step_orders)):
             raise ValueError("step_order cannot be duplicated")
@@ -275,6 +283,7 @@ class TemplateImpactOrderItem(BaseModel):
 
 
 class TemplateImpactAnalysisResult(BaseModel):
+    target_version: int
     total_orders: int
     pending_orders: int
     in_progress_orders: int
@@ -393,12 +402,16 @@ class TemplateBatchImportItem(BaseModel):
     template_name: str = Field(min_length=1, max_length=128)
     is_default: bool = False
     is_enabled: bool = True
-    lifecycle_status: str = Field(default=TEMPLATE_LIFECYCLE_DRAFT, min_length=1, max_length=32)
+    lifecycle_status: str = Field(
+        default=TEMPLATE_LIFECYCLE_DRAFT, min_length=1, max_length=32
+    )
     steps: list[TemplateStepPayload] = Field(default_factory=list, min_length=1)
 
     @field_validator("steps")
     @classmethod
-    def validate_steps(cls, value: list[TemplateStepPayload]) -> list[TemplateStepPayload]:
+    def validate_steps(
+        cls, value: list[TemplateStepPayload]
+    ) -> list[TemplateStepPayload]:
         step_orders = [item.step_order for item in value]
         if len(step_orders) != len(set(step_orders)):
             raise ValueError("step_order cannot be duplicated")

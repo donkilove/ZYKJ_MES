@@ -38,7 +38,9 @@ class OrderCreate(BaseModel):
 
     @field_validator("process_steps")
     @classmethod
-    def validate_process_steps(cls, value: list[OrderProcessStepPayload] | None) -> list[OrderProcessStepPayload] | None:
+    def validate_process_steps(
+        cls, value: list[OrderProcessStepPayload] | None
+    ) -> list[OrderProcessStepPayload] | None:
         if value is None:
             return value
         step_orders = [item.step_order for item in value]
@@ -71,7 +73,9 @@ class OrderUpdate(BaseModel):
 
     @field_validator("process_steps")
     @classmethod
-    def validate_process_steps(cls, value: list[OrderProcessStepPayload] | None) -> list[OrderProcessStepPayload] | None:
+    def validate_process_steps(
+        cls, value: list[OrderProcessStepPayload] | None
+    ) -> list[OrderProcessStepPayload] | None:
         if value is None:
             return value
         step_orders = [item.step_order for item in value]
@@ -596,6 +600,8 @@ class ScrapStatisticsListResult(BaseModel):
 class ScrapStatisticsExportRequest(BaseModel):
     keyword: str | None = Field(default=None, max_length=128)
     progress: str | None = Field(default="all", max_length=32)
+    product_name: str | None = Field(default=None, max_length=128)
+    process_code: str | None = Field(default=None, max_length=64)
     start_date: date | None = None
     end_date: date | None = None
 
@@ -674,6 +680,7 @@ class PipelineInstanceItem(BaseModel):
     order_code: str
     order_process_id: int
     process_code: str
+    process_name: str
     pipeline_seq: int
     pipeline_sub_order_no: str
     is_active: bool
@@ -690,6 +697,7 @@ class PipelineInstanceListResult(BaseModel):
 
 class ScrapRelatedRepairItem(BaseModel):
     """报废详情中关联的维修单摘要"""
+
     id: int
     repair_order_code: str
     status: str
@@ -757,6 +765,7 @@ class RepairReturnRouteItem(BaseModel):
 
 class RepairEventLogItem(BaseModel):
     """维修详情中关联的订单事件日志摘要"""
+
     id: int
     order_code: str | None = None
     order_status: str | None = None

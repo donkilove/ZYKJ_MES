@@ -168,7 +168,7 @@ class _ProductPageState extends State<ProductPage>
       case productVersionManagementTabCode:
         return '版本管理';
       case productParameterManagementTabCode:
-        return '产品参数管理';
+        return '版本参数管理';
       case productParameterQueryTabCode:
         return '产品参数查询';
       default:
@@ -221,6 +221,7 @@ class _ProductPageState extends State<ProductPage>
               targetTabCode: productParameterManagementTabCode,
               action: 'edit',
               product: product,
+              targetVersion: product.currentVersion,
             );
           },
         );

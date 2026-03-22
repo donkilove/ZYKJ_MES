@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
+import 'package:mes_client/models/message_models.dart';
 import 'package:mes_client/services/message_service.dart';
 
 import '../support/http_test_server.dart';
@@ -39,7 +40,8 @@ void main() {
                     'target_page_code': 'production',
                     'target_tab_code': 'production_repair_orders',
                     'target_route_payload_json': null,
-                    'status': 'active',
+                    'status': 'no_permission',
+                    'inactive_reason': 'no_permission',
                     'published_at': '2026-03-19T08:00:00Z',
                     'is_read': false,
                     'read_at': null,
@@ -56,7 +58,25 @@ void main() {
         'POST /messages/read-batch': (request) {
           final body = request.decodedBody as Map<String, dynamic>? ?? const {};
           expect(body['message_ids'], [1, 2]);
-          return TestResponse.json(200, body: {'data': {'updated': 2}});
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {'updated': 2},
+            },
+          );
+        },
+        'POST /messages/announcements': (request) {
+          final body = request.decodedBody as Map<String, dynamic>? ?? const {};
+          expect(body['title'], '新的系统公告');
+          expect(body['range_type'], 'roles');
+          expect(body['role_codes'], ['system_admin']);
+          expect(body['user_ids'], isEmpty);
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {'message_id': 9, 'recipient_count': 3},
+            },
+          );
         },
       });
       addTearDown(server.close);
@@ -68,11 +88,26 @@ void main() {
       final summary = await service.getSummary();
       final list = await service.listMessages(todoOnly: true);
       final updated = await service.markBatchRead([1, 2]);
+      final publishResult = await service.publishAnnouncement(
+        const AnnouncementPublishRequest(
+          title: '新的系统公告',
+          content: '请全员知悉',
+          priority: 'important',
+          rangeType: 'roles',
+          roleCodes: ['system_admin'],
+          userIds: [],
+          expiresAt: null,
+        ),
+      );
 
       expect(summary.totalCount, 5);
       expect(summary.todoUnreadCount, 2);
+      expect(list.items.single.inactiveReason, 'no_permission');
+      expect(list.items.single.inactiveReasonName, '暂无目标页面访问权限');
       expect(list.items.single.targetTabCode, 'production_repair_orders');
       expect(updated, 2);
+      expect(publishResult.messageId, 9);
+      expect(publishResult.recipientCount, 3);
     });
   });
 }

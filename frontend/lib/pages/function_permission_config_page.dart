@@ -22,6 +22,10 @@ const String _systemModuleCode = 'system';
 const String _systemAdminRoleCode = 'system_admin';
 const String _systemRolePermissionManageCapability =
     'feature.system.role_permissions.manage';
+const Set<String> _hiddenCapabilityCodes = {
+  'feature.system.role_permissions.manage',
+  'feature.user.login_session.force_offline',
+};
 
 class _RoleDraft {
   const _RoleDraft({
@@ -679,7 +683,7 @@ class _FunctionPermissionConfigPageState
                           ? '入口：${capability.pageName}\n说明：$description'
                           : '入口：${capability.pageName}',
                     ),
-                     value: checked,
+                    value: checked,
                     onChanged: readonly || _saving
                         ? null
                         : (value) => _setCapabilityChecked(
@@ -724,14 +728,18 @@ class _FunctionPermissionConfigPageState
     }
     final readonly = _isReadonly(role.code);
 
-    final capabilityPacks = [...catalog.capabilityPacks]
-      ..sort((a, b) {
-        final groupCompare = a.groupName.compareTo(b.groupName);
-        if (groupCompare != 0) {
-          return groupCompare;
-        }
-        return a.capabilityName.compareTo(b.capabilityName);
-      });
+    final capabilityPacks =
+        [
+          ...catalog.capabilityPacks.where(
+            (item) => !_hiddenCapabilityCodes.contains(item.capabilityCode),
+          ),
+        ]..sort((a, b) {
+          final groupCompare = a.groupName.compareTo(b.groupName);
+          if (groupCompare != 0) {
+            return groupCompare;
+          }
+          return a.capabilityName.compareTo(b.capabilityName);
+        });
 
     return Padding(
       padding: const EdgeInsets.all(16),

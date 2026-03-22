@@ -282,6 +282,38 @@ void main() {
               },
             },
           ),
+          'GET /production/order-events/search': (request) {
+            expect(request.uri.queryParameters['order_code'], 'PO-1');
+            expect(request.uri.queryParameters['event_type'], 'order_deleted');
+            expect(request.uri.queryParameters['operator_username'], 'admin');
+            expect(request.uri.queryParameters['start_date'], '2026-03-01');
+            expect(request.uri.queryParameters['end_date'], '2026-03-02');
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'total': 1,
+                  'items': [
+                    {
+                      'id': 15,
+                      'order_id': null,
+                      'order_code': 'PO-1',
+                      'order_status': 'pending',
+                      'product_name': 'Product-A',
+                      'process_code': '01-01',
+                      'event_type': 'order_deleted',
+                      'event_title': '订单已删除',
+                      'event_detail': '删除订单 PO-1',
+                      'operator_user_id': 1,
+                      'operator_username': 'admin',
+                      'payload_json': '{"deleted":true}',
+                      'created_at': '2026-03-02T00:00:00Z',
+                    },
+                  ],
+                },
+              },
+            );
+          },
           'PUT /production/orders/1/pipeline-mode': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['enabled'], true);
@@ -653,7 +685,10 @@ void main() {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['approve'], true);
             expect(body['review_remark'], 'ok');
-            return TestResponse.json(409, body: {'detail': '代班流程已改为发起即生效，无需审批'});
+            return TestResponse.json(
+              409,
+              body: {'detail': '代班流程已改为发起即生效，无需审批'},
+            );
           },
           'GET /production/scrap-statistics': (request) {
             expect(request.uri.queryParameters['page'], '1');
@@ -833,6 +868,13 @@ void main() {
           viewMode: 'assist',
           proxyOperatorUserId: 8,
         );
+        final orderEvents = await service.searchOrderEvents(
+          orderCode: 'PO-1',
+          eventType: 'order_deleted',
+          operatorUsername: 'admin',
+          startDate: DateTime(2026, 3, 1),
+          endDate: DateTime(2026, 3, 2),
+        );
         final firstArticle = await service.submitFirstArticle(
           orderId: 1,
           orderProcessId: 11,
@@ -898,11 +940,7 @@ void main() {
           throwsA(
             isA<ApiException>()
                 .having((e) => e.statusCode, 'statusCode', 409)
-                .having(
-                  (e) => e.message,
-                  'message',
-                  contains('发起即生效'),
-                ),
+                .having((e) => e.message, 'message', contains('发起即生效')),
           ),
         );
         final scrapStats = await service.getScrapStatistics(
@@ -962,6 +1000,7 @@ void main() {
         expect(proxyOrders.items.single.workView, 'proxy');
         expect(myOrderContext.found, isTrue);
         expect(myOrderContext.item?.workView, 'assist');
+        expect(orderEvents.items.single.eventType, 'order_deleted');
         expect(firstArticle.message, 'first article done');
         expect(endProduction.message, 'end production done');
         expect(overview.totalOrders, 10);
@@ -984,7 +1023,7 @@ void main() {
         expect(repairSummary.items.single.phenomenon, '毛刺');
         expect(completedRepair.status, 'completed');
         expect(repairExport.fileName, 'repair.csv');
-        expect(server.requests.length, 33);
+        expect(server.requests.length, 34);
       },
     );
 

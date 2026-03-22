@@ -55,6 +55,12 @@ class ProcessConfigurationPage extends StatefulWidget {
     required this.canViewTemplates,
     required this.canManageTemplates,
     required this.canManageSystemMasterTemplate,
+    this.craftService,
+    this.productionService,
+    this.templateId,
+    this.version,
+    this.systemMasterVersions = false,
+    this.jumpRequestId = 0,
   });
 
   final AppSession session;
@@ -62,6 +68,12 @@ class ProcessConfigurationPage extends StatefulWidget {
   final bool canViewTemplates;
   final bool canManageTemplates;
   final bool canManageSystemMasterTemplate;
+  final CraftService? craftService;
+  final ProductionService? productionService;
+  final int? templateId;
+  final int? version;
+  final bool systemMasterVersions;
+  final int jumpRequestId;
 
   @override
   State<ProcessConfigurationPage> createState() =>
@@ -90,12 +102,16 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   List<CraftTemplateItem> _templates = const [];
   CraftSystemMasterTemplateItem? _systemMasterTemplate;
   final Map<int, CraftTemplateDetail> _detailCache = {};
+  int? _focusedTemplateId;
+  String _jumpNotice = '';
+  int _lastHandledJumpRequestId = -1;
 
   @override
   void initState() {
     super.initState();
-    _craftService = CraftService(widget.session);
-    _productionService = ProductionService(widget.session);
+    _craftService = widget.craftService ?? CraftService(widget.session);
+    _productionService =
+        widget.productionService ?? ProductionService(widget.session);
     _loadData();
   }
 
@@ -103,6 +119,14 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   void dispose() {
     _templateKeywordController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProcessConfigurationPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.jumpRequestId != oldWidget.jumpRequestId) {
+      _tryApplyJumpTarget(force: true);
+    }
   }
 
   bool _isUnauthorized(Object error) {
@@ -114,6 +138,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   bool get _canViewTemplates => widget.canViewTemplates;
+
+  bool get _canViewSystemMasterVersions {
+    return _canManageSystemMasterTemplate || _canViewTemplates;
+  }
 
   bool get _canManageTemplates => widget.canManageTemplates;
 
@@ -198,7 +226,86 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         setState(() {
           _loading = false;
         });
+        _tryApplyJumpTarget(force: true);
       }
+    }
+  }
+
+  CraftTemplateItem? get _focusedTemplate {
+    final focusedTemplateId = _focusedTemplateId;
+    if (focusedTemplateId == null) {
+      return null;
+    }
+    for (final item in _templates) {
+      if (item.id == focusedTemplateId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  void _tryApplyJumpTarget({bool force = false}) {
+    if (!mounted) {
+      return;
+    }
+    if (!force && widget.jumpRequestId == _lastHandledJumpRequestId) {
+      return;
+    }
+    if (widget.systemMasterVersions) {
+      setState(() {
+        _focusedTemplateId = null;
+        _jumpNotice = '已承接到系统母版历史版本视图';
+      });
+      _lastHandledJumpRequestId = widget.jumpRequestId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _showSystemMasterVersionDialog();
+        }
+      });
+      return;
+    }
+    final templateId = widget.templateId;
+    if (templateId == null || templateId <= 0) {
+      _lastHandledJumpRequestId = widget.jumpRequestId;
+      return;
+    }
+    CraftTemplateItem? matched;
+    for (final item in _templates) {
+      if (item.id == templateId) {
+        matched = item;
+        break;
+      }
+    }
+    if (matched == null) {
+      setState(() {
+        _focusedTemplateId = null;
+        _jumpNotice = '未找到目标模板记录 #$templateId';
+      });
+      _lastHandledJumpRequestId = widget.jumpRequestId;
+      return;
+    }
+    final version = widget.version;
+    setState(() {
+      _productFilterId = matched!.productId;
+      _templateKeyword = '';
+      _templateKeywordController.clear();
+      _productCategoryFilter = null;
+      _defaultTemplateFilter = null;
+      _templateEnabledFilter = null;
+      _updatedFromDate = null;
+      _updatedToDate = null;
+      _focusedTemplateId = matched.id;
+      _jumpNotice = version == null
+          ? '已定位模板 #${matched.id} ${matched.templateName}'
+          : '已定位模板 #${matched.id} ${matched.templateName}，准备查看版本 v$version';
+    });
+    _lastHandledJumpRequestId = widget.jumpRequestId;
+    if (version != null && version > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _showVersionDialog(matched!, initialTargetVersion: version);
+        }
+      });
     }
   }
 
@@ -223,10 +330,14 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           .toList();
     }
     if (_defaultTemplateFilter != null) {
-      rows = rows.where((item) => item.isDefault == _defaultTemplateFilter).toList();
+      rows = rows
+          .where((item) => item.isDefault == _defaultTemplateFilter)
+          .toList();
     }
     if (_templateEnabledFilter != null) {
-      rows = rows.where((item) => item.isEnabled == _templateEnabledFilter).toList();
+      rows = rows
+          .where((item) => item.isEnabled == _templateEnabledFilter)
+          .toList();
     }
     if (_updatedFromDate != null) {
       final from = DateTime(
@@ -249,7 +360,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         999,
         999,
       );
-      rows = rows.where((item) => !item.updatedAt.toLocal().isAfter(to)).toList();
+      rows = rows
+          .where((item) => !item.updatedAt.toLocal().isAfter(to))
+          .toList();
     }
     return rows;
   }
@@ -378,22 +491,29 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 Text('生命周期：${_lifecycleLabel(item.lifecycleStatus)}'),
                 Text('状态：${item.isEnabled ? '启用' : '停用'}'),
                 Text('来源：${_templateSourceLabel(item)}'),
-                if (item.remark.trim().isNotEmpty) Text('备注：${item.remark.trim()}'),
+                if (item.remark.trim().isNotEmpty)
+                  Text('备注：${item.remark.trim()}'),
                 const SizedBox(height: 10),
-                const Text('步骤列表', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text(
+                  '步骤列表',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: detail.steps.isEmpty
                       ? const Center(child: Text('暂无步骤'))
                       : ListView.separated(
                           itemCount: detail.steps.length,
-                          separatorBuilder: (context, index) => const Divider(height: 1),
+                          separatorBuilder: (context, index) =>
+                              const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final step = detail.steps[index];
                             return ListTile(
                               dense: true,
                               leading: Text('#${step.stepOrder}'),
-                              title: Text('${step.stageCode} ${step.stageName}'),
+                              title: Text(
+                                '${step.stageCode} ${step.stageName}',
+                              ),
                               subtitle: Text(
                                 '${step.processCode} ${step.processName}\n'
                                 '标准工时：${step.standardMinutes} 分钟｜${step.isKeyProcess ? '关键工序' : '普通工序'}'
@@ -411,9 +531,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             TextButton(
               onPressed: () async {
                 try {
-                  final contentBase64 = await _craftService.exportTemplateDetail(
-                    templateId: item.id,
-                  );
+                  final contentBase64 = await _craftService
+                      .exportTemplateDetail(templateId: item.id);
                   if (!dialogContext.mounted) {
                     return;
                   }
@@ -449,9 +568,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_errorMessage(error))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     }
   }
@@ -776,8 +895,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                       SizedBox(
                                         width: 160,
                                         child: TextFormField(
-                                          initialValue:
-                                              step.standardMinutes.toString(),
+                                          initialValue: step.standardMinutes
+                                              .toString(),
                                           decoration: const InputDecoration(
                                             labelText: '标准工时(分钟)',
                                             border: OutlineInputBorder(),
@@ -785,7 +904,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                           ),
                                           keyboardType: TextInputType.number,
                                           inputFormatters: [
-                                            FilteringTextInputFormatter.digitsOnly,
+                                            FilteringTextInputFormatter
+                                                .digitsOnly,
                                           ],
                                           onChanged: (value) {
                                             setDialogState(() {
@@ -928,9 +1048,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_errorMessage(error))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     }
   }
@@ -1134,8 +1254,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                       SizedBox(
                                         width: 160,
                                         child: TextFormField(
-                                          initialValue:
-                                              step.standardMinutes.toString(),
+                                          initialValue: step.standardMinutes
+                                              .toString(),
                                           decoration: const InputDecoration(
                                             labelText: '标准工时(分钟)',
                                             border: OutlineInputBorder(),
@@ -1143,7 +1263,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                           ),
                                           keyboardType: TextInputType.number,
                                           inputFormatters: [
-                                            FilteringTextInputFormatter.digitsOnly,
+                                            FilteringTextInputFormatter
+                                                .digitsOnly,
                                           ],
                                           onChanged: (value) {
                                             setDialogState(() {
@@ -1250,7 +1371,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   Future<void> _showSystemMasterVersionDialog() async {
-    if (!_canManageSystemMasterTemplate) {
+    if (!_canViewSystemMasterVersions) {
       _showNoPermission();
       return;
     }
@@ -1271,18 +1392,27 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   ? const Center(child: Text('暂无历史版本'))
                   : ListView.separated(
                       itemCount: result.items.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final item = result.items[index];
                         final subtitleParts = <String>[
                           item.createdAt.toLocal().toString(),
                           if ((item.createdByUsername ?? '').trim().isNotEmpty)
                             '操作人：${item.createdByUsername}',
-                          if ((item.note ?? '').trim().isNotEmpty) item.note!.trim(),
+                          if ((item.note ?? '').trim().isNotEmpty)
+                            item.note!.trim(),
                         ];
                         return ExpansionTile(
-                          tilePadding: const EdgeInsets.symmetric(horizontal: 8),
-                          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          tilePadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                          ),
+                          childrenPadding: const EdgeInsets.fromLTRB(
+                            16,
+                            0,
+                            16,
+                            12,
+                          ),
                           title: Text('v${item.version} · ${item.action}'),
                           subtitle: Text(subtitleParts.join(' · ')),
                           children: [
@@ -1299,8 +1429,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                         dense: true,
                                         contentPadding: EdgeInsets.zero,
                                         leading: Text('#${step.stepOrder}'),
-                                        title: Text('${step.stageCode} ${step.stageName}'),
-                                        subtitle: Text('${step.processCode} ${step.processName}'),
+                                        title: Text(
+                                          '${step.stageCode} ${step.stageName}',
+                                        ),
+                                        subtitle: Text(
+                                          '${step.processCode} ${step.processName}',
+                                        ),
                                       ),
                                     )
                                     .toList(),
@@ -1325,9 +1459,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_errorMessage(error))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     }
   }
@@ -1407,12 +1541,14 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     if (_products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('暂无可用产品')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('暂无可用产品')));
       return;
     }
-    final nameController = TextEditingController(text: '${item.templateName} 副本');
+    final nameController = TextEditingController(
+      text: '${item.templateName} 副本',
+    );
     int selectedProductId = _products.first.id;
     final saved = await showLockedFormDialog<bool>(
       context: context,
@@ -1433,10 +1569,17 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         border: OutlineInputBorder(),
                       ),
                       items: _products
-                          .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
+                          .map(
+                            (p) => DropdownMenuItem(
+                              value: p.id,
+                              child: Text(p.name),
+                            ),
+                          )
                           .toList(),
                       onChanged: (v) {
-                        if (v != null) setDialogState(() => selectedProductId = v);
+                        if (v != null) {
+                          setDialogState(() => selectedProductId = v);
+                        }
                       },
                     ),
                     const SizedBox(height: 12),
@@ -1459,9 +1602,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   onPressed: () async {
                     final newName = nameController.text.trim();
                     if (newName.isEmpty) {
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        const SnackBar(content: Text('请输入新模板名称')),
-                      );
+                      ScaffoldMessenger.of(
+                        dialogContext,
+                      ).showSnackBar(const SnackBar(content: Text('请输入新模板名称')));
                       return;
                     }
                     try {
@@ -1470,7 +1613,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         targetProductId: selectedProductId,
                         newName: newName,
                       );
-                      if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop(true);
+                      }
                     } catch (error) {
                       if (_isUnauthorized(error)) {
                         widget.onLogout();
@@ -1501,9 +1646,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     if (_products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('暂无可用产品')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('暂无可用产品')));
       return;
     }
     final nameController = TextEditingController(text: '系统母版套版');
@@ -1527,10 +1672,17 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         border: OutlineInputBorder(),
                       ),
                       items: _products
-                          .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
+                          .map(
+                            (p) => DropdownMenuItem(
+                              value: p.id,
+                              child: Text(p.name),
+                            ),
+                          )
                           .toList(),
                       onChanged: (v) {
-                        if (v != null) setDialogState(() => selectedProductId = v);
+                        if (v != null) {
+                          setDialogState(() => selectedProductId = v);
+                        }
                       },
                     ),
                     const SizedBox(height: 12),
@@ -1553,9 +1705,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   onPressed: () async {
                     final newName = nameController.text.trim();
                     if (newName.isEmpty) {
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        const SnackBar(content: Text('请输入新模板名称')),
-                      );
+                      ScaffoldMessenger.of(
+                        dialogContext,
+                      ).showSnackBar(const SnackBar(content: Text('请输入新模板名称')));
                       return;
                     }
                     try {
@@ -1563,7 +1715,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         productId: selectedProductId,
                         newName: newName,
                       );
-                      if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop(true);
+                      }
                     } catch (error) {
                       if (_isUnauthorized(error)) {
                         widget.onLogout();
@@ -2123,16 +2277,96 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   Future<bool> _showRollbackDialog({
     required CraftTemplateItem item,
     required int targetVersion,
+    required List<int> availableVersions,
   }) async {
     bool applyOrderSync = false;
     bool confirmed = false;
-    final noteController = TextEditingController(text: '回滚到版本 v$targetVersion');
+    final versionOptions = availableVersions.toSet().toList()
+      ..sort((left, right) => right.compareTo(left));
+    int selectedTargetVersion = versionOptions.contains(targetVersion)
+        ? targetVersion
+        : versionOptions.first;
+    bool loadingAnalysis = false;
+    final noteController = TextEditingController(
+      text: '回滚到版本 v$selectedTargetVersion',
+    );
+    CraftTemplateImpactAnalysis? analysis;
+
+    try {
+      analysis = await _craftService.getTemplateImpactAnalysis(
+        templateId: item.id,
+        targetVersion: selectedTargetVersion,
+      );
+      selectedTargetVersion = analysis.targetVersion;
+    } catch (error) {
+      noteController.dispose();
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return false;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
+      return false;
+    }
+    if (!mounted) {
+      noteController.dispose();
+      return false;
+    }
 
     final done = await showLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final currentAnalysis = analysis!;
+
+            Future<void> reloadImpactAnalysis(int nextTargetVersion) async {
+              final previousVersion =
+                  analysis?.targetVersion ?? selectedTargetVersion;
+              setDialogState(() {
+                loadingAnalysis = true;
+                selectedTargetVersion = nextTargetVersion;
+              });
+              try {
+                final nextAnalysis = await _craftService
+                    .getTemplateImpactAnalysis(
+                      templateId: item.id,
+                      targetVersion: nextTargetVersion,
+                    );
+                if (!dialogContext.mounted) {
+                  return;
+                }
+                setDialogState(() {
+                  analysis = nextAnalysis;
+                  selectedTargetVersion = nextAnalysis.targetVersion;
+                  loadingAnalysis = false;
+                  final currentNote = noteController.text.trim();
+                  if (currentNote.isEmpty ||
+                      currentNote == '回滚到版本 v$previousVersion') {
+                    noteController.text =
+                        '回滚到版本 v${nextAnalysis.targetVersion}';
+                  }
+                });
+              } catch (error) {
+                if (_isUnauthorized(error)) {
+                  widget.onLogout();
+                  return;
+                }
+                if (!dialogContext.mounted) {
+                  return;
+                }
+                setDialogState(() {
+                  loadingAnalysis = false;
+                });
+                ScaffoldMessenger.of(
+                  dialogContext,
+                ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+              }
+            }
+
             return AlertDialog(
               title: Text('回滚模板 - ${item.templateName}'),
               content: SizedBox(
@@ -2141,7 +2375,64 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('目标版本：v$targetVersion'),
+                    DropdownButtonFormField<int>(
+                      initialValue: selectedTargetVersion,
+                      decoration: const InputDecoration(
+                        labelText: '回滚目标版本',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: versionOptions
+                          .map(
+                            (version) => DropdownMenuItem(
+                              value: version,
+                              child: Text('v$version'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: loadingAnalysis
+                          ? null
+                          : (value) {
+                              if (value == null ||
+                                  value == selectedTargetVersion) {
+                                return;
+                              }
+                              reloadImpactAnalysis(value);
+                            },
+                    ),
+                    const SizedBox(height: 8),
+                    Text('当前预览版本：v${currentAnalysis.targetVersion}'),
+                    const SizedBox(height: 8),
+                    if (loadingAnalysis) const LinearProgressIndicator(),
+                    if (loadingAnalysis) const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        Chip(label: Text('总计 ${currentAnalysis.totalOrders}')),
+                        Chip(
+                          label: Text('待开工 ${currentAnalysis.pendingOrders}'),
+                        ),
+                        Chip(
+                          label: Text(
+                            '生产中 ${currentAnalysis.inProgressOrders}',
+                          ),
+                        ),
+                        Chip(
+                          label: Text('可同步 ${currentAnalysis.syncableOrders}'),
+                        ),
+                        Chip(
+                          label: Text('受阻 ${currentAnalysis.blockedOrders}'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (currentAnalysis.items.any((order) => !order.syncable))
+                      Text(
+                        '存在无法同步的订单，回滚时会自动跳过受阻订单。',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
                     const SizedBox(height: 8),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -2175,6 +2466,42 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         border: OutlineInputBorder(),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      '订单明细',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 220,
+                      child: currentAnalysis.items.isEmpty
+                          ? const Center(child: Text('暂无受影响订单'))
+                          : ListView.separated(
+                              itemCount: currentAnalysis.items.length,
+                              separatorBuilder: (_, separatorIndex) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final order = currentAnalysis.items[index];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(order.orderCode),
+                                  subtitle: Text(
+                                    '状态：${order.orderStatus}${(order.reason ?? '').isNotEmpty ? '，原因：${order.reason}' : ''}',
+                                  ),
+                                  trailing: Text(
+                                    order.syncable ? '可同步' : '阻塞',
+                                    style: TextStyle(
+                                      color: order.syncable
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                          : Theme.of(context).colorScheme.error,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
                   ],
                 ),
               ),
@@ -2194,7 +2521,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                     try {
                       await _craftService.rollbackTemplate(
                         templateId: item.id,
-                        targetVersion: targetVersion,
+                        targetVersion: selectedTargetVersion,
                         applyOrderSync: applyOrderSync,
                         confirmed: !applyOrderSync || confirmed,
                         note: noteController.text.trim().isEmpty
@@ -2234,7 +2561,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     return false;
   }
 
-  Future<void> _showVersionDialog(CraftTemplateItem item) async {
+  Future<void> _showVersionDialog(
+    CraftTemplateItem item, {
+    int? initialTargetVersion,
+  }) async {
     if (!_canViewTemplates) {
       _showNoPermission();
       return;
@@ -2265,10 +2595,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
 
+    final hasInitialTargetVersion =
+        initialTargetVersion != null &&
+        versions.items.any((entry) => entry.version == initialTargetVersion);
     int fromVersion = versions.items.length > 1
         ? versions.items[1].version
         : versions.items.first.version;
-    int toVersion = versions.items.first.version;
+    int toVersion = hasInitialTargetVersion
+        ? initialTargetVersion
+        : versions.items.first.version;
+    if (hasInitialTargetVersion && versions.items.length > 1) {
+      fromVersion = versions.items.first.version == initialTargetVersion
+          ? versions.items[1].version
+          : versions.items.first.version;
+    }
     CraftTemplateVersionCompareResult? compareResult;
 
     Future<void> loadCompare() async {
@@ -2453,6 +2793,14 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                       _canManageTemplates ? '历史版本（点击回滚）' : '历史版本',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
+                    if (hasInitialTargetVersion)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          '已自动定位目标版本 v$initialTargetVersion',
+                          style: Theme.of(dialogContext).textTheme.bodySmall,
+                        ),
+                      ),
                     const SizedBox(height: 8),
                     Expanded(
                       child: ListView.separated(
@@ -2461,10 +2809,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                             const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final version = versions.items[index];
+                          final isTargetVersion =
+                              version.version == initialTargetVersion;
                           return ListTile(
                             dense: true,
+                            tileColor: isTargetVersion
+                                ? Theme.of(dialogContext)
+                                      .colorScheme
+                                      .primaryContainer
+                                      .withValues(alpha: 0.28)
+                                : null,
                             title: Text(
-                              'v${version.version} · ${version.action}',
+                              isTargetVersion
+                                  ? 'v${version.version} · ${version.action} · 目标版本'
+                                  : 'v${version.version} · ${version.action}',
                             ),
                             subtitle: Text(
                               '${version.createdAt.toLocal()}'
@@ -2478,10 +2836,11 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                         onPressed: () async {
                                           try {
                                             final contentBase64 =
-                                                await _craftService.exportTemplateVersion(
-                                                  templateId: item.id,
-                                                  version: version.version,
-                                                );
+                                                await _craftService
+                                                    .exportTemplateVersion(
+                                                      templateId: item.id,
+                                                      version: version.version,
+                                                    );
                                             if (!dialogContext.mounted) {
                                               return;
                                             }
@@ -2497,14 +2856,15 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                               return;
                                             }
                                             if (dialogContext.mounted) {
-                                              ScaffoldMessenger.of(dialogContext)
-                                                  .showSnackBar(
-                                                    SnackBar(
-                                                      content: Text(
-                                                        _errorMessage(error),
-                                                      ),
-                                                    ),
-                                                  );
+                                              ScaffoldMessenger.of(
+                                                dialogContext,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    _errorMessage(error),
+                                                  ),
+                                                ),
+                                              );
                                             }
                                           }
                                         },
@@ -2516,9 +2876,18 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                               await _showRollbackDialog(
                                                 item: item,
                                                 targetVersion: version.version,
+                                                availableVersions: versions
+                                                    .items
+                                                    .map(
+                                                      (entry) => entry.version,
+                                                    )
+                                                    .toList(),
                                               );
-                                          if (rolledBack && dialogContext.mounted) {
-                                            Navigator.of(dialogContext).pop(true);
+                                          if (rolledBack &&
+                                              dialogContext.mounted) {
+                                            Navigator.of(
+                                              dialogContext,
+                                            ).pop(true);
                                           }
                                         },
                                         child: const Text('回滚'),
@@ -2528,11 +2897,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                 : TextButton(
                                     onPressed: () async {
                                       try {
-                                        final contentBase64 = await _craftService
-                                            .exportTemplateVersion(
-                                              templateId: item.id,
-                                              version: version.version,
-                                            );
+                                        final contentBase64 =
+                                            await _craftService
+                                                .exportTemplateVersion(
+                                                  templateId: item.id,
+                                                  version: version.version,
+                                                );
                                         if (!dialogContext.mounted) {
                                           return;
                                         }
@@ -2548,14 +2918,15 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                           return;
                                         }
                                         if (dialogContext.mounted) {
-                                          ScaffoldMessenger.of(dialogContext)
-                                              .showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    _errorMessage(error),
-                                                  ),
-                                                ),
-                                              );
+                                          ScaffoldMessenger.of(
+                                            dialogContext,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                _errorMessage(error),
+                                              ),
+                                            ),
+                                          );
                                         }
                                       }
                                     },
@@ -2584,6 +2955,43 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       _detailCache.remove(item.id);
       await _loadData();
     }
+  }
+
+  Widget _buildJumpBanner(ThemeData theme) {
+    final focusedTemplate = _focusedTemplate;
+    if (_jumpNotice.isEmpty && focusedTemplate == null) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.28),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.my_location, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              focusedTemplate == null
+                  ? _jumpNotice
+                  : '$_jumpNotice，产品：${focusedTemplate.productName}，当前版本：v${focusedTemplate.version}',
+            ),
+          ),
+          if (focusedTemplate != null && _canViewTemplates)
+            TextButton(
+              onPressed: () => _showTemplateDetailDialog(focusedTemplate),
+              child: const Text('查看详情'),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showExportDialog() async {
@@ -2992,6 +3400,159 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     );
   }
 
+  Widget _buildSystemMasterStepCell(
+    String text, {
+    int flex = 1,
+    TextAlign textAlign = TextAlign.start,
+    bool isHeader = false,
+  }) {
+    final theme = Theme.of(context);
+    final style = isHeader
+        ? theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)
+        : theme.textTheme.bodyMedium;
+    return Expanded(
+      flex: flex,
+      child: Text(text, textAlign: textAlign, style: style),
+    );
+  }
+
+  Widget _buildSystemMasterStepsSection(ThemeData theme) {
+    final List<CraftSystemMasterTemplateStepItem> steps =
+        _systemMasterTemplate?.steps ??
+        const <CraftSystemMasterTemplateStepItem>[];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.dividerColor),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '系统母版步骤',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            steps.isEmpty ? '未配置系统母版，主页面暂无可展示步骤。' : '当前主页面直接展示系统母版完整步骤明细。',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          if (steps.isEmpty)
+            const Text('暂无系统母版步骤')
+          else
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: theme.dividerColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.65),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(7),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        _buildSystemMasterStepCell(
+                          '序号',
+                          textAlign: TextAlign.center,
+                          isHeader: true,
+                        ),
+                        _buildSystemMasterStepCell(
+                          '工段',
+                          flex: 2,
+                          isHeader: true,
+                        ),
+                        _buildSystemMasterStepCell(
+                          '工序',
+                          flex: 2,
+                          isHeader: true,
+                        ),
+                        _buildSystemMasterStepCell(
+                          '标准工时',
+                          isHeader: true,
+                          textAlign: TextAlign.center,
+                        ),
+                        _buildSystemMasterStepCell(
+                          '关键工序',
+                          isHeader: true,
+                          textAlign: TextAlign.center,
+                        ),
+                        _buildSystemMasterStepCell(
+                          '备注',
+                          flex: 2,
+                          isHeader: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: steps.length,
+                      separatorBuilder: (context, index) =>
+                          Divider(height: 1, color: theme.dividerColor),
+                      itemBuilder: (context, index) {
+                        final step = steps[index];
+                        final stageLabel = '${step.stageCode} ${step.stageName}'
+                            .trim();
+                        final processLabel =
+                            '${step.processCode} ${step.processName}'.trim();
+                        final remark = step.stepRemark.trim().isEmpty
+                            ? '-'
+                            : step.stepRemark.trim();
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildSystemMasterStepCell(
+                                '${step.stepOrder}',
+                                textAlign: TextAlign.center,
+                              ),
+                              _buildSystemMasterStepCell(stageLabel, flex: 2),
+                              _buildSystemMasterStepCell(processLabel, flex: 2),
+                              _buildSystemMasterStepCell(
+                                '${step.standardMinutes} 分钟',
+                                textAlign: TextAlign.center,
+                              ),
+                              _buildSystemMasterStepCell(
+                                step.isKeyProcess ? '是' : '否',
+                                textAlign: TextAlign.center,
+                              ),
+                              _buildSystemMasterStepCell(remark, flex: 2),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -3023,9 +3584,11 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                     _systemMasterTemplate == null ? '新建系统母版' : '编辑系统母版',
                   ),
                 ),
-              if (_canManageSystemMasterTemplate && _systemMasterTemplate != null)
+              if (_canManageSystemMasterTemplate &&
+                  _systemMasterTemplate != null)
                 const SizedBox(width: 8),
-              if (_canManageSystemMasterTemplate && _systemMasterTemplate != null)
+              if (_canManageSystemMasterTemplate &&
+                  _systemMasterTemplate != null)
                 OutlinedButton.icon(
                   onPressed: _loading ? null : _showSystemMasterVersionDialog,
                   icon: const Icon(Icons.history),
@@ -3064,6 +3627,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             ],
           ),
           const SizedBox(height: 12),
+          _buildJumpBanner(theme),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -3077,6 +3641,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   : '系统母版状态：已配置（版本 v${_systemMasterTemplate!.version}，步骤 ${_systemMasterTemplate!.steps.length}，最近更新人 ${_systemMasterTemplate!.updatedByUsername ?? '-'}，最近更新时间 ${_systemMasterTemplate!.updatedAt.toLocal()}）',
             ),
           ),
+          const SizedBox(height: 12),
+          _buildSystemMasterStepsSection(theme),
           const SizedBox(height: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3231,10 +3797,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                           value: null,
                           child: Text('全部状态'),
                         ),
-                        DropdownMenuItem<bool?>(
-                          value: true,
-                          child: Text('启用'),
-                        ),
+                        DropdownMenuItem<bool?>(value: true, child: Text('启用')),
                         DropdownMenuItem<bool?>(
                           value: false,
                           child: Text('停用'),
@@ -3311,11 +3874,24 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                     const Divider(height: 1),
                                 itemBuilder: (context, index) {
                                   final item = templates[index];
+                                  final isFocused =
+                                      item.id == _focusedTemplateId;
                                   return Container(
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 8,
                                       horizontal: 12,
                                     ),
+                                    decoration: isFocused
+                                        ? BoxDecoration(
+                                            color: theme
+                                                .colorScheme
+                                                .primaryContainer
+                                                .withValues(alpha: 0.28),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          )
+                                        : null,
                                     child: Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.center,
@@ -3348,7 +3924,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                         ),
                                         Expanded(
                                           flex: 1,
-                                          child: Text(item.updatedByUsername ?? '-'),
+                                          child: Text(
+                                            item.updatedByUsername ?? '-',
+                                          ),
                                         ),
                                         Expanded(
                                           flex: 2,
@@ -3379,11 +3957,16 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                                   if (_canManageTemplates) {
                                                     items.add(
                                                       PopupMenuItem(
-                                                        value: item.lifecycleStatus == 'draft'
-                                                            ? _TemplateAction.edit
-                                                            : _TemplateAction.createDraft,
+                                                        value:
+                                                            item.lifecycleStatus ==
+                                                                'draft'
+                                                            ? _TemplateAction
+                                                                  .edit
+                                                            : _TemplateAction
+                                                                  .createDraft,
                                                         child: Text(
-                                                          item.lifecycleStatus == 'draft'
+                                                          item.lifecycleStatus ==
+                                                                  'draft'
                                                               ? '编辑'
                                                               : '创建草稿',
                                                         ),
@@ -3398,19 +3981,22 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                                     );
                                                     items.add(
                                                       const PopupMenuItem(
-                                                        value: _TemplateAction.copy,
+                                                        value: _TemplateAction
+                                                            .copy,
                                                         child: Text('复制（同产品）'),
                                                       ),
                                                     );
                                                     items.add(
                                                       const PopupMenuItem(
-                                                        value: _TemplateAction.copyToProduct,
+                                                        value: _TemplateAction
+                                                            .copyToProduct,
                                                         child: Text('跨产品复制'),
                                                       ),
                                                     );
                                                     items.add(
                                                       const PopupMenuItem(
-                                                        value: _TemplateAction.copyFromMaster,
+                                                        value: _TemplateAction
+                                                            .copyFromMaster,
                                                         child: Text('从系统母版套版'),
                                                       ),
                                                     );

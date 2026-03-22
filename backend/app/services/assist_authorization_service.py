@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.core.authz_catalog import PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW
-from app.core.production_constants import ORDER_STATUS_COMPLETED, PROCESS_STATUS_COMPLETED
+from app.core.production_constants import (
+    ORDER_STATUS_COMPLETED,
+    PROCESS_STATUS_COMPLETED,
+)
 from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
@@ -124,9 +128,12 @@ def create_assist_authorization(
             select(ProductionAssistAuthorization).where(
                 ProductionAssistAuthorization.order_id == order_id,
                 ProductionAssistAuthorization.order_process_id == order_process_id,
-                ProductionAssistAuthorization.target_operator_user_id == target_operator_user_id,
+                ProductionAssistAuthorization.target_operator_user_id
+                == target_operator_user_id,
                 ProductionAssistAuthorization.requester_user_id == requester.id,
-                ProductionAssistAuthorization.status.in_([ASSIST_STATUS_PENDING, ASSIST_STATUS_APPROVED]),
+                ProductionAssistAuthorization.status.in_(
+                    [ASSIST_STATUS_PENDING, ASSIST_STATUS_APPROVED]
+                ),
                 ProductionAssistAuthorization.end_production_used_at.is_(None),
             )
         )
@@ -202,16 +209,28 @@ def list_assist_authorizations(
             raise ValueError("Invalid assist authorization status")
         stmt = stmt.where(ProductionAssistAuthorization.status == status)
     if order_code:
-        stmt = stmt.where(ProductionAssistAuthorization.order_code.ilike(f"%{order_code}%"))
+        stmt = stmt.where(
+            ProductionAssistAuthorization.order_code.ilike(f"%{order_code}%")
+        )
     if process_name:
-        stmt = stmt.where(ProductionAssistAuthorization.process_name.ilike(f"%{process_name}%"))
+        stmt = stmt.where(
+            ProductionAssistAuthorization.process_name.ilike(f"%{process_name}%")
+        )
     if requester_username:
         RequesterUser = aliased(User)
-        stmt = stmt.join(RequesterUser, ProductionAssistAuthorization.requester_user_id == RequesterUser.id, isouter=True)
+        stmt = stmt.join(
+            RequesterUser,
+            ProductionAssistAuthorization.requester_user_id == RequesterUser.id,
+            isouter=True,
+        )
         stmt = stmt.where(RequesterUser.username.ilike(f"%{requester_username}%"))
     if helper_username:
         HelperUser = aliased(User)
-        stmt = stmt.join(HelperUser, ProductionAssistAuthorization.helper_user_id == HelperUser.id, isouter=True)
+        stmt = stmt.join(
+            HelperUser,
+            ProductionAssistAuthorization.helper_user_id == HelperUser.id,
+            isouter=True,
+        )
         stmt = stmt.where(HelperUser.username.ilike(f"%{helper_username}%"))
     if created_at_from:
         stmt = stmt.where(ProductionAssistAuthorization.created_at >= created_at_from)
@@ -263,7 +282,9 @@ def review_assist_authorization(
     if row is None:
         raise ValueError("Assist authorization not found")
     if row.status != ASSIST_STATUS_PENDING:
-        raise ValueError(f"Only pending authorizations can be reviewed, current status: {row.status}")
+        raise ValueError(
+            f"Only pending authorizations can be reviewed, current status: {row.status}"
+        )
 
     now = datetime.now(timezone.utc)
     row.reviewer_user_id = reviewer.id
@@ -279,7 +300,9 @@ def review_assist_authorization(
         row.status = ASSIST_STATUS_REJECTED
         event_type = "assist_authorization_rejected"
         event_title = "代班审批拒绝"
-        event_detail = f"{reviewer.username} 拒绝代班申请，原因：{row.review_remark or '无'}"
+        event_detail = (
+            f"{reviewer.username} 拒绝代班申请，原因：{row.review_remark or '无'}"
+        )
 
     add_order_event_log(
         db,
@@ -300,11 +323,17 @@ def review_assist_authorization(
     # 通知申请人审批结果
     if row.requester_user_id:
         if approve:
-            msg_title = f"代班申请已通过：{row.order_code or ''} / {row.process_name or ''}"
+            msg_title = (
+                f"代班申请已通过：{row.order_code or ''} / {row.process_name or ''}"
+            )
             msg_summary = f"{reviewer.username} 审批通过，{row.helper.username if row.helper else ''} 可代班执行"
         else:
-            msg_title = f"代班申请已拒绝：{row.order_code or ''} / {row.process_name or ''}"
-            msg_summary = f"{reviewer.username} 拒绝代班申请，原因：{row.review_remark or '无'}"
+            msg_title = (
+                f"代班申请已拒绝：{row.order_code or ''} / {row.process_name or ''}"
+            )
+            msg_summary = (
+                f"{reviewer.username} 拒绝代班申请，原因：{row.review_remark or '无'}"
+            )
         create_message_for_users(
             db,
             message_type="todo" if approve else "notice",
@@ -316,7 +345,15 @@ def review_assist_authorization(
             source_id=str(row.id),
             source_code=row.order_code,
             target_page_code="production",
-            target_tab_code="production_order_query",
+            target_tab_code="production_assist_approval",
+            target_route_payload_json=json.dumps(
+                {
+                    "action": "detail",
+                    "authorization_id": row.id,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
             recipient_user_ids=[row.requester_user_id],
             dedupe_key=f"assist_auth_review_{row.id}",
             created_by_user_id=reviewer.id,

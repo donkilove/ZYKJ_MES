@@ -19,11 +19,13 @@ class MaintenanceExecutionPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canExecute,
+    this.jumpPayloadJson,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canExecute;
+  final String? jumpPayloadJson;
 
   @override
   State<MaintenanceExecutionPage> createState() =>
@@ -46,6 +48,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   DateTime? _dueDateEnd;
   String? _stageCodeFilter;
   List<CraftStageItem> _stages = const [];
+  String? _lastHandledJumpPayloadJson;
 
   @override
   void initState() {
@@ -54,6 +57,17 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     _craftService = CraftService(widget.session);
     _loadStages();
     _loadItems();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumeJumpPayload(widget.jumpPayloadJson);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant MaintenanceExecutionPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.jumpPayloadJson != oldWidget.jumpPayloadJson) {
+      _consumeJumpPayload(widget.jumpPayloadJson);
+    }
   }
 
   @override
@@ -356,7 +370,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     try {
       await _equipmentService.cancelExecution(workOrderId: item.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('工单已取消')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('工单已取消')));
       }
       await _loadItems();
     } catch (error) {
@@ -365,22 +381,53 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         widget.onLogout();
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取消工单失败：${_errorMessage(error)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('取消工单失败：${_errorMessage(error)}')));
     }
   }
 
   Future<void> _showDetail(MaintenanceWorkOrderItem item) async {
+    await _showDetailById(item.id);
+  }
+
+  Future<void> _showDetailById(int workOrderId) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MaintenanceExecutionDetailPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          workOrderId: item.id,
+          workOrderId: workOrderId,
         ),
       ),
     );
+  }
+
+  void _consumeJumpPayload(String? rawPayload) {
+    if (!mounted ||
+        rawPayload == null ||
+        rawPayload.trim().isEmpty ||
+        rawPayload == _lastHandledJumpPayloadJson) {
+      return;
+    }
+    try {
+      final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
+      final action = (payload['action'] as String? ?? '').trim();
+      final rawWorkOrderId = payload['work_order_id'];
+      final workOrderId = rawWorkOrderId is int
+          ? rawWorkOrderId
+          : int.tryParse('${rawWorkOrderId ?? ''}');
+      if (action != 'detail' || workOrderId == null || workOrderId <= 0) {
+        return;
+      }
+      _lastHandledJumpPayloadJson = rawPayload;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _showDetailById(workOrderId);
+      });
+    } catch (_) {}
   }
 
   String _formatDateTime(DateTime value) {
@@ -393,7 +440,10 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   }
 
   Future<void> _exportCsv() async {
-    setState(() { _exporting = true; _message = ''; });
+    setState(() {
+      _exporting = true;
+      _message = '';
+    });
     try {
       final csvBase64 = await _equipmentService.exportWorkOrders(
         status: _statusFilter,
@@ -417,14 +467,21 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         ],
       );
       if (location == null || !mounted) return;
-      await XFile.fromData(bytes, mimeType: 'text/csv', name: 'maintenance_executions.csv').saveTo(location.path);
+      await XFile.fromData(
+        bytes,
+        mimeType: 'text/csv',
+        name: 'maintenance_executions.csv',
+      ).saveTo(location.path);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功：${location.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
     } catch (error) {
       if (!mounted) return;
-      if (_isUnauthorized(error)) { widget.onLogout(); return; }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
       setState(() => _message = '导出失败：${_errorMessage(error)}');
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -486,7 +543,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                   if (picked != null) setState(() => _dueDateStart = picked);
                 },
                 icon: const Icon(Icons.event),
-                label: Text(_dueDateStart == null ? '到期开始' : _formatDate(_dueDateStart!)),
+                label: Text(
+                  _dueDateStart == null ? '到期开始' : _formatDate(_dueDateStart!),
+                ),
               ),
               const SizedBox(width: 8),
               OutlinedButton.icon(
@@ -498,7 +557,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                   if (picked != null) setState(() => _dueDateEnd = picked);
                 },
                 icon: const Icon(Icons.event_available),
-                label: Text(_dueDateEnd == null ? '到期结束' : _formatDate(_dueDateEnd!)),
+                label: Text(
+                  _dueDateEnd == null ? '到期结束' : _formatDate(_dueDateEnd!),
+                ),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
@@ -517,11 +578,26 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                   initialValue: _statusFilter,
                   items: const [
                     DropdownMenuItem<String?>(value: null, child: Text('全部状态')),
-                    DropdownMenuItem<String?>(value: 'pending', child: Text('待执行')),
-                    DropdownMenuItem<String?>(value: 'in_progress', child: Text('执行中')),
-                    DropdownMenuItem<String?>(value: 'overdue', child: Text('已逾期')),
-                    DropdownMenuItem<String?>(value: 'done', child: Text('已完成')),
-                    DropdownMenuItem<String?>(value: 'cancelled', child: Text('已取消')),
+                    DropdownMenuItem<String?>(
+                      value: 'pending',
+                      child: Text('待执行'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'in_progress',
+                      child: Text('执行中'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'overdue',
+                      child: Text('已逾期'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'done',
+                      child: Text('已完成'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'cancelled',
+                      child: Text('已取消'),
+                    ),
                   ],
                   onChanged: (value) {
                     setState(() => _statusFilter = value);
@@ -540,9 +616,15 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                   child: DropdownButtonFormField<String?>(
                     initialValue: _stageCodeFilter,
                     items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('全部工段')),
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('全部工段'),
+                      ),
                       ..._stages.map(
-                        (s) => DropdownMenuItem<String?>(value: s.code, child: Text(s.name)),
+                        (s) => DropdownMenuItem<String?>(
+                          value: s.code,
+                          child: Text(s.name),
+                        ),
                       ),
                     ],
                     onChanged: (value) {
@@ -566,7 +648,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                 ],
               ),
               const SizedBox(width: 12),
-              if (_dueDateStart != null || _dueDateEnd != null || _stageCodeFilter != null)
+              if (_dueDateStart != null ||
+                  _dueDateEnd != null ||
+                  _stageCodeFilter != null)
                 TextButton(
                   onPressed: _loading
                       ? null
@@ -635,8 +719,20 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                               DataCell(Text(_formatDate(item.dueDate))),
                               DataCell(Text(_statusLabel(item.status))),
                               DataCell(Text(item.executorUsername ?? '-')),
-                              DataCell(Text(item.startedAt != null ? _formatDateTime(item.startedAt!) : '-')),
-                              DataCell(Text(item.completedAt != null ? _formatDateTime(item.completedAt!) : '-')),
+                              DataCell(
+                                Text(
+                                  item.startedAt != null
+                                      ? _formatDateTime(item.startedAt!)
+                                      : '-',
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  item.completedAt != null
+                                      ? _formatDateTime(item.completedAt!)
+                                      : '-',
+                                ),
+                              ),
                               DataCell(Text(item.resultSummary ?? '-')),
                               DataCell(
                                 Row(

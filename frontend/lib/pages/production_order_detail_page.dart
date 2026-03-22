@@ -22,6 +22,7 @@ class ProductionOrderDetailPage extends StatefulWidget {
     required this.onCompleteOrder,
     required this.onConfigurePipelineOrder,
     required this.onDisablePipelineOrder,
+    this.readOnly = false,
     this.service,
   });
 
@@ -38,6 +39,7 @@ class ProductionOrderDetailPage extends StatefulWidget {
   final Future<bool> Function(ProductionOrderItem order)
   onConfigurePipelineOrder;
   final Future<bool> Function(ProductionOrderItem order) onDisablePipelineOrder;
+  final bool readOnly;
   final ProductionService? service;
 
   @override
@@ -161,6 +163,9 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
   }
 
   Widget _buildActionBar(ProductionOrderItem order) {
+    if (widget.readOnly) {
+      return const SizedBox.shrink();
+    }
     final canEdit =
         widget.canEditOrder && order.status == 'pending' && !_acting;
     final canDelete =
@@ -379,7 +384,8 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
                           '${snapshotParts.isEmpty ? '' : '\n快照：${snapshotParts.join(' ｜ ')}'}'
                           '${payload.isEmpty ? '' : '\n载荷：$payload'}',
                         ),
-                        isThreeLine: snapshotParts.isNotEmpty || payload.isNotEmpty,
+                        isThreeLine:
+                            snapshotParts.isNotEmpty || payload.isNotEmpty,
                         trailing: Text(item.operatorUsername ?? '-'),
                       );
                     },

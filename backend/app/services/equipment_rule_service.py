@@ -80,7 +80,11 @@ def _validate_parameter_limits(
     upper_limit,
     lower_limit,
 ) -> None:
-    if upper_limit is not None and lower_limit is not None and lower_limit > upper_limit:
+    if (
+        upper_limit is not None
+        and lower_limit is not None
+        and lower_limit > upper_limit
+    ):
         raise ValueError("lower_limit cannot be greater than upper_limit")
 
 
@@ -90,14 +94,15 @@ def _normalize_equipment_scope(
     equipment_id: int | None,
     equipment_type: str | None,
 ) -> tuple[int | None, str | None, str | None, str | None]:
-    normalized_type = (equipment_type or '').strip() or None
+    normalized_type = (equipment_type or "").strip() or None
     if equipment_id is None and normalized_type is None:
-        raise ValueError('Equipment scope is required')
+        raise ValueError("Equipment scope is required")
     code, name = _resolve_equipment_fields(db, equipment_id)
     return equipment_id, normalized_type, code, name
 
 
 # ── 设备规则 ──────────────────────────────────────────────────────────────────
+
 
 def list_equipment_rules(
     db: Session,
@@ -117,11 +122,15 @@ def list_equipment_rules(
         like = f"%{keyword.strip()}%"
         stmt = stmt.where(EquipmentRule.rule_name.ilike(like))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    rows = db.execute(
-        stmt.order_by(EquipmentRule.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    ).scalars().all()
+    rows = (
+        db.execute(
+            stmt.order_by(EquipmentRule.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        .scalars()
+        .all()
+    )
     return EquipmentRuleListResult(total=total, items=[_to_rule_item(r) for r in rows])
 
 
@@ -133,9 +142,15 @@ def create_equipment_rule(
         equipment_id=payload.equipment_id,
         equipment_type=payload.equipment_type,
     )
-    existing_rule = db.execute(
-        select(EquipmentRule).where(EquipmentRule.rule_code == payload.rule_code.strip())
-    ).scalars().first()
+    existing_rule = (
+        db.execute(
+            select(EquipmentRule).where(
+                EquipmentRule.rule_code == payload.rule_code.strip()
+            )
+        )
+        .scalars()
+        .first()
+    )
     if existing_rule is not None:
         raise ValueError("Equipment rule code already exists")
     row = EquipmentRule(
@@ -164,12 +179,16 @@ def update_equipment_rule(
         equipment_id=payload.equipment_id,
         equipment_type=payload.equipment_type,
     )
-    existing_rule = db.execute(
-        select(EquipmentRule).where(
-            EquipmentRule.rule_code == payload.rule_code.strip(),
-            EquipmentRule.id != row.id,
+    existing_rule = (
+        db.execute(
+            select(EquipmentRule).where(
+                EquipmentRule.rule_code == payload.rule_code.strip(),
+                EquipmentRule.id != row.id,
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if existing_rule is not None:
         raise ValueError("Equipment rule code already exists")
     row.equipment_id = equipment_id
@@ -202,10 +221,12 @@ def delete_equipment_rule(db: Session, *, row: EquipmentRule) -> None:
 
 # ── 运行参数 ──────────────────────────────────────────────────────────────────
 
+
 def list_runtime_parameters(
     db: Session,
     *,
     equipment_id: int | None = None,
+    equipment_type: str | None = None,
     keyword: str | None = None,
     is_enabled: bool | None = None,
     page: int = 1,
@@ -214,6 +235,10 @@ def list_runtime_parameters(
     stmt = select(EquipmentRuntimeParameter)
     if equipment_id is not None:
         stmt = stmt.where(EquipmentRuntimeParameter.equipment_id == equipment_id)
+    if equipment_type and equipment_type.strip():
+        stmt = stmt.where(
+            EquipmentRuntimeParameter.equipment_type == equipment_type.strip()
+        )
     if is_enabled is not None:
         stmt = stmt.where(EquipmentRuntimeParameter.is_enabled == is_enabled)
     if keyword:
@@ -223,11 +248,15 @@ def list_runtime_parameters(
             | EquipmentRuntimeParameter.param_code.ilike(like)
         )
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    rows = db.execute(
-        stmt.order_by(EquipmentRuntimeParameter.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    ).scalars().all()
+    rows = (
+        db.execute(
+            stmt.order_by(EquipmentRuntimeParameter.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        .scalars()
+        .all()
+    )
     return EquipmentRuntimeParameterListResult(
         total=total, items=[_to_param_item(r) for r in rows]
     )
@@ -251,8 +280,12 @@ def create_runtime_parameter(
         equipment_type=equipment_type,
         equipment_code=code,
         equipment_name=name,
-        param_code=_normalize_required_text(payload.param_code, field_name="Parameter code"),
-        param_name=_normalize_required_text(payload.param_name, field_name="Parameter name"),
+        param_code=_normalize_required_text(
+            payload.param_code, field_name="Parameter code"
+        ),
+        param_name=_normalize_required_text(
+            payload.param_name, field_name="Parameter name"
+        ),
         unit=payload.unit.strip(),
         standard_value=payload.standard_value,
         upper_limit=payload.upper_limit,
@@ -286,8 +319,12 @@ def update_runtime_parameter(
     row.equipment_type = equipment_type
     row.equipment_code = code
     row.equipment_name = name
-    row.param_code = _normalize_required_text(payload.param_code, field_name="Parameter code")
-    row.param_name = _normalize_required_text(payload.param_name, field_name="Parameter name")
+    row.param_code = _normalize_required_text(
+        payload.param_code, field_name="Parameter code"
+    )
+    row.param_name = _normalize_required_text(
+        payload.param_name, field_name="Parameter name"
+    )
     row.unit = payload.unit.strip()
     row.standard_value = payload.standard_value
     row.upper_limit = payload.upper_limit
@@ -299,9 +336,7 @@ def update_runtime_parameter(
     return row
 
 
-def delete_runtime_parameter(
-    db: Session, *, row: EquipmentRuntimeParameter
-) -> None:
+def delete_runtime_parameter(db: Session, *, row: EquipmentRuntimeParameter) -> None:
     db.delete(row)
     db.flush()
 

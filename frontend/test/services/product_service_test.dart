@@ -367,5 +367,33 @@ void main() {
         ),
       );
     });
+
+    test('exports product parameters with effective filter query', () async {
+      final server = await TestHttpServer.start({
+        'GET /products/parameters/export': (request) {
+          expect(request.uri.queryParameters['keyword'], '产品A');
+          expect(request.uri.queryParameters['category'], '贴片');
+          expect(request.uri.queryParameters['lifecycle_status'], 'active');
+          expect(request.uri.queryParameters['version_keyword'], 'V1.0');
+          expect(request.uri.queryParameters['effective_only'], 'true');
+          return const TestResponse(statusCode: 200, body: 'ABCD');
+        },
+      });
+      addTearDown(server.close);
+
+      final service = ProductService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-product'),
+      );
+
+      final bytes = await service.exportProductParameters(
+        keyword: '产品A',
+        category: '贴片',
+        lifecycleStatus: 'active',
+        versionKeyword: 'V1.0',
+        effectiveOnly: true,
+      );
+
+      expect(bytes, 'ABCD'.codeUnits);
+    });
   });
 }

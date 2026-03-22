@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.core.rbac import ROLE_SYSTEM_ADMIN
+
 
 @dataclass(frozen=True, slots=True)
 class ModuleDefinition:
@@ -17,6 +19,8 @@ class FeatureDefinition:
     page_code: str
     action_permission_codes: tuple[str, ...]
     dependency_permission_codes: tuple[str, ...] = ()
+    hidden_in_capability_pack: bool = False
+    assignable_role_codes: tuple[str, ...] = ()
 
 
 def module_permission_code(module_code: str) -> str:
@@ -35,7 +39,9 @@ MODULE_DEFINITIONS: tuple[ModuleDefinition, ...] = (
 )
 
 
-MODULE_NAME_BY_CODE = {item.module_code: item.module_name for item in MODULE_DEFINITIONS}
+MODULE_NAME_BY_CODE = {
+    item.module_code: item.module_name for item in MODULE_DEFINITIONS
+}
 
 
 FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
@@ -58,6 +64,8 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
             "authz.role_permissions.view",
             "authz.role_permissions.update",
         ),
+        hidden_in_capability_pack=True,
+        assignable_role_codes=(ROLE_SYSTEM_ADMIN,),
     ),
     FeatureDefinition(
         permission_code="feature.user.user_management.view",
@@ -244,6 +252,8 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
             "user.sessions.force_offline.batch",
         ),
         dependency_permission_codes=("feature.user.login_session.online_view",),
+        hidden_in_capability_pack=True,
+        assignable_role_codes=(ROLE_SYSTEM_ADMIN,),
     ),
     FeatureDefinition(
         permission_code="feature.product.catalog.read",
@@ -719,7 +729,17 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         ),
         dependency_permission_codes=("feature.message.center.view",),
     ),
+    FeatureDefinition(
+        permission_code="feature.message.announcement.publish",
+        permission_name="发布站内公告",
+        module_code="message",
+        page_code="message_center",
+        action_permission_codes=("message.announcements.publish",),
+        dependency_permission_codes=("feature.message.center.view",),
+    ),
 )
 
 
-FEATURE_BY_PERMISSION_CODE = {item.permission_code: item for item in FEATURE_DEFINITIONS}
+FEATURE_BY_PERMISSION_CODE = {
+    item.permission_code: item for item in FEATURE_DEFINITIONS
+}

@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -153,6 +152,38 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     }
   }
 
+  String? _validateProductName(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return '产品名称不能为空';
+    }
+    if (trimmed.length > 128) {
+      return '产品名称不能超过 128 个字符';
+    }
+    return null;
+  }
+
+  String? _validateProductRemark(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.length > 500) {
+      return '备注不能超过 500 个字符';
+    }
+    return null;
+  }
+
+  Widget _buildReadonlyStatusField({
+    required String label,
+    required String value,
+  }) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      child: Text(value),
+    );
+  }
+
   String _parameterHistoryTypeLabel(String value) {
     switch (value) {
       case 'create':
@@ -198,6 +229,14 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       return '-';
     }
     return 'V1.${version - 1}';
+  }
+
+  String _noEffectiveVersionHint(ProductItem product) {
+    final reason = product.inactiveReason?.trim() ?? '';
+    if (reason.isNotEmpty) {
+      return reason;
+    }
+    return '当前无生效版本，请前往版本管理生效版本后恢复启用。';
   }
 
   Future<bool> _confirmImpact(
@@ -364,9 +403,10 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       if (!mounted) {
         return;
       }
+      final successText = targetStatus == 'inactive' ? '产品已停用' : '产品状态已更新';
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('产品生命周期已更新')));
+      ).showSnackBar(SnackBar(content: Text(successText)));
       await _loadProducts();
     } catch (error) {
       if (!mounted) {
@@ -945,15 +985,28 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                                 if (!mounted) {
                                                   return;
                                                 }
+                                                final refreshedProduct =
+                                                    await _productService
+                                                        .getProduct(
+                                                          productId: product.id,
+                                                        );
+                                                if (!mounted) {
+                                                  return;
+                                                }
                                                 ScaffoldMessenger.of(
                                                   this.context,
                                                 ).showSnackBar(
                                                   SnackBar(
                                                     content: Text(
-                                                      '版本 ${item.displayVersion} 已生效',
+                                                      refreshedProduct
+                                                                  .lifecycleStatus ==
+                                                              'active'
+                                                          ? '版本 ${item.displayVersion} 已生效，产品已恢复启用'
+                                                          : '版本 ${item.displayVersion} 已生效',
                                                     ),
                                                   ),
                                                 );
+                                                await _loadProducts();
                                                 await reloadVersions(
                                                   setLocalState,
                                                 );
@@ -993,15 +1046,28 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                                 if (!mounted) {
                                                   return;
                                                 }
+                                                final refreshedProduct =
+                                                    await _productService
+                                                        .getProduct(
+                                                          productId: product.id,
+                                                        );
+                                                if (!mounted) {
+                                                  return;
+                                                }
                                                 ScaffoldMessenger.of(
                                                   this.context,
                                                 ).showSnackBar(
                                                   SnackBar(
                                                     content: Text(
-                                                      '版本 ${item.displayVersion} 已停用',
+                                                      refreshedProduct
+                                                                  .lifecycleStatus ==
+                                                              'inactive'
+                                                          ? '版本 ${item.displayVersion} 已停用，产品因无生效版本已同步停用'
+                                                          : '版本 ${item.displayVersion} 已停用',
                                                     ),
                                                   ),
                                                 );
+                                                await _loadProducts();
                                                 await reloadVersions(
                                                   setLocalState,
                                                 );
@@ -1242,9 +1308,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         name: 'products.csv',
       ).saveTo(location.path);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出成功：${location.path}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
       }
     } catch (error) {
       if (!mounted) return;
@@ -1252,9 +1318,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         widget.onLogout();
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败：${_errorMessage(error)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出失败：${_errorMessage(error)}')));
     }
   }
 
@@ -1280,56 +1346,66 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
               title: const Text('编辑产品'),
               content: Form(
                 key: formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 child: SizedBox(
                   width: 420,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: '产品名称',
-                          border: OutlineInputBorder(),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildReadonlyStatusField(
+                          label: '当前状态',
+                          value: _lifecycleLabel(product.lifecycleStatus),
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入产品名称';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedCategory,
-                        decoration: const InputDecoration(
-                          labelText: '产品分类',
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: nameController,
+                          maxLength: 128,
+                          maxLengthEnforcement: MaxLengthEnforcement.none,
+                          decoration: const InputDecoration(
+                            labelText: '产品名称',
+                            hintText: '请输入 1-128 个字符，提交时自动去除首尾空格',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: _validateProductName,
                         ),
-                        items: _productCategoryOptions
-                            .map(
-                              (category) => DropdownMenuItem<String>(
-                                value: category,
-                                child: Text(category),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setLocalState(() {
-                            selectedCategory = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: remarkController,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: '备注',
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedCategory,
+                          decoration: const InputDecoration(
+                            labelText: '产品分类',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: _productCategoryOptions
+                              .map(
+                                (category) => DropdownMenuItem<String>(
+                                  value: category,
+                                  child: Text(category),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setLocalState(() {
+                              selectedCategory = value;
+                            });
+                          },
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: remarkController,
+                          maxLines: 3,
+                          maxLength: 500,
+                          maxLengthEnforcement: MaxLengthEnforcement.none,
+                          decoration: const InputDecoration(
+                            labelText: '备注',
+                            hintText: '最多 500 个字符，提交时自动去除首尾空格',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: _validateProductRemark,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1374,9 +1450,6 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       },
     );
 
-    nameController.dispose();
-    remarkController.dispose();
-
     if (updated == true) {
       await _loadProducts();
     }
@@ -1402,58 +1475,68 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
               title: const Text('添加产品'),
               content: Form(
                 key: formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 child: SizedBox(
                   width: 420,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: '产品名称',
-                          border: OutlineInputBorder(),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildReadonlyStatusField(
+                          label: '默认状态',
+                          value: '停用（待生效版本）',
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入产品名称';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedCategory,
-                        decoration: const InputDecoration(
-                          labelText: '产品分类',
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: nameController,
+                          maxLength: 128,
+                          maxLengthEnforcement: MaxLengthEnforcement.none,
+                          decoration: const InputDecoration(
+                            labelText: '产品名称',
+                            hintText: '请输入 1-128 个字符，提交时自动去除首尾空格',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: _validateProductName,
                         ),
-                        items: _productCategoryOptions
-                            .map(
-                              (category) => DropdownMenuItem<String>(
-                                value: category,
-                                child: Text(category),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setLocalState(() {
-                            selectedCategory = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: remarkController,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: '备注',
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedCategory,
+                          decoration: const InputDecoration(
+                            labelText: '产品分类',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: _productCategoryOptions
+                              .map(
+                                (category) => DropdownMenuItem<String>(
+                                  value: category,
+                                  child: Text(category),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setLocalState(() {
+                              selectedCategory = value;
+                            });
+                          },
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: remarkController,
+                          maxLines: 3,
+                          maxLength: 500,
+                          maxLengthEnforcement: MaxLengthEnforcement.none,
+                          decoration: const InputDecoration(
+                            labelText: '备注',
+                            hintText: '最多 500 个字符，提交时自动去除首尾空格',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: _validateProductRemark,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1498,9 +1581,6 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         );
       },
     );
-
-    nameController.dispose();
-    remarkController.dispose();
 
     if (created == true) {
       await _loadProducts();
@@ -1759,10 +1839,20 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     if (!mounted) return;
 
     String paramSearch = '';
-    final currentVersionItem = _findVersionByNumber(versions, product.currentVersion);
-    final effectiveVersionItem = _findVersionByNumber(versions, product.effectiveVersion);
-    final currentVersionLabel = currentVersionItem?.versionLabel ?? _formatDisplayVersion(product.currentVersion);
-    final effectiveVersionLabel = effectiveVersionItem?.versionLabel ?? _formatDisplayVersion(product.effectiveVersion);
+    final currentVersionItem = _findVersionByNumber(
+      versions,
+      product.currentVersion,
+    );
+    final effectiveVersionItem = _findVersionByNumber(
+      versions,
+      product.effectiveVersion,
+    );
+    final currentVersionLabel =
+        currentVersionItem?.versionLabel ??
+        _formatDisplayVersion(product.currentVersion);
+    final effectiveVersionLabel =
+        effectiveVersionItem?.versionLabel ??
+        _formatDisplayVersion(product.effectiveVersion);
     final currentVersionStatus = currentVersionItem != null
         ? _versionLifecycleLabel(currentVersionItem.lifecycleStatus)
         : versionError != null
@@ -1780,133 +1870,203 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
             }).toList();
 
             return AlertDialog(
-          title: Text('产品详情 - ${product.name}'),
-          content: SizedBox(
-            width: 620,
-            height: 560,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 基本信息区
-                  const Text('基本信息', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  const Divider(),
-                  _detailRow('产品名称', product.name),
-                  _detailRow('产品分类', product.category.isEmpty ? '-' : product.category),
-                  _detailRow('状态', _lifecycleLabel(product.lifecycleStatus)),
-                  _detailRow('当前版本', currentVersionLabel),
-                  _detailRow('当前版本状态', currentVersionStatus),
-                  _detailRow(
-                    '生效版本',
-                    product.effectiveVersion > 0
-                        ? effectiveVersionLabel
-                        : '-',
-                  ),
-                  if (product.effectiveAt != null)
-                    _detailRow('生效时间', _formatTime(product.effectiveAt!)),
-                  if (product.inactiveReason != null && product.inactiveReason!.isNotEmpty)
-                    _detailRow('停用原因', product.inactiveReason!),
-                  _detailRow('备注', product.remark.isEmpty ? '-' : product.remark),
-                  _detailRow('创建时间', _formatTime(product.createdAt)),
-                  _detailRow('更新时间', _formatTime(product.updatedAt)),
-
-                  // 当前生效参数快照区
-                  const SizedBox(height: 16),
-                  Text(
-                    '当前生效参数快照${effectiveVersionItem != null ? '（${effectiveVersionItem.versionLabel}）' : ''}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                  const Divider(),
-                  if (paramError != null)
-                    Text('加载参数失败：$paramError', style: const TextStyle(color: Colors.red))
-                  else if (parameters == null || parameters.isEmpty)
-                    const Text('暂无参数', style: TextStyle(color: Colors.grey))
-                  else ...[
-                    SizedBox(
-                      width: 240,
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          hintText: '搜索参数名称',
-                          prefixIcon: Icon(Icons.search, size: 18),
-                          isDense: true,
-                          border: OutlineInputBorder(),
+              title: Text('产品详情 - ${product.name}'),
+              content: SizedBox(
+                width: 620,
+                height: 560,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 基本信息区
+                      const Text(
+                        '基本信息',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
                         ),
-                        onChanged: (v) => setDialogState(() => paramSearch = v),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    DataTable(
-                      columnSpacing: 16,
-                      headingRowHeight: 36,
-                      dataRowMinHeight: 32,
-                      dataRowMaxHeight: 40,
-                      columns: const [
-                        DataColumn(label: Text('参数名')),
-                        DataColumn(label: Text('分组')),
-                        DataColumn(label: Text('类型')),
-                        DataColumn(label: Text('值')),
-                        DataColumn(label: Text('说明')),
-                      ],
-                      rows: filteredParams.map((p) => DataRow(cells: [
-                        DataCell(Text(p.name)),
-                        DataCell(Text(p.category)),
-                        DataCell(Text(p.type)),
-                        DataCell(Text(p.value, overflow: TextOverflow.ellipsis)),
-                        DataCell(Text(p.description.isEmpty ? '-' : p.description, overflow: TextOverflow.ellipsis)),
-                      ])).toList(),
-                    ),
-                  ],
+                      const Divider(),
+                      _detailRow('产品名称', product.name),
+                      _detailRow(
+                        '产品分类',
+                        product.category.isEmpty ? '-' : product.category,
+                      ),
+                      _detailRow(
+                        '状态',
+                        _lifecycleLabel(product.lifecycleStatus),
+                      ),
+                      _detailRow('当前版本', currentVersionLabel),
+                      _detailRow('当前版本状态', currentVersionStatus),
+                      _detailRow(
+                        '生效版本',
+                        product.effectiveVersion > 0
+                            ? effectiveVersionLabel
+                            : '无',
+                      ),
+                      if (product.effectiveAt != null)
+                        _detailRow('生效时间', _formatTime(product.effectiveAt!)),
+                      if (product.inactiveReason != null &&
+                          product.inactiveReason!.isNotEmpty)
+                        _detailRow('停用原因', product.inactiveReason!),
+                      _detailRow(
+                        '备注',
+                        product.remark.isEmpty ? '-' : product.remark,
+                      ),
+                      _detailRow('创建时间', _formatTime(product.createdAt)),
+                      _detailRow('更新时间', _formatTime(product.updatedAt)),
 
-                  // 变更记录区
-                  const SizedBox(height: 16),
-                  const Text('变更记录', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  const Divider(),
-                  if (historyError != null)
-                    Text('加载变更记录失败：$historyError', style: const TextStyle(color: Colors.red))
-                  else if (history == null || history.isEmpty)
-                    const Text('暂无变更记录', style: TextStyle(color: Colors.grey))
-                  else
-                    ...history.map((h) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 140,
-                            child: Text(
-                              _formatTime(h.createdAt),
-                              style: const TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 80,
-                            child: Text(h.operatorUsername, style: const TextStyle(fontSize: 12)),
-                          ),
-                          Expanded(
-                            child: Text(
-                              [
-                                if (h.versionLabel?.trim().isNotEmpty == true) h.versionLabel!,
-                                _parameterHistoryTypeLabel(h.changeType),
-                                h.remark,
-                                if (h.changedKeys.isNotEmpty) '参数：${h.changedKeys.join(', ')}',
-                              ].join('｜'),
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ],
+                      // 当前生效参数快照区
+                      const SizedBox(height: 16),
+                      Text(
+                        '当前生效参数快照${effectiveVersionItem != null ? '（${effectiveVersionItem.versionLabel}）' : ''}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
-                    )),
-                ],
+                      const Divider(),
+                      if (paramError != null)
+                        Text(
+                          paramError.contains('暂无生效版本')
+                              ? _noEffectiveVersionHint(product)
+                              : '加载参数失败：$paramError',
+                          style: TextStyle(
+                            color: paramError.contains('暂无生效版本')
+                                ? Colors.orange[700]
+                                : Colors.red,
+                          ),
+                        )
+                      else if (parameters == null || parameters.isEmpty)
+                        const Text('暂无参数', style: TextStyle(color: Colors.grey))
+                      else ...[
+                        SizedBox(
+                          width: 240,
+                          child: TextField(
+                            decoration: const InputDecoration(
+                              hintText: '搜索参数名称',
+                              prefixIcon: Icon(Icons.search, size: 18),
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (v) =>
+                                setDialogState(() => paramSearch = v),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        DataTable(
+                          columnSpacing: 16,
+                          headingRowHeight: 36,
+                          dataRowMinHeight: 32,
+                          dataRowMaxHeight: 40,
+                          columns: const [
+                            DataColumn(label: Text('参数名')),
+                            DataColumn(label: Text('分组')),
+                            DataColumn(label: Text('类型')),
+                            DataColumn(label: Text('值')),
+                            DataColumn(label: Text('说明')),
+                          ],
+                          rows: filteredParams
+                              .map(
+                                (p) => DataRow(
+                                  cells: [
+                                    DataCell(Text(p.name)),
+                                    DataCell(Text(p.category)),
+                                    DataCell(Text(p.type)),
+                                    DataCell(
+                                      Text(
+                                        p.value,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        p.description.isEmpty
+                                            ? '-'
+                                            : p.description,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
+
+                      // 变更记录区
+                      const SizedBox(height: 16),
+                      const Text(
+                        '变更记录',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const Divider(),
+                      if (historyError != null)
+                        Text(
+                          '加载变更记录失败：$historyError',
+                          style: const TextStyle(color: Colors.red),
+                        )
+                      else if (history == null || history.isEmpty)
+                        const Text(
+                          '暂无变更记录',
+                          style: TextStyle(color: Colors.grey),
+                        )
+                      else
+                        ...history.map(
+                          (h) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 140,
+                                  child: Text(
+                                    _formatTime(h.createdAt),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 80,
+                                  child: Text(
+                                    h.operatorUsername,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    [
+                                      if (h.versionLabel?.trim().isNotEmpty ==
+                                          true)
+                                        h.versionLabel!,
+                                      _parameterHistoryTypeLabel(h.changeType),
+                                      h.remark,
+                                      if (h.changedKeys.isNotEmpty)
+                                        '参数：${h.changedKeys.join(', ')}',
+                                    ].join('｜'),
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        );
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('关闭'),
+                ),
+              ],
+            );
           },
         );
       },
@@ -1921,7 +2081,10 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         children: [
           SizedBox(
             width: 100,
-            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
           Expanded(child: SelectableText(value)),
         ],
@@ -2036,7 +2199,10 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                   ),
                   items: const [
                     DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    DropdownMenuItem<String>(value: 'yes', child: Text('有生效版本')),
+                    DropdownMenuItem<String>(
+                      value: 'yes',
+                      child: Text('有生效版本'),
+                    ),
                     DropdownMenuItem<String>(value: 'no', child: Text('无生效版本')),
                   ],
                   onChanged: _loading
@@ -2080,7 +2246,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                     : () async {
                         final picked = await showDatePicker(
                           context: context,
-                          initialDate: _updatedAfter ?? DateTime.now().subtract(const Duration(days: 30)),
+                          initialDate:
+                              _updatedAfter ??
+                              DateTime.now().subtract(const Duration(days: 30)),
                           firstDate: DateTime(2020),
                           lastDate: DateTime.now(),
                           helpText: '选择更新起始日期',
@@ -2091,9 +2259,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                         }
                       },
                 icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(_updatedAfter != null
-                    ? '起始：${_formatTime(_updatedAfter!).substring(0, 10)}'
-                    : '更新起始日期'),
+                label: Text(
+                  _updatedAfter != null
+                      ? '起始：${_formatTime(_updatedAfter!).substring(0, 10)}'
+                      : '更新起始日期',
+                ),
               ),
               const SizedBox(width: 8),
               OutlinedButton.icon(
@@ -2108,16 +2278,25 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                           helpText: '选择更新截止日期',
                         );
                         if (picked != null) {
-                          setState(() => _updatedBefore = DateTime(
-                            picked.year, picked.month, picked.day, 23, 59, 59,
-                          ));
+                          setState(
+                            () => _updatedBefore = DateTime(
+                              picked.year,
+                              picked.month,
+                              picked.day,
+                              23,
+                              59,
+                              59,
+                            ),
+                          );
                           _loadProducts();
                         }
                       },
                 icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(_updatedBefore != null
-                    ? '截止：${_formatTime(_updatedBefore!).substring(0, 10)}'
-                    : '更新截止日期'),
+                label: Text(
+                  _updatedBefore != null
+                      ? '截止：${_formatTime(_updatedBefore!).substring(0, 10)}'
+                      : '更新截止日期',
+                ),
               ),
               if (_updatedAfter != null || _updatedBefore != null) ...[
                 const SizedBox(width: 8),

@@ -10,15 +10,26 @@ class _FakeRepairAndScrapService extends ProductionService {
   _FakeRepairAndScrapService()
     : super(AppSession(baseUrl: '', accessToken: ''));
 
+  String? lastScrapKeyword;
+  String? lastScrapProductName;
+  String? lastScrapProcessCode;
+  String lastScrapProgress = 'all';
+
   @override
   Future<ScrapStatisticsListResult> getScrapStatistics({
     required int page,
     required int pageSize,
     String? keyword,
+    String? productName,
+    String? processCode,
     String progress = 'all',
     DateTime? startDate,
     DateTime? endDate,
   }) async {
+    lastScrapKeyword = keyword;
+    lastScrapProductName = productName;
+    lastScrapProcessCode = processCode;
+    lastScrapProgress = progress;
     return ScrapStatisticsListResult(
       total: 1,
       items: [
@@ -89,6 +100,7 @@ void main() {
   testWidgets('production scrap statistics page renders list content', (
     tester,
   ) async {
+    final service = _FakeRepairAndScrapService();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -96,7 +108,7 @@ void main() {
             session: AppSession(baseUrl: '', accessToken: ''),
             onLogout: () {},
             canExport: true,
-            service: _FakeRepairAndScrapService(),
+            service: service,
           ),
         ),
       ),
@@ -108,6 +120,18 @@ void main() {
     expect(find.text('报废统计'), findsOneWidget);
     expect(find.text('PO-1'), findsOneWidget);
     expect(find.text('刀具磨损'), findsOneWidget);
+    expect(find.text('产品名称（精确）'), findsOneWidget);
+    expect(find.text('工序编码（精确）'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).at(0), 'PO-1');
+    await tester.enterText(find.byType(TextField).at(1), '产品A');
+    await tester.enterText(find.byType(TextField).at(2), '01-01');
+    await tester.tap(find.text('查询'));
+    await tester.pump();
+
+    expect(service.lastScrapKeyword, 'PO-1');
+    expect(service.lastScrapProductName, '产品A');
+    expect(service.lastScrapProcessCode, '01-01');
   });
 
   testWidgets('production repair orders page renders list content', (

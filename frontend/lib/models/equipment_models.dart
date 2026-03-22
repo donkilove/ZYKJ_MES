@@ -52,7 +52,11 @@ class EquipmentLedgerListResult {
 }
 
 class EquipmentOwnerOption {
-  EquipmentOwnerOption({required this.userId, required this.username, required this.fullName});
+  EquipmentOwnerOption({
+    required this.userId,
+    required this.username,
+    required this.fullName,
+  });
 
   final int userId;
   final String username;
@@ -108,7 +112,7 @@ class MaintenanceItemEntry {
       case maintenanceCycleYearly:
         return '每年执行';
       default:
-        return '自定义';
+        return '每$defaultCycleDays天执行';
     }
   }
 
@@ -280,7 +284,8 @@ class MaintenanceWorkOrderItem {
       itemId: json['item_id'] as int?,
       itemName: (json['item_name'] as String?) ?? '',
       sourceItemName: json['source_item_name'] as String?,
-      sourceExecutionProcessCode: json['source_execution_process_code'] as String?,
+      sourceExecutionProcessCode:
+          json['source_execution_process_code'] as String?,
       dueDate: DateTime.parse(json['due_date'] as String),
       status: (json['status'] as String?) ?? 'pending',
       executorUserId: json['executor_user_id'] as int?,
@@ -416,9 +421,14 @@ class EquipmentDetailResult {
       activePlans: (json['active_plans'] as List<dynamic>? ?? const [])
           .map((e) => MaintenancePlanItem.fromJson(e as Map<String, dynamic>))
           .toList(),
-      pendingWorkOrders: (json['pending_work_orders'] as List<dynamic>? ?? const [])
-          .map((e) => MaintenanceWorkOrderItem.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      pendingWorkOrders:
+          (json['pending_work_orders'] as List<dynamic>? ?? const [])
+              .map(
+                (e) => MaintenanceWorkOrderItem.fromJson(
+                  e as Map<String, dynamic>,
+                ),
+              )
+              .toList(),
       recentRecords: (json['recent_records'] as List<dynamic>? ?? const [])
           .map((e) => MaintenanceRecordItem.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -451,6 +461,7 @@ class MaintenanceWorkOrderDetail extends MaintenanceWorkOrderItem {
     required this.sourcePlanId,
     required this.sourcePlanCycleDays,
     required this.sourcePlanStartDate,
+    required this.sourcePlanSummary,
     required this.sourceEquipmentName,
     required this.sourceItemId,
     required this.recordId,
@@ -459,6 +470,7 @@ class MaintenanceWorkOrderDetail extends MaintenanceWorkOrderItem {
   final int? sourcePlanId;
   final int? sourcePlanCycleDays;
   final DateTime? sourcePlanStartDate;
+  final String? sourcePlanSummary;
   final String? sourceEquipmentName;
   final int? sourceItemId;
   final int? recordId;
@@ -473,7 +485,8 @@ class MaintenanceWorkOrderDetail extends MaintenanceWorkOrderItem {
       itemId: json['item_id'] as int?,
       itemName: (json['item_name'] as String?) ?? '',
       sourceItemName: json['source_item_name'] as String?,
-      sourceExecutionProcessCode: json['source_execution_process_code'] as String?,
+      sourceExecutionProcessCode:
+          json['source_execution_process_code'] as String?,
       dueDate: DateTime.parse(json['due_date'] as String),
       status: (json['status'] as String?) ?? 'pending',
       executorUserId: json['executor_user_id'] as int?,
@@ -494,6 +507,7 @@ class MaintenanceWorkOrderDetail extends MaintenanceWorkOrderItem {
       sourcePlanStartDate: json['source_plan_start_date'] != null
           ? DateTime.parse(json['source_plan_start_date'] as String)
           : null,
+      sourcePlanSummary: json['source_plan_summary'] as String?,
       sourceEquipmentName: json['source_equipment_name'] as String?,
       sourceItemId: json['source_item_id'] as int?,
       recordId: json['record_id'] as int?,
@@ -519,7 +533,10 @@ class MaintenanceRecordDetail extends MaintenanceRecordItem {
     required this.sourcePlanId,
     required this.sourcePlanCycleDays,
     required this.sourcePlanStartDate,
+    required this.sourcePlanSummary,
     required this.sourceEquipmentCode,
+    required this.sourceEquipmentName,
+    required this.sourceExecutionProcessCode,
     required this.sourceItemId,
     required this.sourceItemName,
   });
@@ -527,7 +544,10 @@ class MaintenanceRecordDetail extends MaintenanceRecordItem {
   final int? sourcePlanId;
   final int? sourcePlanCycleDays;
   final DateTime? sourcePlanStartDate;
+  final String? sourcePlanSummary;
   final String? sourceEquipmentCode;
+  final String? sourceEquipmentName;
+  final String? sourceExecutionProcessCode;
   final int? sourceItemId;
   final String? sourceItemName;
 
@@ -551,7 +571,11 @@ class MaintenanceRecordDetail extends MaintenanceRecordItem {
       sourcePlanStartDate: json['source_plan_start_date'] != null
           ? DateTime.parse(json['source_plan_start_date'] as String)
           : null,
+      sourcePlanSummary: json['source_plan_summary'] as String?,
       sourceEquipmentCode: json['source_equipment_code'] as String?,
+      sourceEquipmentName: json['source_equipment_name'] as String?,
+      sourceExecutionProcessCode:
+          json['source_execution_process_code'] as String?,
       sourceItemId: json['source_item_id'] as int?,
       sourceItemName: json['source_item_name'] as String?,
     );
@@ -681,7 +705,10 @@ class EquipmentRuntimeParameterItem {
 }
 
 class EquipmentRuntimeParameterListResult {
-  EquipmentRuntimeParameterListResult({required this.total, required this.items});
+  EquipmentRuntimeParameterListResult({
+    required this.total,
+    required this.items,
+  });
   final int total;
   final List<EquipmentRuntimeParameterItem> items;
 }

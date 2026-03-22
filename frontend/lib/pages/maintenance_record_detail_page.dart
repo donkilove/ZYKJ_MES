@@ -7,23 +7,70 @@ import '../services/api_exception.dart';
 import '../services/equipment_service.dart';
 import 'maintenance_execution_detail_page.dart';
 
+typedef MaintenanceAttachmentOpenCallback =
+    Future<void> Function(String urlText);
+
+Future<void> openMaintenanceAttachment(String urlText) async {
+  final uri = Uri.tryParse(urlText.trim());
+  if (uri == null) {
+    return;
+  }
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
+}
+
+class MaintenanceAttachmentAction extends StatelessWidget {
+  const MaintenanceAttachmentAction({
+    super.key,
+    required this.attachmentLink,
+    this.onOpen,
+    this.emptyLabel = '无附件',
+    this.buttonLabel = '查看附件',
+  });
+
+  final String? attachmentLink;
+  final MaintenanceAttachmentOpenCallback? onOpen;
+  final String emptyLabel;
+  final String buttonLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedLink = attachmentLink?.trim() ?? '';
+    if (normalizedLink.isEmpty) {
+      return Text(emptyLabel);
+    }
+    return TextButton.icon(
+      onPressed: () async {
+        await (onOpen ?? openMaintenanceAttachment)(normalizedLink);
+      },
+      icon: const Icon(Icons.attach_file),
+      label: Text(buttonLabel),
+    );
+  }
+}
+
 class MaintenanceRecordDetailPage extends StatefulWidget {
   const MaintenanceRecordDetailPage({
     super.key,
     required this.session,
     required this.onLogout,
     required this.recordId,
+    this.equipmentService,
+    this.onOpenAttachment,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final int recordId;
+  final EquipmentService? equipmentService;
+  final MaintenanceAttachmentOpenCallback? onOpenAttachment;
 
   @override
-  State<MaintenanceRecordDetailPage> createState() => _MaintenanceRecordDetailPageState();
+  State<MaintenanceRecordDetailPage> createState() =>
+      _MaintenanceRecordDetailPageState();
 }
 
-class _MaintenanceRecordDetailPageState extends State<MaintenanceRecordDetailPage> {
+class _MaintenanceRecordDetailPageState
+    extends State<MaintenanceRecordDetailPage> {
   late final EquipmentService _service;
   bool _loading = true;
   String _message = '';
@@ -32,7 +79,7 @@ class _MaintenanceRecordDetailPageState extends State<MaintenanceRecordDetailPag
   @override
   void initState() {
     super.initState();
-    _service = EquipmentService(widget.session);
+    _service = widget.equipmentService ?? EquipmentService(widget.session);
     _load();
   }
 
@@ -51,7 +98,10 @@ class _MaintenanceRecordDetailPageState extends State<MaintenanceRecordDetailPag
         widget.onLogout();
         return;
       }
-      setState(() => _message = error is ApiException ? error.message : error.toString());
+      setState(
+        () =>
+            _message = error is ApiException ? error.message : error.toString(),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -73,10 +123,9 @@ class _MaintenanceRecordDetailPageState extends State<MaintenanceRecordDetailPag
     return '${local.year}-$mm-$dd $hh:$min';
   }
 
-  Future<void> _openAttachment(String urlText) async {
-    final uri = Uri.tryParse(urlText.trim());
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  String _nonEmptyOrDash(String? value) {
+    final normalized = value?.trim() ?? '';
+    return normalized.isEmpty ? '-' : normalized;
   }
 
   Widget _row(String label, String value) {
@@ -85,7 +134,13 @@ class _MaintenanceRecordDetailPageState extends State<MaintenanceRecordDetailPag
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 120, child: Text('$label：', style: const TextStyle(fontWeight: FontWeight.w600))),
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label：',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
           Expanded(child: SelectableText(value)),
         ],
       ),
@@ -106,26 +161,30 @@ class _MaintenanceRecordDetailPageState extends State<MaintenanceRecordDetailPag
               child: ListView(
                 children: [
                   _row('设备', detail.equipmentName),
-                  if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty) _row('设备编号', detail.sourceEquipmentCode!),
+                  _row('来源计划', _nonEmptyOrDash(detail.sourcePlanSummary)),
+                  _row('设备快照', _nonEmptyOrDash(detail.sourceEquipmentName)),
+                  _row(
+                    '执行工段快照',
+                    _nonEmptyOrDash(detail.sourceExecutionProcessCode),
+                  ),
+                  if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty)
+                    _row('设备编号', detail.sourceEquipmentCode!),
                   _row('项目', detail.itemName),
-                  if ((detail.sourceItemName ?? '').trim().isNotEmpty) _row('项目快照', detail.sourceItemName!),
+                  if ((detail.sourceItemName ?? '').trim().isNotEmpty)
+                    _row('项目快照', detail.sourceItemName!),
                   _row('工单编号', '#${detail.workOrderId}'),
                   _row('到期日期', _formatDate(detail.dueDate)),
                   _row('完成时间', _formatDateTime(detail.completedAt)),
                   _row('执行人', detail.executorUsername ?? '-'),
                   _row('结果摘要', detail.resultSummary),
                   _row('备注', detail.resultRemark ?? '-'),
-                  if (detail.sourcePlanCycleDays != null) _row('计划周期(天)', '${detail.sourcePlanCycleDays}'),
-                  if (detail.sourcePlanStartDate != null) _row('计划起始日期', _formatDate(detail.sourcePlanStartDate!)),
-                  if (detail.attachmentLink?.trim().isNotEmpty == true)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () => _openAttachment(detail.attachmentLink!),
-                        icon: const Icon(Icons.attach_file),
-                        label: const Text('查看附件'),
-                      ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: MaintenanceAttachmentAction(
+                      attachmentLink: detail.attachmentLink,
+                      onOpen: widget.onOpenAttachment,
                     ),
+                  ),
                   const SizedBox(height: 12),
                   Align(
                     alignment: Alignment.centerLeft,

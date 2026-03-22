@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/app_session.dart';
 import '../models/quality_models.dart';
 import '../services/api_exception.dart';
+import '../services/export_file_service.dart';
 import '../services/quality_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import 'first_article_disposition_page.dart';
@@ -17,6 +18,8 @@ class DailyFirstArticlePage extends StatefulWidget {
     this.canViewDetail = false,
     this.canExport = false,
     this.canDispose = false,
+    this.routePayloadJson,
+    this.service,
   });
 
   final AppSession session;
@@ -24,6 +27,8 @@ class DailyFirstArticlePage extends StatefulWidget {
   final bool canViewDetail;
   final bool canExport;
   final bool canDispose;
+  final String? routePayloadJson;
+  final QualityService? service;
 
   @override
   State<DailyFirstArticlePage> createState() => _DailyFirstArticlePageState();
@@ -33,10 +38,12 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
   static const int _pageSize = 20;
 
   late final QualityService _service;
+  final ExportFileService _exportFileService = const ExportFileService();
   final TextEditingController _keywordController = TextEditingController();
   final TextEditingController _productNameController = TextEditingController();
   final TextEditingController _processCodeController = TextEditingController();
-  final TextEditingController _operatorUsernameController = TextEditingController();
+  final TextEditingController _operatorUsernameController =
+      TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -48,12 +55,24 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
   String? _verificationCode;
   String _verificationCodeSource = 'none';
   List<FirstArticleListItem> _items = const [];
+  String? _lastHandledRoutePayloadJson;
 
   @override
   void initState() {
     super.initState();
-    _service = QualityService(widget.session);
+    _service = widget.service ?? QualityService(widget.session);
     _loadFirstArticles();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant DailyFirstArticlePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.routePayloadJson != oldWidget.routePayloadJson) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    }
   }
 
   @override
@@ -191,7 +210,7 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
       _message = '';
     });
     try {
-      final csvBase64 = await _service.exportFirstArticles(
+      final exportFile = await _service.exportFirstArticles(
         date: _queryDate,
         keyword: _keywordController.text.trim(),
         result: _resultFilter,
@@ -200,13 +219,22 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
         operatorUsername: _operatorUsernameController.text.trim(),
       );
       if (!mounted) return;
-      if (csvBase64.isEmpty) {
+      if (exportFile.contentBase64.isEmpty) {
         setState(() {
           _message = '导出失败：服务端返回空数据';
         });
         return;
       }
-      _showExportDialog(csvBase64);
+      final savedPath = await _exportFileService.saveCsvBase64(
+        filename: exportFile.filename,
+        contentBase64: exportFile.contentBase64,
+      );
+      if (savedPath == null || !mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出成功：$savedPath')));
     } catch (error) {
       if (!mounted) return;
       if (_isUnauthorized(error)) {
@@ -225,47 +253,62 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
     }
   }
 
-  void _showExportDialog(String csvBase64) {
-    final csvText = utf8.decode(base64Decode(csvBase64));
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('导出首件记录'),
-        content: SizedBox(
-          width: 600,
-          height: 400,
-          child: SingleChildScrollView(
-            child: SelectableText(
-              csvText,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
+  Future<void> _openDetailPage(
+    FirstArticleListItem item, {
+    required bool isDispositionMode,
+  }) async {
+    await _openDetailPageById(
+      recordId: item.id,
+      isDispositionMode: isDispositionMode,
     );
   }
 
-  Future<void> _showDetailDialog(FirstArticleListItem item) async {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => FirstArticleDetailDialog(
-        session: widget.session,
-        recordId: item.id,
-        canDispose: widget.canDispose,
-        onLogout: widget.onLogout,
-        onDisposed: () {
-          Navigator.of(ctx).pop();
-          _loadFirstArticles();
-        },
+  Future<void> _openDetailPageById({
+    required int recordId,
+    required bool isDispositionMode,
+  }) async {
+    final needsRefresh = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => FirstArticleDispositionPage(
+          session: widget.session,
+          recordId: recordId,
+          canDispose: widget.canDispose,
+          isDispositionMode: isDispositionMode,
+          onLogout: widget.onLogout,
+          service: _service,
+        ),
       ),
     );
+    if (needsRefresh == true && mounted) {
+      await _loadFirstArticles();
+    }
+  }
+
+  void _consumeRoutePayload(String? rawPayload) {
+    if (!mounted ||
+        rawPayload == null ||
+        rawPayload.trim().isEmpty ||
+        rawPayload == _lastHandledRoutePayloadJson) {
+      return;
+    }
+    try {
+      final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
+      final action = (payload['action'] as String? ?? '').trim();
+      final rawRecordId = payload['record_id'];
+      final recordId = rawRecordId is int
+          ? rawRecordId
+          : int.tryParse('${rawRecordId ?? ''}');
+      if (action != 'detail' || recordId == null || recordId <= 0) {
+        return;
+      }
+      _lastHandledRoutePayloadJson = rawPayload;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _openDetailPageById(recordId: recordId, isDispositionMode: false);
+      });
+    } catch (_) {}
   }
 
   @override
@@ -463,16 +506,31 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                                       Text(_formatDate(item.verificationDate)),
                                     ),
                                     DataCell(Text(item.remark ?? '-')),
-                                    if (widget.canViewDetail || widget.canDispose)
+                                    if (widget.canViewDetail ||
+                                        widget.canDispose)
                                       DataCell(
-                                        TextButton(
-                                          onPressed: () =>
-                                              _showDetailDialog(item),
-                                          child: Text(
-                                            widget.canDispose && item.result == 'failed'
-                                                ? '详情/处置'
-                                                : '详情',
-                                          ),
+                                        Wrap(
+                                          spacing: 8,
+                                          children: [
+                                            if (widget.canViewDetail)
+                                              TextButton(
+                                                onPressed: () =>
+                                                    _openDetailPage(
+                                                      item,
+                                                      isDispositionMode: false,
+                                                    ),
+                                                child: const Text('详情'),
+                                              ),
+                                            if (widget.canDispose)
+                                              TextButton(
+                                                onPressed: () =>
+                                                    _openDetailPage(
+                                                      item,
+                                                      isDispositionMode: true,
+                                                    ),
+                                                child: const Text('处置'),
+                                              ),
+                                          ],
                                         ),
                                       ),
                                   ],

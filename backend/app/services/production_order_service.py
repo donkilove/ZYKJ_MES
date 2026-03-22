@@ -44,9 +44,13 @@ from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_sub_order import ProductionSubOrder
 from app.models.order_event_log import OrderEventLog
 from app.models.user import User
-from app.services.assist_authorization_service import ASSIST_STATUS_APPROVED, ASSIST_STATUS_CONSUMED
+from app.services.assist_authorization_service import (
+    ASSIST_STATUS_APPROVED,
+    ASSIST_STATUS_CONSUMED,
+)
 from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
+
 
 def _normalize_process_codes(process_codes: Iterable[str]) -> list[str]:
     normalized = [item.strip() for item in process_codes if item and item.strip()]
@@ -98,7 +102,10 @@ def _is_parallel_edge_enabled(
     selected_codes = _pipeline_selected_code_set(order)
     if not selected_codes:
         return False
-    return previous_process_code in selected_codes and current_process_code in selected_codes
+    return (
+        previous_process_code in selected_codes
+        and current_process_code in selected_codes
+    )
 
 
 def is_pipeline_parallel_edge_for_processes(
@@ -165,10 +172,16 @@ def is_pipeline_end_allowed_for_process(
     return True
 
 
-def _resolve_processes_by_codes(db: Session, process_codes: list[str]) -> tuple[list[Process], list[str]]:
+def _resolve_processes_by_codes(
+    db: Session, process_codes: list[str]
+) -> tuple[list[Process], list[str]]:
     if not process_codes:
         return [], []
-    stmt = select(Process).where(Process.code.in_(process_codes)).options(selectinload(Process.stage))
+    stmt = (
+        select(Process)
+        .where(Process.code.in_(process_codes))
+        .options(selectinload(Process.stage))
+    )
     rows = db.execute(stmt).scalars().all()
     by_code = {row.code: row for row in rows}
     missing = [code for code in process_codes if code not in by_code]
@@ -212,9 +225,19 @@ def _resolve_steps_from_payload(
     ordered_steps = sorted(process_steps, key=lambda item: int(item["step_order"]))
     stage_ids = {int(item["stage_id"]) for item in ordered_steps}
     process_ids = {int(item["process_id"]) for item in ordered_steps}
-    stage_rows = db.execute(select(ProcessStage).where(ProcessStage.id.in_(stage_ids))).scalars().all()
+    stage_rows = (
+        db.execute(select(ProcessStage).where(ProcessStage.id.in_(stage_ids)))
+        .scalars()
+        .all()
+    )
     process_rows = (
-        db.execute(select(Process).where(Process.id.in_(process_ids)).options(selectinload(Process.stage))).scalars().all()
+        db.execute(
+            select(Process)
+            .where(Process.id.in_(process_ids))
+            .options(selectinload(Process.stage))
+        )
+        .scalars()
+        .all()
     )
     stage_by_id = {row.id: row for row in stage_rows}
     process_by_id = {row.id: row for row in process_rows}
@@ -230,7 +253,9 @@ def _resolve_steps_from_payload(
         if not process:
             raise ValueError(f"Process not found: {process_id}")
         if process.stage_id != stage.id:
-            raise ValueError(f"Process {process.code} does not belong to stage {stage.code}")
+            raise ValueError(
+                f"Process {process.code} does not belong to stage {stage.code}"
+            )
         if not stage.is_enabled:
             raise ValueError(f"Stage disabled: {stage.code}")
         if not process.is_enabled:
@@ -251,7 +276,11 @@ def _resolve_route_steps(
         resolved = _resolve_steps_from_payload(db, process_steps=process_steps)
         if not resolved:
             raise ValueError("At least one process is required")
-        template = _resolve_template(db, template_id=template_id, product_id=product_id) if template_id else None
+        template = (
+            _resolve_template(db, template_id=template_id, product_id=product_id)
+            if template_id
+            else None
+        )
         return resolved, template
 
     if template_id:
@@ -264,10 +293,17 @@ def _resolve_route_steps(
             .scalars()
             .all()
         }
-        process_codes_in_template = [item.process_code for item in sorted(template.steps, key=lambda item: item.step_order)]
-        processes, missing_codes = _resolve_processes_by_codes(db, process_codes_in_template)
+        process_codes_in_template = [
+            item.process_code
+            for item in sorted(template.steps, key=lambda item: item.step_order)
+        ]
+        processes, missing_codes = _resolve_processes_by_codes(
+            db, process_codes_in_template
+        )
         if missing_codes:
-            raise ValueError(f"Template process codes not found: {', '.join(missing_codes)}")
+            raise ValueError(
+                f"Template process codes not found: {', '.join(missing_codes)}"
+            )
         process_by_code = {row.code: row for row in processes}
         results: list[tuple[ProcessStage, Process]] = []
         for step in sorted(template.steps, key=lambda item: item.step_order):
@@ -323,7 +359,9 @@ def _split_quantity_evenly(total: int, count: int) -> list[int]:
 
 
 def _recalculate_order_current_process(order: ProductionOrder) -> None:
-    sorted_processes = sorted(order.processes, key=lambda item: (item.process_order, item.id))
+    sorted_processes = sorted(
+        order.processes, key=lambda item: (item.process_order, item.id)
+    )
     for row in sorted_processes:
         if row.status != PROCESS_STATUS_COMPLETED:
             order.current_process_code = row.process_code
@@ -341,14 +379,20 @@ def _create_initial_sub_orders_for_process(
     if not operator_users:
         return
 
-    assigned_quantities = _split_quantity_evenly(max(0, visible_quantity), len(operator_users))
-    for user, assigned_quantity in zip(operator_users, assigned_quantities, strict=True):
+    assigned_quantities = _split_quantity_evenly(
+        max(0, visible_quantity), len(operator_users)
+    )
+    for user, assigned_quantity in zip(
+        operator_users, assigned_quantities, strict=True
+    ):
         row = ProductionSubOrder(
             order_process_id=process_row.id,
             operator_user_id=user.id,
             assigned_quantity=assigned_quantity,
             completed_quantity=0,
-            status=SUB_ORDER_STATUS_PENDING if assigned_quantity > 0 else SUB_ORDER_STATUS_DONE,
+            status=SUB_ORDER_STATUS_PENDING
+            if assigned_quantity > 0
+            else SUB_ORDER_STATUS_DONE,
             is_visible=assigned_quantity > 0,
         )
         db.add(row)
@@ -366,7 +410,9 @@ def ensure_sub_orders_visible_quantity(
         db.execute(
             select(ProductionSubOrder)
             .where(ProductionSubOrder.order_process_id == process_row.id)
-            .order_by(ProductionSubOrder.operator_user_id.asc(), ProductionSubOrder.id.asc())
+            .order_by(
+                ProductionSubOrder.operator_user_id.asc(), ProductionSubOrder.id.asc()
+            )
         )
         .scalars()
         .all()
@@ -384,7 +430,9 @@ def ensure_sub_orders_visible_quantity(
     # Backfill newly assigned operators for historical orders.
     existing_operator_ids = {row.operator_user_id for row in rows}
     operator_users = _list_operator_users_by_process_code(db, process_row.process_code)
-    missing_operator_users = [user for user in operator_users if user.id not in existing_operator_ids]
+    missing_operator_users = [
+        user for user in operator_users if user.id not in existing_operator_ids
+    ]
     if missing_operator_users:
         for user in missing_operator_users:
             db.add(
@@ -402,7 +450,10 @@ def ensure_sub_orders_visible_quantity(
             db.execute(
                 select(ProductionSubOrder)
                 .where(ProductionSubOrder.order_process_id == process_row.id)
-                .order_by(ProductionSubOrder.operator_user_id.asc(), ProductionSubOrder.id.asc())
+                .order_by(
+                    ProductionSubOrder.operator_user_id.asc(),
+                    ProductionSubOrder.id.asc(),
+                )
             )
             .scalars()
             .all()
@@ -415,7 +466,10 @@ def ensure_sub_orders_visible_quantity(
         for idx in range(delta):
             row = rows[idx % len(rows)]
             row.assigned_quantity += 1
-            if row.status == SUB_ORDER_STATUS_DONE and row.assigned_quantity > row.completed_quantity:
+            if (
+                row.status == SUB_ORDER_STATUS_DONE
+                and row.assigned_quantity > row.completed_quantity
+            ):
                 row.status = SUB_ORDER_STATUS_PENDING
                 row.is_visible = True
             changed = True
@@ -443,14 +497,18 @@ def _backfill_operator_sub_orders(
     *,
     current_user: User,
 ) -> bool:
-    process_codes = _normalize_process_codes(process.code for process in current_user.processes)
+    process_codes = _normalize_process_codes(
+        process.code for process in current_user.processes
+    )
     if not process_codes:
         return False
 
     process_rows = (
         db.execute(
             select(ProductionOrderProcess)
-            .join(ProductionOrder, ProductionOrder.id == ProductionOrderProcess.order_id)
+            .join(
+                ProductionOrder, ProductionOrder.id == ProductionOrderProcess.order_id
+            )
             .where(
                 ProductionOrder.status != ORDER_STATUS_COMPLETED,
                 ProductionOrderProcess.status != PROCESS_STATUS_COMPLETED,
@@ -473,17 +531,23 @@ def _backfill_operator_sub_orders(
     return changed
 
 
-def get_order_by_id(db: Session, order_id: int, *, with_relations: bool = False) -> ProductionOrder | None:
+def get_order_by_id(
+    db: Session, order_id: int, *, with_relations: bool = False
+) -> ProductionOrder | None:
     stmt = select(ProductionOrder).where(ProductionOrder.id == order_id)
     if with_relations:
         stmt = stmt.options(
             selectinload(ProductionOrder.product),
             selectinload(ProductionOrder.created_by),
-            selectinload(ProductionOrder.processes).selectinload(ProductionOrderProcess.sub_orders).selectinload(
-                ProductionSubOrder.operator
+            selectinload(ProductionOrder.processes)
+            .selectinload(ProductionOrderProcess.sub_orders)
+            .selectinload(ProductionSubOrder.operator),
+            selectinload(ProductionOrder.production_records).selectinload(
+                ProductionRecord.operator
             ),
-            selectinload(ProductionOrder.production_records).selectinload(ProductionRecord.operator),
-            selectinload(ProductionOrder.event_logs).selectinload(OrderEventLog.operator),
+            selectinload(ProductionOrder.event_logs).selectinload(
+                OrderEventLog.operator
+            ),
         )
     return db.execute(stmt).scalars().first()
 
@@ -508,12 +572,12 @@ def can_user_access_order_pipeline_mode(
     role_codes = {role.code for role in current_user.roles}
     if ROLE_OPERATOR not in role_codes:
         return False
-    exists_stmt = (
-        select(exists().where(
+    exists_stmt = select(
+        exists().where(
             ProductionSubOrder.operator_user_id == current_user.id,
             ProductionSubOrder.order_process_id == ProductionOrderProcess.id,
             ProductionOrderProcess.order_id == order_id,
-        ))
+        )
     )
     return bool(db.execute(exists_stmt).scalar())
 
@@ -548,7 +612,9 @@ def can_user_access_order_detail(
         exists().where(
             ProductionAssistAuthorization.order_id == order_id,
             ProductionAssistAuthorization.helper_user_id == current_user.id,
-            ProductionAssistAuthorization.status.in_([ASSIST_STATUS_APPROVED, ASSIST_STATUS_CONSUMED]),
+            ProductionAssistAuthorization.status.in_(
+                [ASSIST_STATUS_APPROVED, ASSIST_STATUS_CONSUMED]
+            ),
         )
     )
     return bool(db.execute(assist_stmt).scalar())
@@ -586,22 +652,19 @@ def _create_pipeline_instances_for_order(
 ) -> int:
     if not selected_codes:
         return 0
-    sub_rows = (
-        db.execute(
-            select(ProductionSubOrder, ProductionOrderProcess)
-            .join(ProductionSubOrder.order_process)
-            .where(
-                ProductionOrderProcess.order_id == order.id,
-                ProductionOrderProcess.process_code.in_(selected_codes),
-            )
-            .order_by(
-                ProductionOrderProcess.process_order.asc(),
-                ProductionSubOrder.operator_user_id.asc(),
-                ProductionSubOrder.id.asc(),
-            )
+    sub_rows = db.execute(
+        select(ProductionSubOrder, ProductionOrderProcess)
+        .join(ProductionSubOrder.order_process)
+        .where(
+            ProductionOrderProcess.order_id == order.id,
+            ProductionOrderProcess.process_code.in_(selected_codes),
         )
-        .all()
-    )
+        .order_by(
+            ProductionOrderProcess.process_order.asc(),
+            ProductionSubOrder.operator_user_id.asc(),
+            ProductionSubOrder.id.asc(),
+        )
+    ).all()
     created = 0
     for pipeline_seq, (sub_order, process_row) in enumerate(sub_rows, start=1):
         pipeline_no = f"P{order.id}-{sub_order.id}-{pipeline_seq}-{uuid4().hex[:8]}"
@@ -644,7 +707,9 @@ def get_order_pipeline_mode(
     route_codes = _route_process_codes_from_order(order)
     selected_codes = _ordered_selected_pipeline_codes(
         route_process_codes=route_codes,
-        requested_codes=_parse_pipeline_process_codes_text(order.pipeline_process_codes),
+        requested_codes=_parse_pipeline_process_codes_text(
+            order.pipeline_process_codes
+        ),
     )
     if not order.pipeline_enabled:
         selected_codes = []
@@ -688,24 +753,38 @@ def update_order_pipeline_mode(
 
     process_rows = _sorted_order_processes(order)
     if len(process_rows) < 2 and enabled:
-        raise ValueError("Order has fewer than 2 processes and cannot enable pipeline mode")
+        raise ValueError(
+            "Order has fewer than 2 processes and cannot enable pipeline mode"
+        )
     route_codes = [row.process_code for row in process_rows]
     selected_codes = _ordered_selected_pipeline_codes(
         route_process_codes=route_codes,
         requested_codes=process_codes,
     )
     if enabled and len(selected_codes) < 2:
-        raise ValueError("At least two valid process codes are required when enabling pipeline mode")
-    invalid_codes = [code for code in _normalize_process_codes(process_codes) if code not in route_codes]
+        raise ValueError(
+            "At least two valid process codes are required when enabling pipeline mode"
+        )
+    invalid_codes = [
+        code
+        for code in _normalize_process_codes(process_codes)
+        if code not in route_codes
+    ]
     if invalid_codes:
-        raise ValueError(f"Invalid process codes for order route: {', '.join(invalid_codes)}")
+        raise ValueError(
+            f"Invalid process codes for order route: {', '.join(invalid_codes)}"
+        )
 
     if enabled:
         first_code = selected_codes[0]
-        first_row = next((row for row in process_rows if row.process_code == first_code), None)
+        first_row = next(
+            (row for row in process_rows if row.process_code == first_code), None
+        )
         if first_row is None:
             raise ValueError("Selected first process does not exist in order route")
-        first_available = max(first_row.visible_quantity - first_row.completed_quantity, 0)
+        first_available = max(
+            first_row.visible_quantity - first_row.completed_quantity, 0
+        )
         if first_available <= 0:
             raise ValueError(
                 f"Cannot enable pipeline mode: first selected process {first_code} has no producible quantity"
@@ -714,11 +793,15 @@ def update_order_pipeline_mode(
     previous_enabled = bool(order.pipeline_enabled)
     previous_codes = _ordered_selected_pipeline_codes(
         route_process_codes=route_codes,
-        requested_codes=_parse_pipeline_process_codes_text(order.pipeline_process_codes),
+        requested_codes=_parse_pipeline_process_codes_text(
+            order.pipeline_process_codes
+        ),
     )
 
     order.pipeline_enabled = bool(enabled)
-    order.pipeline_process_codes = _pipeline_process_codes_to_text(selected_codes if enabled else [])
+    order.pipeline_process_codes = _pipeline_process_codes_to_text(
+        selected_codes if enabled else []
+    )
 
     reason = "pipeline_reconfigured" if enabled else "pipeline_disabled"
     invalidated_count = _invalidate_pipeline_instances_for_order(
@@ -800,7 +883,9 @@ def list_orders(
     due_date_from: date | None = None,
     due_date_to: date | None = None,
 ) -> tuple[int, list[ProductionOrder]]:
-    stmt = select(ProductionOrder).join(Product, Product.id == ProductionOrder.product_id)
+    stmt = select(ProductionOrder).join(
+        Product, Product.id == ProductionOrder.product_id
+    )
     if keyword:
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(
@@ -885,7 +970,9 @@ def _is_template_route_match(
     template_steps = sorted(template.steps, key=lambda item: item.step_order)
     if len(template_steps) != len(route_steps):
         return False
-    for template_step, (stage, process) in zip(template_steps, route_steps, strict=True):
+    for template_step, (stage, process) in zip(
+        template_steps, route_steps, strict=True
+    ):
         if template_step.stage_code != stage.code:
             return False
         if template_step.process_code != process.code:
@@ -922,7 +1009,9 @@ def _set_order_product_snapshot(
 def _normalize_template_name(value: str | None) -> str:
     normalized = (value or "").strip()
     if not normalized:
-        raise ValueError("New template name is required when save_as_template is enabled")
+        raise ValueError(
+            "New template name is required when save_as_template is enabled"
+        )
     return normalized
 
 
@@ -1043,7 +1132,9 @@ def create_order(
         raise ValueError("Quantity must be greater than 0")
     if get_order_by_code(db, normalized_order_code):
         raise ValueError("Order code already exists")
-    product = db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    product = (
+        db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    )
     if not product:
         raise ValueError("Product not found")
     if product.lifecycle_status != PRODUCT_LIFECYCLE_ACTIVE:
@@ -1057,7 +1148,13 @@ def create_order(
         process_codes=process_codes,
     )
     final_template = selected_template
-    if process_steps and selected_template and not _is_template_route_match(route_steps=route_steps, template=selected_template):
+    if (
+        process_steps
+        and selected_template
+        and not _is_template_route_match(
+            route_steps=route_steps, template=selected_template
+        )
+    ):
         final_template = None
     if save_as_template:
         final_template = _save_route_as_template(
@@ -1140,7 +1237,9 @@ def update_order(
         raise ValueError("Only pending orders can be updated")
     if quantity <= 0:
         raise ValueError("Quantity must be greater than 0")
-    product = db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    product = (
+        db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    )
     if not product:
         raise ValueError("Product not found")
     if product.lifecycle_status != PRODUCT_LIFECYCLE_ACTIVE:
@@ -1154,7 +1253,13 @@ def update_order(
         process_codes=process_codes,
     )
     final_template = selected_template
-    if process_steps and selected_template and not _is_template_route_match(route_steps=route_steps, template=selected_template):
+    if (
+        process_steps
+        and selected_template
+        and not _is_template_route_match(
+            route_steps=route_steps, template=selected_template
+        )
+    ):
         final_template = None
     if save_as_template:
         final_template = _save_route_as_template(
@@ -1168,7 +1273,11 @@ def update_order(
     resolved_process_codes = _route_process_codes(route_steps)
 
     # Rebuild process/sub-order assignment for pending orders.
-    db.execute(select(ProductionOrderProcess).where(ProductionOrderProcess.order_id == order.id).with_for_update())
+    db.execute(
+        select(ProductionOrderProcess)
+        .where(ProductionOrderProcess.order_id == order.id)
+        .with_for_update()
+    )
     order.processes = []
     db.flush()
 
@@ -1290,10 +1399,14 @@ def _build_my_order_item(
     can_first_article_override: bool | None = None,
     can_end_production_override: bool | None = None,
 ) -> dict[str, object]:
-    process_remaining = max(process_row.visible_quantity - process_row.completed_quantity, 0)
+    process_remaining = max(
+        process_row.visible_quantity - process_row.completed_quantity, 0
+    )
     sub_remaining = process_remaining
     if sub_order is not None:
-        sub_remaining = max(sub_order.assigned_quantity - sub_order.completed_quantity, 0)
+        sub_remaining = max(
+            sub_order.assigned_quantity - sub_order.completed_quantity, 0
+        )
     max_producible = min(process_remaining, sub_remaining)
 
     can_first_article = False
@@ -1312,13 +1425,19 @@ def _build_my_order_item(
             and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
             and max_producible > 0
         )
-        pipeline_start_allowed = first_article_base and is_pipeline_start_allowed_for_process(
-            order=order,
-            process_row=process_row,
+        pipeline_start_allowed = (
+            first_article_base
+            and is_pipeline_start_allowed_for_process(
+                order=order,
+                process_row=process_row,
+            )
         )
-        pipeline_end_allowed = end_production_base and is_pipeline_end_allowed_for_process(
-            order=order,
-            process_row=process_row,
+        pipeline_end_allowed = (
+            end_production_base
+            and is_pipeline_end_allowed_for_process(
+                order=order,
+                process_row=process_row,
+            )
         )
         can_first_article = pipeline_start_allowed
         can_end_production = pipeline_end_allowed
@@ -1351,7 +1470,9 @@ def _build_my_order_item(
         "user_assigned_quantity": sub_order.assigned_quantity if sub_order else None,
         "user_completed_quantity": sub_order.completed_quantity if sub_order else None,
         "operator_user_id": sub_order.operator_user_id if sub_order else None,
-        "operator_username": sub_order.operator.username if sub_order and sub_order.operator else None,
+        "operator_username": sub_order.operator.username
+        if sub_order and sub_order.operator
+        else None,
         "work_view": work_view,
         "assist_authorization_id": assist_authorization_id,
         "pipeline_mode_enabled": pipeline_mode_enabled,
@@ -1417,7 +1538,9 @@ def _collect_my_order_items(
         if exact_order_id is not None:
             stmt = stmt.where(ProductionOrder.id == exact_order_id)
         if exact_order_process_id is not None:
-            stmt = stmt.where(ProductionSubOrder.order_process_id == exact_order_process_id)
+            stmt = stmt.where(
+                ProductionSubOrder.order_process_id == exact_order_process_id
+            )
         if keyword:
             like_pattern = f"%{keyword.strip()}%"
             stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
@@ -1452,7 +1575,9 @@ def _collect_my_order_items(
                 ProductionAssistAuthorization.end_production_used_at.is_(None),
             )
             .options(
-                selectinload(ProductionAssistAuthorization.order).selectinload(ProductionOrder.product),
+                selectinload(ProductionAssistAuthorization.order).selectinload(
+                    ProductionOrder.product
+                ),
                 selectinload(ProductionAssistAuthorization.order_process),
             )
             .order_by(
@@ -1463,21 +1588,27 @@ def _collect_my_order_items(
         if exact_order_id is not None:
             stmt = stmt.where(ProductionAssistAuthorization.order_id == exact_order_id)
         if exact_order_process_id is not None:
-            stmt = stmt.where(ProductionAssistAuthorization.order_process_id == exact_order_process_id)
+            stmt = stmt.where(
+                ProductionAssistAuthorization.order_process_id == exact_order_process_id
+            )
         assist_rows = db.execute(stmt).scalars().all()
         for assist_row in assist_rows:
             order = assist_row.order
             process_row = assist_row.order_process
             if order is None or process_row is None:
                 continue
-            if order.status == ORDER_STATUS_COMPLETED or process_row.status == PROCESS_STATUS_COMPLETED:
+            if (
+                order.status == ORDER_STATUS_COMPLETED
+                or process_row.status == PROCESS_STATUS_COMPLETED
+            ):
                 continue
             sub_order = (
                 db.execute(
                     select(ProductionSubOrder)
                     .where(
                         ProductionSubOrder.order_process_id == process_row.id,
-                        ProductionSubOrder.operator_user_id == assist_row.target_operator_user_id,
+                        ProductionSubOrder.operator_user_id
+                        == assist_row.target_operator_user_id,
                         ProductionSubOrder.is_visible.is_(True),
                     )
                     .options(selectinload(ProductionSubOrder.operator))
@@ -1489,25 +1620,38 @@ def _collect_my_order_items(
                 continue
             if keyword:
                 key = keyword.strip().lower()
-                if key and key not in order.order_code.lower() and key not in (order.product.name if order.product else "").lower():
+                if (
+                    key
+                    and key not in order.order_code.lower()
+                    and key not in (order.product.name if order.product else "").lower()
+                ):
                     continue
 
-            process_remaining = max(process_row.visible_quantity - process_row.completed_quantity, 0)
-            sub_remaining = max(sub_order.assigned_quantity - sub_order.completed_quantity, 0)
+            process_remaining = max(
+                process_row.visible_quantity - process_row.completed_quantity, 0
+            )
+            sub_remaining = max(
+                sub_order.assigned_quantity - sub_order.completed_quantity, 0
+            )
             max_producible = min(process_remaining, sub_remaining)
             can_first_article = (
                 assist_row.first_article_used_at is None
-                and process_row.status in {PROCESS_STATUS_PENDING, PROCESS_STATUS_PARTIAL}
+                and process_row.status
+                in {PROCESS_STATUS_PENDING, PROCESS_STATUS_PARTIAL}
                 and sub_order.status == SUB_ORDER_STATUS_PENDING
                 and max_producible > 0
-                and is_pipeline_start_allowed_for_process(order=order, process_row=process_row)
+                and is_pipeline_start_allowed_for_process(
+                    order=order, process_row=process_row
+                )
             )
             can_end_production = (
                 assist_row.end_production_used_at is None
                 and process_row.status == PROCESS_STATUS_IN_PROGRESS
                 and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
                 and max_producible > 0
-                and is_pipeline_end_allowed_for_process(order=order, process_row=process_row)
+                and is_pipeline_end_allowed_for_process(
+                    order=order, process_row=process_row
+                )
             )
             items.append(
                 _build_my_order_item(
@@ -1525,7 +1669,10 @@ def _collect_my_order_items(
         stmt = (
             select(ProductionOrder)
             .where(ProductionOrder.status != ORDER_STATUS_COMPLETED)
-            .options(selectinload(ProductionOrder.product), selectinload(ProductionOrder.processes))
+            .options(
+                selectinload(ProductionOrder.product),
+                selectinload(ProductionOrder.processes),
+            )
             .order_by(ProductionOrder.updated_at.desc(), ProductionOrder.id.desc())
         )
         if exact_order_id is not None:
@@ -1540,12 +1687,21 @@ def _collect_my_order_items(
             )
         orders = db.execute(stmt).scalars().all()
         for order in orders:
-            process_rows = sorted(order.processes, key=lambda row: (row.process_order, row.id))
+            process_rows = sorted(
+                order.processes, key=lambda row: (row.process_order, row.id)
+            )
             if exact_order_process_id is not None:
-                current_process = next((row for row in process_rows if row.id == exact_order_process_id), None)
+                current_process = next(
+                    (row for row in process_rows if row.id == exact_order_process_id),
+                    None,
+                )
             else:
                 current_process = next(
-                    (row for row in process_rows if row.status != PROCESS_STATUS_COMPLETED),
+                    (
+                        row
+                        for row in process_rows
+                        if row.status != PROCESS_STATUS_COMPLETED
+                    ),
                     None,
                 )
             if current_process is None:
@@ -1577,16 +1733,18 @@ def _collect_my_order_items(
                 ProductionOrderProcess.status != PROCESS_STATUS_COMPLETED,
             )
             .options(
-                selectinload(ProductionSubOrder.order_process).selectinload(ProductionOrderProcess.order).selectinload(
-                    ProductionOrder.product
-                )
+                selectinload(ProductionSubOrder.order_process)
+                .selectinload(ProductionOrderProcess.order)
+                .selectinload(ProductionOrder.product)
             )
             .order_by(ProductionOrder.updated_at.desc(), ProductionSubOrder.id.desc())
         )
         if exact_order_id is not None:
             stmt = stmt.where(ProductionOrder.id == exact_order_id)
         if exact_order_process_id is not None:
-            stmt = stmt.where(ProductionSubOrder.order_process_id == exact_order_process_id)
+            stmt = stmt.where(
+                ProductionSubOrder.order_process_id == exact_order_process_id
+            )
         if keyword:
             like_pattern = f"%{keyword.strip()}%"
             stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
@@ -1614,12 +1772,19 @@ def _collect_my_order_items(
     if order_status is not None or current_process_id is not None:
         filtered_items: list[dict[str, object]] = []
         for item in items:
-            if order_status is not None and str(item.get("order_status") or "") != order_status:
+            if (
+                order_status is not None
+                and str(item.get("order_status") or "") != order_status
+            ):
                 continue
             if current_process_id is not None:
                 current_process_value = item.get("current_process_id")
                 try:
-                    process_id_value = int(current_process_value) if current_process_value is not None else 0
+                    process_id_value = (
+                        int(current_process_value)
+                        if current_process_value is not None
+                        else 0
+                    )
                 except (TypeError, ValueError):
                     continue
                 if process_id_value != current_process_id:
@@ -1706,31 +1871,45 @@ def export_orders_csv(
         due_date_to=due_date_to,
     )
     headers = [
-        "订单号", "产品名称", "产品版本", "数量", "当前状态",
-        "工艺模板", "模板版本", "并行模式", "开始日期", "交期", "创建人", "更新时间",
+        "订单号",
+        "产品名称",
+        "产品版本",
+        "数量",
+        "当前状态",
+        "工艺模板",
+        "模板版本",
+        "并行模式",
+        "开始日期",
+        "交期",
+        "创建人",
+        "更新时间",
     ]
     csv_rows = []
     for row in rows:
-        csv_rows.append([
-            row.order_code,
-            row.product.name if row.product else "",
-            row.product_version or "",
-            row.quantity,
-            row.status,
-            row.process_template_name or "",
-            row.process_template_version or "",
-            "开启" if row.pipeline_enabled else "关闭",
-            str(row.start_date) if row.start_date else "",
-            str(row.due_date) if row.due_date else "",
-            row.created_by.username if row.created_by else "",
-            row.updated_at.strftime("%Y-%m-%d %H:%M:%S") if row.updated_at else "",
-        ])
+        csv_rows.append(
+            [
+                row.order_code,
+                row.product.name if row.product else "",
+                row.product_version or "",
+                row.quantity,
+                row.status,
+                row.process_template_name or "",
+                row.process_template_version or "",
+                "开启" if row.pipeline_enabled else "关闭",
+                str(row.start_date) if row.start_date else "",
+                str(row.due_date) if row.due_date else "",
+                row.created_by.username if row.created_by else "",
+                row.updated_at.strftime("%Y-%m-%d %H:%M:%S") if row.updated_at else "",
+            ]
+        )
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(headers)
     for r in csv_rows:
         writer.writerow(r)
-    content_b64 = base64.b64encode(output.getvalue().encode("utf-8-sig")).decode("ascii")
+    content_b64 = base64.b64encode(output.getvalue().encode("utf-8-sig")).decode(
+        "ascii"
+    )
     file_name = f"orders_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.csv"
     return {
         "file_name": file_name,
@@ -1747,13 +1926,17 @@ def list_pipeline_instances(
     order_code: str | None = None,
     order_process_id: int | None = None,
     sub_order_id: int | None = None,
+    process_keyword: str | None = None,
+    pipeline_sub_order_no: str | None = None,
     is_active: bool | None = None,
     page: int = 1,
     page_size: int = 100,
 ) -> tuple[int, list[OrderSubOrderPipelineInstance]]:
     from sqlalchemy.orm import joinedload
+
     stmt = select(OrderSubOrderPipelineInstance).options(
-        joinedload(OrderSubOrderPipelineInstance.order)
+        joinedload(OrderSubOrderPipelineInstance.order),
+        joinedload(OrderSubOrderPipelineInstance.order_process),
     )
     if order_id is not None:
         stmt = stmt.where(OrderSubOrderPipelineInstance.order_id == order_id)
@@ -1764,9 +1947,29 @@ def list_pipeline_instances(
             isouter=False,
         ).where(ProductionOrder.order_code.ilike(f"%{order_code.strip()}%"))
     if order_process_id is not None:
-        stmt = stmt.where(OrderSubOrderPipelineInstance.order_process_id == order_process_id)
+        stmt = stmt.where(
+            OrderSubOrderPipelineInstance.order_process_id == order_process_id
+        )
     if sub_order_id is not None:
         stmt = stmt.where(OrderSubOrderPipelineInstance.sub_order_id == sub_order_id)
+    if process_keyword is not None and process_keyword.strip():
+        like_pattern = f"%{process_keyword.strip()}%"
+        stmt = stmt.join(
+            ProductionOrderProcess,
+            ProductionOrderProcess.id == OrderSubOrderPipelineInstance.order_process_id,
+            isouter=False,
+        ).where(
+            or_(
+                OrderSubOrderPipelineInstance.process_code.ilike(like_pattern),
+                ProductionOrderProcess.process_name.ilike(like_pattern),
+            )
+        )
+    if pipeline_sub_order_no is not None and pipeline_sub_order_no.strip():
+        stmt = stmt.where(
+            OrderSubOrderPipelineInstance.pipeline_sub_order_no.ilike(
+                f"%{pipeline_sub_order_no.strip()}%"
+            )
+        )
     if is_active is not None:
         stmt = stmt.where(OrderSubOrderPipelineInstance.is_active == is_active)
     stmt = stmt.order_by(
@@ -1777,4 +1980,4 @@ def list_pipeline_instances(
     rows = db.execute(stmt).unique().scalars().all()
     total = len(rows)
     offset = (page - 1) * page_size
-    return total, rows[offset: offset + page_size]
+    return total, rows[offset : offset + page_size]

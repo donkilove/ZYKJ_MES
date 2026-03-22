@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import date, datetime
 
@@ -115,8 +115,15 @@ from app.schemas.production import (
     ProductionStatsOverview,
     ProductionSubOrderItem,
 )
-from app.services.assist_authorization_service import create_assist_authorization, list_assist_authorizations, review_assist_authorization
-from app.services.production_execution_service import end_production, submit_first_article
+from app.services.assist_authorization_service import (
+    create_assist_authorization,
+    list_assist_authorizations,
+    review_assist_authorization,
+)
+from app.services.production_execution_service import (
+    end_production,
+    submit_first_article,
+)
 from app.services.production_order_service import (
     can_user_access_order_detail,
     can_user_access_order_pipeline_mode,
@@ -181,17 +188,27 @@ def _parse_id_list_query(raw_value: str | None) -> list[int]:
     try:
         return parse_id_list_param(raw_value)
     except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
+        ) from error
 
 
 def _to_order_item(order: ProductionOrder) -> OrderItem:
     current_process = None
     if order.processes:
-        process_rows = sorted(order.processes, key=lambda row: (row.process_order, row.id))
-        current_process = next((row for row in process_rows if row.status != "completed"), None)
+        process_rows = sorted(
+            order.processes, key=lambda row: (row.process_order, row.id)
+        )
+        current_process = next(
+            (row for row in process_rows if row.status != "completed"), None
+        )
         if current_process is None and order.current_process_code:
             current_process = next(
-                (row for row in process_rows if row.process_code == order.current_process_code),
+                (
+                    row
+                    for row in process_rows
+                    if row.process_code == order.current_process_code
+                ),
                 None,
             )
     created_by_username = order.created_by.username if order.created_by else None
@@ -300,7 +317,9 @@ def _to_assist_authorization_item(row) -> AssistAuthorizationItem:
         process_code=row.order_process.process_code if row.order_process else "",
         process_name=row.order_process.process_name if row.order_process else "",
         target_operator_user_id=row.target_operator_user_id,
-        target_operator_username=row.target_operator.username if row.target_operator else "",
+        target_operator_username=row.target_operator.username
+        if row.target_operator
+        else "",
         requester_user_id=row.requester_user_id,
         requester_username=row.requester.username if row.requester else "",
         helper_user_id=row.helper_user_id,
@@ -333,7 +352,9 @@ def _to_order_pipeline_mode_item(payload: dict[str, object]) -> OrderPipelineMod
         order_id=int(payload.get("order_id") or 0),
         enabled=bool(payload.get("enabled")),
         process_codes=[str(code) for code in payload.get("process_codes") or []],
-        available_process_codes=[str(code) for code in payload.get("available_process_codes") or []],
+        available_process_codes=[
+            str(code) for code in payload.get("available_process_codes") or []
+        ],
     )
 
 
@@ -421,7 +442,9 @@ def get_orders(
         due_date_from=due_date_from,
         due_date_to=due_date_to,
     )
-    return success_response(OrderListResult(total=total, items=[_to_order_item(row) for row in rows]))
+    return success_response(
+        OrderListResult(total=total, items=[_to_order_item(row) for row in rows])
+    )
 
 
 @router.post(
@@ -445,7 +468,9 @@ def create_order_api(
             remark=payload.remark,
             process_codes=payload.process_codes,
             template_id=payload.template_id,
-            process_steps=[item.model_dump() for item in payload.process_steps] if payload.process_steps else None,
+            process_steps=[item.model_dump() for item in payload.process_steps]
+            if payload.process_steps
+            else None,
             save_as_template=payload.save_as_template,
             new_template_name=payload.new_template_name,
             new_template_set_default=payload.new_template_set_default,
@@ -468,15 +493,28 @@ def get_order_detail_api(
 ) -> ApiResponse[OrderDetail]:
     row = get_order_by_id(db, order_id, with_relations=True)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-    if not can_user_access_order_detail(db, order_id=order_id, current_user=current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current user has no access to this order")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Order not found"
+        )
+    if not can_user_access_order_detail(
+        db, order_id=order_id, current_user=current_user
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Current user has no access to this order",
+        )
 
     process_rows = sorted(row.processes, key=lambda item: (item.process_order, item.id))
     sub_order_rows: list[ProductionSubOrder] = []
     for process_row in process_rows:
         sub_order_rows.extend(process_row.sub_orders)
-    sub_order_rows.sort(key=lambda item: (item.order_process.process_order, item.operator_user_id, item.id))
+    sub_order_rows.sort(
+        key=lambda item: (
+            item.order_process.process_order,
+            item.operator_user_id,
+            item.id,
+        )
+    )
 
     record_rows = sorted(
         row.production_records,
@@ -506,11 +544,17 @@ def get_order_detail_api(
 def get_order_pipeline_mode_api(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_PIPELINE_MODE_VIEW)),
+    current_user: User = Depends(
+        require_permission(PERM_PROD_ORDERS_PIPELINE_MODE_VIEW)
+    ),
 ) -> ApiResponse[OrderPipelineModeItem]:
     try:
-        if not can_user_access_order_pipeline_mode(db, order_id=order_id, current_user=current_user):
-            raise PermissionError("Current user has no access to this order pipeline mode")
+        if not can_user_access_order_pipeline_mode(
+            db, order_id=order_id, current_user=current_user
+        ):
+            raise PermissionError(
+                "Current user has no access to this order pipeline mode"
+            )
         payload = get_order_pipeline_mode(db, order_id=order_id)
     except Exception as error:
         _raise_service_error(error)
@@ -525,7 +569,9 @@ def update_order_pipeline_mode_api(
     order_id: int,
     payload: OrderPipelineModeUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE)),
+    current_user: User = Depends(
+        require_permission(PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE)
+    ),
 ) -> ApiResponse[OrderPipelineModeItem]:
     try:
         updated = update_order_pipeline_mode(
@@ -552,7 +598,9 @@ def update_order_api(
 ) -> ApiResponse[OrderItem]:
     order = get_order_by_id(db, order_id, with_relations=False)
     if not order:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Order not found"
+        )
 
     try:
         row = update_order(
@@ -565,7 +613,9 @@ def update_order_api(
             remark=payload.remark,
             process_codes=payload.process_codes,
             template_id=payload.template_id,
-            process_steps=[item.model_dump() for item in payload.process_steps] if payload.process_steps else None,
+            process_steps=[item.model_dump() for item in payload.process_steps]
+            if payload.process_steps
+            else None,
             save_as_template=payload.save_as_template,
             new_template_name=payload.new_template_name,
             new_template_set_default=payload.new_template_set_default,
@@ -588,7 +638,9 @@ def delete_order_api(
 ) -> ApiResponse[dict[str, bool]]:
     order = get_order_by_id(db, order_id, with_relations=False)
     if not order:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Order not found"
+        )
     try:
         delete_order(db, order=order, operator=current_user)
     except Exception as error:
@@ -602,10 +654,30 @@ def delete_order_api(
 )
 def search_order_events_api(
     order_code: str,
+    event_type: str | None = Query(default=None),
+    operator_username: str | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(PERM_PROD_ORDERS_DETAIL)),
 ) -> ApiResponse[OrderEventLogListResult]:
-    rows = search_order_event_logs_by_code(db, order_code=order_code)
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_date cannot be greater than end_date",
+        )
+    start_time = (
+        datetime.combine(start_date, datetime.min.time()) if start_date else None
+    )
+    end_time = datetime.combine(end_date, datetime.max.time()) if end_date else None
+    rows = search_order_event_logs_by_code(
+        db,
+        order_code=order_code,
+        event_type=event_type,
+        operator_username=operator_username,
+        start_time=start_time,
+        end_time=end_time,
+    )
     return success_response(
         OrderEventLogListResult(
             total=len(rows),
@@ -625,13 +697,17 @@ def complete_order_api(
 ) -> ApiResponse[OrderActionResult]:
     order = get_order_by_id(db, order_id, with_relations=True)
     if not order:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Order not found"
+        )
     try:
         row = complete_order_manually(db, order=order, operator=current_user)
     except Exception as error:
         _raise_service_error(error)
     return success_response(
-        OrderActionResult(order_id=row.id, status=row.status, message="Order completed"),
+        OrderActionResult(
+            order_id=row.id, status=row.status, message="Order completed"
+        ),
         message="completed",
     )
 
@@ -653,9 +729,15 @@ def get_my_orders_api(
 ) -> ApiResponse[MyOrderListResult]:
     normalized_status: str | None = None
     if proxy_operator_user_id is not None and proxy_operator_user_id <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="proxy_operator_user_id must be > 0")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="proxy_operator_user_id must be > 0",
+        )
     if current_process_id is not None and current_process_id <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="current_process_id must be > 0")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="current_process_id must be > 0",
+        )
     if order_status is not None:
         token = order_status.strip().lower()
         if token and token != "all":
@@ -700,9 +782,15 @@ def get_my_order_context_api(
     current_user: User = Depends(require_permission(PERM_PROD_MY_ORDERS_CONTEXT)),
 ) -> ApiResponse[MyOrderContextResult]:
     if proxy_operator_user_id is not None and proxy_operator_user_id <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="proxy_operator_user_id must be > 0")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="proxy_operator_user_id must be > 0",
+        )
     if order_process_id is not None and order_process_id <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="order_process_id must be > 0")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="order_process_id must be > 0",
+        )
     try:
         item = get_my_order_context(
             db,
@@ -760,7 +848,9 @@ def end_production_api(
     order_id: int,
     payload: EndProductionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_PROD_EXECUTION_END_PRODUCTION)),
+    current_user: User = Depends(
+        require_permission(PERM_PROD_EXECUTION_END_PRODUCTION)
+    ),
 ) -> ApiResponse[OrderActionResult]:
     try:
         row, _, _ = end_production(
@@ -772,7 +862,9 @@ def end_production_api(
             operator=current_user,
             effective_operator_user_id=payload.effective_operator_user_id,
             assist_authorization_id=payload.assist_authorization_id,
-            defect_items=[item.model_dump() for item in payload.defect_items] if payload.defect_items else None,
+            defect_items=[item.model_dump() for item in payload.defect_items]
+            if payload.defect_items
+            else None,
         )
     except Exception as error:
         _raise_service_error(error)
@@ -807,7 +899,11 @@ def get_process_stats_api(
     _: User = Depends(require_permission(PERM_PROD_STATS_PROCESSES)),
 ) -> ApiResponse[ProductionProcessStatsResult]:
     rows = get_process_stats(db)
-    return success_response(ProductionProcessStatsResult(items=[ProductionProcessStatItem(**row) for row in rows]))
+    return success_response(
+        ProductionProcessStatsResult(
+            items=[ProductionProcessStatItem(**row) for row in rows]
+        )
+    )
 
 
 @router.get(
@@ -820,7 +916,9 @@ def get_operator_stats_api(
 ) -> ApiResponse[ProductionOperatorStatsResult]:
     rows = get_operator_stats(db)
     return success_response(
-        ProductionOperatorStatsResult(items=[ProductionOperatorStatItem(**row) for row in rows])
+        ProductionOperatorStatsResult(
+            items=[ProductionOperatorStatItem(**row) for row in rows]
+        )
     )
 
 
@@ -952,6 +1050,8 @@ def get_scrap_statistics_api(
     page_size: int = Query(default=20, ge=1, le=500),
     keyword: str | None = Query(default=None),
     progress: str | None = Query(default="all"),
+    product_name: str | None = Query(default=None),
+    process_code: str | None = Query(default=None),
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -965,6 +1065,8 @@ def get_scrap_statistics_api(
             filters=ScrapStatisticsFilters(
                 keyword=keyword,
                 progress=progress,
+                product_name=product_name,
+                process_code=process_code,
                 start_date=start_date,
                 end_date=end_date,
             ),
@@ -994,6 +1096,8 @@ def export_scrap_statistics_api(
             filters=ScrapStatisticsFilters(
                 keyword=payload.keyword,
                 progress=payload.progress,
+                product_name=payload.product_name,
+                process_code=payload.process_code,
                 start_date=payload.start_date,
                 end_date=payload.end_date,
             ),
@@ -1049,7 +1153,9 @@ def create_manual_repair_order_api(
     order_id: int,
     payload: RepairOrderCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_PROD_REPAIR_ORDERS_CREATE_MANUAL)),
+    current_user: User = Depends(
+        require_permission(PERM_PROD_REPAIR_ORDERS_CREATE_MANUAL)
+    ),
 ) -> ApiResponse[RepairOrderItem]:
     try:
         row = create_manual_repair_order(
@@ -1111,7 +1217,9 @@ def complete_repair_order_api(
             repair_order_id=repair_order_id,
             cause_items=[item.model_dump() for item in payload.cause_items],
             scrap_replenished=payload.scrap_replenished,
-            return_allocations=[item.model_dump() for item in payload.return_allocations],
+            return_allocations=[
+                item.model_dump() for item in payload.return_allocations
+            ],
             operator=current_user,
         )
     except Exception as error:
@@ -1159,7 +1267,9 @@ def get_assist_authorizations_api(
     created_at_from: datetime | None = Query(default=None),
     created_at_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_LIST)),
+    current_user: User = Depends(
+        require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_LIST)
+    ),
 ) -> ApiResponse[AssistAuthorizationListResult]:
     try:
         total, rows = list_assist_authorizations(
@@ -1194,7 +1304,9 @@ def create_assist_authorization_api(
     order_id: int,
     payload: AssistAuthorizationCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE)),
+    current_user: User = Depends(
+        require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE)
+    ),
 ) -> ApiResponse[AssistAuthorizationItem]:
     try:
         row = create_assist_authorization(
@@ -1222,7 +1334,9 @@ def review_assist_authorization_api(
     authorization_id: int,
     payload: AssistAuthorizationReviewRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW)),
+    current_user: User = Depends(
+        require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW)
+    ),
 ) -> ApiResponse[AssistAuthorizationItem]:
     try:
         row = review_assist_authorization(
@@ -1258,7 +1372,10 @@ def get_assist_user_options_api(
         ROLE_OPERATOR,
     }
     if role_code and role_code not in allowed_role_codes:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role_code: {role_code}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role_code: {role_code}",
+        )
 
     stmt = (
         select(User)
@@ -1301,6 +1418,7 @@ def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
         order_code=row.order.order_code if row.order else "",
         order_process_id=row.order_process_id,
         process_code=row.process_code,
+        process_name=row.order_process.process_name if row.order_process else "",
         pipeline_seq=row.pipeline_seq,
         pipeline_sub_order_no=row.pipeline_sub_order_no,
         is_active=row.is_active,
@@ -1311,8 +1429,16 @@ def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
     )
 
 
-def _to_repair_order_detail_item(row: object, event_logs: list | None = None) -> RepairOrderDetailItem:
-    from app.schemas.production import RepairCauseDetailItem, RepairDefectPhenomenonItem, RepairEventLogItem, RepairReturnRouteItem
+def _to_repair_order_detail_item(
+    row: object, event_logs: list | None = None
+) -> RepairOrderDetailItem:
+    from app.schemas.production import (
+        RepairCauseDetailItem,
+        RepairDefectPhenomenonItem,
+        RepairEventLogItem,
+        RepairReturnRouteItem,
+    )
+
     return RepairOrderDetailItem(
         id=row.id,
         repair_order_code=row.repair_order_code,
@@ -1336,7 +1462,9 @@ def _to_repair_order_detail_item(row: object, event_logs: list | None = None) ->
         repair_operator_user_id=row.repair_operator_user_id,
         repair_operator_username=row.repair_operator_username,
         defect_rows=[
-            RepairDefectPhenomenonItem(id=d.id, phenomenon=d.phenomenon, quantity=d.quantity)
+            RepairDefectPhenomenonItem(
+                id=d.id, phenomenon=d.phenomenon, quantity=d.quantity
+            )
             for d in (row.defect_rows or [])
         ],
         cause_rows=[
@@ -1414,6 +1542,8 @@ def get_pipeline_instances_api(
     order_code: str | None = Query(default=None),
     order_process_id: int | None = Query(default=None),
     sub_order_id: int | None = Query(default=None),
+    process_keyword: str | None = Query(default=None),
+    pipeline_sub_order_no: str | None = Query(default=None),
     is_active: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=100, ge=1, le=500),
@@ -1427,6 +1557,8 @@ def get_pipeline_instances_api(
             order_code=order_code,
             order_process_id=order_process_id,
             sub_order_id=sub_order_id,
+            process_keyword=process_keyword,
+            pipeline_sub_order_no=pipeline_sub_order_no,
             is_active=is_active,
             page=page,
             page_size=page_size,
@@ -1454,22 +1586,35 @@ def get_scrap_statistics_detail_api(
     from app.models.production_scrap_statistics import ProductionScrapStatistics
     from app.models.order_event_log import OrderEventLog
     from app.schemas.production import ScrapEventLogItem, ScrapRelatedRepairItem
-    row = db.execute(
-        sa_select(ProductionScrapStatistics).where(ProductionScrapStatistics.id == scrap_id)
-    ).scalars().first()
+
+    row = (
+        db.execute(
+            sa_select(ProductionScrapStatistics).where(
+                ProductionScrapStatistics.id == scrap_id
+            )
+        )
+        .scalars()
+        .first()
+    )
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scrap statistics not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Scrap statistics not found"
+        )
     # Query related repair orders by order/process.
     related_repairs: list[ScrapRelatedRepairItem] = []
     if row.order_id is not None:
         repair_filters = [RepairOrder.source_order_id == row.order_id]
         if row.process_id is not None:
             repair_filters.append(RepairOrder.source_order_process_id == row.process_id)
-        repair_rows = db.execute(
-            sa_select(RepairOrder)
-            .where(*repair_filters)
-            .order_by(RepairOrder.repair_time.desc())
-        ).scalars().all()
+        repair_rows = (
+            db.execute(
+                sa_select(RepairOrder)
+                .where(*repair_filters)
+                .order_by(RepairOrder.repair_time.desc())
+            )
+            .scalars()
+            .all()
+        )
         related_repairs = [
             ScrapRelatedRepairItem(
                 id=r.id,
@@ -1492,7 +1637,9 @@ def get_scrap_statistics_detail_api(
                 .where(OrderEventLog.order_id == row.order_id)
                 .order_by(OrderEventLog.created_at.desc())
                 .limit(100)
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
             if (
                 log.process_code_snapshot == row.process_code
                 or log.event_type == "scrap_statistics_export"
@@ -1547,9 +1694,12 @@ def get_repair_order_detail_api(
     _: User = Depends(require_permission(PERM_PROD_REPAIR_ORDERS_DETAIL)),
 ) -> ApiResponse[RepairOrderDetailItem]:
     from app.models.order_event_log import OrderEventLog
+
     row = get_repair_order_by_id(db, repair_order_id=repair_order_id)
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found"
+        )
     # Query latest related order events for context.
     event_logs = []
     if row.source_order_id is not None:
@@ -1560,10 +1710,15 @@ def get_repair_order_detail_api(
                 .where(OrderEventLog.order_id == row.source_order_id)
                 .order_by(OrderEventLog.created_at.desc())
                 .limit(100)
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
             if (
                 event.process_code_snapshot == row.source_process_code
-                or (event.payload_json and f'"repair_order_id":{row.id}' in event.payload_json)
+                or (
+                    event.payload_json
+                    and f'"repair_order_id":{row.id}' in event.payload_json
+                )
             )
         ]
 

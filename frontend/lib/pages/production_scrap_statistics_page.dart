@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/production_models.dart';
+import 'production_scrap_statistics_detail_page.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
@@ -33,6 +34,8 @@ class _ProductionScrapStatisticsPageState
     extends State<ProductionScrapStatisticsPage> {
   late final ProductionService _service;
   final TextEditingController _keywordController = TextEditingController();
+  final TextEditingController _productNameController = TextEditingController();
+  final TextEditingController _processCodeController = TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -53,6 +56,8 @@ class _ProductionScrapStatisticsPageState
   @override
   void dispose() {
     _keywordController.dispose();
+    _productNameController.dispose();
+    _processCodeController.dispose();
     super.dispose();
   }
 
@@ -129,6 +134,8 @@ class _ProductionScrapStatisticsPageState
         page: 1,
         pageSize: 200,
         keyword: _keywordController.text.trim(),
+        productName: _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim(),
         progress: _progress,
         startDate: _startDate,
         endDate: _endDate,
@@ -184,6 +191,12 @@ class _ProductionScrapStatisticsPageState
         keyword: _keywordController.text.trim().isEmpty
             ? null
             : _keywordController.text.trim(),
+        productName: _productNameController.text.trim().isEmpty
+            ? null
+            : _productNameController.text.trim(),
+        processCode: _processCodeController.text.trim().isEmpty
+            ? null
+            : _processCodeController.text.trim(),
         progress: _progress,
         startDate: _startDate,
         endDate: _endDate,
@@ -234,126 +247,17 @@ class _ProductionScrapStatisticsPageState
   }
 
   Future<void> _showDetail(ScrapStatisticsItem item) async {
-    ScrapStatisticsItem? detail;
-    String? errorMsg;
-    try {
-      detail = await _service.getScrapStatisticsDetail(scrapId: item.id);
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      errorMsg = _errorMessage(error);
-    }
     if (!mounted) return;
-    final d = detail ?? item;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('报废详情 - ${d.orderCode ?? '-'}'),
-        content: SizedBox(
-          width: 420,
-          child: errorMsg != null
-              ? Text(
-                  errorMsg,
-                  style: TextStyle(color: Theme.of(ctx).colorScheme.error),
-                )
-              : SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Table(
-                        columnWidths: const {
-                          0: IntrinsicColumnWidth(),
-                          1: FlexColumnWidth(),
-                        },
-                        children: [
-                          _detailRow('订单号', d.orderCode ?? '-'),
-                          _detailRow('产品', d.productName ?? '-'),
-                          _detailRow('工序', d.processName ?? '-'),
-                          _detailRow('工序编码', d.processCode ?? '-'),
-                          _detailRow('报废原因', d.scrapReason),
-                          _detailRow('报废数量', '${d.scrapQuantity}'),
-                          _detailRow('进度', scrapProgressLabel(d.progress)),
-                          _detailRow(
-                            '最近报废时间',
-                            _formatDateTime(d.lastScrapTime),
-                          ),
-                          _detailRow('申请时间', _formatDateTime(d.appliedAt)),
-                          _detailRow('创建时间', _formatDateTime(d.createdAt)),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        '关联维修工单',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 6),
-                      if (d.relatedRepairOrders.isEmpty)
-                        const Text('无')
-                      else
-                        ...d.relatedRepairOrders.map(
-                          (repair) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              '${repair.repairOrderCode} | ${repairOrderStatusLabel(repair.status)} | '
-                              '送修:${repair.repairQuantity} 已修:${repair.repairedQuantity} 报废:${repair.scrapQuantity} | '
-                              '${_formatDateTime(repair.repairTime)}',
-                            ),
-                            ),
-                          ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        '相关日志',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 6),
-                      if (d.relatedEventLogs.isEmpty)
-                        const Text('无')
-                      else
-                        ...d.relatedEventLogs.map(
-                          (event) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              '${_formatDateTime(event.createdAt)} | ${event.eventTitle}'
-                              '${(event.eventDetail ?? '').trim().isEmpty ? '' : ' | ${event.eventDetail!.trim()}'}'
-                              '${(event.orderCode ?? '').trim().isEmpty ? '' : ' | ${event.orderCode}'}'
-                              '${(event.processCode ?? '').trim().isEmpty ? '' : ' | ${event.processCode}'}'
-                              '${(event.orderStatus ?? '').trim().isEmpty ? '' : ' | ${event.orderStatus}'}'
-                              '${(event.payloadJson ?? '').trim().isEmpty ? '' : '\n载荷：${event.payloadJson!.trim()}'}',
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProductionScrapStatisticsDetailPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          scrapId: item.id,
+          orderCode: item.orderCode,
+          service: _service,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
       ),
-    );
-  }
-
-  TableRow _detailRow(String label, String value) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-          child: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-          child: Text(value),
-        ),
-      ],
     );
   }
 
@@ -390,7 +294,31 @@ class _ProductionScrapStatisticsPageState
                 child: TextField(
                   controller: _keywordController,
                   decoration: const InputDecoration(
-                    labelText: '关键词（订单/产品/工序/原因）',
+                    labelText: '关键词（订单/原因）',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadItems(),
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _productNameController,
+                  decoration: const InputDecoration(
+                    labelText: '产品名称（精确）',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadItems(),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: TextField(
+                  controller: _processCodeController,
+                  decoration: const InputDecoration(
+                    labelText: '工序编码（精确）',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),

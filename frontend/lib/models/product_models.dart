@@ -102,7 +102,13 @@ class ProductParameterUpdateItem {
   final String description;
 
   Map<String, dynamic> toJson() {
-    return {'name': name, 'category': category, 'type': type, 'value': value, 'description': description};
+    return {
+      'name': name,
+      'category': category,
+      'type': type,
+      'value': value,
+      'description': description,
+    };
   }
 }
 
@@ -110,6 +116,7 @@ class ProductParameterListResult {
   ProductParameterListResult({
     required this.productId,
     required this.productName,
+    required this.parameterScope,
     required this.version,
     required this.versionLabel,
     required this.lifecycleStatus,
@@ -119,6 +126,7 @@ class ProductParameterListResult {
 
   final int productId;
   final String productName;
+  final String parameterScope;
   final int version;
   final String versionLabel;
   final String lifecycleStatus;
@@ -129,6 +137,7 @@ class ProductParameterListResult {
     return ProductParameterListResult(
       productId: json['product_id'] as int,
       productName: json['product_name'] as String,
+      parameterScope: (json['parameter_scope'] as String?) ?? 'version',
       version: (json['version'] as int?) ?? 0,
       versionLabel: (json['version_label'] as String?) ?? 'V1.0',
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
@@ -141,6 +150,54 @@ class ProductParameterListResult {
           .toList(),
     );
   }
+}
+
+class ProductParameterVersionListItem {
+  ProductParameterVersionListItem({
+    required this.productId,
+    required this.productName,
+    required this.productCategory,
+    required this.version,
+    required this.versionLabel,
+    required this.lifecycleStatus,
+    required this.isCurrentVersion,
+    required this.isEffectiveVersion,
+    required this.parameterSummary,
+    required this.updatedAt,
+  });
+
+  final int productId;
+  final String productName;
+  final String productCategory;
+  final int version;
+  final String versionLabel;
+  final String lifecycleStatus;
+  final bool isCurrentVersion;
+  final bool isEffectiveVersion;
+  final String? parameterSummary;
+  final DateTime updatedAt;
+
+  factory ProductParameterVersionListItem.fromJson(Map<String, dynamic> json) {
+    return ProductParameterVersionListItem(
+      productId: json['product_id'] as int,
+      productName: json['product_name'] as String,
+      productCategory: (json['product_category'] as String?) ?? '',
+      version: (json['version'] as int?) ?? 0,
+      versionLabel: (json['version_label'] as String?) ?? 'V1.0',
+      lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
+      isCurrentVersion: (json['is_current_version'] as bool?) ?? false,
+      isEffectiveVersion: (json['is_effective_version'] as bool?) ?? false,
+      parameterSummary: json['parameter_summary'] as String?,
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+  }
+}
+
+class ProductParameterVersionListResult {
+  ProductParameterVersionListResult({required this.total, required this.items});
+
+  final int total;
+  final List<ProductParameterVersionListItem> items;
 }
 
 class ProductParameterHistoryItem {
@@ -203,15 +260,21 @@ class ProductParameterHistoryListResult {
 
 class ProductParameterUpdateResult {
   ProductParameterUpdateResult({
+    required this.parameterScope,
+    required this.version,
     required this.updatedCount,
     required this.changedKeys,
   });
 
+  final String parameterScope;
+  final int version;
   final int updatedCount;
   final List<String> changedKeys;
 
   factory ProductParameterUpdateResult.fromJson(Map<String, dynamic> json) {
     return ProductParameterUpdateResult(
+      parameterScope: (json['parameter_scope'] as String?) ?? 'version',
+      version: (json['version'] as int?) ?? 0,
       updatedCount: (json['updated_count'] as int?) ?? 0,
       changedKeys: (json['changed_keys'] as List<dynamic>? ?? const [])
           .cast<String>(),
@@ -343,13 +406,17 @@ class ProductVersionItem {
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? '',
       action: (json['action'] as String?) ?? '',
       note: json['note'] as String?,
-      effectiveAt: json['effective_at'] != null ? DateTime.parse(json['effective_at'] as String) : null,
+      effectiveAt: json['effective_at'] != null
+          ? DateTime.parse(json['effective_at'] as String)
+          : null,
       sourceVersion: json['source_version'] as int?,
       sourceVersionLabel: json['source_version_label'] as String?,
       createdByUserId: json['created_by_user_id'] as int?,
       createdByUsername: json['created_by_username'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : null,
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'] as String)
+          : null,
     );
   }
 }

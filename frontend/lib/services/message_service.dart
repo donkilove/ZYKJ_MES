@@ -14,9 +14,9 @@ class MessageService {
   String get _base => '${_session.baseUrl}/messages';
 
   Map<String, String> get _headers => {
-        'Authorization': 'Bearer ${_session.accessToken}',
-        'Content-Type': 'application/json',
-      };
+    'Authorization': 'Bearer ${_session.accessToken}',
+    'Content-Type': 'application/json',
+  };
 
   Future<int> getUnreadCount() async {
     final uri = Uri.parse('$_base/unread-count');
@@ -53,9 +53,11 @@ class MessageService {
       'page_size': '$pageSize',
       if (keyword != null && keyword.isNotEmpty) 'keyword': keyword,
       if (status != null && status.isNotEmpty) 'status': status,
-      if (messageType != null && messageType.isNotEmpty) 'message_type': messageType,
+      if (messageType != null && messageType.isNotEmpty)
+        'message_type': messageType,
       if (priority != null && priority.isNotEmpty) 'priority': priority,
-      if (sourceModule != null && sourceModule.isNotEmpty) 'source_module': sourceModule,
+      if (sourceModule != null && sourceModule.isNotEmpty)
+        'source_module': sourceModule,
       if (startTime != null) 'start_time': startTime.toUtc().toIso8601String(),
       if (endTime != null) 'end_time': endTime.toUtc().toIso8601String(),
       if (todoOnly) 'todo_only': 'true',
@@ -91,6 +93,22 @@ class MessageService {
     final body = jsonDecode(resp.body) as Map<String, dynamic>;
     final data = body['data'] as Map<String, dynamic>? ?? const {};
     return (data['updated'] as int?) ?? 0;
+  }
+
+  Future<AnnouncementPublishResult> publishAnnouncement(
+    AnnouncementPublishRequest request,
+  ) async {
+    final uri = Uri.parse('$_base/announcements');
+    final resp = await http.post(
+      uri,
+      headers: _headers,
+      body: jsonEncode(request.toJson()),
+    );
+    _checkStatus(resp);
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    return AnnouncementPublishResult.fromJson(
+      body['data'] as Map<String, dynamic>,
+    );
   }
 
   void _checkStatus(http.Response resp) {

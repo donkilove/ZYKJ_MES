@@ -17,6 +17,7 @@ class _FakeProductionOrderQueryDetailService extends ProductionService {
         'order_code': 'PO-$orderId',
         'product_id': 1,
         'product_name': '产品A',
+        'product_version': 3,
         'quantity': 10,
         'status': 'in_progress',
         'current_process_code': '01-01',
@@ -24,10 +25,10 @@ class _FakeProductionOrderQueryDetailService extends ProductionService {
         'start_date': '2026-03-01',
         'due_date': '2026-03-10',
         'remark': null,
-        'process_template_id': null,
-        'process_template_name': null,
-        'process_template_version': null,
-        'pipeline_enabled': false,
+        'process_template_id': 7,
+        'process_template_name': '标准模板',
+        'process_template_version': 5,
+        'pipeline_enabled': true,
         'pipeline_process_codes': [],
         'created_by_user_id': 1,
         'created_by_username': 'admin',
@@ -184,6 +185,12 @@ void main() {
     expect(find.text('子订单'), findsOneWidget);
     expect(find.text('记录'), findsOneWidget);
     expect(find.text('事件'), findsOneWidget);
+    expect(find.text('订单号：PO-1'), findsOneWidget);
+    expect(find.text('产品版本：3'), findsOneWidget);
+    expect(find.text('模板名称/版本：标准模板 v5'), findsOneWidget);
+    expect(find.text('并行模式：开启'), findsOneWidget);
+    expect(find.text('创建人：admin'), findsOneWidget);
+    expect(find.textContaining('创建时间：2026-03-01'), findsOneWidget);
 
     await tester.tap(find.text('首件'));
     await tester.pumpAndSettle();

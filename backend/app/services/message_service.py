@@ -4,17 +4,56 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.authz_catalog import PAGE_PERMISSION_BY_PAGE_CODE
 from app.models.message import Message
 from app.models.message_recipient import MessageRecipient
-from app.schemas.message import MessageCreateRequest, MessageItem
+from app.models.role import Role
+from app.models.user import User
+from app.schemas.message import (
+    AnnouncementPublishRequest,
+    AnnouncementPublishResult,
+    MessageCreateRequest,
+    MessageItem,
+)
+from app.services.authz_service import get_user_permission_codes
 
 logger = logging.getLogger(__name__)
 
 
-def _to_item(msg: Message, recipient: MessageRecipient) -> MessageItem:
+def _resolve_message_status(
+    msg: Message,
+    *,
+    now: datetime,
+    user_permission_codes: set[str] | None,
+) -> tuple[str, str | None]:
+    if msg.status == "archived":
+        return "archived", "archived"
+    if msg.status != "active":
+        return "source_unavailable", "source_unavailable"
+    if msg.expires_at is not None and msg.expires_at <= now:
+        return "expired", "expired"
+
+    target_page_code = (msg.target_page_code or "").strip()
+    if target_page_code and user_permission_codes is not None:
+        target_permission_code = PAGE_PERMISSION_BY_PAGE_CODE.get(target_page_code)
+        if target_permission_code is None:
+            return "source_unavailable", "source_unavailable"
+        if target_permission_code not in user_permission_codes:
+            return "no_permission", "no_permission"
+
+    return "active", None
+
+
+def _to_item(
+    msg: Message,
+    recipient: MessageRecipient,
+    *,
+    effective_status: str,
+    inactive_reason: str | None,
+) -> MessageItem:
     return MessageItem(
         id=msg.id,
         message_type=msg.message_type,
@@ -28,7 +67,8 @@ def _to_item(msg: Message, recipient: MessageRecipient) -> MessageItem:
         target_page_code=msg.target_page_code,
         target_tab_code=msg.target_tab_code,
         target_route_payload_json=msg.target_route_payload_json,
-        status=msg.status,
+        status=effective_status,
+        inactive_reason=inactive_reason,
         published_at=msg.published_at,
         is_read=recipient.is_read,
         read_at=recipient.read_at,
@@ -40,6 +80,7 @@ def list_messages(
     db: Session,
     *,
     user_id: int,
+    current_user: User | None = None,
     page: int = 1,
     page_size: int = 20,
     keyword: str | None = None,
@@ -53,6 +94,7 @@ def list_messages(
     active_only: bool = True,
 ) -> tuple[list[MessageItem], int]:
     """查询当前用户的消息列表，返回 (items, total)"""
+    now = datetime.now(UTC)
     base_stmt = (
         select(Message, MessageRecipient)
         .join(MessageRecipient, MessageRecipient.message_id == Message.id)
@@ -65,7 +107,9 @@ def list_messages(
     if keyword:
         like = f"%{keyword}%"
         base_stmt = base_stmt.where(
-            Message.title.ilike(like) | Message.summary.ilike(like) | Message.source_code.ilike(like)
+            Message.title.ilike(like)
+            | Message.summary.ilike(like)
+            | Message.source_code.ilike(like)
         )
     if status == "unread":
         base_stmt = base_stmt.where(MessageRecipient.is_read.is_(False))
@@ -84,7 +128,10 @@ def list_messages(
     if todo_only:
         base_stmt = base_stmt.where(Message.message_type == "todo")
     if active_only:
-        base_stmt = base_stmt.where(Message.status == "active")
+        base_stmt = base_stmt.where(
+            Message.status == "active",
+            or_(Message.expires_at.is_(None), Message.expires_at > now),
+        )
 
     count_stmt = select(func.count()).select_from(base_stmt.subquery())
     total: int = db.execute(count_stmt).scalar_one()
@@ -102,11 +149,31 @@ def list_messages(
     )
 
     rows = db.execute(data_stmt).all()
-    items = [_to_item(msg, recipient) for msg, recipient in rows]
+    user_permission_codes = (
+        get_user_permission_codes(db, user=current_user)
+        if current_user is not None
+        else None
+    )
+    items = []
+    for msg, recipient in rows:
+        effective_status, inactive_reason = _resolve_message_status(
+            msg,
+            now=now,
+            user_permission_codes=user_permission_codes,
+        )
+        items.append(
+            _to_item(
+                msg,
+                recipient,
+                effective_status=effective_status,
+                inactive_reason=inactive_reason,
+            )
+        )
     return items, total
 
 
 def get_message_summary(db: Session, *, user_id: int) -> dict[str, int]:
+    now = datetime.now(UTC)
     base_stmt = (
         select(Message, MessageRecipient)
         .join(MessageRecipient, MessageRecipient.message_id == Message.id)
@@ -114,6 +181,7 @@ def get_message_summary(db: Session, *, user_id: int) -> dict[str, int]:
             MessageRecipient.recipient_user_id == user_id,
             MessageRecipient.is_deleted.is_(False),
             Message.status == "active",
+            or_(Message.expires_at.is_(None), Message.expires_at > now),
         )
     )
     rows = db.execute(base_stmt).all()
@@ -139,6 +207,7 @@ def get_message_summary(db: Session, *, user_id: int) -> dict[str, int]:
 
 def get_unread_count(db: Session, *, user_id: int) -> int:
     """获取当前用户未读消息数"""
+    now = datetime.now(UTC)
     stmt = (
         select(func.count())
         .select_from(MessageRecipient)
@@ -148,6 +217,7 @@ def get_unread_count(db: Session, *, user_id: int) -> int:
             MessageRecipient.is_read.is_(False),
             MessageRecipient.is_deleted.is_(False),
             Message.status == "active",
+            or_(Message.expires_at.is_(None), Message.expires_at > now),
         )
     )
     return db.execute(stmt).scalar_one()
@@ -186,7 +256,9 @@ def mark_all_read(db: Session, *, user_id: int) -> int:
     return count
 
 
-def mark_messages_read_batch(db: Session, *, user_id: int, message_ids: list[int]) -> int:
+def mark_messages_read_batch(
+    db: Session, *, user_id: int, message_ids: list[int]
+) -> int:
     normalized_ids = sorted({int(value) for value in message_ids if int(value) > 0})
     if not normalized_ids:
         return 0
@@ -297,6 +369,7 @@ def create_message_for_users(
     target_route_payload_json: str | None = None,
     recipient_user_ids: list[int],
     dedupe_key: str | None = None,
+    expires_at: datetime | None = None,
     created_by_user_id: int | None = None,
 ) -> Message:
     """便捷方法：创建消息并投递给指定用户列表"""
@@ -315,6 +388,122 @@ def create_message_for_users(
         target_route_payload_json=target_route_payload_json,
         recipient_user_ids=recipient_user_ids,
         dedupe_key=dedupe_key,
+        expires_at=expires_at,
         created_by_user_id=created_by_user_id,
     )
     return create_message(db, req=req)
+
+
+_VALID_ANNOUNCEMENT_PRIORITIES = {"normal", "important", "urgent"}
+_VALID_ANNOUNCEMENT_RANGE_TYPES = {"all", "roles", "users"}
+
+
+def _normalize_announcement_text(value: str, *, field_name: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} 不能为空")
+    return normalized
+
+
+def _normalize_announcement_priority(priority: str) -> str:
+    normalized = priority.strip().lower()
+    if normalized not in _VALID_ANNOUNCEMENT_PRIORITIES:
+        raise ValueError("priority 仅支持 normal / important / urgent")
+    return normalized
+
+
+def _normalize_announcement_range_type(range_type: str) -> str:
+    normalized = range_type.strip().lower()
+    if normalized not in _VALID_ANNOUNCEMENT_RANGE_TYPES:
+        raise ValueError("range_type 仅支持 all / roles / users")
+    return normalized
+
+
+def _announcement_summary(content: str) -> str:
+    summary = " ".join(content.split())
+    if len(summary) <= 120:
+        return summary
+    return f"{summary[:117]}..."
+
+
+def _resolve_announcement_recipient_user_ids(
+    db: Session,
+    *,
+    range_type: str,
+    role_codes: list[str],
+    user_ids: list[int],
+) -> list[int]:
+    base_stmt = select(User.id).where(
+        User.is_deleted.is_(False),
+        User.is_active.is_(True),
+    )
+    if range_type == "all":
+        stmt = base_stmt.order_by(User.id.asc())
+    elif range_type == "roles":
+        normalized_role_codes = sorted(
+            {code.strip() for code in role_codes if code and code.strip()}
+        )
+        if not normalized_role_codes:
+            raise ValueError("range_type=roles 时必须选择至少一个角色")
+        stmt = (
+            base_stmt.join(User.roles)
+            .where(
+                Role.code.in_(normalized_role_codes),
+                Role.is_enabled.is_(True),
+                Role.is_deleted.is_(False),
+            )
+            .distinct()
+            .order_by(User.id.asc())
+        )
+    else:
+        normalized_user_ids = sorted(
+            {int(user_id) for user_id in user_ids if int(user_id) > 0}
+        )
+        if not normalized_user_ids:
+            raise ValueError("range_type=users 时必须选择至少一个用户")
+        stmt = base_stmt.where(User.id.in_(normalized_user_ids)).order_by(User.id.asc())
+
+    recipient_user_ids = list(db.execute(stmt).scalars().all())
+    if not recipient_user_ids:
+        raise ValueError("未匹配到可投递的有效用户")
+    return recipient_user_ids
+
+
+def publish_announcement(
+    db: Session,
+    *,
+    req: AnnouncementPublishRequest,
+    operator: User,
+) -> AnnouncementPublishResult:
+    title = _normalize_announcement_text(req.title, field_name="title")
+    content = _normalize_announcement_text(req.content, field_name="content")
+    priority = _normalize_announcement_priority(req.priority)
+    range_type = _normalize_announcement_range_type(req.range_type)
+    if req.expires_at is not None and req.expires_at <= datetime.now(UTC):
+        raise ValueError("expires_at 必须晚于当前时间")
+
+    recipient_user_ids = _resolve_announcement_recipient_user_ids(
+        db,
+        range_type=range_type,
+        role_codes=req.role_codes,
+        user_ids=req.user_ids,
+    )
+    message = create_message_for_users(
+        db,
+        message_type="announcement",
+        priority=priority,
+        title=title,
+        summary=_announcement_summary(content),
+        content=content,
+        source_module="message",
+        source_type="announcement",
+        source_id=str(operator.id),
+        source_code=range_type,
+        recipient_user_ids=recipient_user_ids,
+        expires_at=req.expires_at,
+        created_by_user_id=operator.id,
+    )
+    return AnnouncementPublishResult(
+        message_id=message.id,
+        recipient_count=len(recipient_user_ids),
+    )

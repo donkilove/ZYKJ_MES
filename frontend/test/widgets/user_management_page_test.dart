@@ -133,7 +133,12 @@ class _FakeUserService extends UserService {
 }
 
 class _FakeCraftService extends CraftService {
-  _FakeCraftService() : super(AppSession(baseUrl: '', accessToken: 'token'));
+  _FakeCraftService({List<List<CraftStageItem>>? responses})
+    : _responses = responses,
+      super(AppSession(baseUrl: '', accessToken: 'token'));
+
+  final List<List<CraftStageItem>>? _responses;
+  int listStagesCalls = 0;
 
   @override
   Future<CraftStageListResult> listStages({
@@ -142,33 +147,37 @@ class _FakeCraftService extends CraftService {
     String? keyword,
     bool? enabled,
   }) async {
-    return CraftStageListResult(
-      total: 2,
-      items: [
-        CraftStageItem(
-          id: 10,
-          code: '10',
-          name: '装配一段',
-          sortOrder: 1,
-          isEnabled: true,
-          processCount: 1,
-          createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-          updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
-        ),
-        CraftStageItem(
-          id: 11,
-          code: '11',
-          name: '装配二段',
-          sortOrder: 2,
-          isEnabled: true,
-          processCount: 0,
-          createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-          updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
-        ),
-      ],
-    );
+    listStagesCalls += 1;
+    final responses = _responses;
+    final items = responses != null && responses.isNotEmpty
+        ? responses[(listStagesCalls - 1).clamp(0, responses.length - 1)]
+        : _defaultStages;
+    return CraftStageListResult(total: items.length, items: items);
   }
 }
+
+final List<CraftStageItem> _defaultStages = [
+  CraftStageItem(
+    id: 10,
+    code: '10',
+    name: '装配一段',
+    sortOrder: 1,
+    isEnabled: true,
+    processCount: 1,
+    createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+    updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+  ),
+  CraftStageItem(
+    id: 11,
+    code: '11',
+    name: '装配二段',
+    sortOrder: 2,
+    isEnabled: true,
+    processCount: 0,
+    createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+    updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+  ),
+];
 
 UserItem _buildUser({
   required int id,
@@ -228,6 +237,23 @@ Future<void> _pumpPage(
 }
 
 void main() {
+  testWidgets('新建用户弹窗打开时会刷新工段列表', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(craftService.listStagesCalls, 1);
+
+    await tester.tap(find.text('新建用户'));
+    await tester.pumpAndSettle();
+
+    expect(craftService.listStagesCalls, 2);
+  });
+
   testWidgets('创建操作员时会携带 stageId 提交', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
@@ -289,6 +315,39 @@ void main() {
 
     expect(userService.updateCalls, 1);
     expect(userService.lastUpdateStageId, 10);
+  });
+
+  testWidgets('编辑用户弹窗打开时会刷新工段列表', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 3,
+          username: 'op_refresh',
+          roleCode: 'operator',
+          roleName: '操作员',
+          stageId: 10,
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(craftService.listStagesCalls, 1);
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+
+    expect(craftService.listStagesCalls, 2);
   });
 
   testWidgets('编辑未配置工段的操作员时提示必须选择工段', (tester) async {

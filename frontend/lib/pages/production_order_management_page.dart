@@ -49,7 +49,8 @@ class _ProductionOrderManagementPageState
   late final ProductionService _service;
   late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
-  final TextEditingController _deletedOrderCodeController = TextEditingController();
+  final TextEditingController _deletedOrderCodeController =
+      TextEditingController();
 
   bool _loading = false;
   String _message = '';
@@ -187,11 +188,15 @@ class _ProductionOrderManagementPageState
         ],
       );
       if (location == null || !mounted) return;
-      await XFile.fromData(bytes, mimeType: 'text/csv', name: filename).saveTo(location.path);
+      await XFile.fromData(
+        bytes,
+        mimeType: 'text/csv',
+        name: filename,
+      ).saveTo(location.path);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功：${location.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
     } catch (error) {
       if (!mounted) return;
       if (_isUnauthorized(error)) {
@@ -207,13 +212,16 @@ class _ProductionOrderManagementPageState
   Future<void> _showDeletedOrderTraceDialog() async {
     final orderCode = _deletedOrderCodeController.text.trim();
     if (orderCode.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入订单号后再查询删除追溯')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入订单号后再查询删除追溯')));
       return;
     }
     try {
-      final result = await _service.searchOrderEvents(orderCode: orderCode);
+      final result = await _service.searchOrderEvents(
+        orderCode: orderCode,
+        eventType: 'order_deleted',
+      );
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -230,10 +238,18 @@ class _ProductionOrderManagementPageState
                     itemBuilder: (context, index) {
                       final item = result.items[index];
                       final snapshotSegments = <String>[];
-                      if ((item.orderCode ?? '').trim().isNotEmpty) snapshotSegments.add(item.orderCode!.trim());
-                      if ((item.productName ?? '').trim().isNotEmpty) snapshotSegments.add(item.productName!.trim());
-                      if ((item.processCode ?? '').trim().isNotEmpty) snapshotSegments.add(item.processCode!.trim());
-                      if ((item.orderStatus ?? '').trim().isNotEmpty) snapshotSegments.add(item.orderStatus!.trim());
+                      if ((item.orderCode ?? '').trim().isNotEmpty) {
+                        snapshotSegments.add(item.orderCode!.trim());
+                      }
+                      if ((item.productName ?? '').trim().isNotEmpty) {
+                        snapshotSegments.add(item.productName!.trim());
+                      }
+                      if ((item.processCode ?? '').trim().isNotEmpty) {
+                        snapshotSegments.add(item.processCode!.trim());
+                      }
+                      if ((item.orderStatus ?? '').trim().isNotEmpty) {
+                        snapshotSegments.add(item.orderStatus!.trim());
+                      }
                       final payload = (item.payloadJson ?? '').trim();
                       return ListTile(
                         title: Text(item.eventTitle),
@@ -242,7 +258,8 @@ class _ProductionOrderManagementPageState
                           '${snapshotSegments.isEmpty ? '' : '\n快照：${snapshotSegments.join(' ｜ ')}'}'
                           '${payload.isEmpty ? '' : '\n载荷：$payload'}',
                         ),
-                        isThreeLine: snapshotSegments.isNotEmpty || payload.isNotEmpty,
+                        isThreeLine:
+                            snapshotSegments.isNotEmpty || payload.isNotEmpty,
                         trailing: Text(item.operatorUsername ?? '-'),
                       );
                     },
@@ -864,7 +881,10 @@ class _ProductionOrderManagementPageState
                   _loadOrders();
                 },
               ),
-              if (_startDateFrom != null || _startDateTo != null || _dueDateFrom != null || _dueDateTo != null) ...[
+              if (_startDateFrom != null ||
+                  _startDateTo != null ||
+                  _dueDateFrom != null ||
+                  _dueDateTo != null) ...[
                 const SizedBox(width: 8),
                 TextButton.icon(
                   icon: const Icon(Icons.clear, size: 16),
@@ -926,14 +946,22 @@ class _ProductionOrderManagementPageState
                             cells: [
                               DataCell(Text(item.orderCode)),
                               DataCell(Text(item.productName)),
-                              DataCell(Text(item.productVersion != null ? 'v${item.productVersion}' : '-')),
+                              DataCell(
+                                Text(
+                                  item.productVersion != null
+                                      ? 'v${item.productVersion}'
+                                      : '-',
+                                ),
+                              ),
                               DataCell(Text('${item.quantity}')),
                               DataCell(
                                 Text(productionOrderStatusLabel(item.status)),
                               ),
                               DataCell(Text(item.currentProcessName ?? '-')),
                               DataCell(Text(templateLabel)),
-                              DataCell(Text(item.pipelineEnabled ? '已开启' : '未开启')),
+                              DataCell(
+                                Text(item.pipelineEnabled ? '已开启' : '未开启'),
+                              ),
                               DataCell(Text(item.createdByUsername ?? '-')),
                               DataCell(Text(_formatDate(item.startDate))),
                               DataCell(Text(_formatDate(item.dueDate))),
@@ -964,12 +992,12 @@ class _ProductionOrderManagementPageState
                                           MaterialPageRoute<void>(
                                             builder: (_) =>
                                                 ProductionPipelineInstancesPage(
-                                              session: widget.session,
-                                              onLogout: widget.onLogout,
-                                              orderId: item.id,
-                                              orderCode: item.orderCode,
-                                              service: _service,
-                                            ),
+                                                  session: widget.session,
+                                                  onLogout: widget.onLogout,
+                                                  orderId: item.id,
+                                                  orderCode: item.orderCode,
+                                                  service: _service,
+                                                ),
                                           ),
                                         );
                                         break;

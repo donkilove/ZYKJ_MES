@@ -73,7 +73,10 @@ class CraftService {
     }
     final data = body['data'] as Map<String, dynamic>;
     final items = (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => CraftStageLightItem.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) =>
+              CraftStageLightItem.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
     return CraftStageLightListResult(
       total: (data['total'] as int?) ?? 0,
@@ -218,7 +221,10 @@ class CraftService {
     }
     final data = body['data'] as Map<String, dynamic>;
     final items = (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => CraftProcessLightItem.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) =>
+              CraftProcessLightItem.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
     return CraftProcessLightListResult(
       total: (data['total'] as int?) ?? 0,
@@ -503,8 +509,15 @@ class CraftService {
 
   Future<CraftTemplateImpactAnalysis> getTemplateImpactAnalysis({
     required int templateId,
+    int? targetVersion,
   }) async {
-    final uri = Uri.parse('$_basePath/templates/$templateId/impact-analysis');
+    final query = <String, String>{};
+    if (targetVersion != null) {
+      query['target_version'] = '$targetVersion';
+    }
+    final uri = Uri.parse(
+      '$_basePath/templates/$templateId/impact-analysis',
+    ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -700,7 +713,9 @@ class CraftService {
     required int templateId,
     required int version,
   }) async {
-    final uri = Uri.parse('$_basePath/templates/$templateId/versions/$version/export');
+    final uri = Uri.parse(
+      '$_basePath/templates/$templateId/versions/$version/export',
+    );
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -781,7 +796,10 @@ class CraftService {
     final response = await http.post(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({'target_product_id': targetProductId, 'new_name': newName}),
+      body: jsonEncode({
+        'target_product_id': targetProductId,
+        'new_name': newName,
+      }),
     );
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
@@ -867,7 +885,9 @@ class CraftService {
     return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
   }
 
-  Future<CraftTemplateDetail> unarchiveTemplate({required int templateId}) async {
+  Future<CraftTemplateDetail> unarchiveTemplate({
+    required int templateId,
+  }) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/unarchive');
     final response = await http.post(uri, headers: _authHeaders);
     final body = _decodeBody(response);
@@ -892,10 +912,18 @@ class CraftService {
       'product_id': '$productId',
       'limit': '$limit',
     };
-    if (stageId != null) query['stage_id'] = '$stageId';
-    if (processId != null) query['process_id'] = '$processId';
-    if (startDate != null) query['start_date'] = startDate.toUtc().toIso8601String();
-    if (endDate != null) query['end_date'] = endDate.toUtc().toIso8601String();
+    if (stageId != null) {
+      query['stage_id'] = '$stageId';
+    }
+    if (processId != null) {
+      query['process_id'] = '$processId';
+    }
+    if (startDate != null) {
+      query['start_date'] = startDate.toUtc().toIso8601String();
+    }
+    if (endDate != null) {
+      query['end_date'] = endDate.toUtc().toIso8601String();
+    }
     final uri = Uri.parse(
       '$_basePath/kanban/process-metrics',
     ).replace(queryParameters: query);
@@ -924,10 +952,18 @@ class CraftService {
       'product_id': '$productId',
       'limit': '$limit',
     };
-    if (stageId != null) query['stage_id'] = '$stageId';
-    if (processId != null) query['process_id'] = '$processId';
-    if (startDate != null) query['start_date'] = startDate.toUtc().toIso8601String();
-    if (endDate != null) query['end_date'] = endDate.toUtc().toIso8601String();
+    if (stageId != null) {
+      query['stage_id'] = '$stageId';
+    }
+    if (processId != null) {
+      query['process_id'] = '$processId';
+    }
+    if (startDate != null) {
+      query['start_date'] = startDate.toUtc().toIso8601String();
+    }
+    if (endDate != null) {
+      query['end_date'] = endDate.toUtc().toIso8601String();
+    }
     final uri = Uri.parse(
       '$_basePath/kanban/process-metrics/export',
     ).replace(queryParameters: query);
@@ -942,7 +978,6 @@ class CraftService {
     final data = body['data'] as Map<String, dynamic>? ?? const {};
     return (data['content_base64'] as String?) ?? '';
   }
-
 
   Future<CraftStageReferenceResult> getStageReferences({
     required int stageId,
@@ -1014,28 +1049,52 @@ class CraftService {
 
   Future<String> exportStages({String? keyword, bool? enabled}) async {
     final query = <String, String>{};
-    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
-    if (enabled != null) query['enabled'] = '$enabled';
-    final uri = Uri.parse('$_basePath/stages/export').replace(queryParameters: query.isEmpty ? null : query);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (enabled != null) {
+      query['enabled'] = '$enabled';
+    }
+    final uri = Uri.parse(
+      '$_basePath/stages/export',
+    ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(body, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
     return (data['content_base64'] as String?) ?? '';
   }
 
-  Future<String> exportProcesses({String? keyword, int? stageId, bool? enabled}) async {
+  Future<String> exportProcesses({
+    String? keyword,
+    int? stageId,
+    bool? enabled,
+  }) async {
     final query = <String, String>{};
-    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
-    if (stageId != null) query['stage_id'] = '$stageId';
-    if (enabled != null) query['enabled'] = '$enabled';
-    final uri = Uri.parse('$_basePath/processes/export').replace(queryParameters: query.isEmpty ? null : query);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (stageId != null) {
+      query['stage_id'] = '$stageId';
+    }
+    if (enabled != null) {
+      query['enabled'] = '$enabled';
+    }
+    final uri = Uri.parse(
+      '$_basePath/processes/export',
+    ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders);
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(body, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
     return (data['content_base64'] as String?) ?? '';

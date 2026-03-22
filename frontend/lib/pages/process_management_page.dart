@@ -19,11 +19,15 @@ class ProcessManagementPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canWrite,
+    this.processId,
+    this.jumpRequestId = 0,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canWrite;
+  final int? processId;
+  final int jumpRequestId;
 
   @override
   State<ProcessManagementPage> createState() => _ProcessManagementPageState();
@@ -46,6 +50,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   bool? _processEnabledFilter;
   int? _processStageFilter;
   bool _exporting = false;
+  int? _focusedProcessId;
+  String _jumpNotice = '';
+  int _lastHandledJumpRequestId = -1;
 
   @override
   void initState() {
@@ -65,7 +72,13 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     var list = _stages;
     if (_stageKeyword.isNotEmpty) {
       final kw = _stageKeyword.toLowerCase();
-      list = list.where((s) => s.code.toLowerCase().contains(kw) || s.name.toLowerCase().contains(kw)).toList();
+      list = list
+          .where(
+            (s) =>
+                s.code.toLowerCase().contains(kw) ||
+                s.name.toLowerCase().contains(kw),
+          )
+          .toList();
     }
     if (_stageEnabledFilter != null) {
       list = list.where((s) => s.isEnabled == _stageEnabledFilter).toList();
@@ -95,6 +108,19 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     return list;
   }
 
+  CraftProcessItem? get _focusedProcess {
+    final focusedProcessId = _focusedProcessId;
+    if (focusedProcessId == null) {
+      return null;
+    }
+    for (final item in _processes) {
+      if (item.id == focusedProcessId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
   bool _isUnauthorized(Object error) {
     return error is ApiException && error.statusCode == 401;
   }
@@ -106,8 +132,57 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     return error.toString();
   }
 
+  @override
+  void didUpdateWidget(covariant ProcessManagementPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.jumpRequestId != oldWidget.jumpRequestId) {
+      _tryApplyJumpTarget(force: true);
+    }
+  }
+
+  void _tryApplyJumpTarget({bool force = false}) {
+    if (!mounted) {
+      return;
+    }
+    if (!force && widget.jumpRequestId == _lastHandledJumpRequestId) {
+      return;
+    }
+    final processId = widget.processId;
+    if (processId == null || processId <= 0) {
+      _lastHandledJumpRequestId = widget.jumpRequestId;
+      return;
+    }
+    CraftProcessItem? matched;
+    for (final item in _processes) {
+      if (item.id == processId) {
+        matched = item;
+        break;
+      }
+    }
+    if (matched == null) {
+      setState(() {
+        _focusedProcessId = null;
+        _jumpNotice = '未找到目标工序记录 #$processId';
+      });
+      _lastHandledJumpRequestId = widget.jumpRequestId;
+      return;
+    }
+    setState(() {
+      _processStageFilter = matched!.stageId;
+      _processKeyword = '';
+      _processSearchController.clear();
+      _processEnabledFilter = null;
+      _focusedProcessId = matched.id;
+      _jumpNotice = '已定位工序 #${matched.id} ${matched.name}';
+    });
+    _lastHandledJumpRequestId = widget.jumpRequestId;
+  }
+
   Future<void> _exportCsv({required bool isStage}) async {
-    setState(() { _exporting = true; _message = ''; });
+    setState(() {
+      _exporting = true;
+      _message = '';
+    });
     try {
       final csvBase64 = isStage
           ? await _service.exportStages(
@@ -135,12 +210,20 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             height: 400,
             child: SingleChildScrollView(child: SelectableText(csvString)),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      if (_isUnauthorized(e)) { widget.onLogout(); return; }
+      if (_isUnauthorized(e)) {
+        widget.onLogout();
+        return;
+      }
       setState(() => _message = '导出失败：${_errorMessage(e)}');
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -219,6 +302,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         setState(() {
           _loading = false;
         });
+        _tryApplyJumpTarget(force: true);
       }
     }
   }
@@ -234,7 +318,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     final sortController = TextEditingController(
       text: (existing?.sortOrder ?? 0).toString(),
     );
-    final remarkController = TextEditingController(text: existing?.remark ?? '');
+    final remarkController = TextEditingController(
+      text: existing?.remark ?? '',
+    );
     bool isEnabled = existing?.isEnabled ?? true;
     final formKey = GlobalKey<FormState>();
 
@@ -418,7 +504,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
 
     final isEdit = existing != null;
     final nameController = TextEditingController(text: existing?.name ?? '');
-    final remarkController = TextEditingController(text: existing?.remark ?? '');
+    final remarkController = TextEditingController(
+      text: existing?.remark ?? '',
+    );
     var selectedStageId = existing?.stageId ?? _stages.first.id;
     bool isEnabled = existing?.isEnabled ?? true;
     final formKey = GlobalKey<FormState>();
@@ -686,7 +774,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         try {
           final result = await _service.getStageReferences(stageId: item.id);
           refs = result.items
-              .map((e) => _RefEntry(e.refType, e.refName, '#${e.refId}', e.detail))
+              .map(
+                (e) => _RefEntry(e.refType, e.refName, '#${e.refId}', e.detail),
+              )
               .toList();
         } catch (error) {
           if (_isUnauthorized(error)) {
@@ -708,8 +798,12 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                   Text('确认删除工段 ${item.name} 吗？'),
                   if (refs.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Text('该工段存在 ${refs.length} 条引用关系：',
-                        style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    Text(
+                      '该工段存在 ${refs.length} 条引用关系：',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxHeight: 200),
@@ -814,9 +908,13 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         // 先加载引用分析
         List<_RefEntry> processRefs = [];
         try {
-          final result = await _service.getProcessReferences(processId: item.id);
+          final result = await _service.getProcessReferences(
+            processId: item.id,
+          );
           processRefs = result.items
-              .map((e) => _RefEntry(e.refType, e.refName, '#${e.refId}', e.detail))
+              .map(
+                (e) => _RefEntry(e.refType, e.refName, '#${e.refId}', e.detail),
+              )
               .toList();
         } catch (error) {
           if (_isUnauthorized(error)) {
@@ -838,8 +936,12 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                   Text('确认删除工序 ${item.name} 吗？'),
                   if (processRefs.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Text('该工序存在 ${processRefs.length} 条引用关系：',
-                        style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    Text(
+                      '该工序存在 ${processRefs.length} 条引用关系：',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxHeight: 200),
@@ -1009,6 +1111,42 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     );
   }
 
+  Widget _buildFocusedProcessBanner(ThemeData theme) {
+    final process = _focusedProcess;
+    if (_jumpNotice.isEmpty && process == null) {
+      return const SizedBox.shrink();
+    }
+    final colorScheme = theme.colorScheme;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.my_location, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              process == null
+                  ? _jumpNotice
+                  : '$_jumpNotice，所属工段：${process.stageName ?? '-'}，编码：${process.code}',
+            ),
+          ),
+          if (process != null)
+            TextButton(
+              onPressed: () => _showProcessReferenceDialog(process),
+              child: const Text('查看引用'),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1079,7 +1217,10 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                   children: [
                                     Row(
                                       children: [
-                                        Text('工段列表', style: theme.textTheme.titleMedium),
+                                        Text(
+                                          '工段列表',
+                                          style: theme.textTheme.titleMedium,
+                                        ),
                                         const SizedBox(width: 12),
                                         SizedBox(
                                           width: 180,
@@ -1087,12 +1228,21 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                             controller: _stageSearchController,
                                             decoration: const InputDecoration(
                                               hintText: '搜索工段',
-                                              prefixIcon: Icon(Icons.search, size: 16),
+                                              prefixIcon: Icon(
+                                                Icons.search,
+                                                size: 16,
+                                              ),
                                               isDense: true,
                                               border: OutlineInputBorder(),
-                                              contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                              contentPadding:
+                                                  EdgeInsets.symmetric(
+                                                    vertical: 6,
+                                                    horizontal: 8,
+                                                  ),
                                             ),
-                                            onChanged: (v) => setState(() => _stageKeyword = v.trim()),
+                                            onChanged: (v) => setState(
+                                              () => _stageKeyword = v.trim(),
+                                            ),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -1101,17 +1251,33 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                           isDense: true,
                                           hint: const Text('全部状态'),
                                           items: const [
-                                            DropdownMenuItem(value: null, child: Text('全部状态')),
-                                            DropdownMenuItem(value: true, child: Text('启用')),
-                                            DropdownMenuItem(value: false, child: Text('停用')),
+                                            DropdownMenuItem(
+                                              value: null,
+                                              child: Text('全部状态'),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: true,
+                                              child: Text('启用'),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: false,
+                                              child: Text('停用'),
+                                            ),
                                           ],
-                                          onChanged: (v) => setState(() => _stageEnabledFilter = v),
+                                          onChanged: (v) => setState(
+                                            () => _stageEnabledFilter = v,
+                                          ),
                                         ),
                                         const Spacer(),
                                         IconButton(
                                           tooltip: '导出工段',
-                                          onPressed: _exporting ? null : () => _exportCsv(isStage: true),
-                                          icon: const Icon(Icons.download, size: 20),
+                                          onPressed: _exporting
+                                              ? null
+                                              : () => _exportCsv(isStage: true),
+                                          icon: const Icon(
+                                            Icons.download,
+                                            size: 20,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -1123,34 +1289,66 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                           ? const Center(child: Text('暂无工段'))
                                           : ListView.separated(
                                               itemCount: _filteredStages.length,
-                                              separatorBuilder: (context, index) => const Divider(height: 1),
+                                              separatorBuilder:
+                                                  (context, index) =>
+                                                      const Divider(height: 1),
                                               itemBuilder: (context, index) {
-                                                final item = _filteredStages[index];
+                                                final item =
+                                                    _filteredStages[index];
                                                 return Container(
-                                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 8,
+                                                        horizontal: 12,
+                                                      ),
                                                   child: Row(
-                                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .center,
                                                     children: [
-                                                      Expanded(flex: 1, child: Text(item.code)),
-                                                      Expanded(flex: 2, child: Text(item.name)),
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: Text(item.code),
+                                                      ),
                                                       Expanded(
                                                         flex: 2,
-                                                        child: Text(item.remark.isEmpty ? '-' : item.remark),
-                                                      ),
-                                                      Expanded(flex: 1, child: Text('${item.sortOrder}')),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(item.isEnabled ? '启用' : '停用'),
+                                                        child: Text(item.name),
                                                       ),
                                                       Expanded(
+                                                        flex: 2,
+                                                        child: Text(
+                                                          item.remark.isEmpty
+                                                              ? '-'
+                                                              : item.remark,
+                                                        ),
+                                                      ),
+                                                      Expanded(
                                                         flex: 1,
-                                                        child: Text('${item.processCount}'),
+                                                        child: Text(
+                                                          '${item.sortOrder}',
+                                                        ),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: Text(
+                                                          item.isEnabled
+                                                              ? '启用'
+                                                              : '停用',
+                                                        ),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: Text(
+                                                          '${item.processCount}',
+                                                        ),
                                                       ),
                                                       Expanded(
                                                         flex: 1,
                                                         child: Text(
                                                           '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
-                                                          style: theme.textTheme.bodySmall,
+                                                          style: theme
+                                                              .textTheme
+                                                              .bodySmall,
                                                         ),
                                                       ),
                                                       SizedBox(
@@ -1235,20 +1433,33 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                   children: [
                                     Row(
                                       children: [
-                                        Text('工序列表', style: theme.textTheme.titleMedium),
+                                        Text(
+                                          '工序列表',
+                                          style: theme.textTheme.titleMedium,
+                                        ),
                                         const SizedBox(width: 12),
                                         SizedBox(
                                           width: 180,
                                           child: TextField(
-                                            controller: _processSearchController,
+                                            controller:
+                                                _processSearchController,
                                             decoration: const InputDecoration(
                                               hintText: '搜索工序',
-                                              prefixIcon: Icon(Icons.search, size: 16),
+                                              prefixIcon: Icon(
+                                                Icons.search,
+                                                size: 16,
+                                              ),
                                               isDense: true,
                                               border: OutlineInputBorder(),
-                                              contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                              contentPadding:
+                                                  EdgeInsets.symmetric(
+                                                    vertical: 6,
+                                                    horizontal: 8,
+                                                  ),
                                             ),
-                                            onChanged: (v) => setState(() => _processKeyword = v.trim()),
+                                            onChanged: (v) => setState(
+                                              () => _processKeyword = v.trim(),
+                                            ),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -1257,11 +1468,22 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                           isDense: true,
                                           hint: const Text('全部状态'),
                                           items: const [
-                                            DropdownMenuItem(value: null, child: Text('全部状态')),
-                                            DropdownMenuItem(value: true, child: Text('启用')),
-                                            DropdownMenuItem(value: false, child: Text('停用')),
+                                            DropdownMenuItem(
+                                              value: null,
+                                              child: Text('全部状态'),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: true,
+                                              child: Text('启用'),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: false,
+                                              child: Text('停用'),
+                                            ),
                                           ],
-                                          onChanged: (v) => setState(() => _processEnabledFilter = v),
+                                          onChanged: (v) => setState(
+                                            () => _processEnabledFilter = v,
+                                          ),
                                         ),
                                         const SizedBox(width: 8),
                                         DropdownButton<int?>(
@@ -1269,19 +1491,36 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                           isDense: true,
                                           hint: const Text('全部工段'),
                                           items: [
-                                            const DropdownMenuItem<int?>(value: null, child: Text('全部工段')),
-                                            ..._stages.map((s) => DropdownMenuItem<int?>(value: s.id, child: Text(s.name))),
+                                            const DropdownMenuItem<int?>(
+                                              value: null,
+                                              child: Text('全部工段'),
+                                            ),
+                                            ..._stages.map(
+                                              (s) => DropdownMenuItem<int?>(
+                                                value: s.id,
+                                                child: Text(s.name),
+                                              ),
+                                            ),
                                           ],
-                                          onChanged: (v) => setState(() => _processStageFilter = v),
+                                          onChanged: (v) => setState(
+                                            () => _processStageFilter = v,
+                                          ),
                                         ),
                                         const Spacer(),
                                         IconButton(
                                           tooltip: '导出工序',
-                                          onPressed: _exporting ? null : () => _exportCsv(isStage: false),
-                                          icon: const Icon(Icons.download, size: 20),
+                                          onPressed: _exporting
+                                              ? null
+                                              : () =>
+                                                    _exportCsv(isStage: false),
+                                          icon: const Icon(
+                                            Icons.download,
+                                            size: 20,
+                                          ),
                                         ),
                                       ],
                                     ),
+                                    _buildFocusedProcessBanner(theme),
                                     const SizedBox(height: 8),
                                     _buildProcessHeaderRow(theme),
                                     const SizedBox(height: 8),
@@ -1289,31 +1528,79 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                       child: _filteredProcesses.isEmpty
                                           ? const Center(child: Text('暂无小工序'))
                                           : ListView.separated(
-                                              itemCount: _filteredProcesses.length,
-                                              separatorBuilder: (context, index) => const Divider(height: 1),
+                                              itemCount:
+                                                  _filteredProcesses.length,
+                                              separatorBuilder:
+                                                  (context, index) =>
+                                                      const Divider(height: 1),
                                               itemBuilder: (context, index) {
-                                                final item = _filteredProcesses[index];
+                                                final item =
+                                                    _filteredProcesses[index];
+                                                final isFocused =
+                                                    item.id ==
+                                                    _focusedProcessId;
                                                 return Container(
-                                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 8,
+                                                        horizontal: 12,
+                                                      ),
+                                                  decoration: isFocused
+                                                      ? BoxDecoration(
+                                                          color: theme
+                                                              .colorScheme
+                                                              .primaryContainer
+                                                              .withValues(
+                                                                alpha: 0.28,
+                                                              ),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
+                                                        )
+                                                      : null,
                                                   child: Row(
-                                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .center,
                                                     children: [
-                                                      Expanded(flex: 2, child: Text(item.stageName ?? '-')),
-                                                      Expanded(flex: 1, child: Text(item.code)),
-                                                      Expanded(flex: 2, child: Text(item.name)),
                                                       Expanded(
                                                         flex: 2,
-                                                        child: Text(item.remark.isEmpty ? '-' : item.remark),
+                                                        child: Text(
+                                                          item.stageName ?? '-',
+                                                        ),
                                                       ),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Text(item.isEnabled ? '启用' : '停用'),
+                                                        child: Text(item.code),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 2,
+                                                        child: Text(item.name),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 2,
+                                                        child: Text(
+                                                          item.remark.isEmpty
+                                                              ? '-'
+                                                              : item.remark,
+                                                        ),
+                                                      ),
+                                                      Expanded(
+                                                        flex: 1,
+                                                        child: Text(
+                                                          item.isEnabled
+                                                              ? '启用'
+                                                              : '停用',
+                                                        ),
                                                       ),
                                                       Expanded(
                                                         flex: 1,
                                                         child: Text(
                                                           '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
-                                                          style: theme.textTheme.bodySmall,
+                                                          style: theme
+                                                              .textTheme
+                                                              .bodySmall,
                                                         ),
                                                       ),
                                                       SizedBox(

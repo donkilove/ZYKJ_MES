@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import json
 import logging
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, tuple_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.product_lifecycle import (
@@ -29,6 +29,7 @@ from app.core.product_parameter_template import (
     PRODUCT_NAME_PARAMETER_TYPE,
     PRODUCT_PARAMETER_TEMPLATE,
     PRODUCT_PARAMETER_TEMPLATE_NAME_SET,
+    VALID_PRODUCT_PARAMETER_CATEGORY_SET,
 )
 from app.core.production_constants import ORDER_STATUS_IN_PROGRESS, ORDER_STATUS_PENDING
 from app.models.product import Product
@@ -48,6 +49,11 @@ from app.services.craft_service import resolve_system_master_template
 
 
 logger = logging.getLogger(__name__)
+
+
+NO_EFFECTIVE_VERSION_INACTIVE_REASON = (
+    "当前无生效版本，请前往版本管理生效版本后恢复启用"
+)
 
 
 @dataclass(slots=True)
@@ -88,6 +94,13 @@ class ProductVersionCompareResult:
     items: list[ProductVersionCompareRow]
 
 
+@dataclass(slots=True)
+class ProductParameterVersionListRow:
+    product: Product
+    revision: ProductRevision
+    parameter_summary: str | None
+
+
 def _normalize_product_name(name: str) -> str:
     normalized = name.strip()
     if not normalized:
@@ -122,10 +135,14 @@ def _validate_link_value(value: str) -> None:
         )
 
 
-def _normalize_parameter_items(items: list[tuple[str, str, str, str, str]]) -> list[dict[str, object]]:
+def _normalize_parameter_items(
+    items: list[tuple[str, str, str, str, str]],
+) -> list[dict[str, object]]:
     normalized_items: list[dict[str, object]] = []
     key_set: set[str] = set()
-    for index, (name, category, parameter_type, value, description) in enumerate(items, start=1):
+    for index, (name, category, parameter_type, value, description) in enumerate(
+        items, start=1
+    ):
         normalized_name = name.strip()
         normalized_category = category.strip()
         normalized_type = parameter_type.strip()
@@ -136,6 +153,8 @@ def _normalize_parameter_items(items: list[tuple[str, str, str, str, str]]) -> l
             raise ValueError("Parameter name is required")
         if not normalized_category:
             raise ValueError("Parameter category is required")
+        if normalized_category not in VALID_PRODUCT_PARAMETER_CATEGORY_SET:
+            raise ValueError(f"Invalid parameter category: {normalized_category}")
         if normalized_type not in ALLOWED_PARAMETER_TYPES:
             raise ValueError(f"Invalid parameter type: {normalized_type}")
         if normalized_name in key_set:
@@ -170,7 +189,9 @@ def _parameter_compare_value(item: dict[str, object]) -> str:
 
 
 def _snapshot_signature(payload: dict[str, object]) -> str:
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
 
 
 def _build_snapshot_payload(
@@ -306,7 +327,9 @@ def _calculate_changed_keys(
     return sorted(changed_name_set)
 
 
-def summarize_changed_keys(changed_keys: list[str], *, max_count: int = 3) -> str | None:
+def summarize_changed_keys(
+    changed_keys: list[str], *, max_count: int = 3
+) -> str | None:
     if not changed_keys:
         return None
     preview = changed_keys[:max_count]
@@ -316,7 +339,9 @@ def summarize_changed_keys(changed_keys: list[str], *, max_count: int = 3) -> st
 
 
 def get_product_by_id(db: Session, product_id: int) -> Product | None:
-    stmt = select(Product).where(Product.id == product_id, Product.is_deleted.is_(False))
+    stmt = select(Product).where(
+        Product.id == product_id, Product.is_deleted.is_(False)
+    )
     return db.execute(stmt).scalars().first()
 
 
@@ -339,7 +364,11 @@ def list_products(
     current_param_name_keyword: str | None = None,
     current_param_category_keyword: str | None = None,
 ) -> tuple[int, list[Product], dict[int, ProductParameterHistory]]:
-    stmt = select(Product).where(Product.is_deleted.is_(False)).order_by(Product.updated_at.desc())
+    stmt = (
+        select(Product)
+        .where(Product.is_deleted.is_(False))
+        .order_by(Product.updated_at.desc())
+    )
     if keyword:
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(Product.name.ilike(like_pattern))
@@ -358,7 +387,9 @@ def list_products(
     if current_version_keyword is not None and current_version_keyword.strip():
         normalized_version_keyword = current_version_keyword.strip().lower()
         stmt = stmt.where(
-            func.lower(func.concat("v1.", Product.current_version - 1)).contains(normalized_version_keyword)
+            func.lower(func.concat("v1.", Product.current_version - 1)).contains(
+                normalized_version_keyword
+            )
         )
     if current_param_name_keyword is not None and current_param_name_keyword.strip():
         like_pattern = f"%{current_param_name_keyword.strip()}%"
@@ -371,7 +402,10 @@ def list_products(
             )
             .exists()
         )
-    if current_param_category_keyword is not None and current_param_category_keyword.strip():
+    if (
+        current_param_category_keyword is not None
+        and current_param_category_keyword.strip()
+    ):
         like_pattern = f"%{current_param_category_keyword.strip()}%"
         stmt = stmt.where(
             select(ProductRevisionParameter.id)
@@ -390,8 +424,105 @@ def list_products(
     paged_stmt = stmt.offset(offset).limit(page_size)
     products = db.execute(paged_stmt).scalars().all()
 
-    history_map = get_latest_history_map_by_product_ids(db, [product.id for product in products])
+    history_map = get_latest_history_map_by_product_ids(
+        db, [product.id for product in products]
+    )
     return total, products, history_map
+
+
+def list_product_parameter_versions(
+    db: Session,
+    *,
+    page: int,
+    page_size: int,
+    keyword: str | None,
+    category: str | None,
+    version_keyword: str | None,
+    lifecycle_status: str | None,
+    updated_after: datetime | None,
+    updated_before: datetime | None,
+) -> tuple[int, list[ProductParameterVersionListRow]]:
+    stmt = (
+        select(ProductRevision, Product)
+        .join(Product, Product.id == ProductRevision.product_id)
+        .where(Product.is_deleted.is_(False))
+        .order_by(ProductRevision.updated_at.desc(), ProductRevision.id.desc())
+    )
+    if keyword and keyword.strip():
+        like_pattern = f"%{keyword.strip()}%"
+        stmt = stmt.where(Product.name.ilike(like_pattern))
+    if category is not None and category != "":
+        stmt = stmt.where(Product.category == category)
+    if version_keyword and version_keyword.strip():
+        normalized_version_keyword = version_keyword.strip().lower()
+        stmt = stmt.where(
+            func.lower(ProductRevision.version_label).contains(
+                normalized_version_keyword
+            )
+        )
+    if lifecycle_status is not None and lifecycle_status != "":
+        stmt = stmt.where(ProductRevision.lifecycle_status == lifecycle_status)
+    if updated_after is not None:
+        stmt = stmt.where(ProductRevision.updated_at >= updated_after)
+    if updated_before is not None:
+        stmt = stmt.where(ProductRevision.updated_at <= updated_before)
+
+    total_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.execute(total_stmt).scalar_one()
+
+    offset = (page - 1) * page_size
+    raw_rows = db.execute(stmt.offset(offset).limit(page_size)).all()
+    if not raw_rows:
+        return total, []
+
+    version_keys = [
+        (revision.product_id, revision.version) for revision, _product in raw_rows
+    ]
+    history_rows = (
+        db.execute(
+            select(ProductParameterHistory)
+            .where(
+                tuple_(
+                    ProductParameterHistory.product_id,
+                    ProductParameterHistory.version,
+                ).in_(version_keys)
+            )
+            .order_by(
+                ProductParameterHistory.product_id.asc(),
+                ProductParameterHistory.version.asc(),
+                ProductParameterHistory.created_at.desc(),
+                ProductParameterHistory.id.desc(),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    history_map: dict[tuple[int, int], ProductParameterHistory] = {}
+    for history in history_rows:
+        if history.version is None:
+            continue
+        key = (history.product_id, history.version)
+        if key not in history_map:
+            history_map[key] = history
+
+    items: list[ProductParameterVersionListRow] = []
+    for revision, product in raw_rows:
+        latest_history = history_map.get((product.id, revision.version))
+        summary = None
+        if latest_history is not None:
+            summary = summarize_changed_keys(
+                [str(value) for value in (latest_history.changed_keys or [])]
+            )
+        if not summary:
+            summary = (revision.note or "").strip() or None
+        items.append(
+            ProductParameterVersionListRow(
+                product=product,
+                revision=revision,
+                parameter_summary=summary,
+            )
+        )
+    return total, items
 
 
 def _clone_default_craft_template_for_new_product(
@@ -430,7 +561,9 @@ def _clone_default_craft_template_for_new_product(
         return
 
     source_template = source_result.template
-    source_steps = sorted(source_template.steps, key=lambda item: (item.step_order, item.id))
+    source_steps = sorted(
+        source_template.steps, key=lambda item: (item.step_order, item.id)
+    )
     if not source_steps:
         logger.warning(
             "Skip auto bind default process template: product_id=%s system_master_template_id=%s has no steps",
@@ -466,13 +599,17 @@ def _clone_default_craft_template_for_new_product(
         )
     db.flush()
 
-    enabled_rows = db.execute(
-        select(ProductProcessTemplate).where(
-            ProductProcessTemplate.product_id == product.id,
-            ProductProcessTemplate.is_enabled.is_(True),
-            ProductProcessTemplate.lifecycle_status == "published",
+    enabled_rows = (
+        db.execute(
+            select(ProductProcessTemplate).where(
+                ProductProcessTemplate.product_id == product.id,
+                ProductProcessTemplate.is_enabled.is_(True),
+                ProductProcessTemplate.lifecycle_status == "published",
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for item in enabled_rows:
         item.is_default = item.id == row.id
 
@@ -498,13 +635,19 @@ def _create_product_revision_snapshot(
 ) -> ProductRevision:
     if parameter_items is None:
         parameters = list_product_parameters(db, product.id)
-        payload = _build_snapshot_payload(product_name=product.name, parameters=parameters)
+        payload = _build_snapshot_payload(
+            product_name=product.name, parameters=parameters
+        )
         normalized_parameters = payload["parameters"]
         if not isinstance(normalized_parameters, list):
             raise ValueError("Invalid revision snapshot payload")
-        items_to_write = [dict(item) for item in normalized_parameters if isinstance(item, dict)]
+        items_to_write = [
+            dict(item) for item in normalized_parameters if isinstance(item, dict)
+        ]
     else:
-        payload = _build_snapshot_payload_from_items(product_name=product.name, items=parameter_items)
+        payload = _build_snapshot_payload_from_items(
+            product_name=product.name, items=parameter_items
+        )
         items_to_write = [dict(item) for item in parameter_items]
     row = ProductRevision(
         product_id=product.id,
@@ -558,6 +701,24 @@ def _mark_revision_inactive(
         row.lifecycle_status = PRODUCT_LIFECYCLE_INACTIVE
 
 
+def _has_any_effective_revision(
+    db: Session,
+    *,
+    product_id: int,
+    exclude_version: int | None = None,
+) -> bool:
+    conditions = [
+        ProductRevision.product_id == product_id,
+        ProductRevision.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE,
+    ]
+    if exclude_version is not None:
+        conditions.append(ProductRevision.version != exclude_version)
+    return (
+        db.execute(select(ProductRevision.id).where(*conditions)).scalars().first()
+        is not None
+    )
+
+
 def create_product(
     db: Session,
     name: str,
@@ -572,11 +733,11 @@ def create_product(
         category=category,
         remark=(remark or "").strip(),
         parameter_template_initialized=True,
-        lifecycle_status=PRODUCT_LIFECYCLE_ACTIVE,
+        lifecycle_status=PRODUCT_LIFECYCLE_INACTIVE,
         current_version=1,
         effective_version=0,
         effective_at=None,
-        inactive_reason=None,
+        inactive_reason=NO_EFFECTIVE_VERSION_INACTIVE_REASON,
     )
     db.add(product)
     db.flush()
@@ -586,7 +747,9 @@ def create_product(
             "name": template.name,
             "category": template.category,
             "type": template.parameter_type,
-            "value": normalized_name if template.name == PRODUCT_NAME_PARAMETER_KEY else "",
+            "value": normalized_name
+            if template.name == PRODUCT_NAME_PARAMETER_KEY
+            else "",
             "description": "",
             "sort_order": template.sort_order,
             "is_preset": True,
@@ -636,7 +799,9 @@ def delete_product(db: Session, product: Product) -> None:
     db.commit()
 
 
-def ensure_product_parameter_template_initialized(db: Session, product: Product) -> bool:
+def ensure_product_parameter_template_initialized(
+    db: Session, product: Product
+) -> bool:
     current_revision = get_current_revision(db, product=product)
     if current_revision is None:
         return False
@@ -660,11 +825,15 @@ def list_product_parameters(db: Session, product_id: int) -> list[ProductParamet
     return db.execute(stmt).scalars().all()
 
 
-def list_revision_parameters(db: Session, revision_id: int) -> list[ProductRevisionParameter]:
+def list_revision_parameters(
+    db: Session, revision_id: int
+) -> list[ProductRevisionParameter]:
     stmt = (
         select(ProductRevisionParameter)
         .where(ProductRevisionParameter.revision_id == revision_id)
-        .order_by(ProductRevisionParameter.sort_order.asc(), ProductRevisionParameter.id.asc())
+        .order_by(
+            ProductRevisionParameter.sort_order.asc(), ProductRevisionParameter.id.asc()
+        )
     )
     return db.execute(stmt).scalars().all()
 
@@ -704,7 +873,9 @@ def _sync_current_parameter_rows(
     product: Product,
     items: list[dict[str, object]],
 ) -> None:
-    db.execute(delete(ProductParameter).where(ProductParameter.product_id == product.id))
+    db.execute(
+        delete(ProductParameter).where(ProductParameter.product_id == product.id)
+    )
     for item in items:
         db.add(
             ProductParameter(
@@ -735,7 +906,9 @@ def _ensure_revision_parameters_materialized(
     if not isinstance(parameter_items, list):
         return []
 
-    normalized_items = [dict(item) for item in parameter_items if isinstance(item, dict)]
+    normalized_items = [
+        dict(item) for item in parameter_items if isinstance(item, dict)
+    ]
     _replace_revision_parameters(
         db,
         product=product,
@@ -749,13 +922,17 @@ def _ensure_revision_parameters_materialized(
 def get_current_revision(db: Session, *, product: Product) -> ProductRevision | None:
     if product.current_version <= 0:
         return None
-    return get_product_version(db, product_id=product.id, version=product.current_version)
+    return get_product_version(
+        db, product_id=product.id, version=product.current_version
+    )
 
 
 def get_effective_revision(db: Session, *, product: Product) -> ProductRevision | None:
     if product.effective_version <= 0:
         return None
-    return get_product_version(db, product_id=product.id, version=product.effective_version)
+    return get_product_version(
+        db, product_id=product.id, version=product.effective_version
+    )
 
 
 def _sync_current_parameters_from_revision(
@@ -812,7 +989,9 @@ def _append_revision_history(
             change_type=change_type,
             changed_keys=changed_keys or [],
             before_snapshot=before_snapshot,
-            after_snapshot=after_snapshot if after_snapshot is not None else revision.snapshot_json,
+            after_snapshot=after_snapshot
+            if after_snapshot is not None
+            else revision.snapshot_json,
         )
     )
 
@@ -828,7 +1007,9 @@ def append_product_history_event(
     before_snapshot: str,
     after_snapshot: str,
 ) -> None:
-    revision = get_current_revision(db, product=product) or get_effective_revision(db, product=product)
+    revision = get_current_revision(db, product=product) or get_effective_revision(
+        db, product=product
+    )
     db.add(
         ProductParameterHistory(
             product_id=product.id,
@@ -866,35 +1047,41 @@ def _list_product_reference_blockers(db: Session, *, product_id: int) -> list[st
     blockers: list[str] = []
 
     total_orders = db.execute(
-        select(func.count()).select_from(ProductionOrder).where(ProductionOrder.product_id == product_id)
+        select(func.count())
+        .select_from(ProductionOrder)
+        .where(ProductionOrder.product_id == product_id)
     ).scalar_one()
     if total_orders > 0:
         blockers.append(f"存在 {total_orders} 条生产工单")
 
     scrap_records = db.execute(
-        select(func.count()).select_from(ProductionScrapStatistics).where(
-            ProductionScrapStatistics.product_id == product_id
-        )
+        select(func.count())
+        .select_from(ProductionScrapStatistics)
+        .where(ProductionScrapStatistics.product_id == product_id)
     ).scalar_one()
     if scrap_records > 0:
         blockers.append(f"存在 {scrap_records} 条报废统计记录")
 
     repair_orders = db.execute(
-        select(func.count()).select_from(RepairOrder).where(RepairOrder.product_id == product_id)
+        select(func.count())
+        .select_from(RepairOrder)
+        .where(RepairOrder.product_id == product_id)
     ).scalar_one()
     if repair_orders > 0:
         blockers.append(f"存在 {repair_orders} 条维修订单")
 
     defect_rows = db.execute(
-        select(func.count()).select_from(RepairDefectPhenomenon).where(
-            RepairDefectPhenomenon.product_id == product_id
-        )
+        select(func.count())
+        .select_from(RepairDefectPhenomenon)
+        .where(RepairDefectPhenomenon.product_id == product_id)
     ).scalar_one()
     if defect_rows > 0:
         blockers.append(f"存在 {defect_rows} 条维修不良现象记录")
 
     cause_rows = db.execute(
-        select(func.count()).select_from(RepairCause).where(RepairCause.product_id == product_id)
+        select(func.count())
+        .select_from(RepairCause)
+        .where(RepairCause.product_id == product_id)
     ).scalar_one()
     if cause_rows > 0:
         blockers.append(f"存在 {cause_rows} 条维修原因记录")
@@ -902,13 +1089,45 @@ def _list_product_reference_blockers(db: Session, *, product_id: int) -> list[st
     return blockers
 
 
-def _list_open_orders_for_product(db: Session, *, product_id: int) -> list[ProductionOrder]:
+def _get_product_version_delete_blocker(
+    db: Session,
+    *,
+    product_id: int,
+    version: int,
+    version_label: str,
+) -> str | None:
+    referenced_orders = (
+        db.execute(
+            select(ProductionOrder.order_code)
+            .where(
+                ProductionOrder.product_id == product_id,
+                ProductionOrder.product_version == version,
+            )
+            .order_by(ProductionOrder.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if referenced_orders:
+        sample_order_codes = referenced_orders[:3]
+        order_summary = "、".join(sample_order_codes)
+        if len(referenced_orders) > len(sample_order_codes):
+            order_summary = f"{order_summary} 等 {len(referenced_orders)} 条生产工单"
+        return f"草稿版本 {version_label} 已被生产工单引用（{order_summary}），无法删除"
+    return None
+
+
+def _list_open_orders_for_product(
+    db: Session, *, product_id: int
+) -> list[ProductionOrder]:
     return (
         db.execute(
             select(ProductionOrder)
             .where(
                 ProductionOrder.product_id == product_id,
-                ProductionOrder.status.in_([ORDER_STATUS_PENDING, ORDER_STATUS_IN_PROGRESS]),
+                ProductionOrder.status.in_(
+                    [ORDER_STATUS_PENDING, ORDER_STATUS_IN_PROGRESS]
+                ),
             )
             .order_by(ProductionOrder.id.asc())
         )
@@ -935,13 +1154,16 @@ def analyze_product_impact(
 
     open_orders = _list_open_orders_for_product(db, product_id=product.id)
     pending_orders = sum(1 for row in open_orders if row.status == ORDER_STATUS_PENDING)
-    in_progress_orders = sum(1 for row in open_orders if row.status == ORDER_STATUS_IN_PROGRESS)
+    in_progress_orders = sum(
+        1 for row in open_orders if row.status == ORDER_STATUS_IN_PROGRESS
+    )
 
     requires_confirmation = False
     reason_text: str | None = None
     if normalized_operation == "update_parameters":
         requires_confirmation = (
-            product.lifecycle_status == PRODUCT_LIFECYCLE_ACTIVE and len(open_orders) > 0
+            product.lifecycle_status == PRODUCT_LIFECYCLE_ACTIVE
+            and len(open_orders) > 0
         )
         if requires_confirmation:
             reason_text = "Active product has unfinished orders"
@@ -949,7 +1171,8 @@ def analyze_product_impact(
         if normalized_target_status is None:
             raise ValueError("target_status is required for lifecycle impact analysis")
         requires_confirmation = (
-            normalized_target_status == PRODUCT_LIFECYCLE_INACTIVE and len(open_orders) > 0
+            normalized_target_status == PRODUCT_LIFECYCLE_INACTIVE
+            and len(open_orders) > 0
         )
         if requires_confirmation:
             reason_text = "Inactive transition affects unfinished orders"
@@ -1034,14 +1257,19 @@ def update_product_version_parameters(
     if not normalized_remark:
         raise ValueError("Remark is required")
 
-    if product.lifecycle_status == PRODUCT_LIFECYCLE_ACTIVE and product.effective_version == revision.version:
+    if (
+        product.lifecycle_status == PRODUCT_LIFECYCLE_ACTIVE
+        and product.effective_version == revision.version
+    ):
         impact = analyze_product_impact(
             db,
             product=product,
             operation="update_parameters",
         )
         if impact.requires_confirmation and not confirmed:
-            raise ValueError("Impact confirmation required before updating active product")
+            raise ValueError(
+                "Impact confirmation required before updating active product"
+            )
 
     normalized_items = _normalize_parameter_items(items)
     normalized_by_name = {str(item["name"]): item for item in normalized_items}
@@ -1060,7 +1288,9 @@ def update_product_version_parameters(
         raise ValueError("No parameter changes detected")
 
     before_snapshot = _snapshot_signature(
-        _build_snapshot_payload(product_name=product.name, parameters=current_parameters)
+        _build_snapshot_payload(
+            product_name=product.name, parameters=current_parameters
+        )
     )
     after_payload = _build_snapshot_payload_from_items(
         product_name=product.name,
@@ -1136,7 +1366,9 @@ def change_product_lifecycle(
     operator: User,
 ) -> Product:
     del note  # reserved for future audit expansion.
-    del operator  # lifecycle transition currently does not create a separate revision row.
+    del (
+        operator
+    )  # lifecycle transition currently does not create a separate revision row.
 
     normalized_target_status = _normalize_product_lifecycle_status(target_status)
     current_status = _normalize_product_lifecycle_status(product.lifecycle_status)
@@ -1166,7 +1398,9 @@ def change_product_lifecycle(
     product.lifecycle_status = normalized_target_status
     if normalized_target_status == PRODUCT_LIFECYCLE_ACTIVE:
         if current_status == PRODUCT_LIFECYCLE_INACTIVE:
-            raise ValueError("Please activate a version from version management instead of directly re-enabling the product")
+            raise ValueError(
+                "产品当前无生效版本，不能直接启用；请前往版本管理将目标版本设为生效"
+            )
         product.effective_at = datetime.now(UTC)
         product.inactive_reason = None
     else:
@@ -1194,7 +1428,9 @@ def list_product_versions(db: Session, *, product_id: int) -> list[ProductRevisi
     )
 
 
-def get_product_version(db: Session, *, product_id: int, version: int) -> ProductRevision | None:
+def get_product_version(
+    db: Session, *, product_id: int, version: int
+) -> ProductRevision | None:
     return (
         db.execute(
             select(ProductRevision)
@@ -1215,8 +1451,7 @@ def get_product_version(db: Session, *, product_id: int, version: int) -> Produc
 def get_draft_revision(db: Session, *, product_id: int) -> ProductRevision | None:
     return (
         db.execute(
-            select(ProductRevision)
-            .where(
+            select(ProductRevision).where(
                 ProductRevision.product_id == product_id,
                 ProductRevision.lifecycle_status == PRODUCT_LIFECYCLE_DRAFT,
             )
@@ -1227,9 +1462,15 @@ def get_draft_revision(db: Session, *, product_id: int) -> ProductRevision | Non
 
 
 def _next_version_label(db: Session, product_id: int) -> str:
-    labels = db.execute(
-        select(ProductRevision.version_label).where(ProductRevision.product_id == product_id)
-    ).scalars().all()
+    labels = (
+        db.execute(
+            select(ProductRevision.version_label).where(
+                ProductRevision.product_id == product_id
+            )
+        )
+        .scalars()
+        .all()
+    )
     max_minor = -1
     for label in labels:
         if label and label.startswith("V1."):
@@ -1258,7 +1499,9 @@ def create_product_version(
     product.current_version = next_version
     db.flush()
 
-    source_revision = get_effective_revision(db, product=product) or get_product_version(
+    source_revision = get_effective_revision(
+        db, product=product
+    ) or get_product_version(
         db,
         product_id=product.id,
         version=max(next_version - 1, 1),
@@ -1375,10 +1618,16 @@ def activate_product_version(
         raise ValueError("版本不存在")
     if revision.lifecycle_status != PRODUCT_LIFECYCLE_DRAFT:
         raise ValueError("只有草稿版本可以生效")
-    if product.lifecycle_status not in {PRODUCT_LIFECYCLE_ACTIVE, PRODUCT_LIFECYCLE_INACTIVE}:
+    if product.lifecycle_status not in {
+        PRODUCT_LIFECYCLE_ACTIVE,
+        PRODUCT_LIFECYCLE_INACTIVE,
+    }:
         raise ValueError("产品必须处于启用或停用状态才能生效版本")
 
-    if expected_effective_version is not None and product.effective_version != expected_effective_version:
+    if (
+        expected_effective_version is not None
+        and product.effective_version != expected_effective_version
+    ):
         raise ValueError("当前已有其他版本抢先生效，请刷新版本列表后重试")
 
     revision_parameters = _ensure_revision_parameters_materialized(
@@ -1402,7 +1651,10 @@ def activate_product_version(
     for row in db.execute(
         select(ProductRevision).where(ProductRevision.product_id == product.id)
     ).scalars():
-        if row.id != revision.id and row.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE:
+        if (
+            row.id != revision.id
+            and row.lifecycle_status == PRODUCT_LIFECYCLE_EFFECTIVE
+        ):
             row.lifecycle_status = PRODUCT_LIFECYCLE_OBSOLETE
 
     revision.lifecycle_status = PRODUCT_LIFECYCLE_EFFECTIVE
@@ -1442,13 +1694,23 @@ def disable_product_version(
     revision = get_product_version(db, product_id=product.id, version=version)
     if revision is None:
         raise ValueError("版本不存在")
-    if revision.lifecycle_status not in {PRODUCT_LIFECYCLE_EFFECTIVE, PRODUCT_LIFECYCLE_OBSOLETE}:
+    if revision.lifecycle_status not in {
+        PRODUCT_LIFECYCLE_EFFECTIVE,
+        PRODUCT_LIFECYCLE_OBSOLETE,
+    }:
         raise ValueError("只有已生效或已失效的版本可以停用")
 
     revision.lifecycle_status = PRODUCT_LIFECYCLE_DISABLED
     if product.effective_version == version:
         product.effective_version = 0
         product.effective_at = None
+        if not _has_any_effective_revision(
+            db,
+            product_id=product.id,
+            exclude_version=version,
+        ):
+            product.lifecycle_status = PRODUCT_LIFECYCLE_INACTIVE
+            product.inactive_reason = NO_EFFECTIVE_VERSION_INACTIVE_REASON
     product.updated_at = datetime.now(UTC)
     _append_revision_history(
         db,
@@ -1487,8 +1749,14 @@ def update_product_version_note(
                 change_type="update_version_note",
                 remark=f"更新版本 {revision.version_label} 备注",
                 changed_keys=["note"],
-                before_snapshot=json.dumps({"version": revision.version, "note": previous_note}, ensure_ascii=False),
-                after_snapshot=json.dumps({"version": revision.version, "note": revision.note}, ensure_ascii=False),
+                before_snapshot=json.dumps(
+                    {"version": revision.version, "note": previous_note},
+                    ensure_ascii=False,
+                ),
+                after_snapshot=json.dumps(
+                    {"version": revision.version, "note": revision.note},
+                    ensure_ascii=False,
+                ),
             )
     db.commit()
     db.refresh(revision)
@@ -1507,14 +1775,26 @@ def delete_product_version(
         raise ValueError("版本不存在")
     if revision.lifecycle_status != PRODUCT_LIFECYCLE_DRAFT:
         raise ValueError("只有草稿版本可以删除")
+    version_delete_blocker = _get_product_version_delete_blocker(
+        db,
+        product_id=product.id,
+        version=revision.version,
+        version_label=revision.version_label,
+    )
+    if version_delete_blocker is not None:
+        raise ValueError(version_delete_blocker)
 
     # Ensure at least one non-draft revision remains
-    other_revisions = db.execute(
-        select(ProductRevision).where(
-            ProductRevision.product_id == product.id,
-            ProductRevision.id != revision.id,
+    other_revisions = (
+        db.execute(
+            select(ProductRevision).where(
+                ProductRevision.product_id == product.id,
+                ProductRevision.id != revision.id,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if not other_revisions:
         raise ValueError("产品至少需要保留一个版本记录，无法删除唯一版本")
 
@@ -1533,7 +1813,10 @@ def delete_product_version(
 
     db.delete(revision)
     if product.current_version == version:
-        if fallback_current_revision is not None and fallback_current_revision.id != revision.id:
+        if (
+            fallback_current_revision is not None
+            and fallback_current_revision.id != revision.id
+        ):
             product.current_version = fallback_current_revision.version
             _sync_current_parameters_from_revision(
                 db,
@@ -1541,8 +1824,12 @@ def delete_product_version(
                 revision=fallback_current_revision,
             )
         else:
-            remaining_versions = [row.version for row in other_revisions if row.id != revision.id]
-            product.current_version = max(remaining_versions) if remaining_versions else 0
+            remaining_versions = [
+                row.version for row in other_revisions if row.id != revision.id
+            ]
+            product.current_version = (
+                max(remaining_versions) if remaining_versions else 0
+            )
     db.commit()
 
 
@@ -1636,7 +1923,9 @@ def rollback_product_to_version(
     note: str | None,
     operator: User,
 ) -> list[str]:
-    target_revision = get_product_version(db, product_id=product.id, version=target_version)
+    target_revision = get_product_version(
+        db, product_id=product.id, version=target_version
+    )
     if target_revision is None:
         raise ValueError("Target version not found")
 
@@ -1735,7 +2024,9 @@ def list_parameter_history(
     page: int,
     page_size: int,
 ) -> tuple[int, list[ProductParameterHistory]]:
-    stmt = select(ProductParameterHistory).where(ProductParameterHistory.product_id == product_id)
+    stmt = select(ProductParameterHistory).where(
+        ProductParameterHistory.product_id == product_id
+    )
     if revision_id is not None:
         stmt = stmt.where(ProductParameterHistory.revision_id == revision_id)
     elif version is not None:

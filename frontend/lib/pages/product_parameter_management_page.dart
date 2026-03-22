@@ -11,7 +11,7 @@ import '../services/product_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
-enum _ProductParameterManagementListAction { history, edit }
+enum _ProductParameterManagementListAction { view, edit, history, export }
 
 class ProductParameterManagementPage extends StatefulWidget {
   const ProductParameterManagementPage({
@@ -19,6 +19,7 @@ class ProductParameterManagementPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.tabCode,
+    this.service,
     this.jumpCommand,
     this.onJumpHandled,
   });
@@ -26,6 +27,7 @@ class ProductParameterManagementPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final String tabCode;
+  final ProductService? service;
   final ProductJumpCommand? jumpCommand;
   final ValueChanged<int>? onJumpHandled;
 
@@ -43,8 +45,14 @@ class _ProductParameterManagementPageState
     '产品测试参数',
     '产品组装参数',
     '产品包装参数',
-    '自定义参数',
   ];
+  static const Set<String> _allowedCategorySet = {
+    '基础参数',
+    '激光打标参数',
+    '产品测试参数',
+    '产品组装参数',
+    '产品包装参数',
+  };
   static const double _rowActionButtonSize = 36.0;
   static const double _rowActionGap = 4.0;
   static const double _rowActionColumnWidth =
@@ -61,18 +69,20 @@ class _ProductParameterManagementPageState
   bool _loading = false;
   String _message = '';
   int _total = 0;
-  List<ProductItem> _products = const [];
+  List<ProductParameterVersionListItem> _versionRows = const [];
   String _selectedCategoryFilter = '';
   DateTime? _updatedAfter;
   DateTime? _updatedBefore;
-  final TextEditingController _versionFilterController = TextEditingController();
-  final TextEditingController _paramNameFilterController = TextEditingController();
-  final TextEditingController _paramCategoryFilterController = TextEditingController();
+  final TextEditingController _versionFilterController =
+      TextEditingController();
+  final TextEditingController _paramNameFilterController =
+      TextEditingController();
+  final TextEditingController _paramCategoryFilterController =
+      TextEditingController();
 
   int _handledJumpSeq = 0;
 
-  ProductItem? _editingProduct;
-  int? _editingVersion;
+  ProductParameterVersionListItem? _editingTarget;
   String _editingVersionLabel = '';
   String _editingLifecycleStatus = '';
   bool _editorLoading = false;
@@ -83,12 +93,13 @@ class _ProductParameterManagementPageState
   int _editorRowIdSeed = 1;
   String _editorGroupFilter = '';
 
-  bool get _editorReadOnly => _editingLifecycleStatus.isNotEmpty && _editingLifecycleStatus != 'draft';
+  bool get _editorReadOnly =>
+      _editingLifecycleStatus.isNotEmpty && _editingLifecycleStatus != 'draft';
 
   @override
   void initState() {
     super.initState();
-    _productService = ProductService(widget.session);
+    _productService = widget.service ?? ProductService(widget.session);
     _loadProducts();
   }
 
@@ -168,9 +179,28 @@ class _ProductParameterManagementPageState
     }
   }
 
+  String _lifecycleLabel(String value) {
+    switch (value) {
+      case 'draft':
+        return '草稿';
+      case 'effective':
+        return '已生效';
+      case 'obsolete':
+        return '已失效';
+      case 'disabled':
+        return '已停用';
+      default:
+        return value.isEmpty ? '-' : value;
+    }
+  }
+
   List<PopupMenuEntry<_ProductParameterManagementListAction>>
   _buildListActionMenuItems() {
     return const [
+      PopupMenuItem(
+        value: _ProductParameterManagementListAction.view,
+        child: Text('查看参数'),
+      ),
       PopupMenuItem(
         value: _ProductParameterManagementListAction.history,
         child: Text('查看历史'),
@@ -179,30 +209,50 @@ class _ProductParameterManagementPageState
         value: _ProductParameterManagementListAction.edit,
         child: Text('编辑参数'),
       ),
+      PopupMenuItem(
+        value: _ProductParameterManagementListAction.export,
+        child: Text('导出参数'),
+      ),
     ];
   }
 
   Future<void> _handleListAction(
     _ProductParameterManagementListAction action,
-    ProductItem product,
+    ProductParameterVersionListItem row,
   ) async {
     switch (action) {
+      case _ProductParameterManagementListAction.view:
+        await _enterEditor(row);
+        return;
       case _ProductParameterManagementListAction.history:
-        await _showHistoryDialog(product);
+        await _showHistoryDialog(row);
         return;
       case _ProductParameterManagementListAction.edit:
-        await _enterEditor(product, version: product.currentVersion);
+        await _enterEditor(row);
+        return;
+      case _ProductParameterManagementListAction.export:
+        await _exportVersionParameters(row);
         return;
     }
   }
 
-  ProductItem? _findProductById(int productId) {
-    for (final product in _products) {
-      if (product.id == productId) {
-        return product;
+  ProductParameterVersionListItem? _findVersionRow(
+    int productId,
+    int? version,
+  ) {
+    ProductParameterVersionListItem? currentVersionRow;
+    for (final row in _versionRows) {
+      if (row.productId != productId) {
+        continue;
+      }
+      if (version != null && row.version == version) {
+        return row;
+      }
+      if (row.isCurrentVersion) {
+        currentVersionRow = row;
       }
     }
-    return null;
+    return currentVersionRow;
   }
 
   bool _isProductNameParameterName(String name) {
@@ -227,14 +277,7 @@ class _ProductParameterManagementPageState
   }
 
   List<String> _buildCategorySuggestions() {
-    final suggestions = <String>{..._presetCategorySuggestions};
-    for (final row in _editorRows) {
-      final category = row.categoryController.text.trim();
-      if (category.isNotEmpty) {
-        suggestions.add(category);
-      }
-    }
-    return suggestions.toList();
+    return _presetCategorySuggestions;
   }
 
   int _nextEditorRowId() {
@@ -266,22 +309,20 @@ class _ProductParameterManagementPageState
     });
 
     try {
-      final result = await _productService.listProducts(
+      final result = await _productService.listProductParameterVersions(
         page: 1,
         pageSize: 10000,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
+        versionKeyword: _versionFilterController.text.trim(),
         updatedAfter: _updatedAfter,
         updatedBefore: _updatedBefore,
-        currentVersionKeyword: _versionFilterController.text.trim(),
-        currentParamNameKeyword: _paramNameFilterController.text.trim(),
-        currentParamCategoryKeyword: _paramCategoryFilterController.text.trim(),
       );
       if (!mounted) {
         return;
       }
       setState(() {
-        _products = result.items;
+        _versionRows = result.items;
         _total = result.total;
       });
     } catch (error) {
@@ -304,8 +345,20 @@ class _ProductParameterManagementPageState
     }
   }
 
-  List<ProductItem> get _filteredProducts {
-    return _products;
+  List<ProductParameterVersionListItem> get _filteredVersionRows {
+    return _versionRows.where((row) {
+      final paramNameKeyword = _paramNameFilterController.text.trim();
+      final paramCategoryKeyword = _paramCategoryFilterController.text.trim();
+      final summary = row.parameterSummary ?? '';
+      if (paramNameKeyword.isNotEmpty && !summary.contains(paramNameKeyword)) {
+        return false;
+      }
+      if (paramCategoryKeyword.isNotEmpty &&
+          !summary.contains(paramCategoryKeyword)) {
+        return false;
+      }
+      return true;
+    }).toList();
   }
 
   Future<void> _handleJumpCommand(ProductJumpCommand command) async {
@@ -315,62 +368,25 @@ class _ProductParameterManagementPageState
       return;
     }
     if (command.action == 'edit') {
-      final product = _findProductById(command.productId);
-      if (product != null) {
+      final row = _findVersionRow(command.productId, command.targetVersion);
+      if (row != null) {
         await _enterEditor(
-          product,
-          version: command.targetVersion ?? product.currentVersion,
+          row,
           requestedVersionLabel: command.targetVersionLabel,
         );
-        if (mounted && _editingProduct?.id == command.productId) {
+        if (mounted && _editingTarget?.productId == command.productId) {
           widget.onJumpHandled?.call(command.seq);
         }
       }
     }
   }
 
-  Future<void> _exportParameters() async {
-    try {
-      final bytes = await _productService.exportProductParameters(
-        keyword: _keywordController.text.trim(),
-        category: _selectedCategoryFilter,
-        versionKeyword: _versionFilterController.text.trim(),
-        paramKeyword: _paramNameFilterController.text.trim(),
-        paramCategoryKeyword: _paramCategoryFilterController.text.trim(),
-        updatedAfter: _updatedAfter,
-        updatedBefore: _updatedBefore,
-      );
-      final location = await getSaveLocation(
-        suggestedName: 'product_parameters.csv',
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'CSV', extensions: ['csv']),
-        ],
-      );
-      if (location == null || !mounted) return;
-      await XFile.fromData(
-        Uint8List.fromList(bytes),
-        mimeType: 'text/csv',
-        name: 'product_parameters.csv',
-      ).saveTo(location.path);
-      if (mounted) {
-        _showSnackBar('导出成功：${location.path}');
-      }
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      _showSnackBar('导出失败：${_errorMessage(error)}');
-    }
-  }
-
-  Future<void> _showHistoryDialog(ProductItem product) async {
+  Future<void> _showHistoryDialog(ProductParameterVersionListItem row) async {
     ProductParameterHistoryListResult? historyResult;
     try {
       historyResult = await _productService.listProductParameterHistory(
-        productId: product.id,
-        version: product.currentVersion,
+        productId: row.productId,
+        version: row.version,
         page: 1,
         pageSize: 100,
       );
@@ -394,7 +410,7 @@ class _ProductParameterManagementPageState
       builder: (context) {
         return AlertDialog(
           title: Text(
-            '历史修改备注 - ${product.name}（${dialogHistory.versionLabel ?? 'V1.${product.currentVersion}'}）',
+            '历史修改备注 - ${row.productName}（${dialogHistory.versionLabel ?? row.versionLabel}）',
           ),
           content: SizedBox(
             width: 760,
@@ -410,7 +426,9 @@ class _ProductParameterManagementPageState
                       final keySummary = item.changedKeys.isEmpty
                           ? '无参数字段变化'
                           : item.changedKeys.join(', ');
-                      final changeTypeLabel = _historyTypeLabel(item.changeType);
+                      final changeTypeLabel = _historyTypeLabel(
+                        item.changeType,
+                      );
                       return ListTile(
                         title: Text(item.remark),
                         subtitle: Text(
@@ -419,7 +437,9 @@ class _ProductParameterManagementPageState
                           '参数：$keySummary',
                         ),
                         isThreeLine: true,
-                        trailing: item.beforeSnapshot != '{}' || item.afterSnapshot != '{}'
+                        trailing:
+                            item.beforeSnapshot != '{}' ||
+                                item.afterSnapshot != '{}'
                             ? TextButton(
                                 onPressed: () {
                                   showDialog<void>(
@@ -431,22 +451,38 @@ class _ProductParameterManagementPageState
                                         height: 400,
                                         child: SingleChildScrollView(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              const Text('变更前：', style: TextStyle(fontWeight: FontWeight.bold)),
+                                              const Text(
+                                                '变更前：',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
                                               const SizedBox(height: 4),
-                                              SelectableText(item.beforeSnapshot),
+                                              SelectableText(
+                                                item.beforeSnapshot,
+                                              ),
                                               const SizedBox(height: 12),
-                                              const Text('变更后：', style: TextStyle(fontWeight: FontWeight.bold)),
+                                              const Text(
+                                                '变更后：',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
                                               const SizedBox(height: 4),
-                                              SelectableText(item.afterSnapshot),
+                                              SelectableText(
+                                                item.afterSnapshot,
+                                              ),
                                             ],
                                           ),
                                         ),
                                       ),
                                       actions: [
                                         FilledButton(
-                                          onPressed: () => Navigator.of(ctx).pop(),
+                                          onPressed: () =>
+                                              Navigator.of(ctx).pop(),
                                           child: const Text('关闭'),
                                         ),
                                       ],
@@ -469,6 +505,41 @@ class _ProductParameterManagementPageState
         );
       },
     );
+  }
+
+  Future<void> _exportVersionParameters(
+    ProductParameterVersionListItem row,
+  ) async {
+    try {
+      final bytes = await _productService.exportProductVersionParameters(
+        productId: row.productId,
+        version: row.version,
+      );
+      final location = await getSaveLocation(
+        suggestedName: '${row.productName}_${row.versionLabel}_参数.csv',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'CSV', extensions: ['csv']),
+        ],
+      );
+      if (location == null || !mounted) {
+        return;
+      }
+      await XFile.fromData(
+        Uint8List.fromList(bytes),
+        mimeType: 'text/csv',
+        name: '${row.productName}_${row.versionLabel}_参数.csv',
+      ).saveTo(location.path);
+      _showSnackBar('导出成功：${location.path}');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      _showSnackBar('导出失败：${_errorMessage(error)}');
+    }
   }
 
   Future<bool> _confirmDiscardChanges() async {
@@ -539,7 +610,7 @@ class _ProductParameterManagementPageState
   }
 
   Future<bool> _exitEditor({bool force = false}) async {
-    if (_editingProduct == null) {
+    if (_editingTarget == null) {
       return true;
     }
 
@@ -556,8 +627,7 @@ class _ProductParameterManagementPageState
       return true;
     }
     setState(() {
-      _editingProduct = null;
-      _editingVersion = null;
+      _editingTarget = null;
       _editingVersionLabel = '';
       _editingLifecycleStatus = '';
       _editorLoading = false;
@@ -569,8 +639,7 @@ class _ProductParameterManagementPageState
   }
 
   Future<void> _enterEditor(
-    ProductItem product, {
-    int? version,
+    ProductParameterVersionListItem row, {
     String? requestedVersionLabel,
   }) async {
     if (_editorSubmitting) {
@@ -584,7 +653,7 @@ class _ProductParameterManagementPageState
       return;
     }
     setState(() {
-      _editingProduct = product;
+      _editingTarget = row;
       _editorLoading = true;
       _editorSubmitting = false;
       _editorMessage = '';
@@ -594,9 +663,9 @@ class _ProductParameterManagementPageState
 
     ProductParameterListResult result;
     try {
-      result = await _productService.listProductParameters(
-        productId: product.id,
-        version: version ?? product.currentVersion,
+      result = await _productService.getProductVersionParameters(
+        productId: row.productId,
+        version: row.version,
       );
     } catch (error) {
       if (!mounted) {
@@ -637,7 +706,7 @@ class _ProductParameterManagementPageState
     _disposeEditorRows();
     setState(() {
       _editorRows = rows;
-      _editingVersion = result.version;
+      _editingTarget = row;
       _editingVersionLabel = requestedVersionLabel ?? result.versionLabel;
       _editingLifecycleStatus = result.lifecycleStatus;
       _editorLoading = false;
@@ -659,13 +728,8 @@ class _ProductParameterManagementPageState
   }
 
   Future<void> _saveEditor() async {
-    final product = _editingProduct;
-    if (product == null || _editorSubmitting) {
-      return;
-    }
-    final editingVersion = _editingVersion;
-    if (editingVersion == null) {
-      _showSnackBar('当前编辑版本信息缺失，请刷新后重试');
+    final target = _editingTarget;
+    if (target == null || _editorSubmitting) {
       return;
     }
     if (_editorReadOnly) {
@@ -694,6 +758,10 @@ class _ProductParameterManagementPageState
       }
       if (category.isEmpty) {
         _showSnackBar('参数分类不能为空');
+        return;
+      }
+      if (!_allowedCategorySet.contains(category)) {
+        _showSnackBar('参数分类仅允许使用固定枚举');
         return;
       }
       if (parameterType != 'Text' && parameterType != 'Link') {
@@ -736,8 +804,8 @@ class _ProductParameterManagementPageState
       ProductParameterUpdateResult result;
       try {
         result = await _productService.updateProductParameters(
-          productId: product.id,
-          version: editingVersion,
+          productId: target.productId,
+          version: target.version,
           remark: remark,
           items: items,
         );
@@ -746,7 +814,7 @@ class _ProductParameterManagementPageState
           rethrow;
         }
         final impact = await _productService.getProductImpactAnalysis(
-          productId: product.id,
+          productId: target.productId,
           operation: 'update_parameters',
         );
         final confirmed = await _confirmImpactForEffectiveUpdate(impact);
@@ -759,8 +827,8 @@ class _ProductParameterManagementPageState
           return;
         }
         result = await _productService.updateProductParameters(
-          productId: product.id,
-          version: editingVersion,
+          productId: target.productId,
+          version: target.version,
           remark: remark,
           items: items,
           confirmed: true,
@@ -886,7 +954,9 @@ class _ProductParameterManagementPageState
           child: TextField(
             controller: row.nameController,
             readOnly: isProductNameRow || _editorReadOnly,
-            onChanged: (isProductNameRow || _editorReadOnly) ? null : (_) => _markDirty(),
+            onChanged: (isProductNameRow || _editorReadOnly)
+                ? null
+                : (_) => _markDirty(),
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               isDense: true,
@@ -984,7 +1054,8 @@ class _ProductParameterManagementPageState
               _buildRowActionIconButton(
                 icon: Icons.delete_outline,
                 tooltip: isProductNameRow ? '产品名称参数不可删除' : '删除',
-                onPressed: _editorSubmitting || _editorReadOnly || isProductNameRow
+                onPressed:
+                    _editorSubmitting || _editorReadOnly || isProductNameRow
                     ? null
                     : () {
                         setState(() {
@@ -1009,11 +1080,10 @@ class _ProductParameterManagementPageState
     final visibleRows = _editorGroupFilter.isEmpty
         ? _editorRows
         : _editorRows
-            .where(
-              (r) =>
-                  r.categoryController.text.trim() == _editorGroupFilter,
-            )
-            .toList();
+              .where(
+                (r) => r.categoryController.text.trim() == _editorGroupFilter,
+              )
+              .toList();
     final isFiltered = _editorGroupFilter.isNotEmpty;
 
     return LayoutBuilder(
@@ -1067,9 +1137,9 @@ class _ProductParameterManagementPageState
                               buildDefaultDragHandles: false,
                               itemCount: _editorRows.length,
                               onReorder: (oldIndex, newIndex) {
-                                 if (_editorSubmitting || _editorReadOnly) {
-                                   return;
-                                 }
+                                if (_editorSubmitting || _editorReadOnly) {
+                                  return;
+                                }
                                 setState(() {
                                   if (newIndex > oldIndex) {
                                     newIndex -= 1;
@@ -1112,7 +1182,9 @@ class _ProductParameterManagementPageState
         ),
         const SizedBox(width: 12),
         FilledButton(
-          onPressed: (_editorSubmitting || _editorReadOnly) ? null : _saveEditor,
+          onPressed: (_editorSubmitting || _editorReadOnly)
+              ? null
+              : _saveEditor,
           child: _editorSubmitting
               ? const SizedBox(
                   width: 18,
@@ -1126,7 +1198,7 @@ class _ProductParameterManagementPageState
   }
 
   Widget _buildEditorView(ThemeData theme) {
-    final product = _editingProduct!;
+    final target = _editingTarget!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1139,7 +1211,7 @@ class _ProductParameterManagementPageState
             ),
             const SizedBox(width: 8),
             Text(
-              '编辑产品参数 - ${product.name}（${_editingVersionLabel.isEmpty ? 'V1.${_editingVersion ?? product.currentVersion}' : _editingVersionLabel}）',
+              '编辑版本参数 - ${target.productName}（${_editingVersionLabel.isEmpty ? target.versionLabel : _editingVersionLabel}）',
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -1147,7 +1219,9 @@ class _ProductParameterManagementPageState
             const SizedBox(width: 12),
             if (_editingLifecycleStatus.isNotEmpty)
               Chip(
-                label: Text(_editingLifecycleStatus == 'draft' ? '草稿可编辑' : '非草稿只读'),
+                label: Text(
+                  _editingLifecycleStatus == 'draft' ? '草稿可编辑' : '非草稿只读',
+                ),
                 visualDensity: VisualDensity.compact,
               ),
             const SizedBox(width: 8),
@@ -1180,10 +1254,8 @@ class _ProductParameterManagementPageState
                         child: Text('全部分组'),
                       ),
                       ..._buildCategorySuggestions().map(
-                        (c) => DropdownMenuItem<String>(
-                          value: c,
-                          child: Text(c),
-                        ),
+                        (c) =>
+                            DropdownMenuItem<String>(value: c, child: Text(c)),
                       ),
                     ],
                     onChanged: (value) {
@@ -1198,7 +1270,14 @@ class _ProductParameterManagementPageState
             const SizedBox(width: 8),
             IconButton(
               tooltip: '刷新参数',
-              onPressed: _editorSubmitting ? null : () => _enterEditor(product),
+              onPressed: _editorSubmitting
+                  ? null
+                  : () => _enterEditor(
+                      target,
+                      requestedVersionLabel: _editingVersionLabel.isEmpty
+                          ? null
+                          : _editingVersionLabel,
+                    ),
               icon: const Icon(Icons.refresh),
             ),
           ],
@@ -1275,13 +1354,14 @@ class _ProductParameterManagementPageState
   }
 
   Widget _buildListView(ThemeData theme) {
+    final rows = _filteredVersionRows;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Text(
-              '产品参数管理',
+              '版本参数列表',
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -1338,12 +1418,6 @@ class _ProductParameterManagementPageState
               icon: const Icon(Icons.search),
               label: const Text('搜索'),
             ),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(
-              onPressed: _loading ? null : _exportParameters,
-              icon: const Icon(Icons.download),
-              label: const Text('导出'),
-            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -1367,7 +1441,7 @@ class _ProductParameterManagementPageState
               child: TextField(
                 controller: _paramNameFilterController,
                 decoration: const InputDecoration(
-                  labelText: '参数名称筛选',
+                  labelText: '参数摘要筛选',
                   border: OutlineInputBorder(),
                 ),
                 onSubmitted: (_) => _loadProducts(),
@@ -1379,7 +1453,7 @@ class _ProductParameterManagementPageState
               child: TextField(
                 controller: _paramCategoryFilterController,
                 decoration: const InputDecoration(
-                  labelText: '参数分组筛选',
+                  labelText: '摘要补充筛选',
                   border: OutlineInputBorder(),
                 ),
                 onSubmitted: (_) => _loadProducts(),
@@ -1392,7 +1466,9 @@ class _ProductParameterManagementPageState
                   : () async {
                       final picked = await showDatePicker(
                         context: context,
-                        initialDate: _updatedAfter ?? DateTime.now().subtract(const Duration(days: 30)),
+                        initialDate:
+                            _updatedAfter ??
+                            DateTime.now().subtract(const Duration(days: 30)),
                         firstDate: DateTime(2020),
                         lastDate: DateTime.now(),
                         helpText: '修改起始日期',
@@ -1402,9 +1478,11 @@ class _ProductParameterManagementPageState
                       }
                     },
               icon: const Icon(Icons.calendar_today, size: 16),
-              label: Text(_updatedAfter != null
-                  ? '起始：${_formatTime(_updatedAfter!).substring(0, 10)}'
-                  : '修改起始日期'),
+              label: Text(
+                _updatedAfter != null
+                    ? '起始：${_formatTime(_updatedAfter!).substring(0, 10)}'
+                    : '修改起始日期',
+              ),
             ),
             const SizedBox(width: 8),
             OutlinedButton.icon(
@@ -1419,15 +1497,24 @@ class _ProductParameterManagementPageState
                         helpText: '修改截止日期',
                       );
                       if (picked != null) {
-                        setState(() => _updatedBefore = DateTime(
-                          picked.year, picked.month, picked.day, 23, 59, 59,
-                        ));
+                        setState(
+                          () => _updatedBefore = DateTime(
+                            picked.year,
+                            picked.month,
+                            picked.day,
+                            23,
+                            59,
+                            59,
+                          ),
+                        );
                       }
                     },
               icon: const Icon(Icons.calendar_today, size: 16),
-              label: Text(_updatedBefore != null
-                  ? '截止：${_formatTime(_updatedBefore!).substring(0, 10)}'
-                  : '修改截止日期'),
+              label: Text(
+                _updatedBefore != null
+                    ? '截止：${_formatTime(_updatedBefore!).substring(0, 10)}'
+                    : '修改截止日期',
+              ),
             ),
             if (_updatedAfter != null || _updatedBefore != null) ...[
               const SizedBox(width: 8),
@@ -1445,6 +1532,8 @@ class _ProductParameterManagementPageState
         ),
         const SizedBox(height: 12),
         Text('总数：$_total', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text('首屏按版本行展示，查看/编辑/历史/导出均绑定当前版本行。', style: theme.textTheme.bodySmall),
         const SizedBox(height: 12),
         if (_message.isNotEmpty)
           Padding(
@@ -1459,8 +1548,8 @@ class _ProductParameterManagementPageState
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
-              : _products.isEmpty
-              ? const Center(child: Text('暂无产品'))
+              : rows.isEmpty
+              ? const Center(child: Text('暂无版本参数记录'))
               : Card(
                   child: AdaptiveTableContainer(
                     child: UnifiedListTableHeaderStyle.wrap(
@@ -1468,37 +1557,50 @@ class _ProductParameterManagementPageState
                       child: DataTable(
                         columns: [
                           UnifiedListTableHeaderStyle.column(context, '产品名称'),
-                          UnifiedListTableHeaderStyle.column(context, '产品分类'),
-                          UnifiedListTableHeaderStyle.column(context, '当前版本'),
-                          UnifiedListTableHeaderStyle.column(context, '生效版本'),
-                          UnifiedListTableHeaderStyle.column(context, '创建时间'),
-                          UnifiedListTableHeaderStyle.column(context, '最后修改时间'),
-                          UnifiedListTableHeaderStyle.column(context, '最后修改参数'),
+                          UnifiedListTableHeaderStyle.column(
+                            context,
+                            '版本标签/版本号',
+                          ),
+                          UnifiedListTableHeaderStyle.column(context, '版本状态'),
+                          UnifiedListTableHeaderStyle.column(context, '参数摘要'),
+                          UnifiedListTableHeaderStyle.column(context, '更新时间'),
                           UnifiedListTableHeaderStyle.column(
                             context,
                             '操作',
                             textAlign: TextAlign.center,
                           ),
                         ],
-                        rows: _filteredProducts.map((product) {
+                        rows: rows.map((row) {
                           return DataRow(
                             cells: [
-                              DataCell(Text(product.name)),
-                              DataCell(Text(product.category.isEmpty ? '-' : product.category)),
-                              DataCell(Text(product.currentVersion > 0 ? 'V1.${product.currentVersion - 1}' : '-')),
-                              DataCell(Text(product.effectiveVersion > 0 ? 'V1.${product.effectiveVersion - 1}' : '-')),
-                              DataCell(Text(_formatTime(product.createdAt))),
-                              DataCell(Text(_formatTime(product.updatedAt))),
                               DataCell(
-                                Text(product.lastParameterSummary ?? '-'),
+                                Text(
+                                  row.productCategory.isEmpty
+                                      ? row.productName
+                                      : '${row.productName} / ${row.productCategory}',
+                                ),
                               ),
+                              DataCell(
+                                Text('${row.versionLabel} / #${row.version}'),
+                              ),
+                              DataCell(
+                                Text(
+                                  [
+                                    _lifecycleLabel(row.lifecycleStatus),
+                                    if (row.isCurrentVersion) '当前版本',
+                                    if (row.isEffectiveVersion) '生效版本',
+                                  ].join(' / '),
+                                ),
+                              ),
+                              DataCell(Text(row.parameterSummary ?? '-')),
+                              DataCell(Text(_formatTime(row.updatedAt))),
                               DataCell(
                                 UnifiedListTableHeaderStyle.actionMenuButton<
                                   _ProductParameterManagementListAction
                                 >(
                                   theme: theme,
                                   onSelected: (action) {
-                                    _handleListAction(action, product);
+                                    _handleListAction(action, row);
                                   },
                                   itemBuilder: (context) =>
                                       _buildListActionMenuItems(),
@@ -1521,7 +1623,7 @@ class _ProductParameterManagementPageState
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: _editingProduct == null
+      child: _editingTarget == null
           ? _buildListView(theme)
           : _buildEditorView(theme),
     );

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_permission
-from app.services.authz_service import has_permission
+from app.api.deps import require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
@@ -96,24 +96,42 @@ def get_first_articles_api(
     )
 
 
-@router.get("/first-articles/{record_id}", response_model=ApiResponse[FirstArticleDetail])
+@router.get(
+    "/first-articles/{record_id}", response_model=ApiResponse[FirstArticleDetail]
+)
 def get_first_article_detail_api(
     record_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    _: User = Depends(require_permission("quality.first_articles.detail")),
 ) -> ApiResponse[FirstArticleDetail]:
-    if not (
-        has_permission(db, user=current_user, permission_code="quality.first_articles.detail")
-        or has_permission(db, user=current_user, permission_code="quality.first_articles.disposition")
-    ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     detail = get_first_article_by_id(db, record_id=record_id)
     if detail is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="首件记录不存在")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="首件记录不存在"
+        )
     return success_response(FirstArticleDetail(**detail))
 
 
-@router.post("/first-articles/export", response_model=ApiResponse[FirstArticleExportResult])
+@router.get(
+    "/first-articles/{record_id}/disposition-detail",
+    response_model=ApiResponse[FirstArticleDetail],
+)
+def get_first_article_disposition_detail_api(
+    record_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("quality.first_articles.disposition")),
+) -> ApiResponse[FirstArticleDetail]:
+    detail = get_first_article_by_id(db, record_id=record_id)
+    if detail is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="首件记录不存在"
+        )
+    return success_response(FirstArticleDetail(**detail))
+
+
+@router.post(
+    "/first-articles/export", response_model=ApiResponse[FirstArticleExportResult]
+)
 def export_first_articles_api(
     payload: FirstArticleExportRequest,
     db: Session = Depends(get_db),
@@ -131,12 +149,17 @@ def export_first_articles_api(
     return success_response(FirstArticleExportResult(**result))
 
 
-@router.post("/first-articles/{record_id}/disposition", response_model=ApiResponse[FirstArticleDetail])
+@router.post(
+    "/first-articles/{record_id}/disposition",
+    response_model=ApiResponse[FirstArticleDetail],
+)
 def submit_disposition_api(
     record_id: int,
     payload: FirstArticleDispositionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("quality.first_articles.disposition")),
+    current_user: User = Depends(
+        require_permission("quality.first_articles.disposition")
+    ),
 ) -> ApiResponse[FirstArticleDetail]:
     try:
         submit_first_article_disposition(
@@ -150,10 +173,14 @@ def submit_disposition_api(
         db.commit()
     except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
     detail = get_first_article_by_id(db, record_id=record_id)
     if detail is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="首件记录不存在")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="首件记录不存在"
+        )
 
     _judgment_label = {
         "accept": "接受",
@@ -193,6 +220,10 @@ def submit_disposition_api(
                 source_code=detail.get("order_code"),
                 target_page_code="quality",
                 target_tab_code="first_article_management",
+                target_route_payload_json=json.dumps(
+                    {"action": "detail", "record_id": record_id},
+                    ensure_ascii=False,
+                ),
                 recipient_user_ids=[operator_user_id],
                 dedupe_key=f"first_article_disposition_{record_id}_{payload.final_judgment}",
                 created_by_user_id=current_user.id,
@@ -246,7 +277,11 @@ def get_quality_process_stats_api(
         operator_username=operator_username,
         result_filter=result,
     )
-    return success_response(QualityProcessStatsResult(items=[QualityProcessStatItem(**item) for item in rows]))
+    return success_response(
+        QualityProcessStatsResult(
+            items=[QualityProcessStatItem(**item) for item in rows]
+        )
+    )
 
 
 @router.get("/stats/operators", response_model=ApiResponse[QualityOperatorStatsResult])
@@ -271,7 +306,9 @@ def get_quality_operator_stats_api(
         result_filter=result,
     )
     return success_response(
-        QualityOperatorStatsResult(items=[QualityOperatorStatItem(**item) for item in rows])
+        QualityOperatorStatsResult(
+            items=[QualityOperatorStatItem(**item) for item in rows]
+        )
     )
 
 
@@ -296,7 +333,11 @@ def get_quality_product_stats_api(
         operator_username=operator_username,
         result_filter=result,
     )
-    return success_response(QualityProductStatsResult(items=[QualityProductStatItem(**item) for item in rows]))
+    return success_response(
+        QualityProductStatsResult(
+            items=[QualityProductStatItem(**item) for item in rows]
+        )
+    )
 
 
 @router.post("/stats/export", response_model=ApiResponse[QualityStatsExportResult])
@@ -339,7 +380,9 @@ def get_quality_trend_api(
         operator_username=operator_username,
         result_filter=result,
     )
-    return success_response(QualityTrendResult(items=[QualityTrendItem(**item) for item in rows]))
+    return success_response(
+        QualityTrendResult(items=[QualityTrendItem(**item) for item in rows])
+    )
 
 
 @router.post("/trend/export", response_model=ApiResponse[QualityStatsExportResult])
@@ -362,17 +405,31 @@ def export_quality_trend_api(
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["日期", "首件总数", "通过数", "不通过数", "通过率", "报废数", "维修数"])
+    writer.writerow(
+        [
+            "日期",
+            "首件总数",
+            "通过数",
+            "不通过数",
+            "通过率",
+            "不良数",
+            "报废数",
+            "维修数",
+        ]
+    )
     for item in rows:
-        writer.writerow([
-            item["stat_date"],
-            item["first_article_total"],
-            item["passed_total"],
-            item["failed_total"],
-            item["pass_rate_percent"],
-            item["scrap_total"],
-            item["repair_total"],
-        ])
+        writer.writerow(
+            [
+                item["stat_date"],
+                item["first_article_total"],
+                item["passed_total"],
+                item["failed_total"],
+                item["pass_rate_percent"],
+                item.get("defect_total", 0),
+                item["scrap_total"],
+                item["repair_total"],
+            ]
+        )
     csv_bytes = output.getvalue().encode("utf-8-sig")
     return success_response(
         QualityStatsExportResult(
@@ -411,7 +468,9 @@ def get_defect_analysis_api(
     return success_response(result)
 
 
-@router.post("/defect-analysis/export", response_model=ApiResponse[DefectAnalysisExportResult])
+@router.post(
+    "/defect-analysis/export", response_model=ApiResponse[DefectAnalysisExportResult]
+)
 def export_defect_analysis_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),

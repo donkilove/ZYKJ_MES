@@ -27,13 +27,6 @@ class MaintenanceItemPage extends StatefulWidget {
 }
 
 class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
-  static const List<_ExecutionRuleOption> _executionRules = [
-    _ExecutionRuleOption(label: '每周五执行', cycleDays: maintenanceCycleWeekly),
-    _ExecutionRuleOption(label: '每月执行', cycleDays: maintenanceCycleMonthly),
-    _ExecutionRuleOption(label: '每季度执行', cycleDays: maintenanceCycleQuarterly),
-    _ExecutionRuleOption(label: '每年执行', cycleDays: maintenanceCycleYearly),
-  ];
-
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
 
@@ -130,22 +123,19 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     final isCreate = item == null;
     final nameController = TextEditingController(text: item?.name ?? '');
     final durationController = TextEditingController(
-      text: item?.defaultDurationMinutes != null && item!.defaultDurationMinutes > 0
+      text:
+          item?.defaultDurationMinutes != null &&
+              item!.defaultDurationMinutes > 0
           ? '${item.defaultDurationMinutes}'
           : '',
     );
-    final standardDescController = TextEditingController(text: item?.standardDescription ?? '');
+    final cycleDaysController = TextEditingController(
+      text: item != null ? '${item.defaultCycleDays}' : '',
+    );
+    final standardDescController = TextEditingController(
+      text: item?.standardDescription ?? '',
+    );
     final formKey = GlobalKey<FormState>();
-    _ExecutionRuleOption selectedRule = _executionRules.first;
-    if (item != null) {
-      selectedRule = _executionRules.firstWhere(
-        (rule) => rule.cycleDays == item.defaultCycleDays,
-        orElse: () => _ExecutionRuleOption(
-          label: '自定义(${item.defaultCycleDays}天)',
-          cycleDays: item.defaultCycleDays,
-        ),
-      );
-    }
     const categoryOptions = ['', '点检', '润滑', '校准', '清洁'];
     var selectedCategory = item?.category ?? '';
     if (!categoryOptions.contains(selectedCategory)) {
@@ -157,13 +147,6 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (innerContext, setInnerState) {
-            final ruleOptions = <_ExecutionRuleOption>[
-              ..._executionRules,
-              if (_executionRules.every(
-                (rule) => rule.cycleDays != selectedRule.cycleDays,
-              ))
-                selectedRule,
-            ];
             return AlertDialog(
               title: Text(isCreate ? '新增保养项目' : '编辑保养项目'),
               content: SizedBox(
@@ -188,30 +171,25 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                           },
                         ),
                         const SizedBox(height: 12),
-                        DropdownButtonFormField<int>(
-                          initialValue: selectedRule.cycleDays,
-                          items: ruleOptions
-                              .map(
-                                (option) => DropdownMenuItem<int>(
-                                  value: option.cycleDays,
-                                  child: Text(option.label),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setInnerState(() {
-                              selectedRule = ruleOptions.firstWhere(
-                                (option) => option.cycleDays == value,
-                              );
-                            });
-                          },
+                        TextFormField(
+                          controller: cycleDaysController,
                           decoration: const InputDecoration(
-                            labelText: '执行日期',
+                            labelText: '默认周期天数',
+                            helperText: '常用值：7 / 30 / 90 / 365',
                             border: OutlineInputBorder(),
                           ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            final normalized = value?.trim() ?? '';
+                            if (normalized.isEmpty) {
+                              return '请输入默认周期天数';
+                            }
+                            final n = int.tryParse(normalized);
+                            if (n == null || n < 1 || n > 3650) {
+                              return '请输入1-3650之间的整数';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
@@ -276,25 +254,32 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                     if (!formKey.currentState!.validate()) {
                       return;
                     }
+                    final cycleDays = int.parse(
+                      cycleDaysController.text.trim(),
+                    );
                     final durationText = durationController.text.trim();
-                    final duration = durationText.isNotEmpty ? int.tryParse(durationText) : null;
+                    final duration = durationText.isNotEmpty
+                        ? int.tryParse(durationText)
+                        : null;
                     try {
                       if (isCreate) {
                         await _equipmentService.createMaintenanceItem(
                           name: nameController.text.trim(),
-                          defaultCycleDays: selectedRule.cycleDays,
+                          defaultCycleDays: cycleDays,
                           category: selectedCategory,
                           defaultDurationMinutes: duration,
-                          standardDescription: standardDescController.text.trim(),
+                          standardDescription: standardDescController.text
+                              .trim(),
                         );
                       } else {
                         await _equipmentService.updateMaintenanceItem(
                           itemId: item.id,
                           name: nameController.text.trim(),
-                          defaultCycleDays: selectedRule.cycleDays,
+                          defaultCycleDays: cycleDays,
                           category: selectedCategory,
                           defaultDurationMinutes: duration,
-                          standardDescription: standardDescController.text.trim(),
+                          standardDescription: standardDescController.text
+                              .trim(),
                         );
                       }
                       if (dialogContext.mounted) {
@@ -325,6 +310,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
 
     nameController.dispose();
     durationController.dispose();
+    cycleDaysController.dispose();
     standardDescController.dispose();
 
     if (saved == true) {
@@ -430,7 +416,10 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
   }
 
   Future<void> _exportCsv() async {
-    setState(() { _exporting = true; _message = ''; });
+    setState(() {
+      _exporting = true;
+      _message = '';
+    });
     try {
       final csvBase64 = await _equipmentService.exportMaintenanceItems(
         keyword: _keywordController.text.trim(),
@@ -450,14 +439,21 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
         ],
       );
       if (location == null || !mounted) return;
-      await XFile.fromData(bytes, mimeType: 'text/csv', name: 'maintenance_items.csv').saveTo(location.path);
+      await XFile.fromData(
+        bytes,
+        mimeType: 'text/csv',
+        name: 'maintenance_items.csv',
+      ).saveTo(location.path);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功：${location.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
     } catch (error) {
       if (!mounted) return;
-      if (_isUnauthorized(error)) { widget.onLogout(); return; }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
       setState(() => _message = '导出失败：${_errorMessage(error)}');
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -602,10 +598,20 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                           return DataRow(
                             cells: [
                               DataCell(Text(item.name)),
-                              DataCell(Text(item.category.isEmpty ? '-' : item.category)),
+                              DataCell(
+                                Text(
+                                  item.category.isEmpty ? '-' : item.category,
+                                ),
+                              ),
                               DataCell(Text(item.executionDateLabel)),
                               DataCell(Text('${item.defaultCycleDays}')),
-                              DataCell(Text(item.defaultDurationMinutes > 0 ? '${item.defaultDurationMinutes}' : '-')),
+                              DataCell(
+                                Text(
+                                  item.defaultDurationMinutes > 0
+                                      ? '${item.defaultDurationMinutes}'
+                                      : '-',
+                                ),
+                              ),
                               DataCell(Text(item.isEnabled ? '启用' : '停用')),
                               DataCell(Text(_formatDateTime(item.updatedAt))),
                               DataCell(
@@ -644,11 +650,4 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
       ),
     );
   }
-}
-
-class _ExecutionRuleOption {
-  const _ExecutionRuleOption({required this.label, required this.cycleDays});
-
-  final String label;
-  final int cycleDays;
 }

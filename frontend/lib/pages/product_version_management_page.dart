@@ -42,7 +42,8 @@ class ProductVersionManagementPage extends StatefulWidget {
   final String tabCode;
   final ProductJumpCommand? jumpCommand;
   final void Function(int seq)? onJumpHandled;
-  final void Function(ProductItem product, ProductVersionItem version)? onEditVersionParameters;
+  final void Function(ProductItem product, ProductVersionItem version)?
+  onEditVersionParameters;
   final bool canManageVersions;
   final ProductService? service;
 
@@ -214,8 +215,14 @@ class _ProductVersionManagementPageState
         confirmed: true,
         expectedEffectiveVersion: product.effectiveVersion,
       );
-      _showSuccess('版本 ${rev.versionLabel} 已生效');
-      await _reloadSelectedProductAndVersions(product.id);
+      final refreshedProduct = await _reloadSelectedProductAndVersions(
+        product.id,
+      );
+      _showSuccess(
+        refreshedProduct != null && refreshedProduct.lifecycleStatus == 'active'
+            ? '版本 ${rev.versionLabel} 已生效，产品已恢复启用'
+            : '版本 ${rev.versionLabel} 已生效',
+      );
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (e) {
@@ -250,8 +257,15 @@ class _ProductVersionManagementPageState
         productId: product.id,
         version: rev.version,
       );
-      _showSuccess('版本 ${rev.versionLabel} 已停用');
-      await _reloadSelectedProductAndVersions(product.id);
+      final refreshedProduct = await _reloadSelectedProductAndVersions(
+        product.id,
+      );
+      _showSuccess(
+        refreshedProduct != null &&
+                refreshedProduct.lifecycleStatus == 'inactive'
+            ? '版本 ${rev.versionLabel} 已停用，产品因无生效版本已同步停用'
+            : '版本 ${rev.versionLabel} 已停用',
+      );
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (e) {
@@ -307,7 +321,10 @@ class _ProductVersionManagementPageState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _detailRow('版本号', rev.versionLabel),
-                _detailRow('状态', _statusLabels[rev.lifecycleStatus] ?? rev.lifecycleStatus),
+                _detailRow(
+                  '状态',
+                  _statusLabels[rev.lifecycleStatus] ?? rev.lifecycleStatus,
+                ),
                 _detailRow('变更摘要', rev.note ?? '-'),
                 _detailRow('来源版本', rev.sourceVersionLabel ?? '-'),
                 _detailRow('创建人', rev.createdByUsername ?? '-'),
@@ -336,7 +353,10 @@ class _ProductVersionManagementPageState
         children: [
           SizedBox(
             width: 80,
-            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
           Expanded(child: SelectableText(value)),
         ],
@@ -399,15 +419,17 @@ class _ProductVersionManagementPageState
     widget.onEditVersionParameters?.call(product, rev);
   }
 
-  Future<void> _reloadSelectedProductAndVersions(int productId) async {
+  Future<ProductItem?> _reloadSelectedProductAndVersions(int productId) async {
     try {
       final product = await _service.getProduct(productId: productId);
-      if (!mounted) return;
+      if (!mounted) return null;
       await _loadVersions(product);
+      return product;
     } catch (e) {
       if (mounted) {
         _showError('刷新产品状态失败: $e');
       }
+      return null;
     }
   }
 
@@ -614,6 +636,29 @@ class _ProductVersionManagementPageState
               ),
             ),
           ),
+        if (effectiveRevision == null && product.lifecycleStatus == 'inactive')
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Card(
+              color: Colors.orange.withValues(alpha: 0.08),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.orange),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        product.inactiveReason?.isNotEmpty == true
+                            ? product.inactiveReason!
+                            : '当前无生效版本，请先将目标版本设为生效后再恢复启用。',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         const Divider(height: 1),
         if (_loadingVersions)
           const LinearProgressIndicator()
@@ -686,10 +731,12 @@ class _ProductVersionManagementPageState
             ),
           ),
         ),
-        DataCell(Text(
-          rev.note != null && rev.note!.isNotEmpty ? rev.note! : '-',
-          overflow: TextOverflow.ellipsis,
-        )),
+        DataCell(
+          Text(
+            rev.note != null && rev.note!.isNotEmpty ? rev.note! : '-',
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
         DataCell(Text(rev.sourceVersionLabel ?? '-')),
         DataCell(Text(rev.createdByUsername ?? '-')),
         DataCell(Text(_formatDate(rev.createdAt))),
@@ -699,30 +746,24 @@ class _ProductVersionManagementPageState
               ? PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, size: 18),
                   itemBuilder: (ctx) => [
-                    const PopupMenuItem(
-                      value: 'detail',
-                      child: Text('查看详情'),
-                    ),
+                    const PopupMenuItem(value: 'detail', child: Text('查看详情')),
                     if (isDraft)
                       const PopupMenuItem(
                         value: 'activate',
                         child: Text('立即生效'),
                       ),
-                    if (isDraft || isEffective || isObsolete || rev.lifecycleStatus == 'disabled')
+                    if (isDraft ||
+                        isEffective ||
+                        isObsolete ||
+                        rev.lifecycleStatus == 'disabled')
                       const PopupMenuItem(value: 'copy', child: Text('复制版本')),
-                    const PopupMenuItem(
-                      value: 'editNote',
-                      child: Text('编辑备注'),
-                    ),
+                    const PopupMenuItem(value: 'editNote', child: Text('编辑备注')),
                     PopupMenuItem(
                       value: 'editParams',
                       child: Text(isDraft ? '维护参数' : '查看参数'),
                     ),
-                    const PopupMenuItem(
-                      value: 'export',
-                      child: Text('导出版本参数'),
-                    ),
-                    if (isObsolete)
+                    const PopupMenuItem(value: 'export', child: Text('导出版本参数')),
+                    if (isEffective || isObsolete)
                       const PopupMenuItem(
                         value: 'disable',
                         child: Text('停用版本'),

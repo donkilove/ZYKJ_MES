@@ -88,6 +88,7 @@ Map<String, dynamic> _workOrderDetailJson() {
     'source_plan_id': 3,
     'source_plan_cycle_days': 30,
     'source_plan_start_date': '2026-03-01',
+    'source_plan_summary': '计划#3 / 周期30天 / 起始2026-03-01',
     'source_execution_process_code': '01-01',
     'source_equipment_name': '设备1',
     'source_item_id': 2,
@@ -119,7 +120,10 @@ Map<String, dynamic> _recordDetailJson() {
     'source_plan_id': 3,
     'source_plan_cycle_days': 30,
     'source_plan_start_date': '2026-03-01',
+    'source_plan_summary': '计划#3 / 周期30天 / 起始2026-03-01',
     'source_equipment_code': 'EQ-01',
+    'source_equipment_name': '设备1',
+    'source_execution_process_code': '01-01',
     'source_item_id': 2,
     'source_item_name': '点检',
   };
@@ -133,6 +137,27 @@ Map<String, dynamic> _equipmentDetailJson() {
     'active_plans': [_maintenancePlanJson()],
     'pending_work_orders': [_workOrderJson()],
     'recent_records': [_recordJson()],
+  };
+}
+
+Map<String, dynamic> _runtimeParameterJson() {
+  return {
+    'id': 6,
+    'equipment_id': 1,
+    'equipment_type': '冲压机',
+    'equipment_code': 'EQ-01',
+    'equipment_name': '设备1',
+    'param_code': 'PRESSURE',
+    'param_name': '压力',
+    'unit': 'bar',
+    'standard_value': 1.2,
+    'upper_limit': 1.5,
+    'lower_limit': 1.0,
+    'effective_at': '2026-03-01T00:00:00Z',
+    'is_enabled': true,
+    'remark': '关键参数',
+    'created_at': '2026-03-01T00:00:00Z',
+    'updated_at': '2026-03-01T00:00:00Z',
   };
 }
 
@@ -150,10 +175,8 @@ void main() {
             },
           },
         ),
-        'GET /equipment/ledger/1/detail': (_) => TestResponse.json(
-          200,
-          body: {'data': _equipmentDetailJson()},
-        ),
+        'GET /equipment/ledger/1/detail': (_) =>
+            TestResponse.json(200, body: {'data': _equipmentDetailJson()}),
         'GET /equipment/ledger': (request) {
           expect(request.uri.queryParameters['page'], '1');
           expect(request.uri.queryParameters['page_size'], '20');
@@ -228,7 +251,10 @@ void main() {
           expect(request.uri.queryParameters['equipment_id'], '1');
           expect(request.uri.queryParameters['item_id'], '2');
           expect(request.uri.queryParameters['enabled'], 'true');
-          expect(request.uri.queryParameters['execution_process_code'], '01-01');
+          expect(
+            request.uri.queryParameters['execution_process_code'],
+            '01-01',
+          );
           expect(request.uri.queryParameters['default_executor_user_id'], '8');
           return TestResponse.json(
             200,
@@ -287,10 +313,8 @@ void main() {
             },
           );
         },
-        'GET /equipment/executions/4/detail': (_) => TestResponse.json(
-          200,
-          body: {'data': _workOrderDetailJson()},
-        ),
+        'GET /equipment/executions/4/detail': (_) =>
+            TestResponse.json(200, body: {'data': _workOrderDetailJson()}),
         'POST /equipment/executions/4/start': (_) =>
             TestResponse.json(200, body: {'data': {}}),
         'POST /equipment/executions/4/complete': (request) {
@@ -318,10 +342,23 @@ void main() {
             },
           );
         },
-        'GET /equipment/records/5/detail': (_) => TestResponse.json(
-          200,
-          body: {'data': _recordDetailJson()},
-        ),
+        'GET /equipment/records/5/detail': (_) =>
+            TestResponse.json(200, body: {'data': _recordDetailJson()}),
+        'GET /equipment/runtime-parameters': (request) {
+          expect(request.uri.queryParameters['equipment_id'], '1');
+          expect(request.uri.queryParameters['equipment_type'], '冲压机');
+          expect(request.uri.queryParameters['is_enabled'], 'true');
+          expect(request.uri.queryParameters['keyword'], '压力');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'total': 1,
+                'items': [_runtimeParameterJson()],
+              },
+            },
+          );
+        },
       });
       addTearDown(server.close);
 
@@ -447,6 +484,12 @@ void main() {
         equipmentId: 1,
       );
       final recordDetail = await service.getRecordDetail(recordId: 5);
+      final runtimeParameters = await service.listRuntimeParameters(
+        equipmentId: 1,
+        equipmentType: '冲压机',
+        keyword: '压力',
+        isEnabled: true,
+      );
 
       expect(owners.single.username, 'admin');
       expect(owners.single.userId, 1);
@@ -457,17 +500,19 @@ void main() {
       expect(generated.workOrderId, 4);
       expect(executions.items.single.id, 4);
       expect(workOrderDetail.sourcePlanId, 3);
+      expect(workOrderDetail.sourcePlanSummary, '计划#3 / 周期30天 / 起始2026-03-01');
       expect(records.items.single.workOrderId, 4);
       expect(recordDetail.sourceEquipmentCode, 'EQ-01');
-      expect(server.requests.length, 27);
+      expect(recordDetail.sourceEquipmentName, '设备1');
+      expect(recordDetail.sourceExecutionProcessCode, '01-01');
+      expect(runtimeParameters.items.single.equipmentType, '冲压机');
+      expect(server.requests.length, 28);
     });
 
     test('throws ApiException when backend returns non-200 status', () async {
       final server = await TestHttpServer.start({
-        'GET /equipment/ledger': (_) => TestResponse.json(
-          500,
-          body: {'message': 'ledger failure'},
-        ),
+        'GET /equipment/ledger': (_) =>
+            TestResponse.json(500, body: {'message': 'ledger failure'}),
       });
       addTearDown(server.close);
 

@@ -37,7 +37,8 @@ class ProductionOrderQueryDetailPage extends StatefulWidget {
   final Future<bool> Function(MyOrderItem item) onEndProduction;
   final Future<bool> Function(MyOrderItem item) onCreateManualRepair;
   final Future<bool> Function(MyOrderItem item) onApplyAssist;
-  final Future<MyOrderContextResult> Function(int orderId) onRefreshOrderContext;
+  final Future<MyOrderContextResult> Function(int orderId)
+  onRefreshOrderContext;
   final ProductionService? service;
 
   @override
@@ -105,6 +106,15 @@ class _ProductionOrderQueryDetailPageState
       default:
         return '我的工单';
     }
+  }
+
+  String _templateLabel(ProductionOrderItem order) {
+    final templateName = order.processTemplateName;
+    if (templateName == null || templateName.trim().isEmpty) {
+      return '-';
+    }
+    final version = order.processTemplateVersion;
+    return version == null ? templateName : '$templateName v$version';
   }
 
   Future<void> _loadDetail({bool silent = false}) async {
@@ -394,7 +404,8 @@ class _ProductionOrderQueryDetailPageState
                           '${snapshotParts.isEmpty ? '' : '\n快照：${snapshotParts.join(' ｜ ')}'}'
                           '${payload.isEmpty ? '' : '\n载荷：$payload'}',
                         ),
-                        isThreeLine: snapshotParts.isNotEmpty || payload.isNotEmpty,
+                        isThreeLine:
+                            snapshotParts.isNotEmpty || payload.isNotEmpty,
                         trailing: Text(item.operatorUsername ?? '-'),
                       );
                     },
@@ -466,12 +477,20 @@ class _ProductionOrderQueryDetailPageState
                       spacing: 16,
                       runSpacing: 8,
                       children: [
+                        Text('订单号：${detail.order.orderCode}'),
                         Text('产品：${detail.order.productName}'),
+                        Text('产品版本：${detail.order.productVersion ?? '-'}'),
                         Text('数量：${detail.order.quantity}'),
                         Text(
                           '订单状态：${productionOrderStatusLabel(detail.order.status)}',
                         ),
                         Text('当前工序：${detail.order.currentProcessName ?? '-'}'),
+                        Text('模板名称/版本：${_templateLabel(detail.order)}'),
+                        Text(
+                          '并行模式：${detail.order.pipelineEnabled ? '开启' : '关闭'}',
+                        ),
+                        Text('创建人：${detail.order.createdByUsername ?? '-'}'),
+                        Text('创建时间：${_formatDateTime(detail.order.createdAt)}'),
                         Text('开始日期：${_formatDate(detail.order.startDate)}'),
                         Text('交期：${_formatDate(detail.order.dueDate)}'),
                         if (contextItem != null)

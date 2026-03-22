@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -12,12 +14,14 @@ class ProductionAssistApprovalPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canReview,
+    this.routePayloadJson,
     this.service,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canReview;
+  final String? routePayloadJson;
   final ProductionService? service;
 
   @override
@@ -34,6 +38,8 @@ class _ProductionAssistApprovalPageState
   String? _statusFilter = 'pending';
   int _total = 0;
   List<AssistAuthorizationItem> _items = const [];
+  String? _lastHandledRoutePayloadJson;
+  int? _pendingDetailAuthorizationId;
 
   final TextEditingController _orderCodeController = TextEditingController();
   final TextEditingController _processNameController = TextEditingController();
@@ -47,6 +53,17 @@ class _ProductionAssistApprovalPageState
     super.initState();
     _service = widget.service ?? ProductionService(widget.session);
     _loadRows();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductionAssistApprovalPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.routePayloadJson != oldWidget.routePayloadJson) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    }
   }
 
   @override
@@ -151,6 +168,56 @@ class _ProductionAssistApprovalPageState
     );
   }
 
+  void _consumeRoutePayload(String? rawPayload) {
+    if (!mounted ||
+        rawPayload == null ||
+        rawPayload.trim().isEmpty ||
+        rawPayload == _lastHandledRoutePayloadJson) {
+      return;
+    }
+    try {
+      final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
+      final action = (payload['action'] as String? ?? '').trim();
+      final rawAuthorizationId = payload['authorization_id'];
+      final authorizationId = rawAuthorizationId is int
+          ? rawAuthorizationId
+          : int.tryParse('${rawAuthorizationId ?? ''}');
+      if (action != 'detail' ||
+          authorizationId == null ||
+          authorizationId <= 0) {
+        return;
+      }
+      _lastHandledRoutePayloadJson = rawPayload;
+      _pendingDetailAuthorizationId = authorizationId;
+      if (_statusFilter != null) {
+        setState(() {
+          _statusFilter = null;
+        });
+      }
+      _loadRows();
+    } catch (_) {}
+  }
+
+  void _tryAutoOpenDetail() {
+    final authorizationId = _pendingDetailAuthorizationId;
+    if (authorizationId == null || !mounted) {
+      return;
+    }
+    final matchedItem = _items
+        .where((item) => item.id == authorizationId)
+        .firstOrNull;
+    if (matchedItem == null) {
+      return;
+    }
+    _pendingDetailAuthorizationId = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _showDetail(context, matchedItem);
+    });
+  }
+
   Future<void> _reviewRow(AssistAuthorizationItem item, bool approve) async {
     var draftRemark = '';
     final reviewRemark = await showDialog<String?>(
@@ -200,9 +267,9 @@ class _ProductionAssistApprovalPageState
         reviewRemark: reviewRemark.isEmpty ? null : reviewRemark,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(approve ? '已审批通过。' : '已拒绝。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(approve ? '已审批通过。' : '已拒绝。')));
       await _loadRows();
     } catch (error) {
       if (!mounted) return;
@@ -248,6 +315,7 @@ class _ProductionAssistApprovalPageState
         _items = result.items;
         _total = result.total;
       });
+      _tryAutoOpenDetail();
     } catch (error) {
       if (!mounted) {
         return;
@@ -303,7 +371,7 @@ class _ProductionAssistApprovalPageState
                     ),
                     DropdownMenuItem<String?>(
                       value: 'approved',
-                      child: Text('已生效'),
+                      child: Text('已审批'),
                     ),
                     DropdownMenuItem<String?>(
                       value: 'rejected',
@@ -509,8 +577,7 @@ class _ProductionAssistApprovalPageState
                                     if (isPending && widget.canReview) ...[
                                       const SizedBox(width: 4),
                                       TextButton(
-                                        onPressed: () =>
-                                            _reviewRow(item, true),
+                                        onPressed: () => _reviewRow(item, true),
                                         child: const Text('通过'),
                                       ),
                                       const SizedBox(width: 4),

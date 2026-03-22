@@ -235,7 +235,9 @@ def _to_template_detail(row: ProductProcessTemplate) -> ProductProcessTemplateDe
     )
 
 
-def _to_system_master_template_item(row: CraftSystemMasterTemplate) -> SystemMasterTemplateItem:
+def _to_system_master_template_item(
+    row: CraftSystemMasterTemplate,
+) -> SystemMasterTemplateItem:
     steps = sorted(row.steps, key=lambda item: (item.step_order, item.id))
     return SystemMasterTemplateItem(
         id=row.id,
@@ -300,6 +302,7 @@ def _to_kanban_result_item(result) -> CraftKanbanProcessMetricsResult:
 
 def _to_impact_result_item(
     *,
+    target_version: int,
     total_orders: int,
     pending_orders: int,
     in_progress_orders: int,
@@ -308,6 +311,7 @@ def _to_impact_result_item(
     items: list[TemplateImpactOrderItem],
 ) -> TemplateImpactAnalysisResult:
     return TemplateImpactAnalysisResult(
+        target_version=target_version,
         total_orders=total_orders,
         pending_orders=pending_orders,
         in_progress_orders=in_progress_orders,
@@ -317,7 +321,9 @@ def _to_impact_result_item(
     )
 
 
-def _to_template_update_result(row: ProductProcessTemplate) -> ProductProcessTemplateUpdateResult:
+def _to_template_update_result(
+    row: ProductProcessTemplate,
+) -> ProductProcessTemplateUpdateResult:
     return ProductProcessTemplateUpdateResult(
         detail=_to_template_detail(row),
         sync_result=TemplateSyncResult(total=0, synced=0, skipped=0, reasons=[]),
@@ -370,7 +376,9 @@ def _to_process_reference_result(result) -> ProcessReferenceResult:
     )
 
 
-def _to_system_master_template_version_list_result(result) -> SystemMasterTemplateVersionListResult:
+def _to_system_master_template_version_list_result(
+    result,
+) -> SystemMasterTemplateVersionListResult:
     return SystemMasterTemplateVersionListResult(
         total=result.total,
         items=[
@@ -379,7 +387,9 @@ def _to_system_master_template_version_list_result(result) -> SystemMasterTempla
                 action=item.action,
                 note=item.note,
                 created_by_user_id=item.created_by_user_id,
-                created_by_username=item.created_by.username if item.created_by else None,
+                created_by_username=item.created_by.username
+                if item.created_by
+                else None,
                 created_at=item.created_at,
                 steps=[
                     SystemMasterTemplateVersionStepItem(
@@ -397,7 +407,9 @@ def _to_system_master_template_version_list_result(result) -> SystemMasterTempla
                         created_at=step.created_at,
                         updated_at=step.updated_at,
                     )
-                    for step in sorted(item.steps, key=lambda row: (row.step_order, row.id))
+                    for step in sorted(
+                        item.steps, key=lambda row: (row.step_order, row.id)
+                    )
                 ],
             )
             for item in result.items
@@ -447,7 +459,9 @@ def get_stages(
         keyword=keyword,
         enabled=enabled,
     )
-    return success_response(ProcessStageListResult(total=total, items=[_to_stage_item(row) for row in rows]))
+    return success_response(
+        ProcessStageListResult(total=total, items=[_to_stage_item(row) for row in rows])
+    )
 
 
 @router.get("/stages/light", response_model=ApiResponse[ProcessStageLightListResult])
@@ -456,19 +470,29 @@ def get_stage_light_options(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.stages.list")),
 ) -> ApiResponse[ProcessStageLightListResult]:
-    rows = list_enabled_stage_options(db) if enabled is True else list_stages(
-        db,
-        page=1,
-        page_size=1000,
-        keyword=None,
-        enabled=enabled,
-    )[1]
+    rows = (
+        list_enabled_stage_options(db)
+        if enabled is True
+        else list_stages(
+            db,
+            page=1,
+            page_size=1000,
+            keyword=None,
+            enabled=enabled,
+        )[1]
+    )
     return success_response(
-        ProcessStageLightListResult(total=len(rows), items=[_to_stage_light_item(row) for row in rows])
+        ProcessStageLightListResult(
+            total=len(rows), items=[_to_stage_light_item(row) for row in rows]
+        )
     )
 
 
-@router.post("/stages", response_model=ApiResponse[ProcessStageItem], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/stages",
+    response_model=ApiResponse[ProcessStageItem],
+    status_code=status.HTTP_201_CREATED,
+)
 def create_stage_api(
     payload: ProcessStageCreate,
     db: Session = Depends(get_db),
@@ -496,7 +520,9 @@ def update_stage_api(
 ) -> ApiResponse[ProcessStageItem]:
     row = get_stage_by_id(db, stage_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stage not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Stage not found"
+        )
     try:
         updated = update_stage(
             db,
@@ -520,7 +546,9 @@ def delete_stage_api(
 ) -> ApiResponse[dict[str, bool]]:
     row = get_stage_by_id(db, stage_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stage not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Stage not found"
+        )
     try:
         delete_stage(db, row=row)
     except ValueError as error:
@@ -547,7 +575,9 @@ def export_processes_api(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.processes.list")),
 ) -> ApiResponse[CraftExportResult]:
-    result = export_processes_csv(db, keyword=keyword, stage_id=stage_id, enabled=enabled)
+    result = export_processes_csv(
+        db, keyword=keyword, stage_id=stage_id, enabled=enabled
+    )
     return success_response(CraftExportResult(**result))
 
 
@@ -569,7 +599,11 @@ def get_processes_api(
         stage_id=stage_id,
         enabled=enabled,
     )
-    return success_response(CraftProcessListResult(total=total, items=[_to_process_item(row) for row in rows]))
+    return success_response(
+        CraftProcessListResult(
+            total=total, items=[_to_process_item(row) for row in rows]
+        )
+    )
 
 
 @router.get("/processes/light", response_model=ApiResponse[CraftProcessLightListResult])
@@ -579,20 +613,30 @@ def get_process_light_options(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.processes.list")),
 ) -> ApiResponse[CraftProcessLightListResult]:
-    rows = list_enabled_process_options(db, stage_id=stage_id) if enabled is True else list_craft_processes(
-        db,
-        page=1,
-        page_size=2000,
-        keyword=None,
-        stage_id=stage_id,
-        enabled=enabled,
-    )[1]
+    rows = (
+        list_enabled_process_options(db, stage_id=stage_id)
+        if enabled is True
+        else list_craft_processes(
+            db,
+            page=1,
+            page_size=2000,
+            keyword=None,
+            stage_id=stage_id,
+            enabled=enabled,
+        )[1]
+    )
     return success_response(
-        CraftProcessLightListResult(total=len(rows), items=[_to_process_light_item(row) for row in rows])
+        CraftProcessLightListResult(
+            total=len(rows), items=[_to_process_light_item(row) for row in rows]
+        )
     )
 
 
-@router.post("/processes", response_model=ApiResponse[CraftProcessItem], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/processes",
+    response_model=ApiResponse[CraftProcessItem],
+    status_code=status.HTTP_201_CREATED,
+)
 def create_process_api(
     payload: CraftProcessCreate,
     db: Session = Depends(get_db),
@@ -618,9 +662,19 @@ def update_process_api(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.processes.update")),
 ) -> ApiResponse[CraftProcessItem]:
-    row = db.execute(select(Process).where(Process.id == process_id).options(selectinload(Process.stage))).scalars().first()
+    row = (
+        db.execute(
+            select(Process)
+            .where(Process.id == process_id)
+            .options(selectinload(Process.stage))
+        )
+        .scalars()
+        .first()
+    )
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Process not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Process not found"
+        )
     try:
         updated = update_process(
             db,
@@ -633,7 +687,16 @@ def update_process_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
-    updated = db.execute(select(Process).where(Process.id == updated.id).options(selectinload(Process.stage))).scalars().first() or updated
+    updated = (
+        db.execute(
+            select(Process)
+            .where(Process.id == updated.id)
+            .options(selectinload(Process.stage))
+        )
+        .scalars()
+        .first()
+        or updated
+    )
     return success_response(_to_process_item(updated), message="updated")
 
 
@@ -645,7 +708,9 @@ def delete_process_api(
 ) -> ApiResponse[dict[str, bool]]:
     row = db.execute(select(Process).where(Process.id == process_id)).scalars().first()
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Process not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Process not found"
+        )
     try:
         delete_process(db, row=row)
     except ValueError as error:
@@ -653,7 +718,10 @@ def delete_process_api(
     return success_response({"deleted": True}, message="deleted")
 
 
-@router.get("/system-master-template", response_model=ApiResponse[SystemMasterTemplateItem | None])
+@router.get(
+    "/system-master-template",
+    response_model=ApiResponse[SystemMasterTemplateItem | None],
+)
 def get_system_master_template_api(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.system_master_template.view")),
@@ -664,11 +732,17 @@ def get_system_master_template_api(
     return success_response(_to_system_master_template_item(row))
 
 
-@router.post("/system-master-template", response_model=ApiResponse[SystemMasterTemplateItem], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/system-master-template",
+    response_model=ApiResponse[SystemMasterTemplateItem],
+    status_code=status.HTTP_201_CREATED,
+)
 def create_system_master_template_api(
     payload: SystemMasterTemplateUpsertRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("craft.system_master_template.create")),
+    current_user: User = Depends(
+        require_permission("craft.system_master_template.create")
+    ),
 ) -> ApiResponse[SystemMasterTemplateItem]:
     try:
         row = create_system_master_template(
@@ -681,11 +755,15 @@ def create_system_master_template_api(
     return success_response(_to_system_master_template_item(row), message="created")
 
 
-@router.put("/system-master-template", response_model=ApiResponse[SystemMasterTemplateItem])
+@router.put(
+    "/system-master-template", response_model=ApiResponse[SystemMasterTemplateItem]
+)
 def update_system_master_template_api(
     payload: SystemMasterTemplateUpsertRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("craft.system_master_template.update")),
+    current_user: User = Depends(
+        require_permission("craft.system_master_template.update")
+    ),
 ) -> ApiResponse[SystemMasterTemplateItem]:
     try:
         row = update_system_master_template(
@@ -700,7 +778,10 @@ def update_system_master_template_api(
     return success_response(_to_system_master_template_item(row), message="updated")
 
 
-@router.get("/system-master-template/versions", response_model=ApiResponse[SystemMasterTemplateVersionListResult])
+@router.get(
+    "/system-master-template/versions",
+    response_model=ApiResponse[SystemMasterTemplateVersionListResult],
+)
 def list_system_master_template_versions_api(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.system_master_template.view")),
@@ -709,7 +790,10 @@ def list_system_master_template_versions_api(
     return success_response(_to_system_master_template_version_list_result(result))
 
 
-@router.get("/kanban/process-metrics", response_model=ApiResponse[CraftKanbanProcessMetricsResult])
+@router.get(
+    "/kanban/process-metrics",
+    response_model=ApiResponse[CraftKanbanProcessMetricsResult],
+)
 def get_craft_kanban_process_metrics_api(
     product_id: int = Query(ge=1),
     limit: int = Query(default=5, ge=1, le=20),
@@ -738,7 +822,9 @@ def get_craft_kanban_process_metrics_api(
     return success_response(_to_kanban_result_item(result))
 
 
-@router.get("/kanban/process-metrics/export", response_model=ApiResponse[CraftExportResult])
+@router.get(
+    "/kanban/process-metrics/export", response_model=ApiResponse[CraftExportResult]
+)
 def export_craft_kanban_process_metrics_api(
     product_id: int = Query(ge=1),
     stage_id: int | None = Query(default=None, ge=1),
@@ -787,10 +873,16 @@ def get_templates_api(
         enabled=enabled,
         lifecycle_status=lifecycle_status,
     )
-    return success_response(ProductProcessTemplateListResult(total=total, items=[_to_template_item(row) for row in rows]))
+    return success_response(
+        ProductProcessTemplateListResult(
+            total=total, items=[_to_template_item(row) for row in rows]
+        )
+    )
 
 
-@router.get("/templates/{template_id}/export", response_model=ApiResponse[CraftExportResult])
+@router.get(
+    "/templates/{template_id}/export", response_model=ApiResponse[CraftExportResult]
+)
 def export_template_detail_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -798,7 +890,9 @@ def export_template_detail_api(
 ) -> ApiResponse[CraftExportResult]:
     row = get_template_by_id(db, template_id)
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     result = export_template_detail_json(db, template=row)
     return success_response(CraftExportResult(**result))
 
@@ -815,7 +909,9 @@ def export_template_version_api(
 ) -> ApiResponse[CraftExportResult]:
     row = get_template_by_id(db, template_id)
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
         result = export_template_version_json(db, template=row, version=version)
     except ValueError as error:
@@ -823,7 +919,11 @@ def export_template_version_api(
     return success_response(CraftExportResult(**result))
 
 
-@router.post("/templates", response_model=ApiResponse[ProductProcessTemplateDetail], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/templates",
+    response_model=ApiResponse[ProductProcessTemplateDetail],
+    status_code=status.HTTP_201_CREATED,
+)
 def create_template_api(
     payload: ProductProcessTemplateCreate,
     db: Session = Depends(get_db),
@@ -859,7 +959,9 @@ def export_templates_api(
     _: User = Depends(require_permission("craft.templates.export")),
 ) -> ApiResponse[TemplateBatchExportResult]:
     normalized_keyword = keyword if isinstance(keyword, str) else None
-    normalized_product_category = product_category if isinstance(product_category, str) else None
+    normalized_product_category = (
+        product_category if isinstance(product_category, str) else None
+    )
     normalized_is_default = is_default if isinstance(is_default, bool) else None
     try:
         rows = export_templates(
@@ -943,7 +1045,9 @@ def import_templates_api(
     )
 
 
-@router.get("/templates/{template_id}", response_model=ApiResponse[ProductProcessTemplateDetail])
+@router.get(
+    "/templates/{template_id}", response_model=ApiResponse[ProductProcessTemplateDetail]
+)
 def get_template_detail_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -951,21 +1055,31 @@ def get_template_detail_api(
 ) -> ApiResponse[ProductProcessTemplateDetail]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     return success_response(_to_template_detail(row))
 
 
-@router.get("/templates/{template_id}/impact-analysis", response_model=ApiResponse[TemplateImpactAnalysisResult])
+@router.get(
+    "/templates/{template_id}/impact-analysis",
+    response_model=ApiResponse[TemplateImpactAnalysisResult],
+)
 def get_template_impact_analysis_api(
     template_id: int,
+    target_version: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.templates.impact.analysis")),
 ) -> ApiResponse[TemplateImpactAnalysisResult]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
-        impact = analyze_template_impact(db, template=row)
+        impact = analyze_template_impact(
+            db, template=row, target_version=target_version
+        )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
@@ -981,6 +1095,7 @@ def get_template_impact_analysis_api(
     ]
     return success_response(
         _to_impact_result_item(
+            target_version=impact.target_version,
             total_orders=impact.total_orders,
             pending_orders=impact.pending_orders,
             in_progress_orders=impact.in_progress_orders,
@@ -991,7 +1106,10 @@ def get_template_impact_analysis_api(
     )
 
 
-@router.post("/templates/{template_id}/publish", response_model=ApiResponse[ProductProcessTemplateUpdateResult])
+@router.post(
+    "/templates/{template_id}/publish",
+    response_model=ApiResponse[ProductProcessTemplateUpdateResult],
+)
 def publish_template_api(
     template_id: int,
     payload: TemplatePublishRequest,
@@ -1000,7 +1118,9 @@ def publish_template_api(
 ) -> ApiResponse[ProductProcessTemplateUpdateResult]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
         updated, sync_result = publish_template(
             db,
@@ -1045,7 +1165,10 @@ def publish_template_api(
     )
 
 
-@router.get("/templates/{template_id}/versions", response_model=ApiResponse[TemplateVersionListResult])
+@router.get(
+    "/templates/{template_id}/versions",
+    response_model=ApiResponse[TemplateVersionListResult],
+)
 def list_template_versions_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -1053,14 +1176,18 @@ def list_template_versions_api(
 ) -> ApiResponse[TemplateVersionListResult]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     versions = list_template_versions(db, template_id=row.id)
     items = [
         TemplateVersionItem(
             version=item.version,
             action=item.action,
             note=item.note,
-            source_version=item.source_revision.version if item.source_revision else None,
+            source_version=item.source_revision.version
+            if item.source_revision
+            else None,
             created_by_user_id=item.created_by_user_id,
             created_by_username=item.created_by.username if item.created_by else None,
             created_at=item.created_at,
@@ -1070,7 +1197,10 @@ def list_template_versions_api(
     return success_response(TemplateVersionListResult(total=len(items), items=items))
 
 
-@router.get("/templates/{template_id}/versions/compare", response_model=ApiResponse[TemplateVersionCompareResult])
+@router.get(
+    "/templates/{template_id}/versions/compare",
+    response_model=ApiResponse[TemplateVersionCompareResult],
+)
 def compare_template_versions_api(
     template_id: int,
     from_version: int = Query(ge=1),
@@ -1080,7 +1210,9 @@ def compare_template_versions_api(
 ) -> ApiResponse[TemplateVersionCompareResult]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
         result = compare_template_versions(
             db,
@@ -1113,7 +1245,10 @@ def compare_template_versions_api(
     )
 
 
-@router.post("/templates/{template_id}/rollback", response_model=ApiResponse[ProductProcessTemplateUpdateResult])
+@router.post(
+    "/templates/{template_id}/rollback",
+    response_model=ApiResponse[ProductProcessTemplateUpdateResult],
+)
 def rollback_template_api(
     template_id: int,
     payload: TemplateRollbackRequest,
@@ -1122,7 +1257,9 @@ def rollback_template_api(
 ) -> ApiResponse[ProductProcessTemplateUpdateResult]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
         updated, sync_result = rollback_template_to_version(
             db,
@@ -1167,7 +1304,10 @@ def rollback_template_api(
     )
 
 
-@router.put("/templates/{template_id}", response_model=ApiResponse[ProductProcessTemplateUpdateResult])
+@router.put(
+    "/templates/{template_id}",
+    response_model=ApiResponse[ProductProcessTemplateUpdateResult],
+)
 def update_template_api(
     template_id: int,
     payload: ProductProcessTemplateUpdate,
@@ -1176,7 +1316,9 @@ def update_template_api(
 ) -> ApiResponse[ProductProcessTemplateUpdateResult]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
         updated, sync_result = update_template(
             db,
@@ -1245,7 +1387,9 @@ def create_template_draft_api(
 ) -> ApiResponse[ProductProcessTemplateDetail]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
         updated = create_template_draft(db, template=row, operator=current_user)
     except ValueError as error:
@@ -1258,7 +1402,10 @@ def create_template_draft_api(
         target_id=str(updated.id),
         target_name=updated.template_name,
         operator=current_user,
-        after_data={"version": updated.version, "lifecycle_status": updated.lifecycle_status},
+        after_data={
+            "version": updated.version,
+            "lifecycle_status": updated.lifecycle_status,
+        },
     )
     return success_response(_to_template_detail(updated), message="draft_created")
 
@@ -1339,7 +1486,9 @@ def delete_template_api(
 ) -> ApiResponse[dict[str, bool]]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
         delete_template(db, template=row)
     except ValueError as error:
@@ -1347,7 +1496,11 @@ def delete_template_api(
     return success_response({"deleted": True}, message="deleted")
 
 
-@router.post("/templates/{template_id}/copy", response_model=ApiResponse[ProductProcessTemplateDetail], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/templates/{template_id}/copy",
+    response_model=ApiResponse[ProductProcessTemplateDetail],
+    status_code=status.HTTP_201_CREATED,
+)
 def copy_template_api(
     template_id: int,
     body: TemplateCopyRequest,
@@ -1356,9 +1509,13 @@ def copy_template_api(
 ) -> ApiResponse[ProductProcessTemplateDetail]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
-        new_row = copy_template(db, template=row, new_name=body.new_name, operator=current_user)
+        new_row = copy_template(
+            db, template=row, new_name=body.new_name, operator=current_user
+        )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     write_audit_log(
@@ -1375,7 +1532,11 @@ def copy_template_api(
     return success_response(_to_template_detail(new_row), message="created")
 
 
-@router.post("/templates/{template_id}/copy-to-product", response_model=ApiResponse[ProductProcessTemplateDetail], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/templates/{template_id}/copy-to-product",
+    response_model=ApiResponse[ProductProcessTemplateDetail],
+    status_code=status.HTTP_201_CREATED,
+)
 def copy_template_to_product_api(
     template_id: int,
     body: TemplateCopyToProductRequest,
@@ -1384,7 +1545,9 @@ def copy_template_to_product_api(
 ) -> ApiResponse[ProductProcessTemplateDetail]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
         new_row = copy_template_to_product(
             db,
@@ -1403,13 +1566,21 @@ def copy_template_to_product_api(
         target_id=str(row.id),
         target_name=row.template_name,
         operator=current_user,
-        after_data={"new_template_id": new_row.id, "new_name": new_row.template_name, "target_product_id": body.target_product_id},
+        after_data={
+            "new_template_id": new_row.id,
+            "new_name": new_row.template_name,
+            "target_product_id": body.target_product_id,
+        },
     )
     db.commit()
     return success_response(_to_template_detail(new_row), message="created")
 
 
-@router.post("/system-master-template/copy-to-product", response_model=ApiResponse[ProductProcessTemplateDetail], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/system-master-template/copy-to-product",
+    response_model=ApiResponse[ProductProcessTemplateDetail],
+    status_code=status.HTTP_201_CREATED,
+)
 def copy_system_master_to_product_api(
     body: TemplateCopyFromMasterRequest,
     db: Session = Depends(get_db),
@@ -1417,7 +1588,10 @@ def copy_system_master_to_product_api(
 ) -> ApiResponse[ProductProcessTemplateDetail]:
     master = get_system_master_template(db)
     if not master:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System master template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="System master template not found",
+        )
     try:
         new_row = copy_template_from_system_master(
             db,
@@ -1442,7 +1616,10 @@ def copy_system_master_to_product_api(
     return success_response(_to_template_detail(new_row), message="created")
 
 
-@router.post("/templates/{template_id}/archive", response_model=ApiResponse[ProductProcessTemplateDetail])
+@router.post(
+    "/templates/{template_id}/archive",
+    response_model=ApiResponse[ProductProcessTemplateDetail],
+)
 def archive_template_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -1450,7 +1627,9 @@ def archive_template_api(
 ) -> ApiResponse[ProductProcessTemplateDetail]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
         updated = archive_template(db, template=row, operator=current_user)
     except ValueError as error:
@@ -1468,7 +1647,10 @@ def archive_template_api(
     return success_response(_to_template_detail(updated), message="archived")
 
 
-@router.post("/templates/{template_id}/unarchive", response_model=ApiResponse[ProductProcessTemplateDetail])
+@router.post(
+    "/templates/{template_id}/unarchive",
+    response_model=ApiResponse[ProductProcessTemplateDetail],
+)
 def unarchive_template_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -1476,7 +1658,9 @@ def unarchive_template_api(
 ) -> ApiResponse[ProductProcessTemplateDetail]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     try:
         updated = unarchive_template(db, template=row, operator=current_user)
     except ValueError as error:
@@ -1494,7 +1678,9 @@ def unarchive_template_api(
     return success_response(_to_template_detail(updated), message="unarchived")
 
 
-@router.get("/stages/{stage_id}/references", response_model=ApiResponse[StageReferenceResult])
+@router.get(
+    "/stages/{stage_id}/references", response_model=ApiResponse[StageReferenceResult]
+)
 def get_stage_references_api(
     stage_id: int,
     db: Session = Depends(get_db),
@@ -1502,12 +1688,17 @@ def get_stage_references_api(
 ) -> ApiResponse[StageReferenceResult]:
     row = get_stage_by_id(db, stage_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stage not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Stage not found"
+        )
     result = get_stage_references(db, stage=row)
     return success_response(_to_stage_reference_result(result))
 
 
-@router.get("/processes/{process_id}/references", response_model=ApiResponse[ProcessReferenceResult])
+@router.get(
+    "/processes/{process_id}/references",
+    response_model=ApiResponse[ProcessReferenceResult],
+)
 def get_process_references_api(
     process_id: int,
     db: Session = Depends(get_db),
@@ -1515,12 +1706,17 @@ def get_process_references_api(
 ) -> ApiResponse[ProcessReferenceResult]:
     row = db.execute(select(Process).where(Process.id == process_id)).scalars().first()
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Process not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Process not found"
+        )
     result = get_process_references(db, process=row)
     return success_response(_to_process_reference_result(result))
 
 
-@router.get("/templates/{template_id}/references", response_model=ApiResponse[TemplateReferenceResult])
+@router.get(
+    "/templates/{template_id}/references",
+    response_model=ApiResponse[TemplateReferenceResult],
+)
 def get_template_references_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -1528,7 +1724,9 @@ def get_template_references_api(
 ) -> ApiResponse[TemplateReferenceResult]:
     row = get_template_by_id(db, template_id)
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
     result = get_template_references(db, template=row)
     return success_response(
         TemplateReferenceResult(
@@ -1555,14 +1753,21 @@ def get_template_references_api(
     )
 
 
-@router.get("/products/{product_id}/template-references", response_model=ApiResponse[ProductTemplateReferenceResult])
+@router.get(
+    "/products/{product_id}/template-references",
+    response_model=ApiResponse[ProductTemplateReferenceResult],
+)
 def get_product_template_references_api(
     product_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.templates.list")),
 ) -> ApiResponse[ProductTemplateReferenceResult]:
-    product_row = db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    product_row = (
+        db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    )
     if product_row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     result = get_product_template_references(db, product=product_row)
     return success_response(_to_product_template_reference_result(result))

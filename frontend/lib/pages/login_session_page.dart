@@ -159,6 +159,10 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         return;
       }
       final validIds = result.items.map((item) => item.sessionTokenId).toSet();
+      final activeIds = result.items
+          .where((item) => item.status == 'active')
+          .map((item) => item.sessionTokenId)
+          .toSet();
       final resolvedTotalPages = result.total <= 0
           ? 1
           : (((result.total - 1) ~/ _sessionPageSize) + 1);
@@ -169,7 +173,9 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         _onlineSessions = result.items;
         _sessionTotal = result.total;
         _sessionPage = resolvedPage;
-        _selectedSessionIds.removeWhere((id) => !validIds.contains(id));
+        _selectedSessionIds.removeWhere(
+          (id) => !validIds.contains(id) || !activeIds.contains(id),
+        );
       });
       if (resolvedPage != targetPage) {
         await _loadOnlineSessions(page: resolvedPage);
@@ -205,33 +211,15 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   }
 
   String _sessionStatusLabel(String status) {
-    switch (status) {
-      case 'active':
-        return '在线';
-      case 'forced_offline':
-        return '离线';
-      case 'expired':
-        return '离线';
-      case 'logged_out':
-        return '离线';
-      default:
-        return status;
-    }
+    return status == 'active' ? '在线' : '离线';
+  }
+
+  bool _canForceOfflineSession(OnlineSessionItem item) {
+    return widget.canManage && item.status == 'active';
   }
 
   Color _sessionStatusColor(BuildContext context, String status) {
-    switch (status) {
-      case 'active':
-        return Colors.green;
-      case 'forced_offline':
-        return Colors.deepOrange;
-      case 'expired':
-        return Theme.of(context).colorScheme.error;
-      case 'logged_out':
-        return Theme.of(context).colorScheme.primary;
-      default:
-        return Theme.of(context).colorScheme.onSurfaceVariant;
-    }
+    return status == 'active' ? Colors.green : Colors.grey;
   }
 
   Future<void> _forceOfflineSingle(String sessionTokenId) async {
@@ -436,7 +424,9 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                                         ),
                                       ),
                                     ),
-                                    DataCell(Text(_formatDateTime(item.loginTime))),
+                                    DataCell(
+                                      Text(_formatDateTime(item.loginTime)),
+                                    ),
                                     DataCell(Text(item.ipAddress ?? '-')),
                                     DataCell(Text(item.terminalInfo ?? '-')),
                                     DataCell(Text(item.failureReason ?? '-')),
@@ -495,7 +485,10 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                 items: const [
                   DropdownMenuItem<String?>(value: null, child: Text('全部状态')),
                   DropdownMenuItem<String?>(value: 'active', child: Text('在线')),
-                  DropdownMenuItem<String?>(value: 'offline', child: Text('离线')),
+                  DropdownMenuItem<String?>(
+                    value: 'offline',
+                    child: Text('离线'),
+                  ),
                 ],
                 onChanged: (value) {
                   setState(() => _sessionStatusFilter = value);
@@ -556,12 +549,15 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                                 final checked = _selectedSessionIds.contains(
                                   item.sessionTokenId,
                                 );
+                                final canForceOffline = _canForceOfflineSession(
+                                  item,
+                                );
                                 return DataRow(
                                   cells: [
                                     DataCell(
                                       Checkbox(
                                         value: checked,
-                                        onChanged: widget.canManage
+                                        onChanged: canForceOffline
                                             ? (value) {
                                                 setState(() {
                                                   if (value ?? false) {
@@ -599,7 +595,9 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                                         ),
                                       ),
                                     ),
-                                    DataCell(Text(_formatDateTime(item.loginTime))),
+                                    DataCell(
+                                      Text(_formatDateTime(item.loginTime)),
+                                    ),
                                     DataCell(
                                       Text(_formatDateTime(item.lastActiveAt)),
                                     ),
@@ -607,7 +605,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                                     DataCell(Text(item.terminalInfo ?? '-')),
                                     DataCell(
                                       OutlinedButton(
-                                        onPressed: widget.canManage
+                                        onPressed: canForceOffline
                                             ? () => _forceOfflineSingle(
                                                 item.sessionTokenId,
                                               )

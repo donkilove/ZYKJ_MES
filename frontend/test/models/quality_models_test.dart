@@ -141,12 +141,56 @@ void main() {
       'passed_total': 3,
       'failed_total': 1,
       'pass_rate_percent': 75,
+      'defect_total': 5,
       'scrap_total': 2,
     });
 
     expect(item.date, '2026-03-01');
     expect(item.firstArticleTotal, 4);
+    expect(item.defectTotal, 5);
     expect(item.scrapTotal, 2);
+  });
+
+  test('DefectAnalysisResult parses operator and date dimensions', () {
+    final result = DefectAnalysisResult.fromJson({
+      'total_defect_quantity': 12,
+      'top_defects': [
+        {'phenomenon': '虚焊', 'quantity': 6, 'ratio': 50},
+      ],
+      'top_reasons': [
+        {'reason': '治具偏移', 'quantity': 5, 'ratio': 41.67},
+      ],
+      'product_quality_comparison': [
+        {
+          'product_id': 3,
+          'product_name': '产品A',
+          'first_article_total': 7,
+          'passed_total': 5,
+          'failed_total': 2,
+          'pass_rate_percent': 71.43,
+          'scrap_total': 1,
+          'repair_order_count': 4,
+        },
+      ],
+      'by_process': [
+        {'process_code': '01-01', 'process_name': '切割', 'quantity': 4},
+      ],
+      'by_product': [
+        {'product_id': 3, 'product_name': '产品A', 'quantity': 7},
+      ],
+      'by_operator': [
+        {'operator_user_id': 8, 'operator_username': 'worker', 'quantity': 5},
+      ],
+      'by_date': [
+        {'stat_date': '2026-03-01', 'quantity': 9},
+      ],
+    });
+
+    expect(result.byOperator.single.operatorUsername, 'worker');
+    expect(result.byDate.single.date, '2026-03-01');
+    expect(result.byDate.single.quantity, 9);
+    expect(result.topReasons.single.reason, '治具偏移');
+    expect(result.productQualityComparison.single.repairTotal, 4);
   });
 
   test('FirstArticleDetail parses backend detail payload fields', () {

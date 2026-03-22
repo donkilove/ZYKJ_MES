@@ -570,6 +570,7 @@ class PipelineInstanceItem {
     required this.orderCode,
     required this.orderProcessId,
     required this.processCode,
+    required this.processName,
     required this.pipelineSeq,
     required this.pipelineSubOrderNo,
     required this.isActive,
@@ -585,6 +586,7 @@ class PipelineInstanceItem {
   final String orderCode;
   final int orderProcessId;
   final String processCode;
+  final String processName;
   final int pipelineSeq;
   final String pipelineSubOrderNo;
   final bool isActive;
@@ -592,6 +594,18 @@ class PipelineInstanceItem {
   final DateTime? invalidatedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  String get processDisplayText {
+    final name = processName.trim();
+    final code = processCode.trim();
+    if (name.isEmpty) {
+      return code;
+    }
+    if (code.isEmpty) {
+      return name;
+    }
+    return '$name ($code)';
+  }
 
   factory PipelineInstanceItem.fromJson(Map<String, dynamic> json) {
     return PipelineInstanceItem(
@@ -601,6 +615,7 @@ class PipelineInstanceItem {
       orderCode: (json['order_code'] as String?) ?? '',
       orderProcessId: (json['order_process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
+      processName: (json['process_name'] as String?) ?? '',
       pipelineSeq: (json['pipeline_seq'] as int?) ?? 0,
       pipelineSubOrderNo: (json['pipeline_sub_order_no'] as String?) ?? '',
       isActive: (json['is_active'] as bool?) ?? false,
@@ -1535,9 +1550,8 @@ class ScrapStatisticsItem {
       relatedEventLogs:
           (json['related_event_logs'] as List<dynamic>? ?? const [])
               .map(
-                (entry) => ScrapEventLogItem.fromJson(
-                  entry as Map<String, dynamic>,
-                ),
+                (entry) =>
+                    ScrapEventLogItem.fromJson(entry as Map<String, dynamic>),
               )
               .toList(),
     );
@@ -1724,9 +1738,7 @@ class RepairDefectPhenomenonDetailItem {
   final String phenomenon;
   final int quantity;
 
-  factory RepairDefectPhenomenonDetailItem.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory RepairDefectPhenomenonDetailItem.fromJson(Map<String, dynamic> json) {
     return RepairDefectPhenomenonDetailItem(
       id: (json['id'] as int?) ?? 0,
       phenomenon: (json['phenomenon'] as String?) ?? '',
@@ -1873,15 +1885,12 @@ class RepairOrderDetailItem {
           )
           .toList(),
       causeRows: (json['cause_rows'] as List<dynamic>? ?? const [])
-          .map(
-            (e) => RepairCauseDetailItem.fromJson(e as Map<String, dynamic>),
-          )
+          .map((e) => RepairCauseDetailItem.fromJson(e as Map<String, dynamic>))
           .toList(),
       returnRoutes: (json['return_routes'] as List<dynamic>? ?? const [])
           .map(
-            (e) => RepairReturnRouteDetailItem.fromJson(
-              e as Map<String, dynamic>,
-            ),
+            (e) =>
+                RepairReturnRouteDetailItem.fromJson(e as Map<String, dynamic>),
           )
           .toList(),
       eventLogs: (json['event_logs'] as List<dynamic>? ?? const [])

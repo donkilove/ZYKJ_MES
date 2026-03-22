@@ -13,6 +13,7 @@ class MessageItem {
     required this.targetTabCode,
     required this.targetRoutePayloadJson,
     required this.status,
+    required this.inactiveReason,
     required this.publishedAt,
     required this.isRead,
     required this.readAt,
@@ -32,6 +33,7 @@ class MessageItem {
   final String? targetTabCode;
   final String? targetRoutePayloadJson;
   final String status;
+  final String? inactiveReason;
   final DateTime? publishedAt;
   final bool isRead;
   final DateTime? readAt;
@@ -52,6 +54,7 @@ class MessageItem {
       targetTabCode: json['target_tab_code'] as String?,
       targetRoutePayloadJson: json['target_route_payload_json'] as String?,
       status: json['status'] as String,
+      inactiveReason: json['inactive_reason'] as String?,
       publishedAt: json['published_at'] != null
           ? DateTime.tryParse(json['published_at'] as String)
           : null,
@@ -63,6 +66,30 @@ class MessageItem {
           ? DateTime.tryParse(json['delivered_at'] as String)
           : null,
     );
+  }
+
+  bool get isActive => status == 'active';
+
+  String? get resolvedInactiveReason {
+    if (inactiveReason != null && inactiveReason!.isNotEmpty) {
+      return inactiveReason;
+    }
+    return isActive ? null : status;
+  }
+
+  String get inactiveReasonName {
+    switch (resolvedInactiveReason) {
+      case 'expired':
+        return '消息已过期';
+      case 'archived':
+        return '消息已归档';
+      case 'no_permission':
+        return '暂无目标页面访问权限';
+      case 'source_unavailable':
+        return '来源对象不可访问';
+      default:
+        return '来源对象不可访问';
+    }
   }
 
   String get messageTypeName {
@@ -156,6 +183,55 @@ class MessageSummaryResult {
       unreadCount: (json['unread_count'] as int?) ?? 0,
       todoUnreadCount: (json['todo_unread_count'] as int?) ?? 0,
       urgentUnreadCount: (json['urgent_unread_count'] as int?) ?? 0,
+    );
+  }
+}
+
+class AnnouncementPublishRequest {
+  const AnnouncementPublishRequest({
+    required this.title,
+    required this.content,
+    required this.priority,
+    required this.rangeType,
+    required this.roleCodes,
+    required this.userIds,
+    required this.expiresAt,
+  });
+
+  final String title;
+  final String content;
+  final String priority;
+  final String rangeType;
+  final List<String> roleCodes;
+  final List<int> userIds;
+  final DateTime? expiresAt;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'content': content,
+      'priority': priority,
+      'range_type': rangeType,
+      'role_codes': roleCodes,
+      'user_ids': userIds,
+      'expires_at': expiresAt?.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class AnnouncementPublishResult {
+  const AnnouncementPublishResult({
+    required this.messageId,
+    required this.recipientCount,
+  });
+
+  final int messageId;
+  final int recipientCount;
+
+  factory AnnouncementPublishResult.fromJson(Map<String, dynamic> json) {
+    return AnnouncementPublishResult(
+      messageId: (json['message_id'] as int?) ?? 0,
+      recipientCount: (json['recipient_count'] as int?) ?? 0,
     );
   }
 }

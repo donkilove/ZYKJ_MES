@@ -10,6 +10,7 @@ from app.core.product_lifecycle import (
     PRODUCT_LIFECYCLE_INACTIVE,
     PRODUCT_LIFECYCLE_OPTIONS,
 )
+from app.core.product_parameter_template import VALID_PRODUCT_PARAMETER_CATEGORY_SET
 
 
 VALID_PRODUCT_CATEGORIES = {"贴片", "DTU", "套件"}
@@ -24,7 +25,9 @@ class ProductCreate(BaseModel):
     @classmethod
     def validate_category(cls, value: str) -> str:
         if value and value not in VALID_PRODUCT_CATEGORIES:
-            raise ValueError(f"产品分类必须为以下之一：{', '.join(sorted(VALID_PRODUCT_CATEGORIES))}")
+            raise ValueError(
+                f"产品分类必须为以下之一：{', '.join(sorted(VALID_PRODUCT_CATEGORIES))}"
+            )
         return value
 
 
@@ -37,7 +40,9 @@ class ProductUpdate(BaseModel):
     @classmethod
     def validate_category(cls, value: str) -> str:
         if value and value not in VALID_PRODUCT_CATEGORIES:
-            raise ValueError(f"产品分类必须为以下之一：{', '.join(sorted(VALID_PRODUCT_CATEGORIES))}")
+            raise ValueError(
+                f"产品分类必须为以下之一：{', '.join(sorted(VALID_PRODUCT_CATEGORIES))}"
+            )
         return value
 
 
@@ -72,6 +77,14 @@ class ProductParameterInputItem(BaseModel):
     value: str = Field(min_length=0, max_length=1024)
     description: str = Field(default="", max_length=500)
 
+    @field_validator("category")
+    @classmethod
+    def validate_parameter_category(cls, value: str) -> str:
+        normalized = value.strip()
+        if normalized not in VALID_PRODUCT_PARAMETER_CATEGORY_SET:
+            raise ValueError("参数分类不在允许范围内")
+        return normalized
+
 
 class ProductParameterItem(BaseModel):
     name: str
@@ -86,6 +99,7 @@ class ProductParameterItem(BaseModel):
 class ProductParameterListResult(BaseModel):
     product_id: int
     product_name: str
+    parameter_scope: Literal["version", "effective"] = "version"
     version: int
     version_label: str = "V1.0"
     lifecycle_status: str = PRODUCT_LIFECYCLE_DRAFT
@@ -100,8 +114,28 @@ class ProductParameterUpdateRequest(BaseModel):
 
 
 class ProductParameterUpdateResult(BaseModel):
+    parameter_scope: Literal["version"] = "version"
+    version: int
     updated_count: int
     changed_keys: list[str]
+
+
+class ProductParameterVersionListItem(BaseModel):
+    product_id: int
+    product_name: str
+    product_category: str = ""
+    version: int
+    version_label: str = "V1.0"
+    lifecycle_status: str = PRODUCT_LIFECYCLE_DRAFT
+    is_current_version: bool = False
+    is_effective_version: bool = False
+    parameter_summary: str | None = None
+    updated_at: datetime
+
+
+class ProductParameterVersionListResult(BaseModel):
+    total: int
+    items: list[ProductParameterVersionListItem]
 
 
 class ProductParameterHistoryItem(BaseModel):

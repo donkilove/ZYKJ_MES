@@ -30,6 +30,8 @@ from app.schemas.product import (
     ProductParameterHistoryListResult,
     ProductParameterItem,
     ProductParameterListResult,
+    ProductParameterVersionListItem,
+    ProductParameterVersionListResult,
     ProductParameterUpdateRequest,
     ProductParameterUpdateResult,
     ProductRollbackRequest,
@@ -66,6 +68,7 @@ from app.services.product_service import (
     get_product_version,
     list_parameter_history,
     list_product_parameters,
+    list_product_parameter_versions,
     list_product_versions,
     list_products,
     append_product_history_event,
@@ -110,6 +113,7 @@ def to_product_item(
 def _to_parameter_list_result(
     *,
     product: Product,
+    parameter_scope: str,
     version: int,
     version_label: str,
     lifecycle_status: str,
@@ -130,6 +134,7 @@ def _to_parameter_list_result(
     return ProductParameterListResult(
         product_id=product.id,
         product_name=product.name,
+        parameter_scope=parameter_scope,
         version=version,
         version_label=version_label,
         lifecycle_status=lifecycle_status,
@@ -155,7 +160,12 @@ def get_products(
     _: User = Depends(require_permission("product.products.list")),
 ) -> ApiResponse[ProductListResult]:
     total, products, latest_map = list_products(
-        db, page, page_size, keyword, category, lifecycle_status,
+        db,
+        page,
+        page_size,
+        keyword,
+        category,
+        lifecycle_status,
         has_effective_version=has_effective_version,
         updated_after=updated_after,
         updated_before=updated_before,
@@ -166,12 +176,68 @@ def get_products(
     return success_response(
         ProductListResult(
             total=total,
-            items=[to_product_item(product, latest_map.get(product.id)) for product in products],
+            items=[
+                to_product_item(product, latest_map.get(product.id))
+                for product in products
+            ],
         )
     )
 
 
-@router.post("", response_model=ApiResponse[ProductItem], status_code=status.HTTP_201_CREATED)
+@router.get(
+    "/parameter-versions",
+    response_model=ApiResponse[ProductParameterVersionListResult],
+)
+def get_product_parameter_versions(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    keyword: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    version_keyword: str | None = Query(default=None),
+    lifecycle_status: str | None = Query(default=None),
+    updated_after: datetime | None = Query(default=None),
+    updated_before: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("product.parameters.view")),
+) -> ApiResponse[ProductParameterVersionListResult]:
+    total, rows = list_product_parameter_versions(
+        db,
+        page=page,
+        page_size=page_size,
+        keyword=keyword,
+        category=category,
+        version_keyword=version_keyword,
+        lifecycle_status=lifecycle_status,
+        updated_after=updated_after,
+        updated_before=updated_before,
+    )
+    return success_response(
+        ProductParameterVersionListResult(
+            total=total,
+            items=[
+                ProductParameterVersionListItem(
+                    product_id=row.product.id,
+                    product_name=row.product.name,
+                    product_category=row.product.category or "",
+                    version=row.revision.version,
+                    version_label=row.revision.version_label,
+                    lifecycle_status=row.revision.lifecycle_status,
+                    is_current_version=row.product.current_version
+                    == row.revision.version,
+                    is_effective_version=row.product.effective_version
+                    == row.revision.version,
+                    parameter_summary=row.parameter_summary,
+                    updated_at=row.revision.updated_at,
+                )
+                for row in rows
+            ],
+        )
+    )
+
+
+@router.post(
+    "", response_model=ApiResponse[ProductItem], status_code=status.HTTP_201_CREATED
+)
 def create_product_api(
     payload: ProductCreate,
     db: Session = Depends(get_db),
@@ -180,7 +246,10 @@ def create_product_api(
     normalized_name = payload.name.strip()
     existing = get_product_by_name(db, normalized_name)
     if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Product name already exists")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Product name already exists",
+        )
 
     try:
         product = create_product(
@@ -201,7 +270,11 @@ def create_product_api(
         target_id=str(product.id),
         target_name=product.name,
         operator=current_user,
-        after_data={"name": product.name, "category": product.category, "remark": product.remark},
+        after_data={
+            "name": product.name,
+            "category": product.category,
+            "remark": product.remark,
+        },
     )
     db.commit()
     return success_response(to_product_item(product, None), message="created")
@@ -215,8 +288,12 @@ def get_product_detail_api(
 ) -> ApiResponse[ProductItem]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(product.id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
+    latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(
+        product.id
+    )
     return success_response(to_product_item(product, latest_history))
 
 
@@ -229,16 +306,23 @@ def update_product_api(
 ) -> ApiResponse[ProductItem]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
 
     normalized_name = payload.name.strip()
     if not normalized_name:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Product name is required")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Product name is required"
+        )
 
     if normalized_name != product.name:
         existing = get_product_by_name(db, normalized_name)
         if existing and existing.id != product.id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Product name already exists")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Product name already exists",
+            )
 
     before_snapshot = json.dumps(
         {
@@ -285,10 +369,16 @@ def update_product_api(
         target_id=str(product.id),
         target_name=product.name,
         operator=current_user,
-        after_data={"name": product.name, "category": product.category, "remark": product.remark},
+        after_data={
+            "name": product.name,
+            "category": product.category,
+            "remark": product.remark,
+        },
     )
     db.commit()
-    latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(product.id)
+    latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(
+        product.id
+    )
     return success_response(to_product_item(product, latest_history), message="updated")
 
 
@@ -300,11 +390,15 @@ def delete_product_api(
     current_user: User = Depends(require_permission("product.products.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     if not verify_password(payload.password, current_user.password_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password is incorrect")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Password is incorrect"
+        )
 
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
 
     try:
         delete_product(db, product)
@@ -323,7 +417,9 @@ def delete_product_api(
     return success_response({"deleted": True}, message="deleted")
 
 
-@router.get("/{product_id}/parameters", response_model=ApiResponse[ProductParameterListResult])
+@router.get(
+    "/{product_id}/parameters", response_model=ApiResponse[ProductParameterListResult]
+)
 def get_product_parameters(
     product_id: int,
     db: Session = Depends(get_db),
@@ -331,11 +427,15 @@ def get_product_parameters(
 ) -> ApiResponse[ProductParameterListResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
 
     revision = get_current_revision(db, product=product)
     if revision is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Current version not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Current version not found"
+        )
     revision, parameters = get_product_version_parameters(
         db,
         product=product,
@@ -344,6 +444,7 @@ def get_product_parameters(
     return success_response(
         _to_parameter_list_result(
             product=product,
+            parameter_scope="version",
             version=revision.version,
             version_label=revision.version_label,
             lifecycle_status=revision.lifecycle_status,
@@ -364,7 +465,9 @@ def get_product_version_parameters_api(
 ) -> ApiResponse[ProductParameterListResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     try:
         revision, parameters = get_product_version_parameters(
             db,
@@ -376,6 +479,7 @@ def get_product_version_parameters_api(
     return success_response(
         _to_parameter_list_result(
             product=product,
+            parameter_scope="version",
             version=revision.version,
             version_label=revision.version_label,
             lifecycle_status=revision.lifecycle_status,
@@ -395,7 +499,9 @@ def get_effective_product_parameters_api(
 ) -> ApiResponse[ProductParameterListResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     try:
         revision, parameters = get_effective_product_parameters(
             db,
@@ -406,6 +512,7 @@ def get_effective_product_parameters_api(
     return success_response(
         _to_parameter_list_result(
             product=product,
+            parameter_scope="effective",
             version=revision.version,
             version_label=revision.version_label,
             lifecycle_status=revision.lifecycle_status,
@@ -414,7 +521,9 @@ def get_effective_product_parameters_api(
     )
 
 
-@router.put("/{product_id}/parameters", response_model=ApiResponse[ProductParameterUpdateResult])
+@router.put(
+    "/{product_id}/parameters", response_model=ApiResponse[ProductParameterUpdateResult]
+)
 def update_parameters(
     product_id: int,
     payload: ProductParameterUpdateRequest,
@@ -423,13 +532,18 @@ def update_parameters(
 ) -> ApiResponse[ProductParameterUpdateResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
 
     try:
         changed_keys = update_product_parameters(
             db,
             product=product,
-            items=[(item.name, item.category, item.type, item.value, item.description) for item in payload.items],
+            items=[
+                (item.name, item.category, item.type, item.value, item.description)
+                for item in payload.items
+            ],
             remark=payload.remark,
             operator=current_user,
             confirmed=payload.confirmed,
@@ -450,10 +564,12 @@ def update_parameters(
             "remark": payload.remark,
             "changed_keys": changed_keys,
         },
-        )
+    )
     db.commit()
     return success_response(
         ProductParameterUpdateResult(
+            parameter_scope="version",
+            version=product.current_version,
             updated_count=len(changed_keys),
             changed_keys=changed_keys,
         ),
@@ -474,14 +590,19 @@ def update_product_version_parameters_api(
 ) -> ApiResponse[ProductParameterUpdateResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
 
     try:
         changed_keys = update_product_version_parameters(
             db,
             product=product,
             version=version,
-            items=[(item.name, item.category, item.type, item.value, item.description) for item in payload.items],
+            items=[
+                (item.name, item.category, item.type, item.value, item.description)
+                for item in payload.items
+            ],
             remark=payload.remark,
             operator=current_user,
             confirmed=payload.confirmed,
@@ -497,11 +618,17 @@ def update_product_version_parameters_api(
         target_id=str(product.id),
         target_name=product.name,
         operator=current_user,
-        after_data={"version": version, "remark": payload.remark, "changed_keys": changed_keys},
+        after_data={
+            "version": version,
+            "remark": payload.remark,
+            "changed_keys": changed_keys,
+        },
     )
     db.commit()
     return success_response(
         ProductParameterUpdateResult(
+            parameter_scope="version",
+            version=version,
             updated_count=len(changed_keys),
             changed_keys=changed_keys,
         ),
@@ -509,7 +636,10 @@ def update_product_version_parameters_api(
     )
 
 
-@router.get("/{product_id}/impact-analysis", response_model=ApiResponse[ProductImpactAnalysisResult])
+@router.get(
+    "/{product_id}/impact-analysis",
+    response_model=ApiResponse[ProductImpactAnalysisResult],
+)
 def get_product_impact_analysis(
     product_id: int,
     operation: str = Query(default="lifecycle"),
@@ -520,7 +650,9 @@ def get_product_impact_analysis(
 ) -> ApiResponse[ProductImpactAnalysisResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
 
     try:
         query = ProductImpactAnalysisQuery(
@@ -569,7 +701,9 @@ def update_product_lifecycle(
 ) -> ApiResponse[ProductItem]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
 
     try:
         before_snapshot = json.dumps(
@@ -636,7 +770,9 @@ def _to_version_item(
         note=row.note,
         effective_at=effective_at,
         source_version=row.source_revision.version if row.source_revision else None,
-        source_version_label=row.source_revision.version_label if row.source_revision else None,
+        source_version_label=row.source_revision.version_label
+        if row.source_revision
+        else None,
         created_by_user_id=row.created_by_user_id,
         created_by_username=row.created_by.username if row.created_by else None,
         created_at=row.created_at,
@@ -644,7 +780,9 @@ def _to_version_item(
     )
 
 
-@router.get("/{product_id}/versions", response_model=ApiResponse[ProductVersionListResult])
+@router.get(
+    "/{product_id}/versions", response_model=ApiResponse[ProductVersionListResult]
+)
 def get_product_versions(
     product_id: int,
     db: Session = Depends(get_db),
@@ -652,7 +790,9 @@ def get_product_versions(
 ) -> ApiResponse[ProductVersionListResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     rows = list_product_versions(db, product_id=product.id)
     return success_response(
         ProductVersionListResult(
@@ -661,7 +801,8 @@ def get_product_versions(
                 _to_version_item(
                     row,
                     effective_at=product.effective_at
-                    if product.effective_version == row.version and row.lifecycle_status == "effective"
+                    if product.effective_version == row.version
+                    and row.lifecycle_status == "effective"
                     else None,
                 )
                 for row in rows
@@ -670,7 +811,11 @@ def get_product_versions(
     )
 
 
-@router.post("/{product_id}/versions", response_model=ApiResponse[ProductVersionItem], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{product_id}/versions",
+    response_model=ApiResponse[ProductVersionItem],
+    status_code=status.HTTP_201_CREATED,
+)
 def create_product_version_api(
     product_id: int,
     db: Session = Depends(get_db),
@@ -678,7 +823,9 @@ def create_product_version_api(
 ) -> ApiResponse[ProductVersionItem]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     try:
         revision = create_product_version(db, product=product, operator=current_user)
     except ValueError as error:
@@ -691,20 +838,34 @@ def create_product_version_api(
         target_id=str(product.id),
         target_name=product.name,
         operator=current_user,
-        after_data={"version": revision.version, "version_label": revision.version_label},
+        after_data={
+            "version": revision.version,
+            "version_label": revision.version_label,
+        },
     )
     db.commit()
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
-    revision = db.execute(
-        select(_PR).where(_PR.id == revision.id)
-        .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
-    ).scalars().first() or revision
+
+    revision = (
+        db.execute(
+            select(_PR)
+            .where(_PR.id == revision.id)
+            .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+        )
+        .scalars()
+        .first()
+        or revision
+    )
     return success_response(_to_version_item(revision), message="created")
 
 
-@router.post("/{product_id}/versions/{version}/copy", response_model=ApiResponse[ProductVersionItem], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{product_id}/versions/{version}/copy",
+    response_model=ApiResponse[ProductVersionItem],
+    status_code=status.HTTP_201_CREATED,
+)
 def copy_product_version_api(
     product_id: int,
     version: int,
@@ -714,7 +875,9 @@ def copy_product_version_api(
 ) -> ApiResponse[ProductVersionItem]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     if payload.source_version != version:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -734,20 +897,34 @@ def copy_product_version_api(
         target_id=str(product.id),
         target_name=product.name,
         operator=current_user,
-        after_data={"version": revision.version, "version_label": revision.version_label, "source_version": version},
+        after_data={
+            "version": revision.version,
+            "version_label": revision.version_label,
+            "source_version": version,
+        },
     )
     db.commit()
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
-    revision = db.execute(
-        select(_PR).where(_PR.id == revision.id)
-        .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
-    ).scalars().first() or revision
+
+    revision = (
+        db.execute(
+            select(_PR)
+            .where(_PR.id == revision.id)
+            .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+        )
+        .scalars()
+        .first()
+        or revision
+    )
     return success_response(_to_version_item(revision), message="created")
 
 
-@router.post("/{product_id}/versions/{version}/activate", response_model=ApiResponse[ProductVersionItem])
+@router.post(
+    "/{product_id}/versions/{version}/activate",
+    response_model=ApiResponse[ProductVersionItem],
+)
 def activate_product_version_api(
     product_id: int,
     version: int,
@@ -757,7 +934,9 @@ def activate_product_version_api(
 ) -> ApiResponse[ProductVersionItem]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     try:
         revision = activate_product_version(
             db,
@@ -783,14 +962,24 @@ def activate_product_version_api(
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
-    revision = db.execute(
-        select(_PR).where(_PR.id == revision.id)
-        .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
-    ).scalars().first() or revision
+
+    revision = (
+        db.execute(
+            select(_PR)
+            .where(_PR.id == revision.id)
+            .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+        )
+        .scalars()
+        .first()
+        or revision
+    )
     return success_response(_to_version_item(revision), message="activated")
 
 
-@router.post("/{product_id}/versions/{version}/disable", response_model=ApiResponse[ProductVersionItem])
+@router.post(
+    "/{product_id}/versions/{version}/disable",
+    response_model=ApiResponse[ProductVersionItem],
+)
 def disable_product_version_api(
     product_id: int,
     version: int,
@@ -799,7 +988,9 @@ def disable_product_version_api(
 ) -> ApiResponse[ProductVersionItem]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     try:
         revision = disable_product_version(
             db, product=product, version=version, operator=current_user
@@ -820,14 +1011,23 @@ def disable_product_version_api(
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
-    revision = db.execute(
-        select(_PR).where(_PR.id == revision.id)
-        .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
-    ).scalars().first() or revision
+
+    revision = (
+        db.execute(
+            select(_PR)
+            .where(_PR.id == revision.id)
+            .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+        )
+        .scalars()
+        .first()
+        or revision
+    )
     return success_response(_to_version_item(revision), message="disabled")
 
 
-@router.delete("/{product_id}/versions/{version}", response_model=ApiResponse[dict[str, bool]])
+@router.delete(
+    "/{product_id}/versions/{version}", response_model=ApiResponse[dict[str, bool]]
+)
 def delete_product_version_api(
     product_id: int,
     version: int,
@@ -836,9 +1036,13 @@ def delete_product_version_api(
 ) -> ApiResponse[dict[str, bool]]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     try:
-        delete_product_version(db, product=product, version=version, operator=current_user)
+        delete_product_version(
+            db, product=product, version=version, operator=current_user
+        )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     write_audit_log(
@@ -855,7 +1059,10 @@ def delete_product_version_api(
     return success_response({"deleted": True}, message="deleted")
 
 
-@router.patch("/{product_id}/versions/{version}/note", response_model=ApiResponse[ProductVersionItem])
+@router.patch(
+    "/{product_id}/versions/{version}/note",
+    response_model=ApiResponse[ProductVersionItem],
+)
 def update_product_version_note_api(
     product_id: int,
     version: int,
@@ -865,7 +1072,9 @@ def update_product_version_note_api(
 ) -> ApiResponse[ProductVersionItem]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     try:
         revision = update_product_version_note(
             db,
@@ -879,7 +1088,10 @@ def update_product_version_note_api(
     return success_response(_to_version_item(revision))
 
 
-@router.get("/{product_id}/versions/compare", response_model=ApiResponse[ProductVersionCompareResult])
+@router.get(
+    "/{product_id}/versions/compare",
+    response_model=ApiResponse[ProductVersionCompareResult],
+)
 def compare_product_version_api(
     product_id: int,
     from_version: int = Query(ge=1),
@@ -889,7 +1101,9 @@ def compare_product_version_api(
 ) -> ApiResponse[ProductVersionCompareResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     try:
         result = compare_product_versions(
             db,
@@ -919,7 +1133,9 @@ def compare_product_version_api(
     )
 
 
-@router.post("/{product_id}/rollback", response_model=ApiResponse[ProductRollbackResult])
+@router.post(
+    "/{product_id}/rollback", response_model=ApiResponse[ProductRollbackResult]
+)
 def rollback_product_api(
     product_id: int,
     payload: ProductRollbackRequest,
@@ -928,9 +1144,15 @@ def rollback_product_api(
 ) -> ApiResponse[ProductRollbackResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    if not get_product_version(db, product_id=product.id, version=payload.target_version):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target version not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
+    if not get_product_version(
+        db, product_id=product.id, version=payload.target_version
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Target version not found"
+        )
 
     try:
         changed_keys = rollback_product_to_version(
@@ -952,7 +1174,10 @@ def rollback_product_api(
         target_id=str(product.id),
         target_name=product.name,
         operator=current_user,
-        after_data={"target_version": payload.target_version, "changed_keys": changed_keys},
+        after_data={
+            "target_version": payload.target_version,
+            "changed_keys": changed_keys,
+        },
     )
     db.commit()
     refreshed = get_product_by_id(db, product.id) or product
@@ -978,7 +1203,9 @@ def get_parameter_history(
 ) -> ApiResponse[ProductParameterHistoryListResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
 
     total, rows = list_parameter_history(
         db,
@@ -990,7 +1217,9 @@ def get_parameter_history(
         ProductParameterHistoryItem(
             id=row.id,
             version=row.version,
-            version_label=row.revision.version_label if row.revision is not None else (f"V1.{row.version - 1}" if row.version is not None else None),
+            version_label=row.revision.version_label
+            if row.revision is not None
+            else (f"V1.{row.version - 1}" if row.version is not None else None),
             remark=row.remark,
             change_type=row.change_type or "edit",
             changed_keys=[str(value) for value in (row.changed_keys or [])],
@@ -1001,9 +1230,7 @@ def get_parameter_history(
         )
         for row in rows
     ]
-    return success_response(
-        ProductParameterHistoryListResult(total=total, items=items)
-    )
+    return success_response(ProductParameterHistoryListResult(total=total, items=items))
 
 
 @router.get(
@@ -1020,10 +1247,14 @@ def get_version_parameter_history(
 ) -> ApiResponse[ProductParameterHistoryListResult]:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     revision = get_product_version(db, product_id=product.id, version=version)
     if revision is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Version not found"
+        )
 
     total, rows = list_parameter_history(
         db,
@@ -1036,7 +1267,9 @@ def get_version_parameter_history(
         ProductParameterHistoryItem(
             id=row.id,
             version=row.version,
-            version_label=row.revision.version_label if row.revision is not None else (f"V1.{row.version - 1}" if row.version is not None else None),
+            version_label=row.revision.version_label
+            if row.revision is not None
+            else (f"V1.{row.version - 1}" if row.version is not None else None),
             remark=row.remark,
             change_type=row.change_type or "edit",
             changed_keys=[str(value) for value in (row.changed_keys or [])],
@@ -1069,7 +1302,9 @@ def _make_csv_response(rows: list[list[str]], filename: str) -> StreamingRespons
         "Content-Disposition": f'attachment; filename="{filename}"',
         "Content-Type": "text/csv; charset=utf-8-sig",
     }
-    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers=headers)
+    return StreamingResponse(
+        iter([buf.getvalue()]), media_type="text/csv", headers=headers
+    )
 
 
 @router.get("/export/list", response_class=StreamingResponse)
@@ -1084,24 +1319,40 @@ def export_products(
     _: User = Depends(require_permission("product.products.list")),
 ) -> StreamingResponse:
     _, products, latest_map = list_products(
-        db, 1, 10000, keyword, category, lifecycle_status,
+        db,
+        1,
+        10000,
+        keyword,
+        category,
+        lifecycle_status,
         has_effective_version=has_effective_version,
         updated_after=updated_after,
         updated_before=updated_before,
     )
-    header = ["产品名称", "分类", "状态", "当前版本", "生效版本", "备注", "创建时间", "更新时间"]
+    header = [
+        "产品名称",
+        "分类",
+        "状态",
+        "当前版本",
+        "生效版本",
+        "备注",
+        "创建时间",
+        "更新时间",
+    ]
     rows: list[list[str]] = [header]
     for p in products:
-        rows.append([
-            p.name,
-            p.category or "",
-            p.lifecycle_status,
-            f"V1.{p.current_version - 1}" if p.current_version > 0 else "",
-            f"V1.{p.effective_version - 1}" if p.effective_version > 0 else "无",
-            p.remark or "",
-            p.created_at.strftime("%Y-%m-%d %H:%M:%S") if p.created_at else "",
-            p.updated_at.strftime("%Y-%m-%d %H:%M:%S") if p.updated_at else "",
-        ])
+        rows.append(
+            [
+                p.name,
+                p.category or "",
+                p.lifecycle_status,
+                f"V1.{p.current_version - 1}" if p.current_version > 0 else "",
+                f"V1.{p.effective_version - 1}" if p.effective_version > 0 else "无",
+                p.remark or "",
+                p.created_at.strftime("%Y-%m-%d %H:%M:%S") if p.created_at else "",
+                p.updated_at.strftime("%Y-%m-%d %H:%M:%S") if p.updated_at else "",
+            ]
+        )
     return _make_csv_response(rows, "products.csv")
 
 
@@ -1114,7 +1365,9 @@ def export_product_version_parameters(
 ) -> StreamingResponse:
     product = get_product_by_id(db, product_id)
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     try:
         revision, parameters = get_product_version_parameters(
             db,
@@ -1126,15 +1379,17 @@ def export_product_version_parameters(
     header = ["版本号", "参数名称", "参数分组", "类型", "参数值", "参数说明", "排序"]
     rows: list[list[str]] = [header]
     for param in parameters:
-        rows.append([
-            revision.version_label,
-            param.param_key,
-            param.param_category or "",
-            param.param_type,
-            param.param_value,
-            param.param_description or "",
-            str(param.sort_order),
-        ])
+        rows.append(
+            [
+                revision.version_label,
+                param.param_key,
+                param.param_category or "",
+                param.param_type,
+                param.param_value,
+                param.param_description or "",
+                str(param.sort_order),
+            ]
+        )
     filename = f"product_{product.name}_v1.{version}_params.csv"
     return _make_csv_response(rows, filename)
 
@@ -1163,31 +1418,68 @@ def export_product_parameters(
         updated_after=updated_after,
         updated_before=updated_before,
     )
-    normalized_version_keyword = (version_keyword or '').strip().lower()
-    normalized_param_keyword = (param_keyword or '').strip().lower()
-    normalized_param_category_keyword = (param_category_keyword or '').strip().lower()
-    if normalized_version_keyword or normalized_param_keyword or normalized_param_category_keyword:
+    normalized_version_keyword = (version_keyword or "").strip().lower()
+    normalized_param_keyword = (param_keyword or "").strip().lower()
+    normalized_param_category_keyword = (param_category_keyword or "").strip().lower()
+    if (
+        normalized_version_keyword
+        or normalized_param_keyword
+        or normalized_param_category_keyword
+    ):
         filtered_products: list[Product] = []
         for product in products:
-            version_source = product.effective_version if effective_only else product.current_version
-            version_label = f"v1.{version_source - 1}" if version_source > 0 else ''
+            version_source = (
+                product.effective_version if effective_only else product.current_version
+            )
+            version_label = f"v1.{version_source - 1}" if version_source > 0 else ""
             latest_summary = latest_history_map.get(product.id)
             summary_text = (
-                (summarize_changed_keys(latest_summary.changed_keys or []) or '').lower()
+                (
+                    summarize_changed_keys(latest_summary.changed_keys or []) or ""
+                ).lower()
                 if latest_summary is not None
-                else ''
+                else ""
             )
-            if normalized_version_keyword and normalized_version_keyword not in version_label:
+            if (
+                normalized_version_keyword
+                and normalized_version_keyword not in version_label
+            ):
                 continue
-            if normalized_param_keyword and normalized_param_keyword not in summary_text:
+            if (
+                normalized_param_keyword
+                and normalized_param_keyword not in summary_text
+            ):
                 continue
             filtered_products.append(product)
         products = filtered_products
-    header = ["产品名称", "生效版本", "参数名称", "参数分组", "类型", "参数值", "参数说明"]
+    header = [
+        "产品名称",
+        "生效版本",
+        "参数名称",
+        "参数分组",
+        "类型",
+        "参数值",
+        "参数说明",
+    ]
     rows: list[list[str]] = [header]
     for product in products:
-        target_revision = get_effective_revision(db, product=product) if effective_only else get_current_revision(db, product=product)
+        target_revision = (
+            get_effective_revision(db, product=product)
+            if effective_only
+            else get_current_revision(db, product=product)
+        )
         if target_revision is None:
+            rows.append(
+                [
+                    product.name,
+                    "-",
+                    "当前无生效版本",
+                    "",
+                    "",
+                    "",
+                    "当前筛选结果下暂无可导出参数",
+                ]
+            )
             continue
         params = get_product_version_parameters(
             db,
@@ -1195,23 +1487,30 @@ def export_product_parameters(
             version=target_revision.version,
         )[1]
         if normalized_param_keyword:
-            params = [param for param in params if normalized_param_keyword in param.param_key.lower()]
+            params = [
+                param
+                for param in params
+                if normalized_param_keyword in param.param_key.lower()
+            ]
         if normalized_param_category_keyword:
             params = [
                 param
                 for param in params
-                if normalized_param_category_keyword in (param.param_category or '').lower()
+                if normalized_param_category_keyword
+                in (param.param_category or "").lower()
             ]
         if not params:
             continue
         for param in params:
-            rows.append([
-                product.name,
-                target_revision.version_label,
-                param.param_key,
-                param.param_category or "",
-                param.param_type,
-                param.param_value,
-                param.param_description or "",
-            ])
+            rows.append(
+                [
+                    product.name,
+                    target_revision.version_label,
+                    param.param_key,
+                    param.param_category or "",
+                    param.param_type,
+                    param.param_value,
+                    param.param_description or "",
+                ]
+            )
     return _make_csv_response(rows, "product_parameters.csv")

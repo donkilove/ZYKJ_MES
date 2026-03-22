@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -15,12 +16,18 @@ class AccountSettingsPage extends StatefulWidget {
     required this.onLogout,
     required this.canChangePassword,
     required this.canViewSession,
+    this.routePayloadJson,
+    this.userService,
+    this.authService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canChangePassword;
   final bool canViewSession;
+  final String? routePayloadJson;
+  final UserService? userService;
+  final AuthService? authService;
 
   @override
   State<AccountSettingsPage> createState() => _AccountSettingsPageState();
@@ -28,7 +35,10 @@ class AccountSettingsPage extends StatefulWidget {
 
 class _AccountSettingsPageState extends State<AccountSettingsPage> {
   late final UserService _userService;
-  final AuthService _authService = AuthService();
+  late final AuthService _authService;
+  final FocusNode _oldPasswordFocusNode = FocusNode();
+  final GlobalKey _passwordSectionKey = GlobalKey();
+  final ScrollController _scrollController = ScrollController();
 
   bool _loading = false;
   bool _changing = false;
@@ -37,7 +47,11 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   ProfileResult? _profile;
   CurrentSessionResult? _session;
   Timer? _sessionRefreshTimer;
+  Timer? _passwordHighlightTimer;
   bool _timeoutWarningShown = false;
+  String? _lastHandledRoutePayloadJson;
+  bool _pendingPasswordSectionLanding = false;
+  bool _passwordSectionHighlighted = false;
 
   final TextEditingController _oldPasswordController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
@@ -48,17 +62,32 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   @override
   void initState() {
     super.initState();
-    _userService = UserService(widget.session);
+    _userService = widget.userService ?? UserService(widget.session);
+    _authService = widget.authService ?? AuthService();
     _loadData();
     _sessionRefreshTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _refreshSession(),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant AccountSettingsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.routePayloadJson != oldWidget.routePayloadJson) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    }
   }
 
   @override
   void dispose() {
     _sessionRefreshTimer?.cancel();
+    _passwordHighlightTimer?.cancel();
+    _oldPasswordFocusNode.dispose();
+    _scrollController.dispose();
     _oldPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
@@ -71,9 +100,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       final currentSession = await _userService.getMySession();
       if (!mounted) return;
       if (currentSession.status != 'active') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('当前登录会话已失效，请重新登录。')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('当前登录会话已失效，请重新登录。')));
         widget.onLogout();
         return;
       }
@@ -82,9 +111,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     } catch (error) {
       if (!mounted) return;
       if (_isSessionUnavailable(error)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('登录状态已失效，请重新登录。')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('登录状态已失效，请重新登录。')));
         widget.onLogout();
       }
     }
@@ -132,13 +161,77 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       error is ApiException && error.statusCode == 401;
 
   bool _isSessionUnavailable(Object error) =>
-      error is ApiException && (error.statusCode == 401 || error.statusCode == 404);
+      error is ApiException &&
+      (error.statusCode == 401 || error.statusCode == 404);
 
   String _errorMessage(Object error) {
     if (error is ApiException) {
       return error.message;
     }
     return error.toString();
+  }
+
+  void _consumeRoutePayload(String? rawPayload) {
+    if (!mounted ||
+        rawPayload == null ||
+        rawPayload.trim().isEmpty ||
+        rawPayload == _lastHandledRoutePayloadJson) {
+      return;
+    }
+    try {
+      final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
+      final action = (payload['action'] as String? ?? '').trim();
+      if (action != 'change_password') {
+        return;
+      }
+      _lastHandledRoutePayloadJson = rawPayload;
+      _pendingPasswordSectionLanding = true;
+      _highlightPasswordSection();
+      _tryLandOnPasswordSection();
+    } catch (_) {}
+  }
+
+  void _highlightPasswordSection() {
+    _passwordHighlightTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _passwordSectionHighlighted = true;
+      });
+    }
+    _passwordHighlightTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _passwordSectionHighlighted = false;
+      });
+    });
+  }
+
+  void _tryLandOnPasswordSection() {
+    if (!_pendingPasswordSectionLanding || _loading || !mounted) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        return;
+      }
+      final targetContext = _passwordSectionKey.currentContext;
+      if (targetContext == null) {
+        return;
+      }
+      _pendingPasswordSectionLanding = false;
+      await Scrollable.ensureVisible(
+        targetContext,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        alignment: 0.08,
+      );
+      if (!mounted) {
+        return;
+      }
+      FocusScope.of(context).requestFocus(_oldPasswordFocusNode);
+    });
   }
 
   Future<void> _loadData() async {
@@ -154,18 +247,18 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           currentSession = await _userService.getMySession();
           if (currentSession.status != 'active') {
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('当前登录会话已失效，请重新登录。')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('当前登录会话已失效，请重新登录。')));
             widget.onLogout();
             return;
           }
         } catch (error) {
           if (_isSessionUnavailable(error)) {
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('登录状态已失效，请重新登录。')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('登录状态已失效，请重新登录。')));
             widget.onLogout();
             return;
           }
@@ -182,6 +275,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       if (currentSession != null) {
         _checkSessionTimeout(currentSession);
       }
+      _tryLandOnPasswordSection();
     } catch (error) {
       if (!mounted) {
         return;
@@ -286,7 +380,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           children: [
             Text('用户名：${profile.username}'),
             Text('显示名称：${profile.fullName ?? '-'}'),
-            Text('角色：${profile.roleName?.trim().isNotEmpty == true ? profile.roleName! : '-'}'),
+            Text(
+              '角色：${profile.roleName?.trim().isNotEmpty == true ? profile.roleName! : '-'}',
+            ),
             Text('工段：${profile.stageName ?? '/'}'),
             Text('账号状态：${profile.isActive ? '启用' : '停用'}'),
             Text('创建时间：${_formatDateTime(profile.createdAt)}'),
@@ -393,7 +489,21 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   }
 
   Widget _buildPasswordCard() {
+    final highlightColor = Theme.of(context).colorScheme.primary;
     return Card(
+      key: _passwordSectionKey,
+      color: _passwordSectionHighlighted
+          ? highlightColor.withValues(alpha: 0.08)
+          : null,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: _passwordSectionHighlighted
+              ? highlightColor
+              : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Form(
@@ -402,9 +512,23 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('修改密码', style: TextStyle(fontWeight: FontWeight.w600)),
+              if (_passwordSectionHighlighted) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '已定位到修改密码区域',
+                  key: const ValueKey(
+                    'account-settings-change-password-anchor',
+                  ),
+                  style: TextStyle(
+                    color: highlightColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               TextFormField(
                 controller: _oldPasswordController,
+                focusNode: _oldPasswordFocusNode,
                 obscureText: true,
                 decoration: const InputDecoration(
                   labelText: '当前密码',
@@ -480,6 +604,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(12),
         children: [
           if (_message.isNotEmpty)

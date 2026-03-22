@@ -34,6 +34,7 @@ class EquipmentPage extends StatefulWidget {
     required this.visibleTabCodes,
     required this.capabilityCodes,
     this.preferredTabCode,
+    this.routePayloadJson,
   });
 
   final AppSession session;
@@ -41,6 +42,7 @@ class EquipmentPage extends StatefulWidget {
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
   final String? preferredTabCode;
+  final String? routePayloadJson;
 
   @override
   State<EquipmentPage> createState() => _EquipmentPageState();
@@ -179,6 +181,10 @@ class _EquipmentPageState extends State<EquipmentPage>
           session: widget.session,
           onLogout: widget.onLogout,
           canExecute: _canExecute,
+          jumpPayloadJson:
+              widget.preferredTabCode == maintenanceExecutionTabCode
+              ? widget.routePayloadJson
+              : null,
         );
       case maintenanceRecordTabCode:
         return MaintenanceRecordPage(
@@ -189,7 +195,9 @@ class _EquipmentPageState extends State<EquipmentPage>
         return EquipmentRuleParameterPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canViewRules: _hasPermission(EquipmentFeaturePermissionCodes.rulesManage),
+          canViewRules: _hasPermission(
+            EquipmentFeaturePermissionCodes.rulesManage,
+          ),
           canManageRules: _hasPermission(
             EquipmentFeaturePermissionCodes.rulesManage,
           ),

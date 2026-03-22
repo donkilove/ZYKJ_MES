@@ -15,10 +15,14 @@ class MaintenanceRecordPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    this.equipmentService,
+    this.onOpenAttachment,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final EquipmentService? equipmentService;
+  final MaintenanceAttachmentOpenCallback? onOpenAttachment;
 
   @override
   State<MaintenanceRecordPage> createState() => _MaintenanceRecordPageState();
@@ -27,7 +31,6 @@ class MaintenanceRecordPage extends StatefulWidget {
 class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
-  final TextEditingController _executorController = TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -40,11 +43,13 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   List<EquipmentLedgerItem> _equipmentList = const [];
   List<EquipmentOwnerOption> _ownerOptions = const [];
   int? _equipmentIdFilter;
+  int? _executorIdFilter;
 
   @override
   void initState() {
     super.initState();
-    _equipmentService = EquipmentService(widget.session);
+    _equipmentService =
+        widget.equipmentService ?? EquipmentService(widget.session);
     _loadEquipmentList();
     _loadItems();
   }
@@ -52,13 +57,15 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   @override
   void dispose() {
     _keywordController.dispose();
-    _executorController.dispose();
     super.dispose();
   }
 
   Future<void> _loadEquipmentList() async {
     try {
-      final result = await _equipmentService.listEquipment(page: 1, pageSize: 500);
+      final result = await _equipmentService.listEquipment(
+        page: 1,
+        pageSize: 500,
+      );
       final owners = await _equipmentService.listAllOwners();
       if (mounted) {
         setState(() {
@@ -122,21 +129,11 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
       final keyword = _keywordController.text.trim().isNotEmpty
           ? _keywordController.text.trim()
           : null;
-      int? executorId;
-      final executorKeyword = _executorController.text.trim();
-      if (executorKeyword.isNotEmpty) {
-        for (final owner in _ownerOptions) {
-          if (owner.username == executorKeyword) {
-            executorId = owner.userId;
-            break;
-          }
-        }
-      }
       final result = await _equipmentService.listRecords(
         page: 1,
         pageSize: 200,
         keyword: keyword,
-        executorId: executorId,
+        executorId: _executorIdFilter,
         startDate: _startDate,
         endDate: _endDate,
         resultSummary: _resultSummaryFilter,
@@ -182,23 +179,16 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   }
 
   Future<void> _exportCsv() async {
-    setState(() { _exporting = true; _message = ''; });
+    setState(() {
+      _exporting = true;
+      _message = '';
+    });
     try {
-      int? executorId;
-      final executorKeyword = _executorController.text.trim();
-      if (executorKeyword.isNotEmpty) {
-        for (final owner in _ownerOptions) {
-          if (owner.username == executorKeyword) {
-            executorId = owner.userId;
-            break;
-          }
-        }
-      }
       final csvBase64 = await _equipmentService.exportMaintenanceRecords(
         keyword: _keywordController.text.trim().isNotEmpty
             ? _keywordController.text.trim()
             : null,
-        executorId: executorId,
+        executorId: _executorIdFilter,
         startDate: _startDate,
         endDate: _endDate,
         resultSummary: _resultSummaryFilter,
@@ -217,14 +207,21 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
         ],
       );
       if (location == null || !mounted) return;
-      await XFile.fromData(bytes, mimeType: 'text/csv', name: 'maintenance_records.csv').saveTo(location.path);
+      await XFile.fromData(
+        bytes,
+        mimeType: 'text/csv',
+        name: 'maintenance_records.csv',
+      ).saveTo(location.path);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功：${location.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
     } catch (error) {
       if (!mounted) return;
-      if (_isUnauthorized(error)) { widget.onLogout(); return; }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
       setState(() => _message = '导出失败：${_errorMessage(error)}');
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -277,18 +274,33 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _executorController,
-                  decoration: const InputDecoration(
-                    labelText: '执行人',
-                    border: OutlineInputBorder(),
+              if (_ownerOptions.isNotEmpty)
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<int?>(
+                    initialValue: _executorIdFilter,
+                    decoration: const InputDecoration(
+                      labelText: '执行人',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('全部执行人'),
+                      ),
+                      ..._ownerOptions.map(
+                        (owner) => DropdownMenuItem<int?>(
+                          value: owner.userId,
+                          child: Text(owner.displayName),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _executorIdFilter = value);
+                    },
                   ),
-                  onSubmitted: (_) => _loadItems(),
                 ),
-              ),
-              const SizedBox(width: 12),
+              if (_ownerOptions.isNotEmpty) const SizedBox(width: 12),
               OutlinedButton.icon(
                 onPressed: () async {
                   final picked = await _pickDate(
@@ -340,8 +352,9 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                         setState(() {
                           _startDate = null;
                           _endDate = null;
-                          _executorController.clear();
+                          _executorIdFilter = null;
                           _equipmentIdFilter = null;
+                          _resultSummaryFilter = null;
                         });
                         _loadItems();
                       },
@@ -378,9 +391,15 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                   child: DropdownButtonFormField<int?>(
                     initialValue: _equipmentIdFilter,
                     items: [
-                      const DropdownMenuItem<int?>(value: null, child: Text('全部设备')),
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('全部设备'),
+                      ),
                       ..._equipmentList.map(
-                        (e) => DropdownMenuItem<int?>(value: e.id, child: Text(e.name)),
+                        (e) => DropdownMenuItem<int?>(
+                          value: e.id,
+                          child: Text(e.name),
+                        ),
                       ),
                     ],
                     onChanged: (value) {
@@ -434,15 +453,18 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                             cells: [
                               DataCell(Text('#${item.id}')),
                               DataCell(Text('#${item.workOrderId}')),
-                              DataCell(
-                                Text(_formatDateTime(item.completedAt)),
-                              ),
+                              DataCell(Text(_formatDateTime(item.completedAt))),
                               DataCell(Text(item.equipmentName)),
                               DataCell(Text(item.itemName)),
                               DataCell(Text(item.executorUsername ?? '-')),
                               DataCell(Text(item.resultSummary)),
                               DataCell(Text(item.resultRemark ?? '-')),
-                              DataCell(Text(item.attachmentLink?.trim().isNotEmpty == true ? '有附件' : '-')),
+                              DataCell(
+                                MaintenanceAttachmentAction(
+                                  attachmentLink: item.attachmentLink,
+                                  onOpen: widget.onOpenAttachment,
+                                ),
+                              ),
                               DataCell(
                                 TextButton(
                                   onPressed: () => _showDetail(item),

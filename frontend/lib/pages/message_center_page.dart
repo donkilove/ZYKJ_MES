@@ -4,26 +4,36 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/message_models.dart';
+import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/message_service.dart';
+import '../services/user_service.dart';
 
 class MessageCenterPage extends StatefulWidget {
   const MessageCenterPage({
     super.key,
     required this.session,
     required this.onLogout,
+    this.canPublishAnnouncement = false,
     this.onUnreadCountChanged,
     this.onNavigateToPage,
     this.service,
+    this.userService,
     this.refreshTick = 0,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final bool canPublishAnnouncement;
   final void Function(int count)? onUnreadCountChanged;
-  final void Function(String pageCode, {String? tabCode, String? routePayloadJson})?
+  final void Function(
+    String pageCode, {
+    String? tabCode,
+    String? routePayloadJson,
+  })?
   onNavigateToPage;
   final MessageService? service;
+  final UserService? userService;
   final int refreshTick;
 
   @override
@@ -32,6 +42,7 @@ class MessageCenterPage extends StatefulWidget {
 
 class _MessageCenterPageState extends State<MessageCenterPage> {
   late final MessageService _service;
+  late final UserService _userService;
   Timer? _pollTimer;
 
   bool _loading = false;
@@ -62,6 +73,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   void initState() {
     super.initState();
     _service = widget.service ?? MessageService(widget.session);
+    _userService = widget.userService ?? UserService(widget.session);
     _load();
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _load(reset: false);
@@ -94,7 +106,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       final result = await _service.listMessages(
         page: _page,
         pageSize: _pageSize,
-        keyword: _keywordCtrl.text.trim().isEmpty ? null : _keywordCtrl.text.trim(),
+        keyword: _keywordCtrl.text.trim().isEmpty
+            ? null
+            : _keywordCtrl.text.trim(),
         status: _statusFilter.isEmpty ? null : _statusFilter,
         messageType: _typeFilter.isEmpty ? null : _typeFilter,
         priority: _priorityFilter.isEmpty ? null : _priorityFilter,
@@ -186,6 +200,21 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     } catch (_) {}
   }
 
+  Future<void> _publishAnnouncement() async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return _AnnouncementPublishDialog(
+          userService: _userService,
+          service: _service,
+        );
+      },
+    );
+    if (changed == true && mounted) {
+      await _load(reset: false);
+    }
+  }
+
   void _resetFilters() {
     setState(() {
       _keywordCtrl.clear();
@@ -269,14 +298,14 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           content: SizedBox(
             width: 480,
             child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: rows,
-              ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: rows),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
           ],
         );
       },
@@ -291,10 +320,17 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         children: [
           SizedBox(
             width: 80,
-            child: Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
           ),
           const SizedBox(width: 8),
-          Expanded(child: SelectableText(value, style: theme.textTheme.bodyMedium)),
+          Expanded(
+            child: SelectableText(value, style: theme.textTheme.bodyMedium),
+          ),
         ],
       ),
     );
@@ -322,12 +358,20 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          Text('消息中心', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          Text(
+            '消息中心',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const Spacer(),
           if (_error.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: Text(_error, style: TextStyle(color: theme.colorScheme.error, fontSize: 12)),
+              child: Text(
+                _error,
+                style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
+              ),
             ),
           OutlinedButton.icon(
             onPressed: _loading ? null : _resetFilters,
@@ -340,6 +384,14 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
             icon: const Icon(Icons.refresh, size: 16),
             label: const Text('刷新'),
           ),
+          if (widget.canPublishAnnouncement) ...[
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: _loading ? null : _publishAnnouncement,
+              icon: const Icon(Icons.campaign_outlined, size: 16),
+              label: const Text('发布公告'),
+            ),
+          ],
           const SizedBox(width: 8),
           FilledButton.icon(
             onPressed: _loading ? null : _markAllRead,
@@ -350,7 +402,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           FilledButton.tonalIcon(
             onPressed: _loading || _selectedIds.isEmpty ? null : _markBatchRead,
             icon: const Icon(Icons.playlist_add_check, size: 16),
-            label: Text('批量已读${_selectedIds.isEmpty ? '' : '(${_selectedIds.length})'}'),
+            label: Text(
+              '批量已读${_selectedIds.isEmpty ? '' : '(${_selectedIds.length})'}',
+            ),
           ),
         ],
       ),
@@ -392,7 +446,10 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          Text(label, style: theme.textTheme.labelSmall?.copyWith(color: color)),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(color: color),
+          ),
         ],
       ),
     );
@@ -421,33 +478,56 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
               onSubmitted: (_) => _load(),
             ),
           ),
-          _filterDropdown('状态', _statusFilter, {
-            '': '全部',
-            'unread': '未读',
-            'read': '已读',
-          }, (v) => setState(() { _statusFilter = v; _load(); })),
-          _filterDropdown('分类', _typeFilter, {
-            '': '全部',
-            'todo': '待处理',
-            'notice': '通知',
-            'announcement': '公告',
-            'warning': '预警',
-          }, (v) => setState(() { _typeFilter = v; _load(); })),
-          _filterDropdown('优先级', _priorityFilter, {
-            '': '全部',
-            'urgent': '紧急',
-            'important': '重要',
-            'normal': '普通',
-          }, (v) => setState(() { _priorityFilter = v; _load(); })),
-          _filterDropdown('来源模块', _sourceModuleFilter, {
-            '': '全部',
-            'user': '用户',
-            'production': '生产',
-            'quality': '品质',
-            'equipment': '设备',
-            'product': '产品',
-            'craft': '工艺',
-          }, (v) => setState(() { _sourceModuleFilter = v; _load(); })),
+          _filterDropdown(
+            '状态',
+            _statusFilter,
+            {'': '全部', 'unread': '未读', 'read': '已读'},
+            (v) => setState(() {
+              _statusFilter = v;
+              _load();
+            }),
+          ),
+          _filterDropdown(
+            '分类',
+            _typeFilter,
+            {
+              '': '全部',
+              'todo': '待处理',
+              'notice': '通知',
+              'announcement': '公告',
+              'warning': '预警',
+            },
+            (v) => setState(() {
+              _typeFilter = v;
+              _load();
+            }),
+          ),
+          _filterDropdown(
+            '优先级',
+            _priorityFilter,
+            {'': '全部', 'urgent': '紧急', 'important': '重要', 'normal': '普通'},
+            (v) => setState(() {
+              _priorityFilter = v;
+              _load();
+            }),
+          ),
+          _filterDropdown(
+            '来源模块',
+            _sourceModuleFilter,
+            {
+              '': '全部',
+              'user': '用户',
+              'production': '生产',
+              'quality': '品质',
+              'equipment': '设备',
+              'product': '产品',
+              'craft': '工艺',
+            },
+            (v) => setState(() {
+              _sourceModuleFilter = v;
+              _load();
+            }),
+          ),
           FilterChip(
             label: const Text('仅看待处理'),
             selected: _todoOnly,
@@ -484,7 +564,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       items: options.entries
           .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
           .toList(),
-      onChanged: (v) { if (v != null) onChanged(v); },
+      onChanged: (v) {
+        if (v != null) onChanged(v);
+      },
     );
   }
 
@@ -495,11 +577,16 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         side: BorderSide(
-          color: hasRange ? theme.colorScheme.primary : theme.colorScheme.outline,
+          color: hasRange
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline,
         ),
       ),
-      icon: Icon(Icons.date_range, size: 16,
-          color: hasRange ? theme.colorScheme.primary : null),
+      icon: Icon(
+        Icons.date_range,
+        size: 16,
+        color: hasRange ? theme.colorScheme.primary : null,
+      ),
       label: Text(
         hasRange
             ? '${_fmtDate(_dateRange!.start)} ~ ${_fmtDate(_dateRange!.end)}'
@@ -512,7 +599,8 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     );
   }
 
-  String _fmtDate(DateTime dt) => '${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  String _fmtDate(DateTime dt) =>
+      '${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 
   Widget _buildBody(ThemeData theme) {
     if (_loading && _items.isEmpty) {
@@ -523,9 +611,18 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.notifications_none, size: 48, color: theme.colorScheme.outline),
+            Icon(
+              Icons.notifications_none,
+              size: 48,
+              color: theme.colorScheme.outline,
+            ),
             const SizedBox(height: 12),
-            Text('暂无消息', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
+            Text(
+              '暂无消息',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
           ],
         ),
       );
@@ -538,7 +635,8 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
               child: ListView.separated(
                 itemCount: _items.length,
                 separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) => _buildMessageTile(_items[index], theme),
+                itemBuilder: (context, index) =>
+                    _buildMessageTile(_items[index], theme),
               ),
             ),
             if (_total > _pageSize)
@@ -578,14 +676,18 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         ),
       );
     }
-    final isActive = item.status == 'active';
-    final disabledReason = !isActive ? '来源对象不可访问' : null;
+    final disabledReason = item.isActive ? null : item.inactiveReasonName;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('消息详情预览', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          Text(
+            '消息详情预览',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 12),
           _detailRow('标题', item.title, theme),
           _detailRow('分类', item.messageTypeName, theme),
@@ -603,8 +705,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           _detailRow('当前状态', item.isRead ? '已读' : '未读', theme),
           if (item.readAt != null)
             _detailRow('已读时间', _formatDateTime(item.readAt!), theme),
-          if (disabledReason != null)
-            _detailRow('跳转状态', disabledReason, theme),
+          if (disabledReason != null) _detailRow('跳转状态', disabledReason, theme),
           const Spacer(),
           Row(
             children: [
@@ -614,7 +715,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
               ),
               const Spacer(),
               FilledButton(
-                onPressed: isActive && widget.onNavigateToPage != null
+                onPressed: item.isActive && widget.onNavigateToPage != null
                     ? () {
                         _markRead(item);
                         _navigateToPage(item);
@@ -634,11 +735,13 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     final priorityColor = item.priority == 'urgent'
         ? theme.colorScheme.error
         : item.priority == 'important'
-            ? Colors.orange
-            : null;
-    final isActive = item.status == 'active';
-    final hasTarget = isActive && item.targetPageCode != null && item.targetPageCode!.isNotEmpty;
-    final inactiveReason = !isActive ? _inactiveReason(item) : null;
+        ? Colors.orange
+        : null;
+    final hasTarget =
+        item.isActive &&
+        item.targetPageCode != null &&
+        item.targetPageCode!.isNotEmpty;
+    final inactiveReason = item.isActive ? null : item.inactiveReasonName;
 
     return InkWell(
       onTap: () {
@@ -649,7 +752,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         }
       },
       child: Container(
-        color: isUnread ? theme.colorScheme.primaryContainer.withAlpha(38) : null,
+        color: isUnread
+            ? theme.colorScheme.primaryContainer.withAlpha(38)
+            : null,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -662,7 +767,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                 height: 8,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isUnread ? theme.colorScheme.primary : Colors.transparent,
+                  color: isUnread
+                      ? theme.colorScheme.primary
+                      : Colors.transparent,
                 ),
               ),
             ),
@@ -675,19 +782,28 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                       if (priorityColor != null)
                         Container(
                           margin: const EdgeInsets.only(right: 6),
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: priorityColor.withAlpha(38),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             item.priorityName,
-                            style: TextStyle(fontSize: 11, color: priorityColor),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: priorityColor,
+                            ),
                           ),
                         ),
                       Container(
                         margin: const EdgeInsets.only(right: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: theme.colorScheme.secondaryContainer,
                           borderRadius: BorderRadius.circular(4),
@@ -704,7 +820,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                         child: Text(
                           item.title,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal,
+                            fontWeight: isUnread
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -733,7 +851,8 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                             color: theme.colorScheme.outline,
                           ),
                         ),
-                      if (item.sourceCode != null && item.sourceCode!.isNotEmpty) ...[
+                      if (item.sourceCode != null &&
+                          item.sourceCode!.isNotEmpty) ...[
                         Text(' · ', style: theme.textTheme.labelSmall),
                         Text(
                           item.sourceCode!,
@@ -762,10 +881,11 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
               children: [
                 Checkbox(
                   value: _selectedIds.contains(item.id),
-                  onChanged: (value) => _toggleSelected(item.id, value ?? false),
+                  onChanged: (value) =>
+                      _toggleSelected(item.id, value ?? false),
                   visualDensity: VisualDensity.compact,
                 ),
-                if (!isActive)
+                if (!item.isActive)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
@@ -783,7 +903,10 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                       _navigateToPage(item);
                     },
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -793,7 +916,10 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                   TextButton(
                     onPressed: () => _markRead(item),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -817,15 +943,377 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     if (diff.inDays < 7) return '${diff.inDays}天前';
     return '${local.month}-${local.day}';
   }
+}
 
-  String _inactiveReason(MessageItem item) {
-    switch (item.status) {
-      case 'expired':
-        return '消息已失效';
-      case 'archived':
-        return '消息已归档';
-      default:
-        return '来源对象不可访问';
+class _AnnouncementPublishDialog extends StatefulWidget {
+  const _AnnouncementPublishDialog({
+    required this.userService,
+    required this.service,
+  });
+
+  final UserService userService;
+  final MessageService service;
+
+  @override
+  State<_AnnouncementPublishDialog> createState() =>
+      _AnnouncementPublishDialogState();
+}
+
+class _AnnouncementPublishDialogState
+    extends State<_AnnouncementPublishDialog> {
+  final _titleController = TextEditingController();
+  final _contentController = TextEditingController();
+
+  bool _loadingOptions = true;
+  bool _submitting = false;
+  String _error = '';
+  String _priority = 'normal';
+  String _rangeType = 'all';
+  DateTime? _expiresAt;
+  List<RoleItem> _roles = const [];
+  List<UserItem> _users = const [];
+  final Set<String> _selectedRoleCodes = <String>{};
+  final Set<int> _selectedUserIds = <int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOptions();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadOptions() async {
+    setState(() {
+      _loadingOptions = true;
+      _error = '';
+    });
+    try {
+      final results = await Future.wait([
+        widget.userService.listAllRoles(),
+        widget.userService.listUsers(page: 1, pageSize: 200, isActive: true),
+      ]);
+      if (!mounted) {
+        return;
+      }
+      final roleResult = results[0] as RoleListResult;
+      final userResult = results[1] as UserListResult;
+      setState(() {
+        _roles = roleResult.items.where((item) => item.isEnabled).toList();
+        _users = userResult.items
+            .where((item) => item.isActive && !item.isDeleted)
+            .toList();
+      });
+    } on ApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _error = error.message);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _error = error.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _loadingOptions = false);
+      }
     }
+  }
+
+  Future<void> _pickExpiresAt() async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 365)),
+      initialDate: _expiresAt ?? now,
+    );
+    if (pickedDate == null || !mounted) {
+      return;
+    }
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+        _expiresAt ?? now.add(const Duration(hours: 1)),
+      ),
+    );
+    if (pickedTime == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _expiresAt = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    });
+  }
+
+  String _formatLocalDateTime(DateTime value) {
+    return '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')} '
+        '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _submit() async {
+    final title = _titleController.text.trim();
+    final content = _contentController.text.trim();
+    if (title.isEmpty || content.isEmpty) {
+      setState(() => _error = '请填写标题和正文');
+      return;
+    }
+    if (_rangeType == 'roles' && _selectedRoleCodes.isEmpty) {
+      setState(() => _error = '请选择至少一个角色');
+      return;
+    }
+    if (_rangeType == 'users' && _selectedUserIds.isEmpty) {
+      setState(() => _error = '请选择至少一个用户');
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _error = '';
+    });
+    try {
+      final result = await widget.service.publishAnnouncement(
+        AnnouncementPublishRequest(
+          title: title,
+          content: content,
+          priority: _priority,
+          rangeType: _rangeType,
+          roleCodes: _selectedRoleCodes.toList()..sort(),
+          userIds: _selectedUserIds.toList()..sort(),
+          expiresAt: _expiresAt,
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('公告已发布，覆盖 ${result.recipientCount} 人')),
+      );
+      Navigator.of(context).pop(true);
+    } on ApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _error = error.message);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _error = error.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  Widget _buildSelectionArea() {
+    if (_rangeType == 'all') {
+      return const ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(Icons.groups_2_outlined),
+        title: Text('发送给全部启用用户'),
+        subtitle: Text('发布后将自动生成全员收件记录'),
+      );
+    }
+    if (_loadingOptions) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_rangeType == 'roles') {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: _roles
+            .map(
+              (role) => FilterChip(
+                label: Text('${role.name}(${role.code})'),
+                selected: _selectedRoleCodes.contains(role.code),
+                onSelected: (selected) {
+                  setState(() {
+                    if (selected) {
+                      _selectedRoleCodes.add(role.code);
+                    } else {
+                      _selectedRoleCodes.remove(role.code);
+                    }
+                  });
+                },
+              ),
+            )
+            .toList(),
+      );
+    }
+    return SizedBox(
+      height: 220,
+      child: ListView.builder(
+        itemCount: _users.length,
+        itemBuilder: (context, index) {
+          final user = _users[index];
+          final label = user.fullName?.trim().isNotEmpty == true
+              ? '${user.fullName}(${user.username})'
+              : user.username;
+          return CheckboxListTile(
+            value: _selectedUserIds.contains(user.id),
+            contentPadding: EdgeInsets.zero,
+            title: Text(label),
+            subtitle: Text(user.roleName ?? user.roleCode ?? '未分配角色'),
+            onChanged: (selected) {
+              setState(() {
+                if (selected ?? false) {
+                  _selectedUserIds.add(user.id);
+                } else {
+                  _selectedUserIds.remove(user.id);
+                }
+              });
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('发布公告'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  labelText: '标题',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _contentController,
+                minLines: 4,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: '正文',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _priority,
+                decoration: const InputDecoration(
+                  labelText: '优先级',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'normal', child: Text('普通')),
+                  DropdownMenuItem(value: 'important', child: Text('重要')),
+                  DropdownMenuItem(value: 'urgent', child: Text('紧急')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _priority = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              const Text('发送范围'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('全员'),
+                    selected: _rangeType == 'all',
+                    onSelected: (_) => setState(() => _rangeType = 'all'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('指定角色'),
+                    selected: _rangeType == 'roles',
+                    onSelected: (_) => setState(() => _rangeType = 'roles'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('指定用户'),
+                    selected: _rangeType == 'users',
+                    onSelected: (_) => setState(() => _rangeType = 'users'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _buildSelectionArea(),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.schedule_outlined),
+                title: const Text('生效时间'),
+                subtitle: Text(_formatLocalDateTime(DateTime.now())),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.event_busy_outlined),
+                title: const Text('失效时间'),
+                subtitle: Text(
+                  _expiresAt == null
+                      ? '不设置'
+                      : _formatLocalDateTime(_expiresAt!),
+                ),
+                trailing: Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton(
+                      onPressed: _submitting ? null : _pickExpiresAt,
+                      child: const Text('选择'),
+                    ),
+                    if (_expiresAt != null)
+                      TextButton(
+                        onPressed: _submitting
+                            ? null
+                            : () => setState(() => _expiresAt = null),
+                        child: const Text('清空'),
+                      ),
+                  ],
+                ),
+              ),
+              if (_error.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting
+              ? null
+              : () => Navigator.of(context).pop(false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: Text(_submitting ? '发布中...' : '确认发布'),
+        ),
+      ],
+    );
   }
 }

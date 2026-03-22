@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MessageItem(BaseModel):
@@ -21,6 +21,7 @@ class MessageItem(BaseModel):
     target_tab_code: str | None
     target_route_payload_json: str | None
     status: str
+    inactive_reason: str | None = None
     published_at: datetime | None
     # 收件记录字段
     is_read: bool
@@ -67,5 +68,20 @@ class MessageCreateRequest(BaseModel):
     target_route_payload_json: str | None = None
     dedupe_key: str | None = None
     expires_at: datetime | None = None
-    recipient_user_ids: list[int] = []
+    recipient_user_ids: list[int] = Field(default_factory=list)
     created_by_user_id: int | None = None
+
+
+class AnnouncementPublishRequest(BaseModel):
+    title: str
+    content: str
+    priority: str = "normal"
+    range_type: str
+    role_codes: list[str] = Field(default_factory=list)
+    user_ids: list[int] = Field(default_factory=list)
+    expires_at: datetime | None = None
+
+
+class AnnouncementPublishResult(BaseModel):
+    message_id: int
+    recipient_count: int

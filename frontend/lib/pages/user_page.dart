@@ -20,6 +20,8 @@ const List<String> _defaultTabOrder = [
   'function_permission_config',
 ];
 
+const String _functionPermissionConfigTabCode = 'function_permission_config';
+
 class UserPage extends StatefulWidget {
   const UserPage({
     super.key,
@@ -28,6 +30,7 @@ class UserPage extends StatefulWidget {
     required this.visibleTabCodes,
     required this.capabilityCodes,
     this.preferredTabCode,
+    this.routePayloadJson,
     this.onVisibilityConfigSaved,
   });
 
@@ -36,6 +39,7 @@ class UserPage extends StatefulWidget {
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
   final String? preferredTabCode;
+  final String? routePayloadJson;
   final VoidCallback? onVisibilityConfigSaved;
 
   @override
@@ -50,7 +54,9 @@ class _UserPageState extends State<UserPage> {
     super.didUpdateWidget(oldWidget);
     if (widget.preferredTabCode != oldWidget.preferredTabCode) {
       final tabs = _buildTabs();
-      final preferredIndex = tabs.indexWhere((item) => item.code == widget.preferredTabCode);
+      final preferredIndex = tabs.indexWhere(
+        (item) => item.code == widget.preferredTabCode,
+      );
       if (preferredIndex >= 0) {
         setState(() => _currentTabIndex = preferredIndex);
       }
@@ -84,6 +90,7 @@ class _UserPageState extends State<UserPage> {
       _hasPermission(UserFeaturePermissionCodes.accountSettingsSessionView);
 
   bool get _canManageSessions =>
+      widget.visibleTabCodes.contains(_functionPermissionConfigTabCode) &&
       _hasPermission(UserFeaturePermissionCodes.loginSessionForceOffline);
 
   List<String> _sortedVisibleTabCodes() {
@@ -173,6 +180,7 @@ class _UserPageState extends State<UserPage> {
                 onLogout: widget.onLogout,
                 canChangePassword: _canChangeMyPassword,
                 canViewSession: _canViewMySession,
+                routePayloadJson: widget.routePayloadJson,
               ),
             ),
           );
@@ -218,7 +226,9 @@ class _UserPageState extends State<UserPage> {
     if (tabs.isEmpty) {
       return const Center(child: Text('当前账号没有可访问的用户模块页面'));
     }
-    final preferredIndex = tabs.indexWhere((item) => item.code == widget.preferredTabCode);
+    final preferredIndex = tabs.indexWhere(
+      (item) => item.code == widget.preferredTabCode,
+    );
     if (preferredIndex >= 0 && preferredIndex != _currentTabIndex) {
       _currentTabIndex = preferredIndex;
     }
@@ -250,7 +260,9 @@ class _UserPageState extends State<UserPage> {
                 return Column(
                   children: [
                     Material(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
                       child: TabBar(
                         isScrollable: false,
                         indicatorSize: TabBarIndicatorSize.tab,

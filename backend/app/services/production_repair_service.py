@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import csv
 import io
+import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from typing import Any
@@ -53,6 +54,8 @@ class RepairListFilters:
 class ScrapStatisticsFilters:
     keyword: str | None
     progress: str | None
+    product_name: str | None
+    process_code: str | None
     start_date: date | None
     end_date: date | None
 
@@ -109,7 +112,9 @@ def _normalize_quantity(value: Any, *, field_name: str) -> int:
     return number
 
 
-def _sanitize_defect_items(defect_items: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+def _sanitize_defect_items(
+    defect_items: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for item in defect_items or []:
         if not isinstance(item, dict):
@@ -129,7 +134,9 @@ def _sanitize_defect_items(defect_items: list[dict[str, Any]] | None) -> list[di
     return normalized
 
 
-def _sanitize_cause_items(cause_items: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+def _sanitize_cause_items(
+    cause_items: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for item in cause_items or []:
         if not isinstance(item, dict):
@@ -154,7 +161,9 @@ def _sanitize_cause_items(cause_items: list[dict[str, Any]] | None) -> list[dict
     return normalized
 
 
-def _sanitize_return_allocations(return_allocations: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+def _sanitize_return_allocations(
+    return_allocations: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for item in return_allocations or []:
         if not isinstance(item, dict):
@@ -232,7 +241,9 @@ def create_repair_order(
         field_name="production_quantity",
     )
     if normalized_production_quantity < repair_quantity:
-        raise ValueError("production_quantity must be greater than or equal to total defect quantity")
+        raise ValueError(
+            "production_quantity must be greater than or equal to total defect quantity"
+        )
 
     order, process_row = _load_order_with_process(
         db,
@@ -284,7 +295,9 @@ def create_repair_order(
     add_order_event_log(
         db,
         order_id=order.id,
-        event_type="repair_order_created_auto" if auto_created else "repair_order_created_manual",
+        event_type="repair_order_created_auto"
+        if auto_created
+        else "repair_order_created_manual",
         event_title="维修单已创建",
         event_detail=f"工序 {process_row.process_name} 创建维修单 {repair_row.repair_order_code}",
         operator_user_id=sender.id if sender else None,
@@ -334,7 +347,9 @@ def complete_repair_order(
             select(RepairOrder)
             .where(RepairOrder.id == repair_order_id)
             .options(
-                selectinload(RepairOrder.source_order).selectinload(ProductionOrder.processes),
+                selectinload(RepairOrder.source_order).selectinload(
+                    ProductionOrder.processes
+                ),
                 selectinload(RepairOrder.source_order_process),
             )
             .with_for_update()
@@ -352,15 +367,27 @@ def complete_repair_order(
         raise ValueError("cause_items is required")
     total_quantity = int(sum(int(item["quantity"]) for item in normalized_causes))
     if total_quantity != int(repair_row.repair_quantity):
-        raise ValueError(f"cause quantity must equal repair quantity {repair_row.repair_quantity}")
+        raise ValueError(
+            f"cause quantity must equal repair quantity {repair_row.repair_quantity}"
+        )
 
-    scrap_quantity = int(sum(int(item["quantity"]) for item in normalized_causes if bool(item["is_scrap"])))
+    scrap_quantity = int(
+        sum(
+            int(item["quantity"])
+            for item in normalized_causes
+            if bool(item["is_scrap"])
+        )
+    )
     repaired_quantity = int(repair_row.repair_quantity) - scrap_quantity
 
     normalized_returns = _sanitize_return_allocations(return_allocations)
-    return_quantity_total = int(sum(int(item["quantity"]) for item in normalized_returns))
+    return_quantity_total = int(
+        sum(int(item["quantity"]) for item in normalized_returns)
+    )
     if repaired_quantity > 0 and return_quantity_total != repaired_quantity:
-        raise ValueError("sum(return_allocations.quantity) must equal repaired quantity")
+        raise ValueError(
+            "sum(return_allocations.quantity) must equal repaired quantity"
+        )
     if repaired_quantity <= 0 and return_quantity_total > 0:
         raise ValueError("return_allocations must be empty when repaired quantity is 0")
 
@@ -369,7 +396,9 @@ def complete_repair_order(
     process_map_by_id: dict[int, ProductionOrderProcess] = {}
     process_order_rank: dict[int, int] = {}
     if source_order is not None:
-        process_rows = sorted(source_order.processes, key=lambda row: (row.process_order, row.id))
+        process_rows = sorted(
+            source_order.processes, key=lambda row: (row.process_order, row.id)
+        )
         process_map_by_id = {row.id: row for row in process_rows}
         process_order_rank = {row.id: int(row.process_order) for row in process_rows}
     if source_process is None and repair_row.source_order_process_id:
@@ -377,18 +406,30 @@ def complete_repair_order(
     if source_process is None:
         raise ValueError("Source process snapshot is missing")
 
-    source_rank = process_order_rank.get(source_process.id, int(source_process.process_order))
+    source_rank = process_order_rank.get(
+        source_process.id, int(source_process.process_order)
+    )
     for item in normalized_returns:
         target_process = process_map_by_id.get(int(item["target_order_process_id"]))
         if target_process is None:
             raise ValueError("Return allocation target process not found")
-        target_rank = process_order_rank.get(target_process.id, int(target_process.process_order))
+        target_rank = process_order_rank.get(
+            target_process.id, int(target_process.process_order)
+        )
         if target_rank > source_rank:
-            raise ValueError("Return allocation target must be current process or previous process")
+            raise ValueError(
+                "Return allocation target must be current process or previous process"
+            )
 
-    db.execute(select(RepairCause).where(RepairCause.repair_order_id == repair_row.id).with_for_update())
     db.execute(
-        select(RepairReturnRoute).where(RepairReturnRoute.repair_order_id == repair_row.id).with_for_update()
+        select(RepairCause)
+        .where(RepairCause.repair_order_id == repair_row.id)
+        .with_for_update()
+    )
+    db.execute(
+        select(RepairReturnRoute)
+        .where(RepairReturnRoute.repair_order_id == repair_row.id)
+        .with_for_update()
     )
     repair_row.cause_rows = []
     repair_row.return_routes = []
@@ -436,9 +477,14 @@ def complete_repair_order(
             )
         )
         target_process.visible_quantity = int(target_process.visible_quantity) + qty
-        if target_process.status == PROCESS_STATUS_COMPLETED and target_process.visible_quantity > target_process.completed_quantity:
+        if (
+            target_process.status == PROCESS_STATUS_COMPLETED
+            and target_process.visible_quantity > target_process.completed_quantity
+        ):
             target_process.status = (
-                PROCESS_STATUS_PARTIAL if int(target_process.completed_quantity) > 0 else PROCESS_STATUS_PENDING
+                PROCESS_STATUS_PARTIAL
+                if int(target_process.completed_quantity) > 0
+                else PROCESS_STATUS_PENDING
             )
         ensure_sub_orders_visible_quantity(
             db,
@@ -451,9 +497,14 @@ def complete_repair_order(
                 int(source_process.completed_quantity),
                 int(source_process.visible_quantity) - qty,
             )
-            if source_process.status == PROCESS_STATUS_COMPLETED and source_process.visible_quantity > source_process.completed_quantity:
+            if (
+                source_process.status == PROCESS_STATUS_COMPLETED
+                and source_process.visible_quantity > source_process.completed_quantity
+            ):
                 source_process.status = (
-                    PROCESS_STATUS_PARTIAL if int(source_process.completed_quantity) > 0 else PROCESS_STATUS_PENDING
+                    PROCESS_STATUS_PARTIAL
+                    if int(source_process.completed_quantity) > 0
+                    else PROCESS_STATUS_PENDING
                 )
             ensure_sub_orders_visible_quantity(
                 db,
@@ -463,12 +514,23 @@ def complete_repair_order(
             affected_process_ids.add(source_process.id)
 
     if scrap_replenished and scrap_quantity > 0 and source_order is not None:
-        first_process = min(source_order.processes, key=lambda row: (row.process_order, row.id), default=None)
+        first_process = min(
+            source_order.processes,
+            key=lambda row: (row.process_order, row.id),
+            default=None,
+        )
         if first_process is not None:
-            first_process.visible_quantity = int(first_process.visible_quantity) + scrap_quantity
-            if first_process.status == PROCESS_STATUS_COMPLETED and first_process.visible_quantity > first_process.completed_quantity:
+            first_process.visible_quantity = (
+                int(first_process.visible_quantity) + scrap_quantity
+            )
+            if (
+                first_process.status == PROCESS_STATUS_COMPLETED
+                and first_process.visible_quantity > first_process.completed_quantity
+            ):
                 first_process.status = (
-                    PROCESS_STATUS_PARTIAL if int(first_process.completed_quantity) > 0 else PROCESS_STATUS_PENDING
+                    PROCESS_STATUS_PARTIAL
+                    if int(first_process.completed_quantity) > 0
+                    else PROCESS_STATUS_PENDING
                 )
             ensure_sub_orders_visible_quantity(
                 db,
@@ -485,17 +547,22 @@ def complete_repair_order(
         if not bool(item["is_scrap"]):
             continue
         reason = str(item["reason"])
-        scrap_reason_bucket[reason] = int(scrap_reason_bucket.get(reason, 0)) + int(item["quantity"])
+        scrap_reason_bucket[reason] = int(scrap_reason_bucket.get(reason, 0)) + int(
+            item["quantity"]
+        )
     if scrap_reason_bucket:
         for reason, qty in scrap_reason_bucket.items():
             existing = (
                 db.execute(
                     select(ProductionScrapStatistics)
                     .where(
-                        ProductionScrapStatistics.order_id == repair_row.source_order_id,
-                        ProductionScrapStatistics.process_id == repair_row.source_order_process_id,
+                        ProductionScrapStatistics.order_id
+                        == repair_row.source_order_id,
+                        ProductionScrapStatistics.process_id
+                        == repair_row.source_order_process_id,
                         ProductionScrapStatistics.scrap_reason == reason,
-                        ProductionScrapStatistics.progress == SCRAP_PROGRESS_PENDING_APPLY,
+                        ProductionScrapStatistics.progress
+                        == SCRAP_PROGRESS_PENDING_APPLY,
                     )
                     .with_for_update()
                 )
@@ -576,6 +643,14 @@ def complete_repair_order(
             source_code=repair_row.repair_order_code,
             target_page_code="production",
             target_tab_code="production_repair_orders",
+            target_route_payload_json=json.dumps(
+                {
+                    "action": "detail",
+                    "repair_order_id": repair_row.id,
+                    "repair_order_code": repair_row.repair_order_code,
+                },
+                ensure_ascii=False,
+            ),
             recipient_user_ids=[repair_row.sender_user_id],
             dedupe_key=f"repair_complete_{repair_row.id}",
             created_by_user_id=operator.id,
@@ -654,18 +729,18 @@ def get_repair_order_phenomena_summary(
     *,
     repair_order_id: int,
 ) -> list[dict[str, Any]]:
-    rows = (
-        db.execute(
-            select(
-                RepairDefectPhenomenon.phenomenon.label("phenomenon"),
-                func.sum(RepairDefectPhenomenon.quantity).label("quantity"),
-            )
-            .where(RepairDefectPhenomenon.repair_order_id == repair_order_id)
-            .group_by(RepairDefectPhenomenon.phenomenon)
-            .order_by(func.sum(RepairDefectPhenomenon.quantity).desc(), RepairDefectPhenomenon.phenomenon.asc())
+    rows = db.execute(
+        select(
+            RepairDefectPhenomenon.phenomenon.label("phenomenon"),
+            func.sum(RepairDefectPhenomenon.quantity).label("quantity"),
         )
-        .all()
-    )
+        .where(RepairDefectPhenomenon.repair_order_id == repair_order_id)
+        .group_by(RepairDefectPhenomenon.phenomenon)
+        .order_by(
+            func.sum(RepairDefectPhenomenon.quantity).desc(),
+            RepairDefectPhenomenon.phenomenon.asc(),
+        )
+    ).all()
     return [
         {
             "phenomenon": str(row.phenomenon),
@@ -690,7 +765,9 @@ def create_manual_repair_order(
         order_id=order_id,
         order_process_id=order_process_id,
         sender=sender,
-        production_quantity=_normalize_quantity(production_quantity, field_name="production_quantity"),
+        production_quantity=_normalize_quantity(
+            production_quantity, field_name="production_quantity"
+        ),
         defect_items=defect_items,
         auto_created=False,
     )
@@ -709,6 +786,8 @@ def list_scrap_statistics(
         end_date=filters.end_date,
     )
     keyword = _normalize_text(filters.keyword)
+    product_name = _normalize_text(filters.product_name)
+    process_code = _normalize_text(filters.process_code)
 
     stmt = select(ProductionScrapStatistics)
     if normalized_progress:
@@ -727,6 +806,10 @@ def list_scrap_statistics(
                 ProductionScrapStatistics.scrap_reason.ilike(like_value),
             )
         )
+    if product_name:
+        stmt = stmt.where(ProductionScrapStatistics.product_name == product_name)
+    if process_code:
+        stmt = stmt.where(ProductionScrapStatistics.process_code == process_code)
     rows = (
         db.execute(
             stmt.order_by(
@@ -772,7 +855,9 @@ def export_scrap_statistics_csv(
                 row.process_name or "",
                 row.scrap_reason,
                 int(row.scrap_quantity),
-                row.last_scrap_time.astimezone().strftime("%Y-%m-%d %H:%M:%S") if row.last_scrap_time else "",
+                row.last_scrap_time.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+                if row.last_scrap_time
+                else "",
                 "待处理" if row.progress == SCRAP_PROGRESS_PENDING_APPLY else "已处理",
             ]
         )
@@ -823,8 +908,12 @@ def export_repair_orders_csv(
                 int(row.scrap_quantity),
                 "是" if row.scrap_replenished else "否",
                 "维修中" if row.status == REPAIR_STATUS_IN_REPAIR else "维修完成",
-                row.repair_time.astimezone().strftime("%Y-%m-%d %H:%M:%S") if row.repair_time else "",
-                row.completed_at.astimezone().strftime("%Y-%m-%d %H:%M:%S") if row.completed_at else "",
+                row.repair_time.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+                if row.repair_time
+                else "",
+                row.completed_at.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+                if row.completed_at
+                else "",
             ]
         )
     content_base64 = _build_csv_base64(
@@ -845,7 +934,9 @@ def export_repair_orders_csv(
         ],
         csv_rows,
     )
-    unique_order_ids = sorted({int(row.source_order_id) for row in rows if row.source_order_id})
+    unique_order_ids = sorted(
+        {int(row.source_order_id) for row in rows if row.source_order_id}
+    )
     for order_id in unique_order_ids:
         add_order_event_log(
             db,

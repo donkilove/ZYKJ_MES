@@ -658,6 +658,7 @@ class CraftTemplateImpactOrderItem {
 
 class CraftTemplateImpactAnalysis {
   CraftTemplateImpactAnalysis({
+    required this.targetVersion,
     required this.totalOrders,
     required this.pendingOrders,
     required this.inProgressOrders,
@@ -666,6 +667,7 @@ class CraftTemplateImpactAnalysis {
     required this.items,
   });
 
+  final int targetVersion;
   final int totalOrders;
   final int pendingOrders;
   final int inProgressOrders;
@@ -675,6 +677,7 @@ class CraftTemplateImpactAnalysis {
 
   factory CraftTemplateImpactAnalysis.fromJson(Map<String, dynamic> json) {
     return CraftTemplateImpactAnalysis(
+      targetVersion: (json['target_version'] as int?) ?? 0,
       totalOrders: (json['total_orders'] as int?) ?? 0,
       pendingOrders: (json['pending_orders'] as int?) ?? 0,
       inProgressOrders: (json['in_progress_orders'] as int?) ?? 0,
@@ -1228,9 +1231,7 @@ class CraftProductTemplateReferenceRow {
   final String? riskLevel;
   final String? riskNote;
 
-  factory CraftProductTemplateReferenceRow.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory CraftProductTemplateReferenceRow.fromJson(Map<String, dynamic> json) {
     return CraftProductTemplateReferenceRow(
       templateId: (json['template_id'] as int?) ?? 0,
       templateName: (json['template_name'] as String?) ?? '',

@@ -6,6 +6,7 @@ import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import 'production_order_detail_page.dart';
 
 class ProductionPipelineInstancesPage extends StatefulWidget {
   const ProductionPipelineInstancesPage({
@@ -39,8 +40,8 @@ class _ProductionPipelineInstancesPageState
   int _total = 0;
   bool? _isActiveFilter;
   final _orderCodeController = TextEditingController();
-  final _orderProcessIdController = TextEditingController();
-  final _subOrderIdController = TextEditingController();
+  final _processKeywordController = TextEditingController();
+  final _pipelineSubOrderNoController = TextEditingController();
   List<PipelineInstanceItem> _items = const [];
 
   /// 独立进入模式（无固定订单）
@@ -59,8 +60,8 @@ class _ProductionPipelineInstancesPageState
   @override
   void dispose() {
     _orderCodeController.dispose();
-    _orderProcessIdController.dispose();
-    _subOrderIdController.dispose();
+    _processKeywordController.dispose();
+    _pipelineSubOrderNoController.dispose();
     super.dispose();
   }
 
@@ -79,16 +80,27 @@ class _ProductionPipelineInstancesPageState
     return '${local.year}-$mm-$dd $hh:$min';
   }
 
-  int? _parsePositiveInt(String raw) {
-    final token = raw.trim();
-    if (token.isEmpty) {
-      return null;
-    }
-    final value = int.tryParse(token);
-    if (value == null || value <= 0) {
-      return null;
-    }
-    return value;
+  Future<void> _openOrderDetail(PipelineInstanceItem item) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ProductionOrderDetailPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          orderId: item.orderId,
+          canEditOrder: false,
+          canDeleteOrder: false,
+          canCompleteOrder: false,
+          canUpdatePipelineMode: false,
+          readOnly: true,
+          service: _service,
+          onEditOrder: (_) async => false,
+          onDeleteOrder: (_) async => false,
+          onCompleteOrder: (_) async => false,
+          onConfigurePipelineOrder: (_) async => false,
+          onDisablePipelineOrder: (_) async => false,
+        ),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -100,8 +112,8 @@ class _ProductionPipelineInstancesPageState
       final result = await _service.listPipelineInstances(
         orderId: widget.orderId,
         orderCode: _standaloneMode ? _orderCodeController.text : null,
-        orderProcessId: _parsePositiveInt(_orderProcessIdController.text),
-        subOrderId: _parsePositiveInt(_subOrderIdController.text),
+        processKeyword: _processKeywordController.text,
+        pipelineSubOrderNo: _pipelineSubOrderNoController.text,
         isActive: _isActiveFilter,
       );
       if (!mounted) return;
@@ -150,12 +162,12 @@ class _ProductionPipelineInstancesPageState
           ),
         ],
         SizedBox(
-          width: 180,
+          width: 220,
           child: TextField(
-            controller: _orderProcessIdController,
-            keyboardType: TextInputType.number,
+            controller: _processKeywordController,
             decoration: const InputDecoration(
-              labelText: '工序ID',
+              labelText: '工序',
+              hintText: '工序编码或名称',
               border: OutlineInputBorder(),
               isDense: true,
             ),
@@ -165,10 +177,9 @@ class _ProductionPipelineInstancesPageState
         SizedBox(
           width: 180,
           child: TextField(
-            controller: _subOrderIdController,
-            keyboardType: TextInputType.number,
+            controller: _pipelineSubOrderNoController,
             decoration: const InputDecoration(
-              labelText: '子订单ID',
+              labelText: '实例编号',
               border: OutlineInputBorder(),
               isDense: true,
             ),
@@ -246,9 +257,9 @@ class _ProductionPipelineInstancesPageState
                           const DataColumn(label: Text('ID')),
                           if (_standaloneMode)
                             const DataColumn(label: Text('订单号')),
-                          const DataColumn(label: Text('工序编码')),
+                          const DataColumn(label: Text('工序')),
                           const DataColumn(label: Text('并行序号')),
-                          const DataColumn(label: Text('子订单编号')),
+                          const DataColumn(label: Text('实例编号')),
                           const DataColumn(label: Text('状态')),
                           const DataColumn(label: Text('失效原因')),
                           const DataColumn(label: Text('失效时间')),
@@ -263,7 +274,7 @@ class _ProductionPipelineInstancesPageState
                               DataCell(Text('${item.id}')),
                               if (_standaloneMode)
                                 DataCell(Text(item.orderCode)),
-                              DataCell(Text(item.processCode)),
+                              DataCell(Text(item.processDisplayText)),
                               DataCell(Text('${item.pipelineSeq}')),
                               DataCell(Text(item.pipelineSubOrderNo)),
                               DataCell(Text(item.isActive ? '活跃' : '已失效')),
@@ -279,9 +290,18 @@ class _ProductionPipelineInstancesPageState
                               DataCell(Text(_formatDateTime(item.updatedAt))),
                               if (_standaloneMode)
                                 DataCell(
-                                  TextButton(
-                                    onPressed: () => _copyOrderCode(item),
-                                    child: const Text('复制订单号'),
+                                  Wrap(
+                                    spacing: 8,
+                                    children: [
+                                      TextButton(
+                                        onPressed: () => _openOrderDetail(item),
+                                        child: const Text('查看订单'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => _copyOrderCode(item),
+                                        child: const Text('复制订单号'),
+                                      ),
+                                    ],
                                   ),
                                 ),
                             ],

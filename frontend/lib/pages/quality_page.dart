@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import '../services/quality_service.dart';
 import 'daily_first_article_page.dart';
 import 'production_repair_orders_page.dart';
 import 'production_scrap_statistics_page.dart';
@@ -33,6 +34,8 @@ class QualityPage extends StatefulWidget {
     required this.visibleTabCodes,
     required this.capabilityCodes,
     this.preferredTabCode,
+    this.routePayloadJson,
+    this.firstArticleService,
   });
 
   final AppSession session;
@@ -40,6 +43,8 @@ class QualityPage extends StatefulWidget {
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
   final String? preferredTabCode;
+  final String? routePayloadJson;
+  final QualityService? firstArticleService;
 
   @override
   State<QualityPage> createState() => _QualityPageState();
@@ -145,9 +150,20 @@ class _QualityPageState extends State<QualityPage>
         return DailyFirstArticlePage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canViewDetail: widget.capabilityCodes.contains('quality.first_articles.detail'),
-          canExport: widget.capabilityCodes.contains('quality.first_articles.export'),
-          canDispose: widget.capabilityCodes.contains('quality.first_articles.disposition'),
+          canViewDetail: widget.capabilityCodes.contains(
+            'quality.first_articles.detail',
+          ),
+          canExport: widget.capabilityCodes.contains(
+            'quality.first_articles.export',
+          ),
+          canDispose: widget.capabilityCodes.contains(
+            'quality.first_articles.disposition',
+          ),
+          routePayloadJson:
+              widget.preferredTabCode == firstArticleManagementTabCode
+              ? widget.routePayloadJson
+              : null,
+          service: widget.firstArticleService,
         );
       case qualityDataQueryTabCode:
         return QualityDataPage(
@@ -159,14 +175,20 @@ class _QualityPageState extends State<QualityPage>
         return ProductionScrapStatisticsPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canExport: widget.capabilityCodes.contains('production.scrap_statistics.export'),
+          canExport: widget.capabilityCodes.contains(
+            'production.scrap_statistics.export',
+          ),
         );
       case qualityRepairOrdersTabCode:
         return ProductionRepairOrdersPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canComplete: widget.capabilityCodes.contains('production.repair_orders.complete'),
-          canExport: widget.capabilityCodes.contains('production.repair_orders.export'),
+          canComplete: widget.capabilityCodes.contains(
+            'production.repair_orders.complete',
+          ),
+          canExport: widget.capabilityCodes.contains(
+            'production.repair_orders.export',
+          ),
         );
       case qualityTrendTabCode:
         return QualityTrendPage(
@@ -178,8 +200,9 @@ class _QualityPageState extends State<QualityPage>
         return QualityDefectAnalysisPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canExport: widget.capabilityCodes
-              .contains('quality.defect_analysis.export'),
+          canExport: widget.capabilityCodes.contains(
+            'quality.defect_analysis.export',
+          ),
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));

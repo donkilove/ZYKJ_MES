@@ -69,7 +69,9 @@ def _build_backend_health_url(api_base_url: str) -> str | None:
     parsed = urllib.parse.urlparse(api_base_url.rstrip("/"))
     if not parsed.scheme or not parsed.netloc:
         return None
-    return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, "/health", "", "", ""))
+    return urllib.parse.urlunparse(
+        (parsed.scheme, parsed.netloc, "/health", "", "", "")
+    )
 
 
 def wait_backend_ready(api_base_url: str, timeout_seconds: int) -> bool:
@@ -98,8 +100,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Start Flutter frontend app.")
     parser.add_argument(
         "--device",
-        default="windows",
-        help="Flutter device id, default: windows",
+        default="chrome",
+        help="Flutter device id, default: chrome",
     )
     parser.add_argument(
         "--skip-pub-get",
@@ -163,7 +165,12 @@ def bootstrap_admin(api_base_url: str) -> None:
                 f"username={username}, created={created}, role_repaired={role_repaired}, "
                 f"normalized_users_count={normalized_users_count}"
             )
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as error:
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        json.JSONDecodeError,
+    ) as error:
         print(f"[WARN] bootstrap admin failed: {error}. Continue starting frontend.")
 
 
@@ -176,7 +183,9 @@ def main() -> int:
 
     flutter = resolve_flutter()
     if not flutter:
-        print("[ERROR] Flutter executable not found. Add flutter to PATH or install to C:/tools/flutter.")
+        print(
+            "[ERROR] Flutter executable not found. Add flutter to PATH or install to C:/tools/flutter."
+        )
         return 1
 
     env = build_subprocess_env()

@@ -32,11 +32,16 @@ class EquipmentService {
     }
     final data = json['data'] as Map<String, dynamic>;
     return (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => EquipmentOwnerOption.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) =>
+              EquipmentOwnerOption.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
   }
 
-  Future<EquipmentDetailResult> getEquipmentDetail({required int equipmentId}) async {
+  Future<EquipmentDetailResult> getEquipmentDetail({
+    required int equipmentId,
+  }) async {
     final uri = Uri.parse('$_basePath/ledger/$equipmentId/detail');
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
@@ -49,7 +54,9 @@ class EquipmentService {
     return EquipmentDetailResult.fromJson(json['data'] as Map<String, dynamic>);
   }
 
-  Future<MaintenanceWorkOrderDetail> getWorkOrderDetail({required int workOrderId}) async {
+  Future<MaintenanceWorkOrderDetail> getWorkOrderDetail({
+    required int workOrderId,
+  }) async {
     final uri = Uri.parse('$_basePath/executions/$workOrderId/detail');
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
@@ -59,7 +66,9 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    return MaintenanceWorkOrderDetail.fromJson(json['data'] as Map<String, dynamic>);
+    return MaintenanceWorkOrderDetail.fromJson(
+      json['data'] as Map<String, dynamic>,
+    );
   }
 
   Future<void> cancelExecution({required int workOrderId}) async {
@@ -74,7 +83,9 @@ class EquipmentService {
     }
   }
 
-  Future<MaintenanceRecordDetail> getRecordDetail({required int recordId}) async {
+  Future<MaintenanceRecordDetail> getRecordDetail({
+    required int recordId,
+  }) async {
     final uri = Uri.parse('$_basePath/records/$recordId/detail');
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
@@ -84,7 +95,9 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    return MaintenanceRecordDetail.fromJson(json['data'] as Map<String, dynamic>);
+    return MaintenanceRecordDetail.fromJson(
+      json['data'] as Map<String, dynamic>,
+    );
   }
 
   Future<EquipmentLedgerListResult> listEquipment({
@@ -119,7 +132,10 @@ class EquipmentService {
     }
     final data = json['data'] as Map<String, dynamic>;
     final items = (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => EquipmentLedgerItem.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) =>
+              EquipmentLedgerItem.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
     return EquipmentLedgerListResult(
       total: (data['total'] as int?) ?? 0,
@@ -251,7 +267,10 @@ class EquipmentService {
     }
     final data = json['data'] as Map<String, dynamic>;
     final items = (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => MaintenanceItemEntry.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) =>
+              MaintenanceItemEntry.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
     return MaintenanceItemListResult(
       total: (data['total'] as int?) ?? 0,
@@ -370,7 +389,8 @@ class EquipmentService {
     if (enabled != null) {
       query['enabled'] = '$enabled';
     }
-    if (executionProcessCode != null && executionProcessCode.trim().isNotEmpty) {
+    if (executionProcessCode != null &&
+        executionProcessCode.trim().isNotEmpty) {
       query['execution_process_code'] = executionProcessCode.trim();
     }
     if (defaultExecutorUserId != null) {
@@ -387,7 +407,10 @@ class EquipmentService {
     }
     final data = json['data'] as Map<String, dynamic>;
     final items = (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => MaintenancePlanItem.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) =>
+              MaintenancePlanItem.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
     return MaintenancePlanListResult(
       total: (data['total'] as int?) ?? 0,
@@ -540,7 +563,9 @@ class EquipmentService {
     if (stageCode != null) {
       query['stage_code'] = stageCode;
     }
-    final uri = Uri.parse('$_basePath/executions').replace(queryParameters: query);
+    final uri = Uri.parse(
+      '$_basePath/executions',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -551,7 +576,10 @@ class EquipmentService {
     }
     final data = json['data'] as Map<String, dynamic>;
     final items = (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => MaintenanceWorkOrderItem.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) =>
+              MaintenanceWorkOrderItem.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
     return MaintenanceWorkOrderListResult(
       total: (data['total'] as int?) ?? 0,
@@ -636,7 +664,10 @@ class EquipmentService {
     }
     final data = json['data'] as Map<String, dynamic>;
     final items = (data['items'] as List<dynamic>? ?? const [])
-        .map((entry) => MaintenanceRecordItem.fromJson(entry as Map<String, dynamic>))
+        .map(
+          (entry) =>
+              MaintenanceRecordItem.fromJson(entry as Map<String, dynamic>),
+        )
         .toList();
     return MaintenanceRecordListResult(
       total: (data['total'] as int?) ?? 0,
@@ -683,10 +714,7 @@ class EquipmentService {
     int page = 1,
     int pageSize = 20,
   }) async {
-    final query = <String, String>{
-      'page': '$page',
-      'page_size': '$pageSize',
-    };
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (equipmentId != null) query['equipment_id'] = '$equipmentId';
     if (keyword != null && keyword.isNotEmpty) query['keyword'] = keyword;
     if (isEnabled != null) query['is_enabled'] = '$isEnabled';
@@ -694,7 +722,10 @@ class EquipmentService {
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = json['data'] as Map<String, dynamic>;
     final items = (data['items'] as List)
@@ -723,13 +754,18 @@ class EquipmentService {
       'rule_type': ruleType,
       'condition_desc': conditionDesc,
       'is_enabled': isEnabled,
-      'effective_at': effectiveAt == null ? null : _formatDateTimeIso(effectiveAt),
+      'effective_at': effectiveAt == null
+          ? null
+          : _formatDateTimeIso(effectiveAt),
       'remark': remark,
     });
     final response = await http.post(uri, headers: _authHeaders, body: body);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
@@ -754,13 +790,18 @@ class EquipmentService {
       'rule_type': ruleType,
       'condition_desc': conditionDesc,
       'is_enabled': isEnabled,
-      'effective_at': effectiveAt == null ? null : _formatDateTimeIso(effectiveAt),
+      'effective_at': effectiveAt == null
+          ? null
+          : _formatDateTimeIso(effectiveAt),
       'remark': remark,
     });
     final response = await http.put(uri, headers: _authHeaders, body: body);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
@@ -773,7 +814,10 @@ class EquipmentService {
     final response = await http.patch(uri, headers: _authHeaders, body: body);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
@@ -782,7 +826,10 @@ class EquipmentService {
     final response = await http.delete(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
@@ -790,29 +837,41 @@ class EquipmentService {
 
   Future<EquipmentRuntimeParameterListResult> listRuntimeParameters({
     int? equipmentId,
+    String? equipmentType,
     String? keyword,
     bool? isEnabled,
     int page = 1,
     int pageSize = 20,
   }) async {
-    final query = <String, String>{
-      'page': '$page',
-      'page_size': '$pageSize',
-    };
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (equipmentId != null) query['equipment_id'] = '$equipmentId';
+    if (equipmentType != null && equipmentType.trim().isNotEmpty) {
+      query['equipment_type'] = equipmentType.trim();
+    }
     if (keyword != null && keyword.isNotEmpty) query['keyword'] = keyword;
     if (isEnabled != null) query['is_enabled'] = '$isEnabled';
-    final uri = Uri.parse('$_basePath/runtime-parameters').replace(queryParameters: query);
+    final uri = Uri.parse(
+      '$_basePath/runtime-parameters',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = json['data'] as Map<String, dynamic>;
     final items = (data['items'] as List)
-        .map((e) => EquipmentRuntimeParameterItem.fromJson(e as Map<String, dynamic>))
+        .map(
+          (e) =>
+              EquipmentRuntimeParameterItem.fromJson(e as Map<String, dynamic>),
+        )
         .toList();
-    return EquipmentRuntimeParameterListResult(total: data['total'] as int, items: items);
+    return EquipmentRuntimeParameterListResult(
+      total: data['total'] as int,
+      items: items,
+    );
   }
 
   Future<void> createRuntimeParameter({
@@ -844,14 +903,19 @@ class EquipmentService {
       'lower_limit': lowerLimit != null && lowerLimit.isNotEmpty
           ? double.tryParse(lowerLimit)
           : null,
-      'effective_at': effectiveAt == null ? null : _formatDateTimeIso(effectiveAt),
+      'effective_at': effectiveAt == null
+          ? null
+          : _formatDateTimeIso(effectiveAt),
       'is_enabled': isEnabled,
       'remark': remark,
     });
     final response = await http.post(uri, headers: _authHeaders, body: body);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
@@ -885,14 +949,19 @@ class EquipmentService {
       'lower_limit': lowerLimit != null && lowerLimit.isNotEmpty
           ? double.tryParse(lowerLimit)
           : null,
-      'effective_at': effectiveAt == null ? null : _formatDateTimeIso(effectiveAt),
+      'effective_at': effectiveAt == null
+          ? null
+          : _formatDateTimeIso(effectiveAt),
       'is_enabled': isEnabled,
       'remark': remark,
     });
     final response = await http.put(uri, headers: _authHeaders, body: body);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
@@ -901,7 +970,10 @@ class EquipmentService {
     final response = await http.delete(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
@@ -917,7 +989,10 @@ class EquipmentService {
     );
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
   }
 
@@ -930,34 +1005,58 @@ class EquipmentService {
     String? ownerName,
   }) async {
     final query = <String, String>{};
-    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
-    if (enabled != null) query['enabled'] = '$enabled';
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (enabled != null) {
+      query['enabled'] = '$enabled';
+    }
     if (locationKeyword != null && locationKeyword.trim().isNotEmpty) {
       query['location_keyword'] = locationKeyword.trim();
     }
     if (ownerName != null && ownerName.trim().isNotEmpty) {
       query['owner_name'] = ownerName.trim();
     }
-    final uri = Uri.parse('$_basePath/ledger/export').replace(queryParameters: query);
+    final uri = Uri.parse(
+      '$_basePath/ledger/export',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = json['data'] as Map<String, dynamic>? ?? const {};
     return (data['content_base64'] as String?) ?? '';
   }
 
-  Future<String> exportMaintenanceItems({String? keyword, bool? enabled, String? category}) async {
+  Future<String> exportMaintenanceItems({
+    String? keyword,
+    bool? enabled,
+    String? category,
+  }) async {
     final query = <String, String>{};
-    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
-    if (enabled != null) query['enabled'] = '$enabled';
-    if (category != null && category.trim().isNotEmpty) query['category'] = category.trim();
-    final uri = Uri.parse('$_basePath/items/export').replace(queryParameters: query);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (enabled != null) {
+      query['enabled'] = '$enabled';
+    }
+    if (category != null && category.trim().isNotEmpty) {
+      query['category'] = category.trim();
+    }
+    final uri = Uri.parse(
+      '$_basePath/items/export',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = json['data'] as Map<String, dynamic>? ?? const {};
     return (data['content_base64'] as String?) ?? '';
@@ -974,17 +1073,23 @@ class EquipmentService {
     if (equipmentId != null) query['equipment_id'] = '$equipmentId';
     if (itemId != null) query['item_id'] = '$itemId';
     if (enabled != null) query['enabled'] = '$enabled';
-    if (executionProcessCode != null && executionProcessCode.trim().isNotEmpty) {
+    if (executionProcessCode != null &&
+        executionProcessCode.trim().isNotEmpty) {
       query['execution_process_code'] = executionProcessCode.trim();
     }
     if (defaultExecutorUserId != null) {
       query['default_executor_user_id'] = '$defaultExecutorUserId';
     }
-    final uri = Uri.parse('$_basePath/plans/export').replace(queryParameters: query);
+    final uri = Uri.parse(
+      '$_basePath/plans/export',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = json['data'] as Map<String, dynamic>? ?? const {};
     return (data['content_base64'] as String?) ?? '';
@@ -999,17 +1104,34 @@ class EquipmentService {
     int? equipmentId,
   }) async {
     final query = <String, String>{};
-    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
-    if (executorId != null) query['executor_id'] = '$executorId';
-    if (startDate != null) query['start_date'] = _formatDate(startDate);
-    if (endDate != null) query['end_date'] = _formatDate(endDate);
-    if (resultSummary != null) query['result_summary'] = resultSummary;
-    if (equipmentId != null) query['equipment_id'] = '$equipmentId';
-    final uri = Uri.parse('$_basePath/records/export').replace(queryParameters: query);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (executorId != null) {
+      query['executor_id'] = '$executorId';
+    }
+    if (startDate != null) {
+      query['start_date'] = _formatDate(startDate);
+    }
+    if (endDate != null) {
+      query['end_date'] = _formatDate(endDate);
+    }
+    if (resultSummary != null) {
+      query['result_summary'] = resultSummary;
+    }
+    if (equipmentId != null) {
+      query['equipment_id'] = '$equipmentId';
+    }
+    final uri = Uri.parse(
+      '$_basePath/records/export',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = json['data'] as Map<String, dynamic>? ?? const {};
     return (data['content_base64'] as String?) ?? '';
@@ -1023,16 +1145,31 @@ class EquipmentService {
     String? stageCode,
   }) async {
     final query = <String, String>{};
-    if (status != null) query['status'] = status;
-    if (keyword != null && keyword.trim().isNotEmpty) query['keyword'] = keyword.trim();
-    if (dueDateStart != null) query['due_date_start'] = _formatDate(dueDateStart);
-    if (dueDateEnd != null) query['due_date_end'] = _formatDate(dueDateEnd);
-    if (stageCode != null) query['stage_code'] = stageCode;
-    final uri = Uri.parse('$_basePath/executions/export').replace(queryParameters: query);
+    if (status != null) {
+      query['status'] = status;
+    }
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (dueDateStart != null) {
+      query['due_date_start'] = _formatDate(dueDateStart);
+    }
+    if (dueDateEnd != null) {
+      query['due_date_end'] = _formatDate(dueDateEnd);
+    }
+    if (stageCode != null) {
+      query['stage_code'] = stageCode;
+    }
+    final uri = Uri.parse(
+      '$_basePath/executions/export',
+    ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      throw ApiException(_extractErrorMessage(json, response.statusCode), response.statusCode);
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
     }
     final data = json['data'] as Map<String, dynamic>? ?? const {};
     return (data['content_base64'] as String?) ?? '';

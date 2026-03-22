@@ -15,11 +15,15 @@ class RegistrationApprovalPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canReviewAction,
+    this.userService,
+    this.craftService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canReviewAction;
+  final UserService? userService;
+  final CraftService? craftService;
 
   @override
   State<RegistrationApprovalPage> createState() =>
@@ -54,8 +58,8 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   @override
   void initState() {
     super.initState();
-    _userService = UserService(widget.session);
-    _craftService = CraftService(widget.session);
+    _userService = widget.userService ?? UserService(widget.session);
+    _craftService = widget.craftService ?? CraftService(widget.session);
     _loadInitialData();
   }
 
@@ -141,10 +145,11 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   bool _isOperator(String? roleCode) => roleCode == _operatorRoleCode;
 
   List<RoleItem> _assignableRoles({String? includeRoleCode}) {
-    final items = _roles
-        .where((role) => role.isEnabled || role.code == includeRoleCode)
-        .toList()
-      ..sort((a, b) => a.id.compareTo(b.id));
+    final items =
+        _roles
+            .where((role) => role.isEnabled || role.code == includeRoleCode)
+            .toList()
+          ..sort((a, b) => a.id.compareTo(b.id));
     return items;
   }
 
@@ -154,6 +159,14 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       setState(() => _stages = result.items);
     }
     return result.items;
+  }
+
+  Future<List<CraftStageItem>> _loadEnabledStagesForDialog() async {
+    try {
+      return await _fetchLatestStages();
+    } catch (_) {
+      return _stages;
+    }
   }
 
   Future<void> _loadInitialData({int? page}) async {
@@ -319,10 +332,10 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       _showNoPermission();
       return;
     }
-    List<CraftStageItem> currentStages = _stages;
-    try {
-      currentStages = await _fetchLatestStages();
-    } catch (_) {}
+    final currentStages = await _loadEnabledStagesForDialog();
+    if (!mounted) {
+      return;
+    }
     final assignableRoles = _assignableRoles();
     if (assignableRoles.isEmpty) {
       setState(() {
@@ -670,9 +683,18 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                   ),
                   items: const [
                     DropdownMenuItem<String?>(value: null, child: Text('全部')),
-                    DropdownMenuItem<String?>(value: 'pending', child: Text('待审批')),
-                    DropdownMenuItem<String?>(value: 'approved', child: Text('已通过')),
-                    DropdownMenuItem<String?>(value: 'rejected', child: Text('已驳回')),
+                    DropdownMenuItem<String?>(
+                      value: 'pending',
+                      child: Text('待审批'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'approved',
+                      child: Text('已通过'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'rejected',
+                      child: Text('已驳回'),
+                    ),
                   ],
                   onChanged: (value) {
                     setState(() => _statusFilter = value);
@@ -706,9 +728,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                 : _items.isEmpty
                 ? Center(
                     child: Text(
-                      _statusFilter == null
-                          ? '暂无注册申请记录'
-                          : '当前状态下暂无注册申请记录',
+                      _statusFilter == null ? '暂无注册申请记录' : '当前状态下暂无注册申请记录',
                     ),
                   )
                 : Card(
