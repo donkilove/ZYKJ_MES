@@ -8,19 +8,35 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permission
+from app.core.authz_catalog import (
+    PERM_QUALITY_REPAIR_ORDERS_COMPLETE,
+    PERM_QUALITY_REPAIR_ORDERS_DETAIL,
+    PERM_QUALITY_REPAIR_ORDERS_EXPORT,
+    PERM_QUALITY_REPAIR_ORDERS_LIST,
+    PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY,
+    PERM_QUALITY_SCRAP_STATISTICS_DETAIL,
+    PERM_QUALITY_SCRAP_STATISTICS_EXPORT,
+    PERM_QUALITY_SCRAP_STATISTICS_LIST,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.production import (
+    ProductionExportResult,
+    RepairOrderCompleteRequest,
     RepairOrderDetailItem,
     RepairOrderItem,
     RepairOrderListResult,
+    RepairOrderPhenomenaSummaryResult,
+    RepairOrderPhenomenonSummaryItem,
+    RepairOrdersExportRequest,
     RepairEventLogItem,
     RepairCauseDetailItem,
     RepairDefectPhenomenonItem,
     RepairReturnRouteItem,
     ScrapEventLogItem,
     ScrapRelatedRepairItem,
+    ScrapStatisticsExportRequest,
     ScrapStatisticsDetailItem,
     ScrapStatisticsItem,
     ScrapStatisticsListResult,
@@ -65,11 +81,16 @@ from app.services.quality_service import (
 from app.services.production_repair_service import (
     RepairListFilters,
     ScrapStatisticsFilters,
+    complete_repair_order,
+    export_repair_orders_csv,
+    export_scrap_statistics_csv,
     get_repair_order_by_id,
+    get_repair_order_phenomena_summary,
     list_repair_orders,
     list_scrap_statistics,
 )
 from app.models.order_event_log import OrderEventLog
+from app.models.production_record import ProductionRecord
 from app.models.production_scrap_statistics import ProductionScrapStatistics
 from app.models.repair_order import RepairOrder
 
@@ -131,6 +152,7 @@ def _to_quality_repair_order_detail_item(
     row: RepairOrder,
     *,
     event_logs: list[OrderEventLog] | None = None,
+    defect_record_map: dict[int, ProductionRecord] | None = None,
 ) -> RepairOrderDetailItem:
     return RepairOrderDetailItem(
         id=row.id,
@@ -159,6 +181,24 @@ def _to_quality_repair_order_detail_item(
                 id=item.id,
                 phenomenon=item.phenomenon,
                 quantity=item.quantity,
+                production_record_id=defect_record_map.get(item.id).id
+                if defect_record_map and defect_record_map.get(item.id)
+                else None,
+                production_sub_order_id=defect_record_map.get(item.id).sub_order_id
+                if defect_record_map and defect_record_map.get(item.id)
+                else None,
+                production_record_type=defect_record_map.get(item.id).record_type
+                if defect_record_map and defect_record_map.get(item.id)
+                else None,
+                production_record_quantity=defect_record_map.get(item.id).production_quantity
+                if defect_record_map and defect_record_map.get(item.id)
+                else None,
+                production_record_created_at=defect_record_map.get(item.id).created_at
+                if defect_record_map and defect_record_map.get(item.id)
+                else None,
+                production_record_operator_user_id=defect_record_map.get(item.id).operator_user_id
+                if defect_record_map and defect_record_map.get(item.id)
+                else None,
             )
             for item in (row.defect_rows or [])
         ],
@@ -601,7 +641,7 @@ def get_quality_scrap_statistics_api(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("production.scrap_statistics.list")),
+    _: User = Depends(require_permission(PERM_QUALITY_SCRAP_STATISTICS_LIST)),
 ) -> ApiResponse[ScrapStatisticsListResult]:
     _validate_date_range(start_date, end_date)
     total, rows = list_scrap_statistics(
@@ -625,6 +665,33 @@ def get_quality_scrap_statistics_api(
     )
 
 
+@router.post(
+    "/scrap-statistics/export",
+    response_model=ApiResponse[ProductionExportResult],
+)
+def export_quality_scrap_statistics_api(
+    payload: ScrapStatisticsExportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_permission(PERM_QUALITY_SCRAP_STATISTICS_EXPORT)
+    ),
+) -> ApiResponse[ProductionExportResult]:
+    _validate_date_range(payload.start_date, payload.end_date)
+    result = export_scrap_statistics_csv(
+        db,
+        filters=ScrapStatisticsFilters(
+            keyword=payload.keyword,
+            progress=payload.progress,
+            product_name=payload.product_name,
+            process_code=payload.process_code,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+        ),
+        operator=current_user,
+    )
+    return success_response(ProductionExportResult(**result))
+
+
 @router.get(
     "/scrap-statistics/{scrap_id}",
     response_model=ApiResponse[ScrapStatisticsDetailItem],
@@ -632,7 +699,7 @@ def get_quality_scrap_statistics_api(
 def get_quality_scrap_statistics_detail_api(
     scrap_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("production.scrap_statistics.detail")),
+    _: User = Depends(require_permission(PERM_QUALITY_SCRAP_STATISTICS_DETAIL)),
 ) -> ApiResponse[ScrapStatisticsDetailItem]:
     row = (
         db.execute(
@@ -742,7 +809,7 @@ def get_quality_repair_orders_api(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("production.repair_orders.list")),
+    _: User = Depends(require_permission(PERM_QUALITY_REPAIR_ORDERS_LIST)),
 ) -> ApiResponse[RepairOrderListResult]:
     _validate_date_range(start_date, end_date)
     total, rows = list_repair_orders(
@@ -765,13 +832,37 @@ def get_quality_repair_orders_api(
 
 
 @router.get(
+    "/repair-orders/{repair_order_id}/phenomena-summary",
+    response_model=ApiResponse[RepairOrderPhenomenaSummaryResult],
+)
+def get_quality_repair_order_phenomena_summary_api(
+    repair_order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY)),
+) -> ApiResponse[RepairOrderPhenomenaSummaryResult]:
+    repair_row = get_repair_order_by_id(db, repair_order_id=repair_order_id)
+    if repair_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repair order not found",
+        )
+    rows = get_repair_order_phenomena_summary(db, repair_order_id=repair_order_id)
+    return success_response(
+        RepairOrderPhenomenaSummaryResult(
+            repair_order_id=repair_order_id,
+            items=[RepairOrderPhenomenonSummaryItem(**item) for item in rows],
+        )
+    )
+
+
+@router.get(
     "/repair-orders/{repair_order_id}/detail",
     response_model=ApiResponse[RepairOrderDetailItem],
 )
 def get_quality_repair_order_detail_api(
     repair_order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("production.repair_orders.detail")),
+    _: User = Depends(require_permission(PERM_QUALITY_REPAIR_ORDERS_DETAIL)),
 ) -> ApiResponse[RepairOrderDetailItem]:
     row = get_repair_order_by_id(db, repair_order_id=repair_order_id)
     if row is None:
@@ -781,6 +872,7 @@ def get_quality_repair_order_detail_api(
         )
 
     event_logs: list[OrderEventLog] = []
+    defect_record_map: dict[int, ProductionRecord] = {}
     if row.source_order_id is not None:
         event_logs = [
             item
@@ -801,9 +893,110 @@ def get_quality_repair_order_detail_api(
             )
         ]
 
+        if row.defect_rows:
+            production_rows = (
+                db.execute(
+                    select(ProductionRecord)
+                    .where(
+                        ProductionRecord.order_id == row.source_order_id,
+                        ProductionRecord.order_process_id == row.source_order_process_id,
+                        ProductionRecord.record_type == "production",
+                    )
+                    .order_by(ProductionRecord.created_at.desc(), ProductionRecord.id.desc())
+                )
+                .scalars()
+                .all()
+            )
+            production_record_map = {int(item.id): item for item in production_rows}
+            unmatched_rows = list(production_rows)
+            for defect_row in row.defect_rows:
+                if defect_row.production_record_id is not None:
+                    matched = production_record_map.get(int(defect_row.production_record_id))
+                    if matched is not None:
+                        defect_record_map[defect_row.id] = matched
+                        unmatched_rows = [item for item in unmatched_rows if item.id != matched.id]
+                        continue
+                candidates = [
+                    item
+                    for item in unmatched_rows
+                    if item.operator_user_id == defect_row.operator_user_id
+                ]
+                if not candidates:
+                    candidates = unmatched_rows
+                if not candidates:
+                    continue
+                if defect_row.production_time is None:
+                    defect_record_map[defect_row.id] = candidates[0]
+                    unmatched_rows = [item for item in unmatched_rows if item.id != candidates[0].id]
+                    continue
+                matched = min(
+                    candidates,
+                    key=lambda item: abs(
+                        (item.created_at - defect_row.production_time).total_seconds()
+                    ),
+                )
+                defect_record_map[defect_row.id] = matched
+                unmatched_rows = [item for item in unmatched_rows if item.id != matched.id]
+
     return success_response(
-        _to_quality_repair_order_detail_item(row, event_logs=event_logs)
+        _to_quality_repair_order_detail_item(
+            row,
+            event_logs=event_logs,
+            defect_record_map=defect_record_map,
+        )
     )
+
+
+@router.post(
+    "/repair-orders/{repair_order_id}/complete",
+    response_model=ApiResponse[RepairOrderItem],
+)
+def complete_quality_repair_order_api(
+    repair_order_id: int,
+    payload: RepairOrderCompleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_QUALITY_REPAIR_ORDERS_COMPLETE)),
+) -> ApiResponse[RepairOrderItem]:
+    try:
+        row = complete_repair_order(
+            db,
+            repair_order_id=repair_order_id,
+            cause_items=[item.model_dump() for item in payload.cause_items],
+            scrap_replenished=payload.scrap_replenished,
+            return_allocations=[
+                item.model_dump() for item in payload.return_allocations
+            ],
+            operator=current_user,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return success_response(_to_quality_repair_order_item(row), message="completed")
+
+
+@router.post(
+    "/repair-orders/export",
+    response_model=ApiResponse[ProductionExportResult],
+)
+def export_quality_repair_orders_api(
+    payload: RepairOrdersExportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_QUALITY_REPAIR_ORDERS_EXPORT)),
+) -> ApiResponse[ProductionExportResult]:
+    _validate_date_range(payload.start_date, payload.end_date)
+    result = export_repair_orders_csv(
+        db,
+        filters=RepairListFilters(
+            keyword=payload.keyword,
+            status=payload.status,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+        ),
+        operator=current_user,
+    )
+    return success_response(ProductionExportResult(**result))
 
 
 @router.get("/defect-analysis", response_model=ApiResponse[DefectAnalysisResult])

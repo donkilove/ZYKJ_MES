@@ -82,6 +82,47 @@ class ProductService {
     return ProductListResult(total: (data['total'] as int?) ?? 0, items: items);
   }
 
+  Future<ProductListResult> listProductsForParameterQuery({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    String? effectiveVersionKeyword,
+  }) async {
+    final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (category != null && category.trim().isNotEmpty) {
+      query['category'] = category.trim();
+    }
+    if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
+      query['lifecycle_status'] = lifecycleStatus.trim();
+    }
+    if (effectiveVersionKeyword != null &&
+        effectiveVersionKeyword.trim().isNotEmpty) {
+      query['effective_version_keyword'] = effectiveVersionKeyword.trim();
+    }
+    final uri = Uri.parse(
+      '${session.baseUrl}/products/parameter-query',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+
+    final data = json['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map((entry) => ProductItem.fromJson(entry as Map<String, dynamic>))
+        .toList();
+    return ProductListResult(total: (data['total'] as int?) ?? 0, items: items);
+  }
+
   Future<void> createProduct({
     required String name,
     required String category,
@@ -118,6 +159,20 @@ class ProductService {
     }
     final data = json['data'] as Map<String, dynamic>;
     return ProductItem.fromJson(data);
+  }
+
+  Future<ProductDetailResult> getProductDetail({required int productId}) async {
+    final uri = Uri.parse('${session.baseUrl}/products/$productId/detail');
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(json, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = json['data'] as Map<String, dynamic>;
+    return ProductDetailResult.fromJson(data);
   }
 
   Future<ProductItem> updateProduct({
@@ -192,6 +247,8 @@ class ProductService {
     String? keyword,
     String? category,
     String? versionKeyword,
+    String? paramNameKeyword,
+    String? paramCategoryKeyword,
     String? lifecycleStatus,
     DateTime? updatedAfter,
     DateTime? updatedBefore,
@@ -205,6 +262,13 @@ class ProductService {
     }
     if (versionKeyword != null && versionKeyword.trim().isNotEmpty) {
       query['version_keyword'] = versionKeyword.trim();
+    }
+    if (paramNameKeyword != null && paramNameKeyword.trim().isNotEmpty) {
+      query['param_name_keyword'] = paramNameKeyword.trim();
+    }
+    if (paramCategoryKeyword != null &&
+        paramCategoryKeyword.trim().isNotEmpty) {
+      query['param_category_keyword'] = paramCategoryKeyword.trim();
     }
     if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
       query['lifecycle_status'] = lifecycleStatus.trim();

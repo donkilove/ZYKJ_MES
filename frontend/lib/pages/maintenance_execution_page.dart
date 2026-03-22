@@ -282,7 +282,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                         TextFormField(
                           controller: attachmentController,
                           decoration: const InputDecoration(
-                            labelText: '附件链接（可选）',
+                            labelText: '附件地址（可选，支持下载链接或 UNC 路径）',
                             border: OutlineInputBorder(),
                           ),
                         ),

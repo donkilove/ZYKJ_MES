@@ -15,9 +15,18 @@ class _FakeEquipmentService extends EquipmentService {
   _FakeEquipmentService()
     : super(AppSession(baseUrl: '', accessToken: 'token'));
 
+  int ownersRequestCount = 0;
+
   @override
   Future<List<EquipmentOwnerOption>> listAllOwners() async {
-    return const [];
+    ownersRequestCount += 1;
+    return [
+      EquipmentOwnerOption(
+        userId: 7,
+        username: 'm1',
+        fullName: null,
+      ),
+    ];
   }
 
   @override
@@ -142,6 +151,7 @@ class _FakeEquipmentService extends EquipmentService {
           resultSummary: null,
           resultRemark: null,
           attachmentLink: null,
+          attachmentName: null,
           createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
           updatedAt: DateTime.parse('2026-03-03T10:00:00Z'),
         ),
@@ -175,6 +185,7 @@ class _FakeEquipmentService extends EquipmentService {
           resultSummary: '完成',
           resultRemark: '执行正常',
           attachmentLink: null,
+          attachmentName: null,
           createdAt: DateTime.parse('2026-03-31T10:00:00Z'),
           updatedAt: DateTime.parse('2026-03-31T10:00:00Z'),
         ),
@@ -224,11 +235,11 @@ Future<void> _pumpPage(WidgetTester tester, Widget child) async {
 }
 
 void main() {
-  final equipmentService = _FakeEquipmentService();
   final craftService = _FakeCraftService();
   final session = AppSession(baseUrl: '', accessToken: 'token');
 
   testWidgets('设备台账页面展示需求关键字段', (tester) async {
+    final equipmentService = _FakeEquipmentService();
     await _pumpPage(
       tester,
       EquipmentLedgerPage(
@@ -246,6 +257,7 @@ void main() {
   });
 
   testWidgets('保养项目页面按需求字段展示创建时间与更新时间', (tester) async {
+    final equipmentService = _FakeEquipmentService();
     await _pumpPage(
       tester,
       MaintenanceItemPage(
@@ -265,6 +277,7 @@ void main() {
   });
 
   testWidgets('保养计划页面展示执行工段与默认执行人字段', (tester) async {
+    final equipmentService = _FakeEquipmentService();
     await _pumpPage(
       tester,
       MaintenancePlanPage(
@@ -281,9 +294,11 @@ void main() {
     expect(find.text('下次到期日'), findsOneWidget);
     expect(find.text('默认执行人'), findsWidgets);
     expect(find.text('冲压工段'), findsOneWidget);
+    expect(equipmentService.ownersRequestCount, 1);
   });
 
   testWidgets('保养执行页面展示工单关键字段', (tester) async {
+    final equipmentService = _FakeEquipmentService();
     await _pumpPage(
       tester,
       MaintenanceExecutionPage(
@@ -302,6 +317,7 @@ void main() {
   });
 
   testWidgets('保养记录页面展示到期日期字段', (tester) async {
+    final equipmentService = _FakeEquipmentService();
     await _pumpPage(
       tester,
       MaintenanceRecordPage(
@@ -314,6 +330,7 @@ void main() {
     expect(find.text('记录编号'), findsOneWidget);
     expect(find.text('到期日期'), findsOneWidget);
     expect(find.text('完成时间'), findsOneWidget);
+    expect(find.text('执行人'), findsWidgets);
     expect(find.text('执行正常'), findsOneWidget);
   });
 }

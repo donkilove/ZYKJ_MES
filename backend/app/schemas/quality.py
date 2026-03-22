@@ -75,6 +75,9 @@ class QualityStatsOverview(BaseModel):
     passed_total: int
     failed_total: int
     pass_rate_percent: float
+    defect_total: int = 0
+    scrap_total: int = 0
+    repair_total: int = 0
     covered_order_count: int
     covered_process_count: int
     covered_operator_count: int
@@ -88,6 +91,9 @@ class QualityProcessStatItem(BaseModel):
     passed_total: int
     failed_total: int
     pass_rate_percent: float
+    defect_total: int = 0
+    scrap_total: int = 0
+    repair_total: int = 0
     latest_first_article_at: datetime | None = None
 
 
@@ -102,6 +108,9 @@ class QualityOperatorStatItem(BaseModel):
     passed_total: int
     failed_total: int
     pass_rate_percent: float
+    defect_total: int = 0
+    scrap_total: int = 0
+    repair_total: int = 0
     latest_first_article_at: datetime | None = None
 
 
@@ -116,8 +125,9 @@ class QualityProductStatItem(BaseModel):
     passed_total: int
     failed_total: int
     pass_rate_percent: float
-    scrap_total: int
-    repair_order_count: int
+    defect_total: int = 0
+    scrap_total: int = 0
+    repair_total: int = 0
 
 
 class QualityProductStatsResult(BaseModel):

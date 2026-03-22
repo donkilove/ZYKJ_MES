@@ -1,6 +1,7 @@
 import sys
 import time
 import unittest
+from unittest.mock import patch
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -12,6 +13,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db.session import SessionLocal  # noqa: E402
+from app.models.audit_log import AuditLog  # noqa: E402
 from app.models.equipment import Equipment  # noqa: E402
 from app.models.maintenance_item import MaintenanceItem  # noqa: E402
 from app.models.maintenance_plan import MaintenancePlan  # noqa: E402
@@ -34,12 +36,19 @@ from app.services.equipment_service import (  # noqa: E402
     delete_maintenance_plan,
     ensure_maintenance_record_view_permission,
     ensure_work_order_view_permission,
+    generate_due_work_orders_for_today,
     generate_work_order_for_plan,
+    get_equipment_detail,
     get_maintenance_plan_by_id,
     list_maintenance_records,
     toggle_equipment,
     toggle_maintenance_item,
     update_maintenance_item,
+)
+from app.services.authz_service import (  # noqa: E402
+    get_permission_codes_for_role_codes,
+    get_role_permission_items,
+    replace_role_permissions_for_module,
 )
 from app.services.equipment_rule_service import (  # noqa: E402
     create_runtime_parameter,
@@ -202,6 +211,72 @@ class EquipmentModuleIntegrationTest(unittest.TestCase):
         self.runtime_parameter_ids.append(int(row.id))
         return row
 
+    def _granted_equipment_permission_codes(self, *, role_code: str) -> list[str]:
+        _, items = get_role_permission_items(
+            self.db,
+            role_code=role_code,
+            module_code="equipment",
+        )
+        return [str(item["permission_code"]) for item in items if item["granted"]]
+
+    def test_owner_option_permissions_follow_plan_and_record_features(self) -> None:
+        plan_role_code = "maintenance_staff"
+        record_role_code = "quality_admin"
+        plan_before = self._granted_equipment_permission_codes(role_code=plan_role_code)
+        record_before = self._granted_equipment_permission_codes(role_code=record_role_code)
+
+        try:
+            replace_role_permissions_for_module(
+                self.db,
+                role_code=plan_role_code,
+                module_code="equipment",
+                granted_permission_codes=["feature.equipment.plans.manage"],
+                operator=None,
+                remark="设备模块 RBAC 回归测试：保养计划默认执行人候选",
+            )
+            plan_codes = get_permission_codes_for_role_codes(
+                self.db,
+                role_codes=[plan_role_code],
+                module_code="equipment",
+            )
+            self.assertIn("equipment.plan_owner_options.list", plan_codes)
+            self.assertNotIn("equipment.record_executor_options.list", plan_codes)
+            self.assertNotIn("equipment.admin_owners.list", plan_codes)
+
+            replace_role_permissions_for_module(
+                self.db,
+                role_code=record_role_code,
+                module_code="equipment",
+                granted_permission_codes=["feature.equipment.records.view"],
+                operator=None,
+                remark="设备模块 RBAC 回归测试：保养记录执行人筛选候选",
+            )
+            record_codes = get_permission_codes_for_role_codes(
+                self.db,
+                role_codes=[record_role_code],
+                module_code="equipment",
+            )
+            self.assertIn("equipment.record_executor_options.list", record_codes)
+            self.assertNotIn("equipment.plan_owner_options.list", record_codes)
+            self.assertNotIn("equipment.admin_owners.list", record_codes)
+        finally:
+            replace_role_permissions_for_module(
+                self.db,
+                role_code=plan_role_code,
+                module_code="equipment",
+                granted_permission_codes=plan_before,
+                operator=None,
+                remark="恢复设备模块 RBAC 回归测试前权限",
+            )
+            replace_role_permissions_for_module(
+                self.db,
+                role_code=record_role_code,
+                module_code="equipment",
+                granted_permission_codes=record_before,
+                operator=None,
+                remark="恢复设备模块 RBAC 回归测试前权限",
+            )
+
     def test_item_default_cycle_change_does_not_override_plan_cycle(self) -> None:
         stage = self._ensure_stage("laser_marking", "激光打标")
         equipment = self._create_equipment("CYCLE")
@@ -289,6 +364,7 @@ class EquipmentModuleIntegrationTest(unittest.TestCase):
             source_equipment_name=equipment.name,
             source_item_id=item.id,
             source_item_name=item.name,
+            source_execution_process_code=hidden_stage.code,
             due_date=work_order.due_date,
             executor_user_id=None,
             executor_username="tester",
@@ -362,6 +438,51 @@ class EquipmentModuleIntegrationTest(unittest.TestCase):
             current_user_stage_codes=[hidden_stage.code],
         )
 
+        with self.assertRaisesRegex(ValueError, "Access denied"):
+            ensure_work_order_view_permission(
+                row=work_order,
+                current_user_role_codes=["quality_admin"],
+                current_user_stage_codes=[visible_stage.code],
+            )
+
+        ensure_work_order_view_permission(
+            row=work_order,
+            current_user_role_codes=["production_admin"],
+            current_user_stage_codes=[visible_stage.code],
+        )
+
+        quality_total, quality_rows = list_maintenance_records(
+            self.db,
+            page=1,
+            page_size=20,
+            keyword=None,
+            executor_user_id=None,
+            result_summary=None,
+            equipment_id=None,
+            current_user_role_codes=["quality_admin"],
+            current_user_stage_codes=[visible_stage.code],
+            start_date=None,
+            end_date=None,
+        )
+        self.assertEqual(quality_total, 0)
+        self.assertEqual(quality_rows, [])
+
+        prod_total, prod_rows = list_maintenance_records(
+            self.db,
+            page=1,
+            page_size=20,
+            keyword=None,
+            executor_user_id=None,
+            result_summary=None,
+            equipment_id=None,
+            current_user_role_codes=["production_admin"],
+            current_user_stage_codes=[visible_stage.code],
+            start_date=None,
+            end_date=None,
+        )
+        self.assertEqual(prod_total, 1)
+        self.assertEqual(len(prod_rows), 1)
+
     def test_cancelled_work_orders_do_not_block_deletion(self) -> None:
         stage = self._ensure_stage("laser_marking", "激光打标")
         equipment = self._create_equipment("DELETE")
@@ -399,6 +520,250 @@ class EquipmentModuleIntegrationTest(unittest.TestCase):
         refreshed_work_order = self.db.get(MaintenanceWorkOrder, work_order.id)
         assert refreshed_work_order is not None
         self.assertIsNone(refreshed_work_order.item_id)
+
+    def test_equipment_detail_respects_plan_execution_record_visibility(self) -> None:
+        visible_stage = self._ensure_stage("product_testing", "成品测试")
+        hidden_stage = self._ensure_stage("laser_marking", "激光打标")
+        equipment = self._create_equipment("DETAIL-SCOPE")
+        visible_item = self._create_item("DETAIL-VISIBLE", default_cycle_days=10)
+        hidden_item = self._create_item("DETAIL-HIDDEN", default_cycle_days=10)
+        visible_plan = self._create_plan(
+            equipment=equipment,
+            item=visible_item,
+            stage_code=visible_stage.code,
+            cycle_days=10,
+            start_date=date(2026, 3, 1),
+            next_due_date=date(2026, 3, 12),
+        )
+        hidden_plan = self._create_plan(
+            equipment=equipment,
+            item=hidden_item,
+            stage_code=hidden_stage.code,
+            cycle_days=10,
+            start_date=date(2026, 3, 1),
+            next_due_date=date(2026, 3, 13),
+        )
+        visible_work_order, _ = generate_work_order_for_plan(self.db, row=visible_plan)
+        hidden_work_order, _ = generate_work_order_for_plan(self.db, row=hidden_plan)
+        self.work_order_ids.extend([int(visible_work_order.id), int(hidden_work_order.id)])
+
+        hidden_record = MaintenanceRecord(
+            work_order_id=hidden_work_order.id,
+            source_plan_id=hidden_plan.id,
+            source_plan_cycle_days=hidden_plan.cycle_days,
+            source_plan_start_date=hidden_plan.start_date,
+            source_equipment_id=equipment.id,
+            source_equipment_code=equipment.code,
+            source_equipment_name=equipment.name,
+            source_item_id=hidden_item.id,
+            source_item_name=hidden_item.name,
+            source_execution_process_code=hidden_stage.code,
+            due_date=hidden_work_order.due_date,
+            executor_user_id=None,
+            executor_username="tester",
+            completed_at=datetime.now(UTC),
+            result_summary="完成",
+            result_remark="隐藏工段记录",
+            attachment_link=None,
+        )
+        self.db.add(hidden_record)
+        self.db.commit()
+        self.db.refresh(hidden_record)
+        self.record_ids.append(int(hidden_record.id))
+
+        scoped_detail = get_equipment_detail(
+            self.db,
+            equipment.id,
+            current_user_role_codes=["operator"],
+            current_user_stage_codes=[visible_stage.code],
+            can_view_plans=True,
+            can_view_executions=True,
+            can_view_records=True,
+        )
+        assert scoped_detail is not None
+        (
+            _,
+            scoped_plan_count,
+            scoped_work_order_count,
+            plans_scope_limited,
+            executions_scope_limited,
+            records_scope_limited,
+            scoped_plans,
+            scoped_work_orders,
+            scoped_records,
+        ) = scoped_detail
+        self.assertEqual(scoped_plan_count, 1)
+        self.assertEqual(scoped_work_order_count, 1)
+        self.assertEqual([plan.id for plan in scoped_plans], [visible_plan.id])
+        self.assertEqual([row.id for row in scoped_work_orders], [visible_work_order.id])
+        self.assertEqual(scoped_records, [])
+        self.assertTrue(plans_scope_limited)
+        self.assertTrue(executions_scope_limited)
+        self.assertTrue(records_scope_limited)
+
+        hidden_detail = get_equipment_detail(
+            self.db,
+            equipment.id,
+            current_user_role_codes=["operator"],
+            current_user_stage_codes=[visible_stage.code],
+            can_view_plans=False,
+            can_view_executions=False,
+            can_view_records=False,
+        )
+        assert hidden_detail is not None
+        self.assertEqual(hidden_detail[1], 0)
+        self.assertEqual(hidden_detail[2], 0)
+        self.assertEqual(hidden_detail[6], [])
+        self.assertEqual(hidden_detail[7], [])
+        self.assertEqual(hidden_detail[8], [])
+
+        quality_detail = get_equipment_detail(
+            self.db,
+            equipment.id,
+            current_user_role_codes=["quality_admin"],
+            current_user_stage_codes=[visible_stage.code],
+            can_view_plans=True,
+            can_view_executions=True,
+            can_view_records=True,
+        )
+        assert quality_detail is not None
+        self.assertEqual(quality_detail[1], 1)
+        self.assertEqual(quality_detail[2], 1)
+        self.assertEqual([plan.id for plan in quality_detail[6]], [visible_plan.id])
+        self.assertEqual(
+            [row.id for row in quality_detail[7]],
+            [visible_work_order.id],
+        )
+        self.assertEqual(quality_detail[8], [])
+        self.assertTrue(quality_detail[3])
+        self.assertTrue(quality_detail[4])
+        self.assertTrue(quality_detail[5])
+
+        production_detail = get_equipment_detail(
+            self.db,
+            equipment.id,
+            current_user_role_codes=["production_admin"],
+            current_user_stage_codes=[visible_stage.code],
+            can_view_plans=True,
+            can_view_executions=True,
+            can_view_records=True,
+        )
+        assert production_detail is not None
+        self.assertEqual(production_detail[1], 2)
+        self.assertEqual(production_detail[2], 2)
+        self.assertEqual(len(production_detail[6]), 2)
+        self.assertEqual(len(production_detail[7]), 2)
+        self.assertEqual(len(production_detail[8]), 1)
+        self.assertFalse(production_detail[3])
+        self.assertFalse(production_detail[4])
+        self.assertFalse(production_detail[5])
+
+    def test_auto_generate_persists_summary_and_plan_traces(self) -> None:
+        success_stage = self._ensure_stage("product_testing", "成品测试")
+        failing_stage = self._ensure_stage("laser_marking", "激光打标")
+        equipment = self._create_equipment("AUTO")
+        success_item = self._create_item("AUTO-SUCCESS", default_cycle_days=7)
+        existing_item = self._create_item("AUTO-EXISTING", default_cycle_days=7)
+        failing_item = self._create_item("AUTO-FAIL", default_cycle_days=7)
+        success_plan = self._create_plan(
+            equipment=equipment,
+            item=success_item,
+            stage_code=success_stage.code,
+            cycle_days=7,
+            start_date=date(2026, 3, 1),
+            next_due_date=date.today(),
+        )
+        existing_plan = self._create_plan(
+            equipment=equipment,
+            item=existing_item,
+            stage_code=success_stage.code,
+            cycle_days=7,
+            start_date=date(2026, 3, 1),
+            next_due_date=date.today(),
+        )
+        failing_plan = self._create_plan(
+            equipment=equipment,
+            item=failing_item,
+            stage_code=failing_stage.code,
+            cycle_days=7,
+            start_date=date(2026, 3, 1),
+            next_due_date=date.today(),
+        )
+        existing_work_order, _ = generate_work_order_for_plan(self.db, row=existing_plan)
+        self.work_order_ids.append(int(existing_work_order.id))
+        existing_plan.next_due_date = date.today()
+        self.db.commit()
+
+        original_generate = generate_work_order_for_plan
+
+        def _patched_generate_work_order_for_plan(db, *, row):
+            if row.id == failing_plan.id:
+                raise ValueError("模拟失败：计划工段缺失")
+            return original_generate(db, row=row)
+
+        with patch(
+            "tests.test_equipment_module_integration.generate_work_order_for_plan",
+            side_effect=_patched_generate_work_order_for_plan,
+        ), patch(
+            "app.services.equipment_service.generate_work_order_for_plan",
+            side_effect=_patched_generate_work_order_for_plan,
+        ):
+            total, created, existing, failed, new_orders, traces = (
+                generate_due_work_orders_for_today(self.db, include_new_orders=True)
+            )
+
+        self.work_order_ids.extend(
+            [
+                int(work_order.id)
+                for work_order in new_orders
+                if work_order.id not in self.work_order_ids
+            ]
+        )
+        self.assertEqual(total, 3)
+        self.assertEqual(created, 1)
+        self.assertEqual(existing, 1)
+        self.assertEqual(failed, 1)
+        self.assertEqual(len(new_orders), 1)
+        trace_by_plan = {trace.plan_id: trace for trace in traces}
+        self.assertEqual(trace_by_plan[success_plan.id].result, "created")
+        self.assertEqual(trace_by_plan[existing_plan.id].result, "skipped_existing")
+        self.assertEqual(trace_by_plan[failing_plan.id].result, "failed")
+        failure_message = trace_by_plan[failing_plan.id].message
+        assert failure_message is not None
+        self.assertIn("模拟失败", failure_message)
+
+        audit_rows = (
+            self.db.execute(
+                select(AuditLog).where(
+                    AuditLog.action_code.in_(
+                        [
+                            "equipment.maintenance.auto_generate.run",
+                            "equipment.maintenance.auto_generate.plan",
+                        ]
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        summary_rows = [
+            row
+            for row in audit_rows
+            if row.action_code == "equipment.maintenance.auto_generate.run"
+        ]
+        detail_rows = [
+            row
+            for row in audit_rows
+            if row.action_code == "equipment.maintenance.auto_generate.plan"
+            and row.target_id in {str(success_plan.id), str(existing_plan.id), str(failing_plan.id)}
+        ]
+        self.assertTrue(summary_rows)
+        self.assertEqual(len(detail_rows), 3)
+        latest_summary = max(summary_rows, key=lambda row: row.id)
+        assert latest_summary.after_data is not None
+        self.assertEqual(latest_summary.after_data["created_count"], 1)
+        self.assertEqual(latest_summary.after_data["existing_count"], 1)
+        self.assertEqual(latest_summary.after_data["failed_count"], 1)
 
     def test_runtime_parameter_filters_support_equipment_type_scope(self) -> None:
         equipment = self._create_equipment("PARAM")
@@ -460,6 +825,7 @@ class EquipmentModuleIntegrationTest(unittest.TestCase):
 
         work_order.result_summary = "完成"
         work_order.result_remark = "完成测试"
+        work_order.attachment_link = "https://example.com/work-order/equipment-detail.pdf"
         work_order.completed_at = datetime(2026, 3, 31, tzinfo=UTC)
         self.db.add(
             MaintenanceRecord(
@@ -472,13 +838,14 @@ class EquipmentModuleIntegrationTest(unittest.TestCase):
                 source_equipment_name=equipment.name,
                 source_item_id=item.id,
                 source_item_name=item.name,
+                source_execution_process_code=stage.code,
                 due_date=work_order.due_date,
                 executor_user_id=None,
                 executor_username="tester",
                 completed_at=datetime(2026, 3, 31, tzinfo=UTC),
                 result_summary="完成",
                 result_remark="完成测试",
-                attachment_link=None,
+                attachment_link="https://example.com/work-order/equipment-detail.pdf",
             )
         )
         self.db.commit()
@@ -509,12 +876,21 @@ class EquipmentModuleIntegrationTest(unittest.TestCase):
             work_order_detail.source_plan_summary,
             f"计划#{plan.id} / 周期30天 / 起始2026-03-01",
         )
+        self.assertEqual(work_order_detail.attachment_name, "equipment-detail.pdf")
         self.assertEqual(
             record_detail.source_plan_summary, work_order_detail.source_plan_summary
         )
+        self.assertEqual(record_detail.attachment_name, "equipment-detail.pdf")
         self.assertEqual(record_detail.source_equipment_name, equipment.name)
         self.assertEqual(record_detail.source_execution_process_code, stage.code)
         self.assertEqual(record_detail.source_equipment_code, equipment.code)
+
+        self.db.delete(work_order)
+        self.db.commit()
+        self.work_order_ids.remove(int(work_order.id))
+
+        standalone_detail = _build_record_detail(self.db, record)
+        self.assertEqual(standalone_detail.source_execution_process_code, stage.code)
 
 
 if __name__ == "__main__":

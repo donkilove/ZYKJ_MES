@@ -224,6 +224,9 @@ class _ProductPageState extends State<ProductPage>
           canCreateProduct: _hasPermission(
             ProductFeaturePermissionCodes.productManagementManage,
           ),
+          canExportProducts: _hasPermission(
+            ProductFeaturePermissionCodes.catalogExport,
+          ),
           canDeleteProduct: _hasPermission(
             ProductFeaturePermissionCodes.productManagementManage,
           ),
@@ -239,6 +242,12 @@ class _ProductPageState extends State<ProductPage>
           canRollbackVersion: _hasPermission(
             ProductFeaturePermissionCodes.productManagementManage,
           ),
+          canManageVersions: _hasPermission(
+            ProductFeaturePermissionCodes.versionsManage,
+          ),
+          canActivateVersions: _hasPermission(
+            ProductFeaturePermissionCodes.versionActivationManage,
+          ),
           canViewImpactAnalysis: _hasPermission(
             ProductFeaturePermissionCodes.versionAnalysisView,
           ),
@@ -247,6 +256,9 @@ class _ProductPageState extends State<ProductPage>
           ),
           canEditParameters: _hasPermission(
             ProductFeaturePermissionCodes.parametersEdit,
+          ),
+          canExportParameters: _hasPermission(
+            ProductFeaturePermissionCodes.parametersExport,
           ),
           onViewParameters: (product) {
             _dispatchJump(
@@ -283,6 +295,12 @@ class _ProductPageState extends State<ProductPage>
           canManageVersions: _hasPermission(
             ProductFeaturePermissionCodes.versionsManage,
           ),
+          canActivateVersions: _hasPermission(
+            ProductFeaturePermissionCodes.versionActivationManage,
+          ),
+          canExportVersionParameters: _hasPermission(
+            ProductFeaturePermissionCodes.parametersExport,
+          ),
           service: widget.productVersionService,
         );
       case productParameterManagementTabCode:
@@ -292,6 +310,9 @@ class _ProductPageState extends State<ProductPage>
           tabCode: productParameterManagementTabCode,
           jumpCommand: _jumpCommand,
           onJumpHandled: _handleJumpConsumed,
+          canExportParameters: _hasPermission(
+            ProductFeaturePermissionCodes.parametersExport,
+          ),
         );
       case productParameterQueryTabCode:
         return ProductParameterQueryPage(
@@ -300,6 +321,9 @@ class _ProductPageState extends State<ProductPage>
           tabCode: productParameterQueryTabCode,
           jumpCommand: _jumpCommand,
           onJumpHandled: _handleJumpConsumed,
+          canExportParameters: _hasPermission(
+            ProductFeaturePermissionCodes.parametersExport,
+          ),
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));

@@ -17,6 +17,10 @@ class _FakeUserService extends UserService {
   int? lastUpdateStageId;
   int createCalls = 0;
   int updateCalls = 0;
+  int enableCalls = 0;
+  int disableCalls = 0;
+  int resetPasswordCalls = 0;
+  int deleteCalls = 0;
 
   @override
   Future<RoleListResult> listRoles({
@@ -121,7 +125,6 @@ class _FakeUserService extends UserService {
   Future<void> updateUser({
     required int userId,
     String? account,
-    String? password,
     String? roleCode,
     String? remark,
     int? stageId,
@@ -129,6 +132,29 @@ class _FakeUserService extends UserService {
   }) async {
     updateCalls += 1;
     lastUpdateStageId = stageId;
+  }
+
+  @override
+  Future<void> enableUser({required int userId}) async {
+    enableCalls += 1;
+  }
+
+  @override
+  Future<void> disableUser({required int userId}) async {
+    disableCalls += 1;
+  }
+
+  @override
+  Future<void> resetUserPassword({
+    required int userId,
+    required String password,
+  }) async {
+    resetPasswordCalls += 1;
+  }
+
+  @override
+  Future<void> deleteUser({required int userId}) async {
+    deleteCalls += 1;
   }
 }
 
@@ -212,6 +238,12 @@ Future<void> _pumpPage(
   WidgetTester tester, {
   required _FakeUserService userService,
   required _FakeCraftService craftService,
+  bool canCreateUser = true,
+  bool canEditUser = true,
+  bool canToggleUser = true,
+  bool canResetPassword = true,
+  bool canDeleteUser = true,
+  bool canExport = true,
 }) async {
   tester.view.physicalSize = const Size(1920, 1200);
   tester.view.devicePixelRatio = 1.0;
@@ -226,7 +258,12 @@ Future<void> _pumpPage(
         body: UserManagementPage(
           session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
           onLogout: () {},
-          canWrite: true,
+          canCreateUser: canCreateUser,
+          canEditUser: canEditUser,
+          canToggleUser: canToggleUser,
+          canResetPassword: canResetPassword,
+          canDeleteUser: canDeleteUser,
+          canExport: canExport,
           userService: userService,
           craftService: craftService,
         ),
@@ -281,6 +318,51 @@ void main() {
     expect(userService.lastCreateStageId, 10);
   });
 
+  testWidgets('创建操作员允许选择无启用工序的工段', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.text('新建用户'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'op_zero');
+    await tester.enterText(find.byType(TextFormField).at(1), 'OpZero@123');
+
+    await tester.tap(find.text('操作员').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('装配二段').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
+
+    expect(userService.createCalls, 1);
+    expect(userService.lastCreateStageId, 11);
+  });
+
+  testWidgets('新建用户密码输入框使用掩码展示', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.text('新建用户'));
+    await tester.pumpAndSettle();
+
+    final editableTexts = tester.widgetList<EditableText>(
+      find.byType(EditableText),
+    );
+    expect(editableTexts.any((item) => item.obscureText), isTrue);
+  });
+
   testWidgets('编辑操作员时会携带 stageId 提交', (tester) async {
     final userService = _FakeUserService(
       initialUsers: [
@@ -315,6 +397,41 @@ void main() {
 
     expect(userService.updateCalls, 1);
     expect(userService.lastUpdateStageId, 10);
+  });
+
+  testWidgets('编辑操作员允许保留无启用工序的工段', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 6,
+          username: 'op_zero',
+          roleCode: 'operator',
+          roleName: '操作员',
+          stageId: 11,
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(userService.updateCalls, 1);
+    expect(userService.lastUpdateStageId, 11);
   });
 
   testWidgets('编辑用户弹窗打开时会刷新工段列表', (tester) async {
@@ -380,5 +497,96 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('操作员角色必须选择一个工段'), findsOneWidget);
+  });
+
+  testWidgets('编辑用户弹窗不再提供密码输入框', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 4,
+          username: 'edit_only',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('新密码（留空不修改）'), findsNothing);
+  });
+
+  testWidgets('用户操作菜单按细粒度权限展示并允许独立启停', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 5,
+          username: 'toggle_only',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      canCreateUser: false,
+      canEditUser: false,
+      canToggleUser: true,
+      canResetPassword: false,
+      canDeleteUser: false,
+    );
+
+    await tester.tap(find.text('新建用户'));
+    await tester.pumpAndSettle();
+    expect(find.text('新建用户'), findsOneWidget);
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('停用'), findsOneWidget);
+    expect(find.text('编辑'), findsNothing);
+    expect(find.text('重置密码'), findsNothing);
+    expect(find.text('删除'), findsNothing);
+
+    await tester.tap(find.text('停用'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.disableCalls, 1);
+    expect(userService.resetPasswordCalls, 0);
+  });
+
+  testWidgets('无导出权限时不显示导出按钮', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      canExport: false,
+    );
+
+    expect(find.text('导出'), findsNothing);
   });
 }

@@ -359,12 +359,20 @@ void main() {
           return TestResponse.json(
             200,
             body: {
-              'data': {
-                'module_code': 'production',
-                'module_codes': ['production', 'system'],
-                'module_name': 'Production',
-                'module_revision': 3,
-                'module_permission_code': 'module.production.access',
+                'data': {
+                  'module_code': 'production',
+                  'module_codes': [
+                    'user',
+                    'product',
+                    'craft',
+                    'production',
+                    'quality',
+                    'equipment',
+                    'message',
+                  ],
+                  'module_name': 'Production',
+                  'module_revision': 3,
+                  'module_permission_code': 'module.production.access',
                 'capability_packs': [
                   {
                     'capability_code': 'feature.production.order_query.execute',
@@ -586,6 +594,7 @@ void main() {
       expect(catalog.moduleCode, 'production');
       expect(catalog.moduleRevision, 3);
       expect(catalog.capabilityPacks, hasLength(1));
+      expect(catalog.moduleCodes, isNot(contains('system')));
       expect(roleConfig.moduleEnabled, isTrue);
       expect(preview.dryRun, isTrue);
       expect(preview.afterCapabilityCodes, [

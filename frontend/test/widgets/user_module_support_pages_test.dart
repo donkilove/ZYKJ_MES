@@ -15,6 +15,11 @@ final AppSession _session = AppSession(baseUrl: '', accessToken: 'token');
 class _FakeSupportUserService extends UserService {
   _FakeSupportUserService() : super(_session);
 
+  int listLoginLogsCalls = 0;
+  int listOnlineSessionsCalls = 0;
+  int enableRoleCalls = 0;
+  int disableRoleCalls = 0;
+
   @override
   Future<RoleListResult> listRoles({
     int page = 1,
@@ -72,6 +77,7 @@ class _FakeSupportUserService extends UserService {
     DateTime? startTime,
     DateTime? endTime,
   }) async {
+    listLoginLogsCalls += 1;
     return LoginLogListResult(
       total: 1,
       items: [
@@ -96,6 +102,7 @@ class _FakeSupportUserService extends UserService {
     String? keyword,
     String? statusFilter,
   }) async {
+    listOnlineSessionsCalls += 1;
     return OnlineSessionListResult(
       total: 1,
       items: [
@@ -118,6 +125,18 @@ class _FakeSupportUserService extends UserService {
       ],
     );
   }
+
+  @override
+  Future<RoleItem> enableRole({required int roleId}) async {
+    enableRoleCalls += 1;
+    return _role;
+  }
+
+  @override
+  Future<RoleItem> disableRole({required int roleId}) async {
+    disableRoleCalls += 1;
+    return _role;
+  }
 }
 
 class _FakeSupportAuthzService extends AuthzService {
@@ -129,7 +148,7 @@ class _FakeSupportAuthzService extends AuthzService {
   }) async {
     return CapabilityPackCatalogResult(
       moduleCode: 'user',
-      moduleCodes: const ['user'],
+      moduleCodes: const ['user', 'system', 'product'],
       moduleName: '用户管理',
       moduleRevision: 1,
       modulePermissionCode: 'module.user',
@@ -204,7 +223,10 @@ void main() {
       RoleManagementPage(
         session: _session,
         onLogout: () {},
-        canManage: true,
+        canCreateRole: true,
+        canEditRole: true,
+        canToggleRole: true,
+        canDeleteRole: true,
         userService: userService,
       ),
     );
@@ -213,7 +235,35 @@ void main() {
     expect(find.text('系统内置'), findsOneWidget);
   });
 
-  testWidgets('function permission config renders capability pack', (
+  testWidgets('role management page shows builtin role lifecycle action', (
+    tester,
+  ) async {
+    userService.disableRoleCalls = 0;
+    await _pumpPage(
+      tester,
+      RoleManagementPage(
+        session: _session,
+        onLogout: () {},
+        canCreateRole: false,
+        canEditRole: false,
+        canToggleRole: true,
+        canDeleteRole: false,
+        userService: userService,
+      ),
+    );
+
+    expect(find.text('停用'), findsOneWidget);
+    expect(find.text('编辑'), findsNothing);
+    expect(find.text('删除'), findsNothing);
+
+    await tester.tap(find.text('停用'));
+    await tester.pumpAndSettle();
+
+    expect(userService.disableRoleCalls, 1);
+    expect(userService.enableRoleCalls, 0);
+  });
+
+  testWidgets('function permission config filters system module option', (
     tester,
   ) async {
     await _pumpPage(
@@ -229,6 +279,13 @@ void main() {
     expect(find.text('品质管理员'), findsOneWidget);
     expect(find.textContaining('能力包'), findsOneWidget);
     expect(find.text('查看角色管理'), findsOneWidget);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('用户管理'), findsWidgets);
+    expect(find.text('产品管理'), findsOneWidget);
+    expect(find.text('系统管理'), findsNothing);
   });
 
   testWidgets('audit log page renders audit rows', (tester) async {
@@ -253,7 +310,9 @@ void main() {
       LoginSessionPage(
         session: _session,
         onLogout: () {},
-        canManage: true,
+        canViewLoginLogs: true,
+        canViewOnlineSessions: true,
+        canForceOffline: true,
         userService: userService,
       ),
     );
@@ -261,5 +320,27 @@ void main() {
     expect(find.text('登录日志'), findsOneWidget);
     expect(find.text('在线会话'), findsOneWidget);
     expect(find.text('tester'), findsOneWidget);
+  });
+
+  testWidgets('login session page按权限只加载登录日志标签', (tester) async {
+    userService.listLoginLogsCalls = 0;
+    userService.listOnlineSessionsCalls = 0;
+
+    await _pumpPage(
+      tester,
+      LoginSessionPage(
+        session: _session,
+        onLogout: () {},
+        canViewLoginLogs: true,
+        canViewOnlineSessions: false,
+        canForceOffline: false,
+        userService: userService,
+      ),
+    );
+
+    expect(find.text('登录日志'), findsOneWidget);
+    expect(find.text('在线会话'), findsNothing);
+    expect(userService.listLoginLogsCalls, 1);
+    expect(userService.listOnlineSessionsCalls, 0);
   });
 }

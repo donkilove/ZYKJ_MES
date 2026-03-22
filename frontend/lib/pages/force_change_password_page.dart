@@ -8,11 +8,11 @@ class ForceChangePasswordPage extends StatefulWidget {
   const ForceChangePasswordPage({
     super.key,
     required this.session,
-    required this.onPasswordChanged,
+    required this.onRequireRelogin,
   });
 
   final AppSession session;
-  final VoidCallback onPasswordChanged;
+  final VoidCallback onRequireRelogin;
 
   @override
   State<ForceChangePasswordPage> createState() =>
@@ -56,7 +56,7 @@ class _ForceChangePasswordPageState extends State<ForceChangePasswordPage> {
         confirmPassword: _confirmPasswordController.text,
       );
       if (!mounted) return;
-      widget.onPasswordChanged();
+      widget.onRequireRelogin();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -87,14 +87,16 @@ class _ForceChangePasswordPageState extends State<ForceChangePasswordPage> {
                   children: [
                     Text(
                       '首次登录，请修改密码',
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       '为保障账号安全，请立即修改初始密码后再使用系统。',
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -153,7 +155,9 @@ class _ForceChangePasswordPageState extends State<ForceChangePasswordPage> {
                                 height: 18,
                                 width: 18,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white),
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
                               )
                             : const Text('确认修改'),
                       ),

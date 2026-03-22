@@ -29,10 +29,11 @@ class _FakeProductionPipelineInstancesService extends ProductionService {
     receivedPipelineSubOrderNo = pipelineSubOrderNo;
     receivedSubOrderId = subOrderId;
     return PipelineInstanceListResult(
-      total: 1,
+      total: 2,
       items: [
         PipelineInstanceItem(
           id: 1,
+          pipelineLinkId: 'PL9-1-ABCDE12345',
           subOrderId: 21,
           orderId: 9,
           orderCode: 'PO-TRACE-001',
@@ -46,6 +47,23 @@ class _FakeProductionPipelineInstancesService extends ProductionService {
           invalidatedAt: null,
           createdAt: DateTime.utc(2026, 3, 1, 8),
           updatedAt: DateTime.utc(2026, 3, 1, 9),
+        ),
+        PipelineInstanceItem(
+          id: 2,
+          pipelineLinkId: 'PL9-1-ABCDE12345',
+          subOrderId: 22,
+          orderId: 9,
+          orderCode: 'PO-TRACE-001',
+          orderProcessId: 12,
+          processCode: 'WELD-01',
+          processName: '焊接',
+          pipelineSeq: 1,
+          pipelineSubOrderNo: 'P9-22-1-ABCD1234',
+          isActive: true,
+          invalidReason: null,
+          invalidatedAt: null,
+          createdAt: DateTime.utc(2026, 3, 1, 8, 10),
+          updatedAt: DateTime.utc(2026, 3, 1, 9, 10),
         ),
       ],
     );
@@ -112,9 +130,14 @@ void main() {
     expect(find.widgetWithText(TextField, '工序'), findsOneWidget);
     expect(find.widgetWithText(TextField, '子订单ID'), findsOneWidget);
     expect(find.widgetWithText(TextField, '实例编号'), findsOneWidget);
-    expect(find.text('21'), findsOneWidget);
-    expect(find.text('切割 (CUT-01)'), findsOneWidget);
-    expect(find.text('查看订单'), findsOneWidget);
+    expect(find.text('21'), findsWidgets);
+    expect(find.text('切割 (CUT-01)'), findsNWidgets(2));
+    expect(find.text('焊接 (WELD-01)'), findsNWidgets(2));
+    expect(find.text('链路追踪视图'), findsOneWidget);
+    expect(find.text('跨工序路径：切割 (CUT-01) -> 焊接 (WELD-01)'), findsOneWidget);
+    expect(find.text('链路 PL9-1-ABCDE12345'), findsNWidgets(3));
+    expect(find.text('查看订单'), findsNWidgets(4));
+    expect(find.text('查看事件日志'), findsNWidgets(4));
 
     await tester.enterText(find.widgetWithText(TextField, '子订单ID'), '21');
     await tester.enterText(find.widgetWithText(TextField, '工序'), '切割');
@@ -127,8 +150,20 @@ void main() {
     expect(service.receivedProcessKeyword, '切割');
     expect(service.receivedPipelineSubOrderNo, 'ABCD1234');
 
-    await tester.ensureVisible(find.text('查看订单'));
-    await tester.tap(find.text('查看订单'));
+    await tester.ensureVisible(find.text('查看事件日志').first);
+    await tester.tap(find.text('查看事件日志').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('订单详情 - PO-TRACE-001'), findsOneWidget);
+
+    Navigator.of(
+      tester.element(find.text('订单详情 - PO-TRACE-001')),
+    ).pop();
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('查看订单').first);
+    await tester.tap(find.text('查看订单').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 

@@ -18,6 +18,10 @@ class MessageItem {
     required this.isRead,
     required this.readAt,
     required this.deliveredAt,
+    required this.deliveryStatus,
+    required this.deliveryAttemptCount,
+    required this.lastPushAt,
+    required this.nextRetryAt,
   });
 
   final int id;
@@ -38,6 +42,10 @@ class MessageItem {
   final bool isRead;
   final DateTime? readAt;
   final DateTime? deliveredAt;
+  final String deliveryStatus;
+  final int deliveryAttemptCount;
+  final DateTime? lastPushAt;
+  final DateTime? nextRetryAt;
 
   factory MessageItem.fromJson(Map<String, dynamic> json) {
     return MessageItem(
@@ -64,6 +72,14 @@ class MessageItem {
           : null,
       deliveredAt: json['delivered_at'] != null
           ? DateTime.tryParse(json['delivered_at'] as String)
+          : null,
+      deliveryStatus: json['delivery_status'] as String? ?? 'pending',
+      deliveryAttemptCount: (json['delivery_attempt_count'] as int?) ?? 0,
+      lastPushAt: json['last_push_at'] != null
+          ? DateTime.tryParse(json['last_push_at'] as String)
+          : null,
+      nextRetryAt: json['next_retry_at'] != null
+          ? DateTime.tryParse(json['next_retry_at'] as String)
           : null,
     );
   }
@@ -136,6 +152,36 @@ class MessageItem {
         return sourceModule ?? '';
     }
   }
+
+  String get deliveryStatusName {
+    switch (deliveryStatus) {
+      case 'delivered':
+        return '已投递';
+      case 'failed':
+        return '投递失败';
+      default:
+        return '待投递';
+    }
+  }
+
+  String get statusName {
+    switch (status) {
+      case 'active':
+        return '有效';
+      case 'expired':
+        return '已过期';
+      case 'archived':
+        return '已归档';
+      case 'no_permission':
+        return '无权限';
+      case 'source_unavailable':
+        return '来源失效';
+      default:
+        return status;
+    }
+  }
+
+  String get readStatusName => isRead ? '已读' : '未读';
 }
 
 class MessageListResult {
@@ -236,6 +282,76 @@ class AnnouncementPublishResult {
   }
 }
 
+class MessageMaintenanceResult {
+  const MessageMaintenanceResult({
+    required this.pendingCompensated,
+    required this.failedRetried,
+    required this.sourceUnavailableUpdated,
+    required this.archivedMessages,
+  });
+
+  final int pendingCompensated;
+  final int failedRetried;
+  final int sourceUnavailableUpdated;
+  final int archivedMessages;
+
+  factory MessageMaintenanceResult.fromJson(Map<String, dynamic> json) {
+    return MessageMaintenanceResult(
+      pendingCompensated: (json['pending_compensated'] as int?) ?? 0,
+      failedRetried: (json['failed_retried'] as int?) ?? 0,
+      sourceUnavailableUpdated:
+          (json['source_unavailable_updated'] as int?) ?? 0,
+      archivedMessages: (json['archived_messages'] as int?) ?? 0,
+    );
+  }
+}
+
+class MessageDetailResult {
+  const MessageDetailResult({
+    required this.item,
+    required this.sourceId,
+    required this.failureReasonHint,
+  });
+
+  final MessageItem item;
+  final String? sourceId;
+  final String? failureReasonHint;
+
+  factory MessageDetailResult.fromJson(Map<String, dynamic> json) {
+    return MessageDetailResult(
+      item: MessageItem.fromJson(json),
+      sourceId: json['source_id'] as String?,
+      failureReasonHint: json['failure_reason_hint'] as String?,
+    );
+  }
+}
+
+class MessageJumpResult {
+  const MessageJumpResult({
+    required this.canJump,
+    required this.disabledReason,
+    required this.targetPageCode,
+    required this.targetTabCode,
+    required this.targetRoutePayloadJson,
+  });
+
+  final bool canJump;
+  final String? disabledReason;
+  final String? targetPageCode;
+  final String? targetTabCode;
+  final String? targetRoutePayloadJson;
+
+  factory MessageJumpResult.fromJson(Map<String, dynamic> json) {
+    return MessageJumpResult(
+      canJump: (json['can_jump'] as bool?) ?? false,
+      disabledReason: json['disabled_reason'] as String?,
+      targetPageCode: json['target_page_code'] as String?,
+      targetTabCode: json['target_tab_code'] as String?,
+      targetRoutePayloadJson: json['target_route_payload_json'] as String?,
+    );
+  }
+}
+
 class WsEvent {
   const WsEvent({
     required this.event,
@@ -243,6 +359,7 @@ class WsEvent {
     this.unreadCount,
     this.messageId,
     this.isRead,
+    this.occurredAt,
   });
 
   final String event;
@@ -250,6 +367,15 @@ class WsEvent {
   final int? unreadCount;
   final int? messageId;
   final bool? isRead;
+  final DateTime? occurredAt;
+
+  String get dedupeFingerprint => [
+    event,
+    '$userId',
+    '${messageId ?? ''}',
+    '${unreadCount ?? ''}',
+    '${isRead ?? ''}',
+  ].join('|');
 
   factory WsEvent.fromJson(Map<String, dynamic> json) {
     return WsEvent(
@@ -258,6 +384,9 @@ class WsEvent {
       unreadCount: json['unread_count'] as int?,
       messageId: json['message_id'] as int?,
       isRead: json['is_read'] as bool?,
+      occurredAt: json['occurred_at'] != null
+          ? DateTime.tryParse(json['occurred_at'] as String)
+          : null,
     );
   }
 }

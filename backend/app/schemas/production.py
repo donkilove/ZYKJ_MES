@@ -235,6 +235,8 @@ class MyOrderItem(BaseModel):
     operator_username: str | None = None
     work_view: str = "own"
     assist_authorization_id: int | None = None
+    pipeline_instance_id: int | None = None
+    pipeline_instance_no: str | None = None
     pipeline_mode_enabled: bool = False
     pipeline_start_allowed: bool = False
     pipeline_end_allowed: bool = False
@@ -256,6 +258,7 @@ class MyOrderContextResult(BaseModel):
 
 class FirstArticleRequest(BaseModel):
     order_process_id: int = Field(gt=0)
+    pipeline_instance_id: int | None = Field(default=None, gt=0)
     verification_code: str = Field(min_length=1, max_length=32)
     remark: str | None = Field(default=None, max_length=1024)
     effective_operator_user_id: int | None = Field(default=None, gt=0)
@@ -269,6 +272,7 @@ class ProductionDefectItem(BaseModel):
 
 class EndProductionRequest(BaseModel):
     order_process_id: int = Field(gt=0)
+    pipeline_instance_id: int | None = Field(default=None, gt=0)
     quantity: int = Field(gt=0)
     remark: str | None = Field(default=None, max_length=1024)
     effective_operator_user_id: int | None = Field(default=None, gt=0)
@@ -675,6 +679,7 @@ class OrdersExportRequest(BaseModel):
 
 class PipelineInstanceItem(BaseModel):
     id: int
+    pipeline_link_id: str | None = None
     sub_order_id: int
     order_id: int
     order_code: str
@@ -745,6 +750,12 @@ class RepairDefectPhenomenonItem(BaseModel):
     id: int
     phenomenon: str
     quantity: int
+    production_record_id: int | None = None
+    production_sub_order_id: int | None = None
+    production_record_type: str | None = None
+    production_record_quantity: int | None = None
+    production_record_created_at: datetime | None = None
+    production_record_operator_user_id: int | None = None
 
 
 class RepairCauseDetailItem(BaseModel):

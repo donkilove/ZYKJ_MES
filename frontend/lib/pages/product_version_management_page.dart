@@ -34,6 +34,8 @@ class ProductVersionManagementPage extends StatefulWidget {
     this.onJumpHandled,
     this.onEditVersionParameters,
     required this.canManageVersions,
+    this.canActivateVersions = false,
+    this.canExportVersionParameters = false,
     this.service,
   });
 
@@ -45,6 +47,8 @@ class ProductVersionManagementPage extends StatefulWidget {
   final void Function(ProductItem product, ProductVersionItem version)?
   onEditVersionParameters;
   final bool canManageVersions;
+  final bool canActivateVersions;
+  final bool canExportVersionParameters;
   final ProductService? service;
 
   @override
@@ -67,6 +71,7 @@ class _ProductVersionManagementPageState
   ProductItem? _selectedProduct;
   List<ProductVersionItem> _versions = [];
   bool _loadingVersions = false;
+  int? _selectedVersionNumber;
 
   @override
   void initState() {
@@ -131,15 +136,32 @@ class _ProductVersionManagementPageState
       _selectedProduct = product;
       _loadingVersions = true;
       _versions = [];
+      _selectedVersionNumber = null;
     });
     try {
       final result = await _service.listProductVersions(productId: product.id);
-      setState(() => _versions = result.items);
+      setState(() {
+        _versions = result.items;
+        _selectedVersionNumber = result.items.isEmpty ? null : result.items.first.version;
+      });
     } catch (e) {
       if (mounted) _showError('加载版本列表失败: $e');
     } finally {
       if (mounted) setState(() => _loadingVersions = false);
     }
+  }
+
+  ProductVersionItem? get _selectedVersion {
+    final selectedVersionNumber = _selectedVersionNumber;
+    if (selectedVersionNumber == null) {
+      return null;
+    }
+    for (final item in _versions) {
+      if (item.version == selectedVersionNumber) {
+        return item;
+      }
+    }
+    return _versions.isEmpty ? null : _versions.first;
   }
 
   void _showError(String msg) {
@@ -215,14 +237,8 @@ class _ProductVersionManagementPageState
         confirmed: true,
         expectedEffectiveVersion: product.effectiveVersion,
       );
-      final refreshedProduct = await _reloadSelectedProductAndVersions(
-        product.id,
-      );
-      _showSuccess(
-        refreshedProduct != null && refreshedProduct.lifecycleStatus == 'active'
-            ? '版本 ${rev.versionLabel} 已生效，产品已恢复启用'
-            : '版本 ${rev.versionLabel} 已生效',
-      );
+      await _reloadSelectedProductAndVersions(product.id);
+      _showSuccess('版本 ${rev.versionLabel} 已生效');
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (e) {
@@ -569,6 +585,7 @@ class _ProductVersionManagementPageState
     }
 
     final hasDraft = _versions.any((v) => v.lifecycleStatus == 'draft');
+    final selectedVersion = _selectedVersion;
     ProductVersionItem? effectiveRevision;
     for (final version in _versions) {
       if (version.lifecycleStatus == 'effective') {
@@ -591,6 +608,16 @@ class _ProductVersionManagementPageState
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (selectedVersion != null)
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    '当前选中：${selectedVersion.versionLabel} / ${_statusLabels[selectedVersion.lifecycleStatus] ?? selectedVersion.lifecycleStatus}',
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              const SizedBox(width: 8),
               if (widget.canManageVersions) ...[
                 OutlinedButton.icon(
                   icon: const Icon(Icons.add, size: 16),
@@ -598,12 +625,48 @@ class _ProductVersionManagementPageState
                   onPressed: hasDraft ? null : _createVersion,
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  onPressed: () => _loadVersions(product),
-                  tooltip: '刷新',
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('复制版本'),
+                  onPressed: selectedVersion == null
+                      ? null
+                      : () => _copyVersion(selectedVersion),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.edit_note, size: 16),
+                  label: const Text('编辑版本说明'),
+                  onPressed: selectedVersion == null
+                      ? null
+                      : () => _editVersionNote(selectedVersion),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (widget.canExportVersionParameters)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text('导出参数'),
+                  onPressed: selectedVersion == null
+                      ? null
+                      : () => _exportVersionParams(selectedVersion),
+                ),
+              if (widget.canActivateVersions) ...[
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  icon: const Icon(Icons.task_alt, size: 16),
+                  label: const Text('立即生效'),
+                  onPressed: selectedVersion == null ||
+                          selectedVersion.lifecycleStatus != 'draft'
+                      ? null
+                      : () => _activateVersion(selectedVersion),
                 ),
               ],
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () => _loadVersions(product),
+                tooltip: '刷新',
+              ),
             ],
           ),
         ),
@@ -702,6 +765,12 @@ class _ProductVersionManagementPageState
         : '-';
 
     return DataRow(
+      selected: _selectedVersionNumber == rev.version,
+      onSelectChanged: (_) {
+        setState(() {
+          _selectedVersionNumber = rev.version;
+        });
+      },
       cells: [
         DataCell(
           Row(
@@ -742,33 +811,44 @@ class _ProductVersionManagementPageState
         DataCell(Text(_formatDate(rev.createdAt))),
         DataCell(Text(effectiveTimeText)),
         DataCell(
-          widget.canManageVersions
+          (widget.canManageVersions ||
+                  widget.canActivateVersions ||
+                  widget.canExportVersionParameters)
               ? PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, size: 18),
                   itemBuilder: (ctx) => [
                     const PopupMenuItem(value: 'detail', child: Text('查看详情')),
-                    if (isDraft)
+                    if (widget.canActivateVersions && isDraft)
                       const PopupMenuItem(
                         value: 'activate',
                         child: Text('立即生效'),
                       ),
-                    if (isDraft ||
+                    if (widget.canManageVersions &&
+                        (isDraft ||
                         isEffective ||
                         isObsolete ||
-                        rev.lifecycleStatus == 'disabled')
+                        rev.lifecycleStatus == 'disabled'))
                       const PopupMenuItem(value: 'copy', child: Text('复制版本')),
-                    const PopupMenuItem(value: 'editNote', child: Text('编辑备注')),
+                    if (widget.canManageVersions)
+                      const PopupMenuItem(
+                        value: 'editNote',
+                        child: Text('编辑版本说明'),
+                      ),
                     PopupMenuItem(
                       value: 'editParams',
                       child: Text(isDraft ? '维护参数' : '查看参数'),
                     ),
-                    const PopupMenuItem(value: 'export', child: Text('导出版本参数')),
-                    if (isEffective || isObsolete)
+                    if (widget.canExportVersionParameters)
+                      const PopupMenuItem(
+                        value: 'export',
+                        child: Text('导出版本参数'),
+                      ),
+                    if (widget.canManageVersions && (isEffective || isObsolete))
                       const PopupMenuItem(
                         value: 'disable',
                         child: Text('停用版本'),
                       ),
-                    if (isDraft)
+                    if (widget.canManageVersions && isDraft)
                       const PopupMenuItem(
                         value: 'delete',
                         child: Text(

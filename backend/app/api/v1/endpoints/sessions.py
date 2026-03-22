@@ -1,11 +1,13 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permission
 from app.core.rbac import ROLE_SYSTEM_ADMIN
 from app.db.session import get_db
+from app.models.user_session import UserSession
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.session import (
@@ -18,6 +20,7 @@ from app.schemas.session import (
     OnlineSessionListResult,
 )
 from app.services.audit_service import write_audit_log
+from app.services.message_service import create_message_for_users
 from app.services.session_service import delete_expired_login_logs, force_offline_sessions, list_login_logs, list_online_sessions
 
 
@@ -114,6 +117,9 @@ def force_offline(
     role_codes = {role.code for role in current_user.roles}
     if ROLE_SYSTEM_ADMIN not in role_codes:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅系统管理员可执行强制下线")
+    target_session = db.execute(
+        select(UserSession).where(UserSession.session_token_id == payload.session_token_id)
+    ).scalar_one_or_none()
     affected = force_offline_sessions(db, session_token_ids=[payload.session_token_id])
     if affected < 1:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Online session not found")
@@ -128,6 +134,27 @@ def force_offline(
         terminal_info=request.headers.get("user-agent"),
     )
     db.commit()
+    if target_session is not None:
+        create_message_for_users(
+            db,
+            message_type="warning",
+            priority="important",
+            title="当前会话已被强制下线",
+            summary="检测到管理员主动终止您的在线会话，请重新登录后继续操作。",
+            content=(
+                f"您的会话已被管理员 {current_user.username} 强制下线。"
+                "如非本人预期操作，请联系系统管理员核实。"
+            ),
+            source_module="user",
+            source_type="force_offline",
+            source_id=payload.session_token_id,
+            source_code=payload.session_token_id,
+            target_page_code="user",
+            target_tab_code="account_settings",
+            recipient_user_ids=[target_session.user_id],
+            dedupe_key=f"force_offline_{payload.session_token_id}",
+            created_by_user_id=current_user.id,
+        )
     return success_response(ForceOfflineResult(affected=affected))
 
 
@@ -141,6 +168,9 @@ def batch_force_offline(
     role_codes = {role.code for role in current_user.roles}
     if ROLE_SYSTEM_ADMIN not in role_codes:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅系统管理员可执行批量强制下线")
+    target_sessions = db.execute(
+        select(UserSession).where(UserSession.session_token_id.in_(payload.session_token_ids))
+    ).scalars().all()
     affected = force_offline_sessions(db, session_token_ids=payload.session_token_ids)
     write_audit_log(
         db,
@@ -153,4 +183,25 @@ def batch_force_offline(
         terminal_info=request.headers.get("user-agent"),
     )
     db.commit()
+    for session_row in target_sessions:
+        create_message_for_users(
+            db,
+            message_type="warning",
+            priority="important",
+            title="当前会话已被强制下线",
+            summary="检测到管理员主动终止您的在线会话，请重新登录后继续操作。",
+            content=(
+                f"您的会话已被管理员 {current_user.username} 强制下线。"
+                "如非本人预期操作，请联系系统管理员核实。"
+            ),
+            source_module="user",
+            source_type="force_offline",
+            source_id=session_row.session_token_id,
+            source_code=session_row.session_token_id,
+            target_page_code="user",
+            target_tab_code="account_settings",
+            recipient_user_ids=[session_row.user_id],
+            dedupe_key=f"force_offline_{session_row.session_token_id}",
+            created_by_user_id=current_user.id,
+        )
     return success_response(ForceOfflineResult(affected=affected))

@@ -3,15 +3,17 @@ from __future__ import annotations
 import base64
 import csv
 import io
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.rbac import (
     ROLE_PRODUCTION_ADMIN,
-    ROLE_QUALITY_ADMIN,
     ROLE_SYSTEM_ADMIN,
 )
 from app.models.equipment import Equipment
@@ -21,6 +23,7 @@ from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.role import Role
 from app.models.user import User
+from app.services.audit_service import write_audit_log
 from app.services.craft_service import is_valid_stage_code, list_enabled_stage_options
 
 WORK_ORDER_STATUS_PENDING = "pending"
@@ -46,13 +49,27 @@ MAINTENANCE_ITEM_DEFAULT_DURATION_MINUTES = 60
 WORK_ORDER_VIEW_ALL_ROLE_CODES = {
     ROLE_SYSTEM_ADMIN,
     ROLE_PRODUCTION_ADMIN,
-    ROLE_QUALITY_ADMIN,
 }
 WORK_ORDER_EXECUTE_ALL_ROLE_CODES = {
     ROLE_SYSTEM_ADMIN,
     ROLE_PRODUCTION_ADMIN,
 }
 EQUIPMENT_DETAIL_RECENT_RECORD_LIMIT = 5
+AUTO_GENERATE_SUMMARY_ACTION_CODE = "equipment.maintenance.auto_generate.run"
+AUTO_GENERATE_DETAIL_ACTION_CODE = "equipment.maintenance.auto_generate.plan"
+
+
+@dataclass(slots=True)
+class MaintenanceAutoGenerateTrace:
+    plan_id: int
+    equipment_id: int | None
+    item_id: int | None
+    execution_process_code: str
+    due_date: date | None
+    result: str
+    work_order_id: int | None = None
+    next_due_date: date | None = None
+    message: str | None = None
 
 
 def _normalize_name(name: str, *, field_name: str) -> str:
@@ -66,6 +83,24 @@ def _normalize_optional_text(value: str | None) -> str:
     if value is None:
         return ""
     return value.strip()
+
+
+def derive_attachment_name(value: str | None) -> str | None:
+    normalized = _normalize_optional_text(value)
+    if not normalized:
+        return None
+
+    if normalized.startswith(("http://", "https://", "file://")):
+        parsed = urlparse(normalized)
+        path = unquote(parsed.path or "").rstrip("/")
+        candidate = PurePosixPath(path).name
+    elif "\\" in normalized:
+        candidate = PureWindowsPath(normalized.rstrip("\\/")).name
+    else:
+        candidate = PurePosixPath(normalized.rstrip("/")).name
+
+    cleaned = candidate.strip()
+    return cleaned or None
 
 
 def _normalize_possible_mojibake(value: str) -> str:
@@ -189,16 +224,43 @@ def ensure_maintenance_record_view_permission(
     if not stage_code_set:
         raise ValueError("Access denied")
 
-    work_order_stage_code = db.execute(
-        select(MaintenanceWorkOrder.source_execution_process_code).where(
-            MaintenanceWorkOrder.id == row.work_order_id
-        )
-    ).scalar_one_or_none()
-    normalized_stage_code = (work_order_stage_code or "").strip()
+    normalized_stage_code = (row.source_execution_process_code or "").strip()
+    if not normalized_stage_code:
+        work_order_stage_code = db.execute(
+            select(MaintenanceWorkOrder.source_execution_process_code).where(
+                MaintenanceWorkOrder.id == row.work_order_id
+            )
+        ).scalar_one_or_none()
+        normalized_stage_code = (work_order_stage_code or "").strip()
     if not normalized_stage_code:
         raise ValueError("Work order process is missing")
     if normalized_stage_code not in stage_code_set:
         raise ValueError("Access denied")
+
+
+def _build_record_stage_scope_filter(stage_code_set: set[str]):
+    return or_(
+        MaintenanceRecord.source_execution_process_code.in_(stage_code_set),
+        and_(
+            or_(
+                MaintenanceRecord.source_execution_process_code.is_(None),
+                MaintenanceRecord.source_execution_process_code == "",
+            ),
+            MaintenanceRecord.work_order_id.in_(
+                select(MaintenanceWorkOrder.id).where(
+                    MaintenanceWorkOrder.source_execution_process_code.in_(stage_code_set)
+                )
+            ),
+        ),
+    )
+
+
+def _is_scope_limited(
+    *, can_view_section: bool, current_user_role_codes: set[str]
+) -> bool:
+    if not can_view_section:
+        return True
+    return not _can_view_all_work_orders(current_user_role_codes)
 
 
 def get_equipment_by_id(db: Session, equipment_id: int) -> Equipment | None:
@@ -384,11 +446,20 @@ def list_active_owners(db: Session) -> list[User]:
 def get_equipment_detail(
     db: Session,
     equipment_id: int,
+    *,
+    current_user_role_codes: list[str] | set[str],
+    current_user_stage_codes: list[str] | set[str],
+    can_view_plans: bool,
+    can_view_executions: bool,
+    can_view_records: bool,
 ) -> (
     tuple[
         Equipment,
         int,
         int,
+        bool,
+        bool,
+        bool,
         list[MaintenancePlan],
         list[MaintenanceWorkOrder],
         list[MaintenanceRecord],
@@ -399,80 +470,120 @@ def get_equipment_detail(
     if row is None:
         return None
 
-    active_plan_count = db.execute(
-        select(func.count())
-        .select_from(MaintenancePlan)
-        .where(
+    role_code_set = _normalize_code_set(current_user_role_codes)
+    stage_code_set = _normalize_code_set(current_user_stage_codes)
+    can_view_all_scope = _can_view_all_work_orders(role_code_set)
+
+    plans_scope_limited = _is_scope_limited(
+        can_view_section=can_view_plans,
+        current_user_role_codes=role_code_set,
+    )
+    executions_scope_limited = _is_scope_limited(
+        can_view_section=can_view_executions,
+        current_user_role_codes=role_code_set,
+    )
+    records_scope_limited = _is_scope_limited(
+        can_view_section=can_view_records,
+        current_user_role_codes=role_code_set,
+    )
+
+    active_plan_count = 0
+    active_plans: list[MaintenancePlan] = []
+    if can_view_plans:
+        plan_stmt = select(MaintenancePlan).where(
             MaintenancePlan.equipment_id == equipment_id,
             MaintenancePlan.is_enabled.is_(True),
         )
-    ).scalar_one()
+        if not can_view_all_scope:
+            if not stage_code_set:
+                plan_stmt = None
+            else:
+                plan_stmt = plan_stmt.where(
+                    MaintenancePlan.execution_process_code.in_(stage_code_set)
+                )
+        if plan_stmt is not None:
+            active_plan_count = db.execute(
+                select(func.count()).select_from(plan_stmt.subquery())
+            ).scalar_one()
+            active_plans = (
+                db.execute(
+                    plan_stmt.options(
+                        selectinload(MaintenancePlan.equipment),
+                        selectinload(MaintenancePlan.item),
+                        selectinload(MaintenancePlan.default_executor),
+                    ).order_by(
+                        MaintenancePlan.next_due_date.asc(),
+                        MaintenancePlan.id.asc(),
+                    )
+                )
+                .scalars()
+                .all()
+            )
 
-    pending_work_order_count = db.execute(
-        select(func.count())
-        .select_from(MaintenanceWorkOrder)
-        .where(
+    pending_work_order_count = 0
+    pending_work_orders: list[MaintenanceWorkOrder] = []
+    if can_view_executions:
+        work_order_stmt = select(MaintenanceWorkOrder).where(
             MaintenanceWorkOrder.source_equipment_id == equipment_id,
             MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
         )
-    ).scalar_one()
+        if not can_view_all_scope:
+            if not stage_code_set:
+                work_order_stmt = None
+            else:
+                work_order_stmt = work_order_stmt.where(
+                    MaintenanceWorkOrder.source_execution_process_code.in_(stage_code_set)
+                )
+        if work_order_stmt is not None:
+            pending_work_order_count = db.execute(
+                select(func.count()).select_from(work_order_stmt.subquery())
+            ).scalar_one()
+            pending_work_orders = (
+                db.execute(
+                    work_order_stmt.options(
+                        selectinload(MaintenanceWorkOrder.equipment),
+                        selectinload(MaintenanceWorkOrder.item),
+                        selectinload(MaintenanceWorkOrder.executor),
+                    ).order_by(
+                        MaintenanceWorkOrder.due_date.asc(),
+                        MaintenanceWorkOrder.id.asc(),
+                    )
+                )
+                .scalars()
+                .all()
+            )
 
-    active_plans = (
-        db.execute(
-            select(MaintenancePlan)
-            .where(
-                MaintenancePlan.equipment_id == equipment_id,
-                MaintenancePlan.is_enabled.is_(True),
-            )
-            .options(
-                selectinload(MaintenancePlan.equipment),
-                selectinload(MaintenancePlan.item),
-                selectinload(MaintenancePlan.default_executor),
-            )
-            .order_by(MaintenancePlan.next_due_date.asc(), MaintenancePlan.id.asc())
+    recent_records: list[MaintenanceRecord] = []
+    if can_view_records:
+        record_stmt = select(MaintenanceRecord).where(
+            MaintenanceRecord.source_equipment_id == equipment_id
         )
-        .scalars()
-        .all()
-    )
-
-    pending_work_orders = (
-        db.execute(
-            select(MaintenanceWorkOrder)
-            .where(
-                MaintenanceWorkOrder.source_equipment_id == equipment_id,
-                MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
+        if not can_view_all_scope:
+            if not stage_code_set:
+                record_stmt = None
+            else:
+                record_stmt = record_stmt.where(
+                    _build_record_stage_scope_filter(stage_code_set)
+                )
+        if record_stmt is not None:
+            recent_records = (
+                db.execute(
+                    record_stmt.order_by(
+                        MaintenanceRecord.completed_at.desc(),
+                        MaintenanceRecord.id.desc(),
+                    ).limit(EQUIPMENT_DETAIL_RECENT_RECORD_LIMIT)
+                )
+                .scalars()
+                .all()
             )
-            .options(
-                selectinload(MaintenanceWorkOrder.equipment),
-                selectinload(MaintenanceWorkOrder.item),
-                selectinload(MaintenanceWorkOrder.executor),
-            )
-            .order_by(
-                MaintenanceWorkOrder.due_date.asc(), MaintenanceWorkOrder.id.asc()
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-    recent_records = (
-        db.execute(
-            select(MaintenanceRecord)
-            .where(MaintenanceRecord.source_equipment_id == equipment_id)
-            .order_by(
-                MaintenanceRecord.completed_at.desc(),
-                MaintenanceRecord.id.desc(),
-            )
-            .limit(EQUIPMENT_DETAIL_RECENT_RECORD_LIMIT)
-        )
-        .scalars()
-        .all()
-    )
 
     return (
         row,
         active_plan_count,
         pending_work_order_count,
+        plans_scope_limited,
+        executions_scope_limited,
+        records_scope_limited,
         active_plans,
         pending_work_orders,
         recent_records,
@@ -1008,7 +1119,14 @@ def generate_due_work_orders_for_today(
     db: Session,
     *,
     include_new_orders: bool = False,
-) -> tuple[int, int, int] | tuple[int, int, int, list[MaintenanceWorkOrder]]:
+) -> tuple[
+    int,
+    int,
+    int,
+    int,
+    list[MaintenanceWorkOrder],
+    list[MaintenanceAutoGenerateTrace],
+]:
     refresh_overdue_work_orders(db)
     today = date.today()
 
@@ -1031,17 +1149,79 @@ def generate_due_work_orders_for_today(
 
     created_count = 0
     existing_count = 0
+    failed_count = 0
     newly_created: list[MaintenanceWorkOrder] = []
+    traces: list[MaintenanceAutoGenerateTrace] = []
     for plan in plans:
-        work_order, created = generate_work_order_for_plan(db, row=plan)
-        if created:
-            created_count += 1
-            newly_created.append(work_order)
-        else:
-            existing_count += 1
+        trace = MaintenanceAutoGenerateTrace(
+            plan_id=plan.id,
+            equipment_id=plan.equipment_id,
+            item_id=plan.item_id,
+            execution_process_code=(plan.execution_process_code or "").strip(),
+            due_date=plan.next_due_date,
+            result="pending",
+        )
+        try:
+            work_order, created = generate_work_order_for_plan(db, row=plan)
+            trace.work_order_id = work_order.id
+            trace.next_due_date = plan.next_due_date
+            if created:
+                created_count += 1
+                newly_created.append(work_order)
+                trace.result = "created"
+                trace.message = "已创建新的保养工单"
+            else:
+                existing_count += 1
+                trace.result = "skipped_existing"
+                trace.message = "存在未完成或同到期工单，已跳过创建"
+        except Exception as error:
+            db.rollback()
+            failed_count += 1
+            trace.result = "failed"
+            trace.message = str(error)
+        traces.append(trace)
+
+    for trace in traces:
+        write_audit_log(
+            db,
+            action_code=AUTO_GENERATE_DETAIL_ACTION_CODE,
+            action_name="保养工单自动生成计划处理",
+            target_type="maintenance_plan",
+            target_id=str(trace.plan_id),
+            result="failed" if trace.result == "failed" else "success",
+            after_data={
+                "plan_id": trace.plan_id,
+                "equipment_id": trace.equipment_id,
+                "item_id": trace.item_id,
+                "execution_process_code": trace.execution_process_code,
+                "due_date": trace.due_date.isoformat() if trace.due_date else None,
+                "result": trace.result,
+                "work_order_id": trace.work_order_id,
+                "next_due_date": (
+                    trace.next_due_date.isoformat() if trace.next_due_date else None
+                ),
+            },
+            remark=trace.message,
+        )
+    write_audit_log(
+        db,
+        action_code=AUTO_GENERATE_SUMMARY_ACTION_CODE,
+        action_name="保养工单自动生成批次汇总",
+        target_type="maintenance_auto_generate_batch",
+        result="failed" if failed_count > 0 else "success",
+        after_data={
+            "scan_date": today.isoformat(),
+            "plan_count": len(plans),
+            "created_count": created_count,
+            "existing_count": existing_count,
+            "failed_count": failed_count,
+        },
+        remark=f"本次共处理 {len(plans)} 条计划。",
+    )
+    db.commit()
     if include_new_orders:
-        return len(plans), created_count, existing_count, newly_created
-    return len(plans), created_count, existing_count
+        return len(plans), created_count, existing_count, failed_count, newly_created, traces
+    return len(plans), created_count, existing_count, failed_count, [], traces
 
 
 def list_work_orders(
@@ -1338,6 +1518,7 @@ def complete_work_order(
                 source_equipment_name=row.source_equipment_name,
                 source_item_id=row.source_item_id,
                 source_item_name=row.source_item_name,
+                source_execution_process_code=row.source_execution_process_code,
                 due_date=row.due_date,
                 executor_user_id=row.executor_user_id,
                 executor_username=executor_username,

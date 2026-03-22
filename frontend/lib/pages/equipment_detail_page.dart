@@ -119,18 +119,26 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
       messages.add(
         '当前有${detail.pendingWorkOrderCount}个待执行工单未收口，调整设备前请先核对到期任务与现场状态。',
       );
+    } else if (detail.pendingWorkOrdersScopeLimited) {
+      messages.add('待执行工单仅展示当前权限范围内数据，不能据此判断设备已无执行阻塞。');
     } else {
       messages.add('当前没有待执行工单，设备变更前的执行阻塞风险较低。');
     }
 
     if (detail.activePlanCount > 0) {
       messages.add('设备仍挂接${detail.activePlanCount}个活跃保养计划，停机或迁移前需同步确认后续排程。');
+    } else if (detail.activePlansScopeLimited) {
+      messages.add('活跃计划仅展示当前权限范围内数据，如需完整排程请联系具备相应权限的人员复核。');
     } else {
       messages.add('当前没有活跃保养计划，需确认是否存在保养提醒缺口。');
     }
 
     if (detail.recentRecords.isEmpty) {
-      messages.add('最近暂无保养记录，建议确认是否长期未执行点检或保养。');
+      messages.add(
+        detail.recentRecordsScopeLimited
+            ? '最近记录仅展示当前权限范围内数据，无法直接据此判断是否长期未执行保养。'
+            : '最近暂无保养记录，建议确认是否长期未执行点检或保养。',
+      );
     } else {
       final latestRecord = detail.recentRecords.first;
       messages.add(
@@ -182,6 +190,21 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
               ],
             ),
             const SizedBox(height: 12),
+            if (detail.activePlansScopeLimited ||
+                detail.pendingWorkOrdersScopeLimited ||
+                detail.recentRecordsScopeLimited)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEDD5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  '当前详情仅展示你在计划、执行与记录范围内可见的数据，不能替代全量排程复核。',
+                ),
+              ),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -281,7 +304,11 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
                   ),
                   const SizedBox(height: 8),
                   if (detail.activePlans.isEmpty)
-                    const Text('暂无启用保养计划')
+                    Text(
+                      detail.activePlansScopeLimited
+                          ? '当前权限范围内暂无可见启用保养计划'
+                          : '暂无启用保养计划',
+                    )
                   else
                     ...detail.activePlans.map(
                       (plan) => ListTile(
@@ -302,7 +329,11 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
                   ),
                   const SizedBox(height: 8),
                   if (detail.pendingWorkOrders.isEmpty)
-                    const Text('暂无未完成工单')
+                    Text(
+                      detail.pendingWorkOrdersScopeLimited
+                          ? '当前权限范围内暂无可见未完成工单'
+                          : '暂无未完成工单',
+                    )
                   else
                     ...detail.pendingWorkOrders.map(
                       (order) => ListTile(
@@ -335,7 +366,11 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
                   ),
                   const SizedBox(height: 8),
                   if (detail.recentRecords.isEmpty)
-                    const Text('暂无保养记录')
+                    Text(
+                      detail.recentRecordsScopeLimited
+                          ? '当前权限范围内暂无可见保养记录'
+                          : '暂无保养记录',
+                    )
                   else
                     ...detail.recentRecords.map(
                       (record) => ListTile(

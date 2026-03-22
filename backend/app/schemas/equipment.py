@@ -145,6 +145,7 @@ class MaintenanceWorkOrderItem(BaseModel):
     result_summary: str | None
     result_remark: str | None
     attachment_link: str | None
+    attachment_name: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -166,6 +167,7 @@ class MaintenanceRecordItem(BaseModel):
     result_summary: str
     result_remark: str | None
     attachment_link: str | None
+    attachment_name: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -188,6 +190,9 @@ class EquipmentDetailResult(BaseModel):
     updated_at: datetime
     active_plan_count: int
     pending_work_order_count: int
+    active_plans_scope_limited: bool = False
+    pending_work_orders_scope_limited: bool = False
+    recent_records_scope_limited: bool = False
     active_plans: list[MaintenancePlanItem]
     pending_work_orders: list[MaintenanceWorkOrderItem]
     recent_records: list[MaintenanceRecordItem]

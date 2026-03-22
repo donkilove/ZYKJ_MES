@@ -23,6 +23,7 @@ class ProductionOrderDetailPage extends StatefulWidget {
     required this.onConfigurePipelineOrder,
     required this.onDisablePipelineOrder,
     this.readOnly = false,
+    this.initialTabIndex = 0,
     this.service,
   });
 
@@ -40,6 +41,7 @@ class ProductionOrderDetailPage extends StatefulWidget {
   onConfigurePipelineOrder;
   final Future<bool> Function(ProductionOrderItem order) onDisablePipelineOrder;
   final bool readOnly;
+  final int initialTabIndex;
   final ProductionService? service;
 
   @override
@@ -261,6 +263,9 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
 
     return DefaultTabController(
       length: 4,
+      initialIndex: widget.initialTabIndex < 0 || widget.initialTabIndex > 3
+          ? 0
+          : widget.initialTabIndex,
       child: Column(
         children: [
           const TabBar(

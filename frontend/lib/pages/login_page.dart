@@ -14,10 +14,12 @@ class LoginPage extends StatefulWidget {
     super.key,
     required this.onLoginSuccess,
     this.defaultBaseUrl = _defaultApiBaseUrl,
+    this.initialMessage,
   });
 
   final ValueChanged<AppSession> onLoginSuccess;
   final String defaultBaseUrl;
+  final String? initialMessage;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -39,6 +41,7 @@ class _LoginPageState extends State<LoginPage> {
   void initState() {
     super.initState();
     _baseUrlController = TextEditingController(text: widget.defaultBaseUrl);
+    _message = widget.initialMessage ?? '';
     _loadAccounts();
   }
 
@@ -114,11 +117,13 @@ class _LoginPageState extends State<LoginPage> {
         username: account,
         password: _passwordController.text,
       );
-      widget.onLoginSuccess(AppSession(
-        baseUrl: baseUrl,
-        accessToken: result.token,
-        mustChangePassword: result.mustChangePassword,
-      ));
+      widget.onLoginSuccess(
+        AppSession(
+          baseUrl: baseUrl,
+          accessToken: result.token,
+          mustChangePassword: result.mustChangePassword,
+        ),
+      );
     } catch (error) {
       if (!mounted) {
         return;

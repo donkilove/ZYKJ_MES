@@ -30,6 +30,7 @@ class OrderSubOrderPipelineInstance(Base, TimestampMixin):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    pipeline_link_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     sub_order_id: Mapped[int] = mapped_column(
         ForeignKey("mes_order_sub_order.id", ondelete="CASCADE"),
         nullable=False,

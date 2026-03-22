@@ -11,7 +11,7 @@ import '../support/http_test_server.dart';
 
 void main() {
   group('MessageService', () {
-    test('supports summary, todo filter and batch read', () async {
+    test('supports summary, pagination, todo filter and batch read', () async {
       final server = await TestHttpServer.start({
         'GET /messages/summary': (_) => TestResponse.json(
           200,
@@ -25,6 +25,8 @@ void main() {
           },
         ),
         'GET /messages': (request) {
+          expect(request.uri.queryParameters['page'], '2');
+          expect(request.uri.queryParameters['page_size'], '10');
           expect(request.uri.queryParameters['todo_only'], 'true');
           return TestResponse.json(
             200,
@@ -50,11 +52,15 @@ void main() {
                     'is_read': false,
                     'read_at': null,
                     'delivered_at': '2026-03-19T08:00:00Z',
+                    'delivery_status': 'failed',
+                    'delivery_attempt_count': 2,
+                    'last_push_at': '2026-03-19T08:05:00Z',
+                    'next_retry_at': '2026-03-19T08:10:00Z',
                   },
                 ],
                 'total': 1,
-                'page': 1,
-                'page_size': 20,
+                'page': 2,
+                'page_size': 10,
               },
             },
           );
@@ -82,6 +88,60 @@ void main() {
             },
           );
         },
+        'POST /messages/maintenance/run': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'pending_compensated': 2,
+              'failed_retried': 1,
+              'source_unavailable_updated': 3,
+              'archived_messages': 4,
+            },
+          },
+        ),
+        'GET /messages/1': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'id': 1,
+              'message_type': 'todo',
+              'priority': 'urgent',
+              'title': '待办提醒',
+              'summary': '请处理',
+              'content': '完整正文',
+              'source_module': 'production',
+              'source_type': 'repair_order',
+              'source_id': '88',
+              'source_code': 'RW-1',
+              'target_page_code': 'production',
+              'target_tab_code': 'production_repair_orders',
+              'target_route_payload_json': '{"action":"detail"}',
+              'status': 'active',
+              'inactive_reason': null,
+              'published_at': '2026-03-19T08:00:00Z',
+              'is_read': false,
+              'read_at': null,
+              'delivered_at': '2026-03-19T08:00:00Z',
+              'delivery_status': 'failed',
+              'delivery_attempt_count': 2,
+              'last_push_at': '2026-03-19T08:05:00Z',
+              'next_retry_at': '2026-03-19T08:10:00Z',
+              'failure_reason_hint': '实时推送失败，系统将按计划继续重试。',
+            },
+          },
+        ),
+        'GET /messages/1/jump-target': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'can_jump': true,
+              'disabled_reason': null,
+              'target_page_code': 'production',
+              'target_tab_code': 'production_repair_orders',
+              'target_route_payload_json': '{"action":"detail"}',
+            },
+          },
+        ),
       });
       addTearDown(server.close);
 
@@ -90,7 +150,7 @@ void main() {
       );
 
       final summary = await service.getSummary();
-      final list = await service.listMessages(todoOnly: true);
+      final list = await service.listMessages(page: 2, pageSize: 10, todoOnly: true);
       final updated = await service.markBatchRead([1, 2]);
       final publishResult = await service.publishAnnouncement(
         const AnnouncementPublishRequest(
@@ -103,20 +163,33 @@ void main() {
           expiresAt: null,
         ),
       );
+      final maintenanceResult = await service.runMaintenance();
+      final detail = await service.getMessageDetail(1);
+      final jumpTarget = await service.getMessageJumpTarget(1);
 
       expect(summary.totalCount, 5);
       expect(summary.todoUnreadCount, 2);
       expect(list.items.single.inactiveReason, 'no_permission');
       expect(list.items.single.inactiveReasonName, '暂无目标页面访问权限');
       expect(list.items.single.targetTabCode, 'production_repair_orders');
+      expect(list.items.single.deliveryStatusName, '投递失败');
+      expect(list.items.single.deliveryAttemptCount, 2);
+      expect(list.page, 2);
+      expect(list.pageSize, 10);
       expect(updated, 2);
       expect(publishResult.messageId, 9);
       expect(publishResult.recipientCount, 3);
+      expect(maintenanceResult.pendingCompensated, 2);
+      expect(maintenanceResult.failedRetried, 1);
+      expect(detail.sourceId, '88');
+      expect(detail.failureReasonHint, contains('按计划继续重试'));
+      expect(jumpTarget.canJump, isTrue);
+      expect(jumpTarget.targetPageCode, 'production');
     });
   });
 
   group('MessageWsService', () {
-    test('receives unread event through websocket channel', () async {
+    test('suppresses duplicate websocket events', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() async {
         await server.close(force: true);
@@ -131,7 +204,10 @@ void main() {
           }
           final socket = await WebSocketTransformer.upgrade(request);
           socket.add(
-            '{"event":"message_created","user_id":1,"message_id":9,"unread_count":4}',
+            '{"event":"message_created","user_id":1,"message_id":9,"unread_count":4,"occurred_at":"2026-03-22T10:00:00Z"}',
+          );
+          socket.add(
+            '{"event":"message_created","user_id":1,"message_id":9,"unread_count":4,"occurred_at":"2026-03-22T10:00:01Z"}',
           );
         }
       }());

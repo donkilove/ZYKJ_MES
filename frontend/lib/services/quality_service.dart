@@ -6,8 +6,9 @@ import '../models/app_session.dart';
 import '../models/production_models.dart';
 import '../models/quality_models.dart';
 import 'api_exception.dart';
+import 'repair_scrap_service.dart';
 
-class QualityService {
+class QualityService implements RepairScrapService {
   QualityService(this.session);
 
   final AppSession session;
@@ -532,6 +533,29 @@ class QualityService {
     );
   }
 
+  @override
+  Future<ScrapStatisticsListResult> getScrapStatistics({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? productName,
+    String? processCode,
+    String progress = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    return listQualityScrapStatistics(
+      keyword: keyword,
+      progress: progress,
+      productName: productName,
+      processCode: processCode,
+      startDate: startDate,
+      endDate: endDate,
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+
   Future<ScrapStatisticsItem> getQualityScrapStatisticsDetail({
     required int scrapId,
   }) async {
@@ -546,6 +570,45 @@ class QualityService {
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
     return ScrapStatisticsItem.fromJson(data);
+  }
+
+  @override
+  Future<ScrapStatisticsItem> getScrapStatisticsDetail({required int scrapId}) {
+    return getQualityScrapStatisticsDetail(scrapId: scrapId);
+  }
+
+  @override
+  Future<ProductionExportResult> exportScrapStatistics({
+    String? keyword,
+    String? productName,
+    String? processCode,
+    String progress = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final uri = Uri.parse('$_basePath/scrap-statistics/export');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'keyword': keyword,
+        'product_name': productName,
+        'process_code': processCode,
+        'progress': progress,
+        'start_date': startDate == null ? null : _formatDate(startDate),
+        'end_date': endDate == null ? null : _formatDate(endDate),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return ProductionExportResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
   }
 
   Future<RepairOrderListResult> listQualityRepairOrders({
@@ -592,6 +655,25 @@ class QualityService {
     );
   }
 
+  @override
+  Future<RepairOrderListResult> getRepairOrders({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String status = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    return listQualityRepairOrders(
+      keyword: keyword,
+      status: status,
+      startDate: startDate,
+      endDate: endDate,
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+
   Future<RepairOrderDetailItem> getQualityRepairOrderDetail({
     required int repairOrderId,
   }) async {
@@ -606,6 +688,110 @@ class QualityService {
     }
     final data = body['data'] as Map<String, dynamic>? ?? const {};
     return RepairOrderDetailItem.fromJson(data);
+  }
+
+  @override
+  Future<RepairOrderDetailItem> getRepairOrderDetail({
+    required int repairOrderId,
+  }) {
+    return getQualityRepairOrderDetail(repairOrderId: repairOrderId);
+  }
+
+  @override
+  Future<RepairOrderPhenomenaSummaryResult> getRepairOrderPhenomenaSummary({
+    required int repairOrderId,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/repair-orders/$repairOrderId/phenomena-summary',
+    );
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return RepairOrderPhenomenaSummaryResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  @override
+  Future<ProductionOrderDetail> getOrderDetail({required int orderId}) async {
+    final uri = Uri.parse('${session.baseUrl}/production/orders/$orderId');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return ProductionOrderDetail.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  @override
+  Future<RepairOrderItem> completeRepairOrder({
+    required int repairOrderId,
+    required List<RepairCauseItemInput> causeItems,
+    required bool scrapReplenished,
+    required List<RepairReturnAllocationInput> returnAllocations,
+  }) async {
+    final uri = Uri.parse('$_basePath/repair-orders/$repairOrderId/complete');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'cause_items': causeItems.map((item) => item.toJson()).toList(),
+        'scrap_replenished': scrapReplenished,
+        'return_allocations': returnAllocations
+            .map((item) => item.toJson())
+            .toList(),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return RepairOrderItem.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  @override
+  Future<ProductionExportResult> exportRepairOrders({
+    String? keyword,
+    String status = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final uri = Uri.parse('$_basePath/repair-orders/export');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'keyword': keyword,
+        'status': status,
+        'start_date': startDate == null ? null : _formatDate(startDate),
+        'end_date': endDate == null ? null : _formatDate(endDate),
+      }),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return ProductionExportResult.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
   }
 
   Map<String, dynamic> _decodeBody(http.Response response) {

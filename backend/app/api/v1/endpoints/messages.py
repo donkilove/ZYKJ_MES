@@ -23,13 +23,18 @@ from app.schemas.message import (
     AnnouncementPublishRequest,
     AnnouncementPublishResult,
     MessageBatchReadRequest,
+    MessageDetailResult,
+    MessageJumpResult,
     MessageListResult,
+    MessageMaintenanceResult,
     MessageSummaryResult,
     UnreadCountResult,
 )
 from app.services.audit_service import write_audit_log
 from app.services.message_connection_manager import message_connection_manager
 from app.services.message_service import (
+    get_message_detail,
+    get_message_jump_target,
     get_message_summary,
     get_unread_count,
     list_messages,
@@ -37,6 +42,7 @@ from app.services.message_service import (
     mark_messages_read_batch,
     mark_message_read,
     publish_announcement,
+    run_message_delivery_maintenance_once,
 )
 from app.services.user_service import get_user_by_id
 
@@ -253,6 +259,69 @@ def api_publish_announcement(
         },
     )
     db.commit()
+    return success_response(result)
+
+
+@router.post(
+    "/maintenance/run",
+    response_model=ApiResponse[MessageMaintenanceResult],
+)
+async def api_run_message_maintenance(
+    current_user: User = Depends(require_permission("message.announcements.publish")),
+    db: Session = Depends(get_db),
+) -> ApiResponse[MessageMaintenanceResult]:
+    result = await run_message_delivery_maintenance_once()
+    write_audit_log(
+        db,
+        action_code="message.maintenance.run",
+        action_name="执行消息维护",
+        target_type="message_maintenance",
+        target_id=str(current_user.id),
+        target_name=current_user.username,
+        operator=current_user,
+        after_data=result,
+    )
+    db.commit()
+    return success_response(MessageMaintenanceResult(**result))
+
+
+@router.get("/{message_id}", response_model=ApiResponse[MessageDetailResult])
+def api_get_message_detail(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("message.messages.detail")),
+) -> ApiResponse[MessageDetailResult]:
+    result = get_message_detail(
+        db,
+        user_id=current_user.id,
+        message_id=message_id,
+        current_user=current_user,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="消息不存在或无权访问",
+        )
+    return success_response(result)
+
+
+@router.get("/{message_id}/jump-target", response_model=ApiResponse[MessageJumpResult])
+def api_get_message_jump_target(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("message.messages.jump")),
+) -> ApiResponse[MessageJumpResult]:
+    result = get_message_jump_target(
+        db,
+        user_id=current_user.id,
+        message_id=message_id,
+        current_user=current_user,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="消息不存在或无权访问",
+        )
     return success_response(result)
 
 

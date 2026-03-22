@@ -29,6 +29,8 @@ class CraftKanbanPage extends StatefulWidget {
 }
 
 class _CraftKanbanPageState extends State<CraftKanbanPage> {
+  static const int _kanbanExportLimit = 100;
+
   late final CraftService _craftService;
   late final ProductionService _productionService;
 
@@ -191,7 +193,7 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     try {
       final contentBase64 = await _craftService.exportCraftKanbanProcessMetrics(
         productId: productId,
-        limit: 50,
+        limit: _kanbanExportLimit,
         stageId: _selectedStageId,
         processId: _selectedProcessId,
         startDate: _startDate,

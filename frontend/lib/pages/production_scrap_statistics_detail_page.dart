@@ -4,6 +4,7 @@ import '../models/app_session.dart';
 import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
+import '../services/repair_scrap_service.dart';
 import 'production_repair_order_detail_page.dart';
 
 class ProductionScrapStatisticsDetailPage extends StatefulWidget {
@@ -20,7 +21,7 @@ class ProductionScrapStatisticsDetailPage extends StatefulWidget {
   final VoidCallback onLogout;
   final int scrapId;
   final String? orderCode;
-  final ProductionService? service;
+  final RepairScrapService? service;
 
   @override
   State<ProductionScrapStatisticsDetailPage> createState() =>
@@ -29,7 +30,7 @@ class ProductionScrapStatisticsDetailPage extends StatefulWidget {
 
 class _ProductionScrapStatisticsDetailPageState
     extends State<ProductionScrapStatisticsDetailPage> {
-  late final ProductionService _service;
+  late final RepairScrapService _service;
 
   bool _loading = true;
   String _message = '';

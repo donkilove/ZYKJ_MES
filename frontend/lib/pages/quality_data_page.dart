@@ -48,6 +48,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
     passedTotal: 0,
     failedTotal: 0,
     passRatePercent: 0,
+    defectTotal: 0,
+    scrapTotal: 0,
+    repairTotal: 0,
     coveredOrderCount: 0,
     coveredProcessCount: 0,
     coveredOperatorCount: 0,
@@ -289,7 +292,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
       return const Text('暂无趋势数据');
     }
     return Card(
-      child: AdaptiveTableContainer(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.all(8),
         child: DataTable(
           columns: const [
             DataColumn(label: Text('日期')),
@@ -297,6 +302,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
             DataColumn(label: Text('通过数')),
             DataColumn(label: Text('不通过数')),
             DataColumn(label: Text('通过率')),
+            DataColumn(label: Text('不良数')),
             DataColumn(label: Text('报废数')),
             DataColumn(label: Text('维修数')),
           ],
@@ -308,6 +314,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
                 DataCell(Text('${item.passedTotal}')),
                 DataCell(Text('${item.failedTotal}')),
                 DataCell(Text(_formatRate(item.passRatePercent))),
+                DataCell(Text('${item.defectTotal}')),
                 DataCell(Text('${item.scrapTotal}')),
                 DataCell(Text('${item.repairTotal}')),
               ],
@@ -474,6 +481,21 @@ class _QualityDataPageState extends State<QualityDataPage> {
                 theme: theme,
               ),
               _buildOverviewCard(
+                title: '不良总数',
+                value: '${_overview.defectTotal}',
+                theme: theme,
+              ),
+              _buildOverviewCard(
+                title: '报废总数',
+                value: '${_overview.scrapTotal}',
+                theme: theme,
+              ),
+              _buildOverviewCard(
+                title: '维修总数',
+                value: '${_overview.repairTotal}',
+                theme: theme,
+              ),
+              _buildOverviewCard(
                 title: '覆盖订单数',
                 value: '${_overview.coveredOrderCount}',
                 theme: theme,
@@ -539,6 +561,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
                                             DataColumn(label: Text('通过数')),
                                             DataColumn(label: Text('不通过数')),
                                             DataColumn(label: Text('通过率')),
+                                            DataColumn(label: Text('不良数')),
+                                            DataColumn(label: Text('报废数')),
+                                            DataColumn(label: Text('维修数')),
                                             DataColumn(label: Text('最近首件时间')),
                                           ],
                                           rows: _processItems.map((item) {
@@ -569,6 +594,15 @@ class _QualityDataPageState extends State<QualityDataPage> {
                                                   ),
                                                 ),
                                                 DataCell(
+                                                  Text('${item.defectTotal}'),
+                                                ),
+                                                DataCell(
+                                                  Text('${item.scrapTotal}'),
+                                                ),
+                                                DataCell(
+                                                  Text('${item.repairTotal}'),
+                                                ),
+                                                DataCell(
                                                   Text(
                                                     _formatDateTime(
                                                       item.latestFirstArticleAt,
@@ -592,6 +626,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
                                             DataColumn(label: Text('通过数')),
                                             DataColumn(label: Text('不通过数')),
                                             DataColumn(label: Text('通过率')),
+                                            DataColumn(label: Text('不良数')),
+                                            DataColumn(label: Text('报废数')),
+                                            DataColumn(label: Text('维修数')),
                                             DataColumn(label: Text('最近首件时间')),
                                           ],
                                           rows: _operatorItems.map((item) {
@@ -619,6 +656,15 @@ class _QualityDataPageState extends State<QualityDataPage> {
                                                   ),
                                                 ),
                                                 DataCell(
+                                                  Text('${item.defectTotal}'),
+                                                ),
+                                                DataCell(
+                                                  Text('${item.scrapTotal}'),
+                                                ),
+                                                DataCell(
+                                                  Text('${item.repairTotal}'),
+                                                ),
+                                                DataCell(
                                                   Text(
                                                     _formatDateTime(
                                                       item.latestFirstArticleAt,
@@ -643,6 +689,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
                                             DataColumn(label: Text('通过数')),
                                             DataColumn(label: Text('不通过数')),
                                             DataColumn(label: Text('通过率')),
+                                            DataColumn(label: Text('不良数')),
                                             DataColumn(label: Text('报废数')),
                                             DataColumn(label: Text('维修数')),
                                           ],
@@ -672,6 +719,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
                                                       item.passRatePercent,
                                                     ),
                                                   ),
+                                                ),
+                                                DataCell(
+                                                  Text('${item.defectTotal}'),
                                                 ),
                                                 DataCell(
                                                   Text('${item.scrapTotal}'),

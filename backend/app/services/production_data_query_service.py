@@ -17,6 +17,7 @@ from app.core.production_constants import (
     ORDER_STATUS_PENDING,
     PROCESS_STATUS_COMPLETED,
     RECORD_TYPE_PRODUCTION,
+    order_status_label,
 )
 from app.models.order_event_log import OrderEventLog
 from app.models.process_stage import ProcessStage
@@ -720,7 +721,7 @@ def export_manual_production_data_csv(
                 str(row.get("operator_username") or ""),
                 int(row.get("quantity", 0) or 0),
                 str(row.get("production_time_text") or ""),
-                str(row.get("order_status") or ""),
+                order_status_label(str(row.get("order_status") or "")),
                 "主订单" if filters.stat_mode == STAT_MODE_MAIN_ORDER else "子订单",
             ]
         )

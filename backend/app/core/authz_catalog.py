@@ -82,6 +82,16 @@ PERM_PROD_ORDERS_EXPORT = "production.orders.export"
 PERM_PROD_PIPELINE_INSTANCES_LIST = "production.pipeline_instances.list"
 PERM_PROD_SCRAP_STATISTICS_DETAIL = "production.scrap_statistics.detail"
 PERM_PROD_REPAIR_ORDERS_DETAIL = "production.repair_orders.detail"
+PERM_QUALITY_SCRAP_STATISTICS_LIST = "quality.scrap_statistics.list"
+PERM_QUALITY_SCRAP_STATISTICS_DETAIL = "quality.scrap_statistics.detail"
+PERM_QUALITY_SCRAP_STATISTICS_EXPORT = "quality.scrap_statistics.export"
+PERM_QUALITY_REPAIR_ORDERS_LIST = "quality.repair_orders.list"
+PERM_QUALITY_REPAIR_ORDERS_DETAIL = "quality.repair_orders.detail"
+PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY = (
+    "quality.repair_orders.phenomena_summary"
+)
+PERM_QUALITY_REPAIR_ORDERS_COMPLETE = "quality.repair_orders.complete"
+PERM_QUALITY_REPAIR_ORDERS_EXPORT = "quality.repair_orders.export"
 
 
 @dataclass(frozen=True, slots=True)
@@ -330,6 +340,7 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         AUTHZ_MODULE_PRODUCT,
         "product_management",
     ),
+    ("product.products.export", "导出产品列表", AUTHZ_MODULE_PRODUCT, "product_management"),
     (
         "product.versions.list",
         "查看产品版本列表",
@@ -348,6 +359,12 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         AUTHZ_MODULE_PRODUCT,
         "product_management",
     ),
+    (
+        "product.versions.activate",
+        "生效产品版本",
+        AUTHZ_MODULE_PRODUCT,
+        "product_version_management",
+    ),
     ("product.rollback", "回滚产品版本", AUTHZ_MODULE_PRODUCT, "product_management"),
     (
         "product.parameter_history.list",
@@ -356,10 +373,28 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         "product_parameter_query",
     ),
     (
+        "product.parameters.export",
+        "导出产品参数",
+        AUTHZ_MODULE_PRODUCT,
+        "product_parameter_query",
+    ),
+    (
         "equipment.admin_owners.list",
         "查看设备负责人选项",
         AUTHZ_MODULE_EQUIPMENT,
         "equipment_ledger",
+    ),
+    (
+        "equipment.plan_owner_options.list",
+        "查看计划默认执行人候选",
+        AUTHZ_MODULE_EQUIPMENT,
+        "maintenance_plan",
+    ),
+    (
+        "equipment.record_executor_options.list",
+        "查看记录执行人筛选候选",
+        AUTHZ_MODULE_EQUIPMENT,
+        "maintenance_record",
     ),
     (
         "equipment.ledger.list",
@@ -683,6 +718,54 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         "quality_defect_analysis",
     ),
     (
+        PERM_QUALITY_SCRAP_STATISTICS_LIST,
+        "查看品质报废统计",
+        AUTHZ_MODULE_QUALITY,
+        "quality_scrap_statistics",
+    ),
+    (
+        PERM_QUALITY_SCRAP_STATISTICS_DETAIL,
+        "查看品质报废统计详情",
+        AUTHZ_MODULE_QUALITY,
+        "quality_scrap_statistics",
+    ),
+    (
+        PERM_QUALITY_SCRAP_STATISTICS_EXPORT,
+        "导出品质报废统计",
+        AUTHZ_MODULE_QUALITY,
+        "quality_scrap_statistics",
+    ),
+    (
+        PERM_QUALITY_REPAIR_ORDERS_LIST,
+        "查看品质维修订单",
+        AUTHZ_MODULE_QUALITY,
+        "quality_repair_orders",
+    ),
+    (
+        PERM_QUALITY_REPAIR_ORDERS_DETAIL,
+        "查看品质维修订单详情",
+        AUTHZ_MODULE_QUALITY,
+        "quality_repair_orders",
+    ),
+    (
+        PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY,
+        "查看品质维修现象汇总",
+        AUTHZ_MODULE_QUALITY,
+        "quality_repair_orders",
+    ),
+    (
+        PERM_QUALITY_REPAIR_ORDERS_COMPLETE,
+        "完成品质维修订单",
+        AUTHZ_MODULE_QUALITY,
+        "quality_repair_orders",
+    ),
+    (
+        PERM_QUALITY_REPAIR_ORDERS_EXPORT,
+        "导出品质维修订单",
+        AUTHZ_MODULE_QUALITY,
+        "quality_repair_orders",
+    ),
+    (
         PERM_PROD_ORDERS_LIST,
         "查看生产订单列表",
         AUTHZ_MODULE_PRODUCTION,
@@ -921,6 +1004,18 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     (
         "message.messages.read_all",
         "全部标记已读",
+        AUTHZ_MODULE_MESSAGE,
+        "message_center",
+    ),
+    (
+        "message.messages.detail",
+        "查看消息详情",
+        AUTHZ_MODULE_MESSAGE,
+        "message_center",
+    ),
+    (
+        "message.messages.jump",
+        "使用消息来源跳转",
         AUTHZ_MODULE_MESSAGE,
         "message_center",
     ),

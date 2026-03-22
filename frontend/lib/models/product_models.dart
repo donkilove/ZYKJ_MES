@@ -6,7 +6,9 @@ class ProductItem {
     required this.remark,
     required this.lifecycleStatus,
     required this.currentVersion,
+    this.currentVersionLabel = 'V1.0',
     required this.effectiveVersion,
+    this.effectiveVersionLabel,
     required this.effectiveAt,
     required this.inactiveReason,
     required this.lastParameterSummary,
@@ -20,7 +22,9 @@ class ProductItem {
   final String remark;
   final String lifecycleStatus;
   final int currentVersion;
+  final String currentVersionLabel;
   final int effectiveVersion;
+  final String? effectiveVersionLabel;
   final DateTime? effectiveAt;
   final String? inactiveReason;
   final String? lastParameterSummary;
@@ -35,7 +39,13 @@ class ProductItem {
       remark: (json['remark'] as String?) ?? '',
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'active',
       currentVersion: (json['current_version'] as int?) ?? 1,
+      currentVersionLabel:
+          (json['current_version_label'] as String?) ??
+          (((json['current_version'] as int?) ?? 1) > 0
+              ? 'V1.${((json['current_version'] as int?) ?? 1) - 1}'
+              : '-'),
       effectiveVersion: (json['effective_version'] as int?) ?? 0,
+      effectiveVersionLabel: json['effective_version_label'] as String?,
       effectiveAt: (json['effective_at'] as String?) == null
           ? null
           : DateTime.parse(json['effective_at'] as String),
@@ -164,7 +174,11 @@ class ProductParameterVersionListItem {
     required this.isEffectiveVersion,
     required this.createdAt,
     required this.parameterSummary,
+    this.parameterCount = 0,
+    this.matchedParameterName,
+    this.matchedParameterCategory,
     required this.lastModifiedParameter,
+    this.lastModifiedParameterCategory,
     required this.updatedAt,
   });
 
@@ -178,7 +192,11 @@ class ProductParameterVersionListItem {
   final bool isEffectiveVersion;
   final DateTime createdAt;
   final String? parameterSummary;
+  final int parameterCount;
+  final String? matchedParameterName;
+  final String? matchedParameterCategory;
   final String? lastModifiedParameter;
+  final String? lastModifiedParameterCategory;
   final DateTime updatedAt;
 
   factory ProductParameterVersionListItem.fromJson(Map<String, dynamic> json) {
@@ -193,7 +211,12 @@ class ProductParameterVersionListItem {
       isEffectiveVersion: (json['is_effective_version'] as bool?) ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
       parameterSummary: json['parameter_summary'] as String?,
+      parameterCount: (json['parameter_count'] as int?) ?? 0,
+      matchedParameterName: json['matched_parameter_name'] as String?,
+      matchedParameterCategory: json['matched_parameter_category'] as String?,
       lastModifiedParameter: json['last_modified_parameter'] as String?,
+      lastModifiedParameterCategory:
+          json['last_modified_parameter_category'] as String?,
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
   }
@@ -280,6 +303,114 @@ class ProductParameterHistoryListResult {
   final String? lifecycleStatus;
   final int total;
   final List<ProductParameterHistoryItem> items;
+}
+
+class ProductRelatedInfoItem {
+  ProductRelatedInfoItem({required this.label, this.value});
+
+  final String label;
+  final String? value;
+
+  factory ProductRelatedInfoItem.fromJson(Map<String, dynamic> json) {
+    return ProductRelatedInfoItem(
+      label: (json['label'] as String?) ?? '-',
+      value: json['value'] as String?,
+    );
+  }
+}
+
+class ProductRelatedInfoSection {
+  ProductRelatedInfoSection({
+    required this.code,
+    required this.title,
+    required this.total,
+    this.items = const [],
+    this.emptyMessage,
+  });
+
+  final String code;
+  final String title;
+  final int total;
+  final List<ProductRelatedInfoItem> items;
+  final String? emptyMessage;
+
+  factory ProductRelatedInfoSection.fromJson(Map<String, dynamic> json) {
+    return ProductRelatedInfoSection(
+      code: (json['code'] as String?) ?? '',
+      title: (json['title'] as String?) ?? '关联信息',
+      total: (json['total'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) =>
+                ProductRelatedInfoItem.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(),
+      emptyMessage: json['empty_message'] as String?,
+    );
+  }
+}
+
+class ProductDetailResult {
+  ProductDetailResult({
+    required this.product,
+    required this.detailParameters,
+    required this.detailParameterMessage,
+    required this.latestVersionChangedAt,
+    required this.versionTotal,
+    required this.versions,
+    required this.historyTotal,
+    required this.historyItems,
+    this.relatedInfoSections = const [],
+  });
+
+  final ProductItem product;
+  final ProductParameterListResult detailParameters;
+  final String? detailParameterMessage;
+  final DateTime? latestVersionChangedAt;
+  final int versionTotal;
+  final List<ProductVersionItem> versions;
+  final int historyTotal;
+  final List<ProductParameterHistoryItem> historyItems;
+  final List<ProductRelatedInfoSection> relatedInfoSections;
+
+  factory ProductDetailResult.fromJson(Map<String, dynamic> json) {
+    return ProductDetailResult(
+      product: ProductItem.fromJson(
+        json['product'] as Map<String, dynamic>? ?? const {},
+      ),
+      detailParameters: ProductParameterListResult.fromJson(
+        json['detail_parameters'] as Map<String, dynamic>? ?? const {},
+      ),
+      detailParameterMessage: json['detail_parameter_message'] as String?,
+      latestVersionChangedAt:
+          (json['latest_version_changed_at'] as String?) == null
+          ? null
+          : DateTime.parse(json['latest_version_changed_at'] as String),
+      versionTotal: (json['version_total'] as int?) ?? 0,
+      versions: (json['versions'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) =>
+                ProductVersionItem.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(),
+      historyTotal: (json['history_total'] as int?) ?? 0,
+      historyItems: (json['history_items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => ProductParameterHistoryItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+      relatedInfoSections:
+          (json['related_info_sections'] as List<dynamic>? ?? const [])
+              .map(
+                (entry) => ProductRelatedInfoSection.fromJson(
+                  entry as Map<String, dynamic>,
+                ),
+              )
+              .toList(),
+    );
+  }
 }
 
 class ProductParameterUpdateResult {

@@ -10,6 +10,8 @@ import 'package:mes_client/services/production_service.dart';
 class _FakeCraftService extends CraftService {
   _FakeCraftService() : super(AppSession(baseUrl: '', accessToken: ''));
 
+  int? lastExportLimit;
+
   @override
   Future<CraftStageListResult> listStages({
     int page = 1,
@@ -96,6 +98,19 @@ class _FakeCraftService extends CraftService {
       ],
     );
   }
+
+  @override
+  Future<String> exportCraftKanbanProcessMetrics({
+    required int productId,
+    int limit = 5,
+    int? stageId,
+    int? processId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    lastExportLimit = limit;
+    return '';
+  }
 }
 
 class _FakeProductionService extends ProductionService {
@@ -109,6 +124,7 @@ class _FakeProductionService extends ProductionService {
 
 void main() {
   testWidgets('工艺看板展示筛选项与趋势结果', (tester) async {
+    final craftService = _FakeCraftService();
     tester.view.physicalSize = const Size(1800, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -122,7 +138,7 @@ void main() {
           body: CraftKanbanPage(
             session: AppSession(baseUrl: '', accessToken: ''),
             onLogout: () {},
-            craftService: _FakeCraftService(),
+            craftService: craftService,
             productionService: _FakeProductionService(),
           ),
         ),
@@ -135,5 +151,10 @@ void main() {
     expect(find.text('工序趋势对比（平均工时/产能）'), findsOneWidget);
     expect(find.textContaining('CUT 切割段  /  CUT-01 激光切割'), findsOneWidget);
     expect(find.textContaining('样本 1'), findsOneWidget);
+
+    await tester.tap(find.text('导出数据'));
+    await tester.pump();
+
+    expect(craftService.lastExportLimit, 100);
   });
 }

@@ -37,6 +37,14 @@ class MessageRecipient(Base, TimestampMixin):
     last_push_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # 最近一次失败原因，便于补偿与排障
+    last_failure_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 已发起的投递尝试次数（包含首次推送）
+    delivery_attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    # 下次重试时间；为空表示当前无待执行重试
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     message: Mapped["Message"] = relationship("Message", back_populates="recipients")
 

@@ -82,7 +82,26 @@ class _ProductionPipelineInstancesPageState
     return '${local.year}-$mm-$dd $hh:$min';
   }
 
-  Future<void> _openOrderDetail(PipelineInstanceItem item) async {
+  String _pipelineLinkLabel(PipelineInstanceItem item) {
+    final linkId = item.pipelineLinkId?.trim() ?? '';
+    if (linkId.isEmpty) {
+      return '未生成';
+    }
+    return '链路 $linkId';
+  }
+
+  String _pipelineGroupKey(PipelineInstanceItem item) {
+    final linkId = item.pipelineLinkId?.trim() ?? '';
+    if (linkId.isNotEmpty) {
+      return linkId;
+    }
+    return 'unlinked-${item.id}';
+  }
+
+  Future<void> _openOrderDetail(
+    PipelineInstanceItem item, {
+    int initialTabIndex = 0,
+  }) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => ProductionOrderDetailPage(
@@ -94,6 +113,7 @@ class _ProductionPipelineInstancesPageState
           canCompleteOrder: false,
           canUpdatePipelineMode: false,
           readOnly: true,
+          initialTabIndex: initialTabIndex,
           service: _service,
           onEditOrder: (_) async => false,
           onDeleteOrder: (_) async => false,
@@ -155,6 +175,129 @@ class _ProductionPipelineInstancesPageState
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('已复制订单号：${item.orderCode}')));
+  }
+
+  Widget _buildTraceGroupCard(
+    BuildContext context,
+    ThemeData theme,
+    String groupKey,
+    List<PipelineInstanceItem> items,
+  ) {
+    final representative = items.first;
+    final hasLinkId = (representative.pipelineLinkId?.trim().isNotEmpty ?? false);
+    final activeCount = items.where((item) => item.isActive).length;
+    final processSummary = items
+        .map((item) => item.processDisplayText)
+        .toSet()
+        .join(' -> ');
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Chip(
+                  avatar: const Icon(Icons.account_tree_outlined, size: 18),
+                  label: Text(hasLinkId ? '链路 $groupKey' : '未生成链路标识'),
+                ),
+                Chip(label: Text('实例 ${items.length}')),
+                Chip(label: Text('活跃 $activeCount/${items.length}')),
+                Text('订单：${representative.orderCode}', style: theme.textTheme.titleSmall),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('跨工序路径：$processSummary', style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            ...items.map((item) {
+              final statusText = item.isActive ? '活跃' : '已失效';
+              final invalidText = item.invalidReason?.trim().isNotEmpty == true
+                  ? '，原因：${item.invalidReason}'
+                  : '';
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  border: Border.all(color: theme.dividerColor),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(child: Text('${item.pipelineSeq}')),
+                  title: Text(item.processDisplayText),
+                  subtitle: Text(
+                    '子订单ID ${item.subOrderId} ｜ 实例 ${item.pipelineSubOrderNo}\n'
+                    '状态：$statusText$invalidText',
+                  ),
+                  isThreeLine: true,
+                  trailing: Wrap(
+                    spacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: () => _openOrderDetail(item),
+                        child: const Text('查看订单'),
+                      ),
+                      TextButton(
+                        onPressed: () => _openOrderDetail(item, initialTabIndex: 3),
+                        child: const Text('查看事件日志'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTraceView(ThemeData theme) {
+    final groupedItems = <String, List<PipelineInstanceItem>>{};
+    for (final item in _items) {
+      final key = _pipelineGroupKey(item);
+      groupedItems.putIfAbsent(key, () => <PipelineInstanceItem>[]).add(item);
+    }
+    final entries = groupedItems.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    for (final entry in entries) {
+      entry.value.sort((a, b) {
+        final seqCompare = a.pipelineSeq.compareTo(b.pipelineSeq);
+        if (seqCompare != 0) {
+          return seqCompare;
+        }
+        final processCompare = a.processDisplayText.compareTo(b.processDisplayText);
+        if (processCompare != 0) {
+          return processCompare;
+        }
+        return a.id.compareTo(b.id);
+      });
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('链路追踪视图', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(
+          '按 pipeline_link_id 聚合同链路实例，可直接跳转到订单详情事件日志。',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        ...entries.map(
+          (entry) => _buildTraceGroupCard(
+            context,
+            theme,
+            entry.key,
+            entry.value,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildFilterBar() {
@@ -274,74 +417,106 @@ class _ProductionPipelineInstancesPageState
               ),
             ),
           const SizedBox(height: 8),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无并行实例记录'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: [
-                          const DataColumn(label: Text('ID')),
-                          const DataColumn(label: Text('子订单ID')),
-                          if (_standaloneMode)
-                            const DataColumn(label: Text('订单号')),
-                          const DataColumn(label: Text('工序')),
-                          const DataColumn(label: Text('并行序号')),
-                          const DataColumn(label: Text('实例编号')),
-                          const DataColumn(label: Text('状态')),
-                          const DataColumn(label: Text('失效原因')),
-                          const DataColumn(label: Text('失效时间')),
-                          const DataColumn(label: Text('创建时间')),
-                          const DataColumn(label: Text('更新时间')),
-                          if (_standaloneMode)
-                            const DataColumn(label: Text('操作')),
-                        ],
-                        rows: _items.map((item) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text('${item.id}')),
-                              DataCell(Text('${item.subOrderId}')),
-                              if (_standaloneMode)
-                                DataCell(Text(item.orderCode)),
-                              DataCell(Text(item.processDisplayText)),
-                              DataCell(Text('${item.pipelineSeq}')),
-                              DataCell(Text(item.pipelineSubOrderNo)),
-                              DataCell(Text(item.isActive ? '活跃' : '已失效')),
-                              DataCell(Text(item.invalidReason ?? '-')),
-                              DataCell(
-                                Text(
-                                  item.invalidatedAt != null
-                                      ? _formatDateTime(item.invalidatedAt!)
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(Text(_formatDateTime(item.createdAt))),
-                              DataCell(Text(_formatDateTime(item.updatedAt))),
-                              if (_standaloneMode)
-                                DataCell(
-                                  Wrap(
-                                    spacing: 8,
-                                    children: [
-                                      TextButton(
-                                        onPressed: () => _openOrderDetail(item),
-                                        child: const Text('查看订单'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => _copyOrderCode(item),
-                                        child: const Text('复制订单号'),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-          ),
+           Expanded(
+             child: _loading
+                 ? const Center(child: CircularProgressIndicator())
+                 : _items.isEmpty
+                 ? const Center(child: Text('暂无并行实例记录'))
+                 : LayoutBuilder(
+                     builder: (context, constraints) {
+                       final tableHeight = constraints.maxHeight.isFinite
+                           ? constraints.maxHeight * 0.45
+                           : 420.0;
+                       return ListView(
+                         children: [
+                           _buildTraceView(theme),
+                           const SizedBox(height: 12),
+                           SizedBox(
+                             height: tableHeight < 320 ? 320 : tableHeight,
+                             child: Card(
+                               child: AdaptiveTableContainer(
+                                 child: DataTable(
+                                   columns: [
+                                     const DataColumn(label: Text('ID')),
+                                     const DataColumn(label: Text('子订单ID')),
+                                     if (_standaloneMode)
+                                       const DataColumn(label: Text('订单号')),
+                                     const DataColumn(label: Text('工序')),
+                                     const DataColumn(label: Text('跨工序链路')),
+                                     const DataColumn(label: Text('并行序号')),
+                                     const DataColumn(label: Text('实例编号')),
+                                     const DataColumn(label: Text('状态')),
+                                     const DataColumn(label: Text('失效原因')),
+                                     const DataColumn(label: Text('失效时间')),
+                                     const DataColumn(label: Text('创建时间')),
+                                     const DataColumn(label: Text('更新时间')),
+                                     if (_standaloneMode)
+                                       const DataColumn(label: Text('操作')),
+                                   ],
+                                   rows: _items.map((item) {
+                                     return DataRow(
+                                       cells: [
+                                         DataCell(Text('${item.id}')),
+                                         DataCell(Text('${item.subOrderId}')),
+                                         if (_standaloneMode)
+                                           DataCell(Text(item.orderCode)),
+                                         DataCell(Text(item.processDisplayText)),
+                                         DataCell(
+                                           Tooltip(
+                                             message: item.pipelineLinkId ?? '未生成跨工序链路标识',
+                                             child: SelectableText(
+                                               _pipelineLinkLabel(item),
+                                             ),
+                                           ),
+                                         ),
+                                         DataCell(Text('${item.pipelineSeq}')),
+                                         DataCell(Text(item.pipelineSubOrderNo)),
+                                         DataCell(Text(item.isActive ? '活跃' : '已失效')),
+                                         DataCell(Text(item.invalidReason ?? '-')),
+                                         DataCell(
+                                           Text(
+                                             item.invalidatedAt != null
+                                                 ? _formatDateTime(item.invalidatedAt!)
+                                                 : '-',
+                                           ),
+                                         ),
+                                         DataCell(Text(_formatDateTime(item.createdAt))),
+                                         DataCell(Text(_formatDateTime(item.updatedAt))),
+                                         if (_standaloneMode)
+                                           DataCell(
+                                             Wrap(
+                                               spacing: 8,
+                                               children: [
+                                                 TextButton(
+                                                   onPressed: () => _openOrderDetail(item),
+                                                   child: const Text('查看订单'),
+                                                 ),
+                                                 TextButton(
+                                                   onPressed: () => _openOrderDetail(
+                                                     item,
+                                                     initialTabIndex: 3,
+                                                   ),
+                                                   child: const Text('查看事件日志'),
+                                                 ),
+                                                 TextButton(
+                                                   onPressed: () => _copyOrderCode(item),
+                                                   child: const Text('复制订单号'),
+                                                 ),
+                                               ],
+                                             ),
+                                           ),
+                                       ],
+                                     );
+                                   }).toList(),
+                                 ),
+                               ),
+                             ),
+                           ),
+                         ],
+                       );
+                     },
+                   ),
+            ),
         ],
       ),
     );

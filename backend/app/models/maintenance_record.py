@@ -25,6 +25,9 @@ class MaintenanceRecord(Base, TimestampMixin):
 
     source_item_id: Mapped[int | None] = mapped_column(index=True, nullable=True)
     source_item_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    source_execution_process_code: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", index=True
+    )
 
     due_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
 

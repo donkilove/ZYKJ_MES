@@ -209,6 +209,9 @@ void main() {
       'is_default': true,
       'is_enabled': true,
       'lifecycle_status': 'published',
+      'source_type': 'system_master',
+      'source_template_name': '系统母版',
+      'source_system_master_version': 7,
       'steps': [
         {
           'step_order': 1,
@@ -222,8 +225,66 @@ void main() {
     });
 
     expect(ref.refCode, 'TPL-12');
+    expect(export.sourceType, 'system_master');
+    expect(export.sourceTemplateName, '系统母版');
+    expect(export.sourceSystemMasterVersion, 7);
     expect(export.steps.single.standardMinutes, 18);
     expect(export.steps.single.isKeyProcess, isTrue);
     expect(export.steps.single.stepRemark, '扩展字段');
+
+    final templateRef = CraftTemplateReferenceResult.fromJson({
+      'template_id': 12,
+      'template_name': '模板A',
+      'product_id': 1,
+      'product_name': '产品A',
+      'total': 2,
+      'order_reference_count': 1,
+      'user_stage_reference_count': 1,
+      'template_reuse_reference_count': 1,
+      'blocking_reference_count': 1,
+      'has_blocking_references': true,
+      'items': [
+        {
+          'ref_type': 'user_stage',
+          'ref_id': 15,
+          'ref_code': 'operator_a',
+          'ref_name': '操作员A',
+          'is_blocking': false,
+        },
+        {
+          'ref_type': 'template_reuse',
+          'ref_id': 18,
+          'ref_name': '模板B',
+          'is_blocking': true,
+        },
+      ],
+    });
+
+    expect(templateRef.orderReferenceCount, 1);
+    expect(templateRef.userStageReferenceCount, 1);
+    expect(templateRef.templateReuseReferenceCount, 1);
+    expect(templateRef.blockingReferenceCount, 1);
+    expect(templateRef.hasBlockingReferences, isTrue);
+    expect(templateRef.items.first.isBlocking, isFalse);
+    expect(templateRef.items.last.isBlocking, isTrue);
+  });
+
+  test('模板发布记录扩展语义字段可解析', () {
+    final version = CraftTemplateVersionItem.fromJson({
+      'version': 3,
+      'action': 'rollback',
+      'record_type': 'rollback_publish',
+      'record_title': '回滚发布记录 P3',
+      'record_summary': '基于历史版本 v2 重新发布并替换当前生效版本',
+      'note': '恢复稳定版本',
+      'source_version': 2,
+      'created_by_username': 'planner',
+      'created_at': '2026-03-20T00:00:00Z',
+    });
+
+    expect(version.recordType, 'rollback_publish');
+    expect(version.recordTitle, '回滚发布记录 P3');
+    expect(version.recordSummary, contains('当前生效版本'));
+    expect(version.sourceVersion, 2);
   });
 }

@@ -822,6 +822,7 @@ def submit_first_article_api(
             db,
             order_id=order_id,
             order_process_id=payload.order_process_id,
+            pipeline_instance_id=payload.pipeline_instance_id,
             verification_code=payload.verification_code,
             remark=payload.remark,
             operator=current_user,
@@ -857,6 +858,7 @@ def end_production_api(
             db,
             order_id=order_id,
             order_process_id=payload.order_process_id,
+            pipeline_instance_id=payload.pipeline_instance_id,
             quantity=payload.quantity,
             remark=payload.remark,
             operator=current_user,
@@ -1413,6 +1415,7 @@ def get_assist_user_options_api(
 def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
     return PipelineInstanceItem(
         id=row.id,
+        pipeline_link_id=row.pipeline_link_id,
         sub_order_id=row.sub_order_id,
         order_id=row.order_id,
         order_code=row.order.order_code if row.order else "",
@@ -1463,7 +1466,25 @@ def _to_repair_order_detail_item(
         repair_operator_username=row.repair_operator_username,
         defect_rows=[
             RepairDefectPhenomenonItem(
-                id=d.id, phenomenon=d.phenomenon, quantity=d.quantity
+                id=d.id,
+                phenomenon=d.phenomenon,
+                quantity=d.quantity,
+                production_record_id=d.production_record_id,
+                production_sub_order_id=d.production_record.sub_order_id
+                if d.production_record is not None
+                else None,
+                production_record_type=d.production_record.record_type
+                if d.production_record is not None
+                else None,
+                production_record_quantity=d.production_record.production_quantity
+                if d.production_record is not None
+                else None,
+                production_record_created_at=d.production_record.created_at
+                if d.production_record is not None
+                else None,
+                production_record_operator_user_id=d.production_record.operator_user_id
+                if d.production_record is not None
+                else None,
             )
             for d in (row.defect_rows or [])
         ],

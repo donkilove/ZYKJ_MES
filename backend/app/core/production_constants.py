@@ -44,3 +44,32 @@ SUB_ORDER_STATUS_ALL = {
     SUB_ORDER_STATUS_IN_PROGRESS,
     SUB_ORDER_STATUS_DONE,
 }
+
+
+def order_status_label(status: str) -> str:
+    return {
+        ORDER_STATUS_PENDING: "待生产",
+        ORDER_STATUS_IN_PROGRESS: "生产中",
+        ORDER_STATUS_COMPLETED: "生产完成",
+    }.get(status, status)
+
+
+def process_status_label(status: str) -> str:
+    return {
+        PROCESS_STATUS_PENDING: "待生产",
+        PROCESS_STATUS_IN_PROGRESS: "进行中",
+        PROCESS_STATUS_PARTIAL: "部分完成",
+        PROCESS_STATUS_COMPLETED: "生产完成",
+    }.get(status, status)
+
+
+def sub_order_status_label(status: str) -> str:
+    return {
+        SUB_ORDER_STATUS_PENDING: "待执行",
+        SUB_ORDER_STATUS_IN_PROGRESS: "执行中",
+        SUB_ORDER_STATUS_DONE: "已完成",
+    }.get(status, status)
+
+
+def pipeline_mode_label(enabled: bool) -> str:
+    return "开启" if enabled else "关闭"

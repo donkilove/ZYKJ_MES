@@ -73,14 +73,15 @@ async def run_maintenance_auto_generate_loop() -> None:
 
         db = SessionLocal()
         try:
-            total, created, existing, new_orders = generate_due_work_orders_for_today(
-                db, include_new_orders=True
+            total, created, existing, failed, new_orders, _ = (
+                generate_due_work_orders_for_today(db, include_new_orders=True)
             )
             logger.info(
-                "[MAINT_SCHED] Scan done. plans=%s created=%s existing=%s.",
+                "[MAINT_SCHED] Scan done. plans=%s created=%s existing=%s failed=%s.",
                 total,
                 created,
                 existing,
+                failed,
             )
             # 为每条新建工单推送消息给执行人和管理员
             if new_orders:

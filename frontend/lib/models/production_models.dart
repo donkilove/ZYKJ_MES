@@ -16,7 +16,7 @@ String productionOrderStatusLabel(String status) {
     case 'in_progress':
       return '生产中';
     case 'completed':
-      return '已完成';
+      return '生产完成';
     default:
       return status;
   }
@@ -27,11 +27,11 @@ String productionProcessStatusLabel(String status) {
     case 'pending':
       return '待生产';
     case 'in_progress':
-      return '生产中';
+      return '进行中';
     case 'partial':
       return '部分完成';
     case 'completed':
-      return '已完成';
+      return '生产完成';
     default:
       return status;
   }
@@ -40,9 +40,9 @@ String productionProcessStatusLabel(String status) {
 String productionSubOrderStatusLabel(String status) {
   switch (status) {
     case 'pending':
-      return '待生产';
+      return '待执行';
     case 'in_progress':
-      return '生产中';
+      return '执行中';
     case 'done':
       return '已完成';
     default:
@@ -70,7 +70,7 @@ String repairOrderStatusLabel(String status) {
     case 'in_repair':
       return '维修中';
     case 'completed':
-      return '维修完成';
+      return '已完成';
     default:
       return status;
   }
@@ -434,6 +434,8 @@ class MyOrderItem {
     required this.operatorUsername,
     required this.workView,
     required this.assistAuthorizationId,
+    required this.pipelineInstanceId,
+    required this.pipelineInstanceNo,
     required this.pipelineModeEnabled,
     required this.pipelineStartAllowed,
     required this.pipelineEndAllowed,
@@ -466,6 +468,8 @@ class MyOrderItem {
   final String? operatorUsername;
   final String workView;
   final int? assistAuthorizationId;
+  final int? pipelineInstanceId;
+  final String? pipelineInstanceNo;
   final bool pipelineModeEnabled;
   final bool pipelineStartAllowed;
   final bool pipelineEndAllowed;
@@ -500,6 +504,8 @@ class MyOrderItem {
       operatorUsername: json['operator_username'] as String?,
       workView: (json['work_view'] as String?) ?? 'own',
       assistAuthorizationId: json['assist_authorization_id'] as int?,
+      pipelineInstanceId: json['pipeline_instance_id'] as int?,
+      pipelineInstanceNo: json['pipeline_instance_no'] as String?,
       pipelineModeEnabled: (json['pipeline_mode_enabled'] as bool?) ?? false,
       pipelineStartAllowed: (json['pipeline_start_allowed'] as bool?) ?? false,
       pipelineEndAllowed: (json['pipeline_end_allowed'] as bool?) ?? false,
@@ -565,6 +571,7 @@ class OrderPipelineModeItem {
 class PipelineInstanceItem {
   PipelineInstanceItem({
     required this.id,
+    required this.pipelineLinkId,
     required this.subOrderId,
     required this.orderId,
     required this.orderCode,
@@ -581,6 +588,7 @@ class PipelineInstanceItem {
   });
 
   final int id;
+  final String? pipelineLinkId;
   final int subOrderId;
   final int orderId;
   final String orderCode;
@@ -610,6 +618,7 @@ class PipelineInstanceItem {
   factory PipelineInstanceItem.fromJson(Map<String, dynamic> json) {
     return PipelineInstanceItem(
       id: json['id'] as int,
+      pipelineLinkId: json['pipeline_link_id'] as String?,
       subOrderId: (json['sub_order_id'] as int?) ?? 0,
       orderId: (json['order_id'] as int?) ?? 0,
       orderCode: (json['order_code'] as String?) ?? '',
@@ -1732,17 +1741,35 @@ class RepairDefectPhenomenonDetailItem {
     required this.id,
     required this.phenomenon,
     required this.quantity,
+    required this.productionRecordId,
+    required this.productionSubOrderId,
+    required this.productionRecordType,
+    required this.productionRecordQuantity,
+    required this.productionRecordCreatedAt,
+    required this.productionRecordOperatorUserId,
   });
 
   final int id;
   final String phenomenon;
   final int quantity;
+  final int? productionRecordId;
+  final int? productionSubOrderId;
+  final String? productionRecordType;
+  final int? productionRecordQuantity;
+  final DateTime? productionRecordCreatedAt;
+  final int? productionRecordOperatorUserId;
 
   factory RepairDefectPhenomenonDetailItem.fromJson(Map<String, dynamic> json) {
     return RepairDefectPhenomenonDetailItem(
       id: (json['id'] as int?) ?? 0,
       phenomenon: (json['phenomenon'] as String?) ?? '',
       quantity: (json['quantity'] as int?) ?? 0,
+      productionRecordId: json['production_record_id'] as int?,
+      productionSubOrderId: json['production_sub_order_id'] as int?,
+      productionRecordType: json['production_record_type'] as String?,
+      productionRecordQuantity: json['production_record_quantity'] as int?,
+      productionRecordCreatedAt: _parseDateOrNull(json['production_record_created_at']),
+      productionRecordOperatorUserId: json['production_record_operator_user_id'] as int?,
     );
   }
 }

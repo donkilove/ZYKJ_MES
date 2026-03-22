@@ -4,6 +4,7 @@ import '../models/app_session.dart';
 import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
+import '../services/repair_scrap_service.dart';
 
 class ProductionRepairOrderDetailPage extends StatefulWidget {
   const ProductionRepairOrderDetailPage({
@@ -19,7 +20,7 @@ class ProductionRepairOrderDetailPage extends StatefulWidget {
   final VoidCallback onLogout;
   final int repairOrderId;
   final String? repairOrderCode;
-  final ProductionService? service;
+  final RepairScrapService? service;
 
   @override
   State<ProductionRepairOrderDetailPage> createState() =>
@@ -28,7 +29,7 @@ class ProductionRepairOrderDetailPage extends StatefulWidget {
 
 class _ProductionRepairOrderDetailPageState
     extends State<ProductionRepairOrderDetailPage> {
-  late final ProductionService _service;
+  late final RepairScrapService _service;
 
   bool _loading = true;
   String _message = '';
@@ -103,6 +104,26 @@ class _ProductionRepairOrderDetailPageState
     );
   }
 
+  String _defectTraceText(RepairDefectPhenomenonDetailItem item) {
+    final parts = <String>[];
+    if (item.productionRecordId != null) {
+      parts.add('报工记录#${item.productionRecordId}');
+    }
+    if (item.productionRecordType != null && item.productionRecordType!.trim().isNotEmpty) {
+      parts.add('类型${item.productionRecordType}');
+    }
+    if (item.productionRecordQuantity != null) {
+      parts.add('报工数${item.productionRecordQuantity}');
+    }
+    if (item.productionSubOrderId != null) {
+      parts.add('子单#${item.productionSubOrderId}');
+    }
+    if (item.productionRecordCreatedAt != null) {
+      parts.add('报工时间${_formatDateTime(item.productionRecordCreatedAt)}');
+    }
+    return parts.join(' | ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = _detail;
@@ -144,7 +165,11 @@ class _ProductionRepairOrderDetailPageState
                     ...detail.defectRows.map(
                       (item) => Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: Text('• ${item.phenomenon}（${item.quantity}件）'),
+                        child: Text(
+                          _defectTraceText(item).isEmpty
+                              ? '• ${item.phenomenon}（${item.quantity}件）'
+                              : '• ${item.phenomenon}（${item.quantity}件）\n  关联${_defectTraceText(item)}',
+                        ),
                       ),
                     ),
                   ],

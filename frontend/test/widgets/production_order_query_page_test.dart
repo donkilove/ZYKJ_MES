@@ -51,6 +51,8 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
           operatorUsername: 'zhangsan',
           workView: 'own',
           assistAuthorizationId: null,
+          pipelineInstanceId: 301,
+          pipelineInstanceNo: 'P1-31-1-PIPE0001',
           pipelineModeEnabled: true,
           pipelineStartAllowed: true,
           pipelineEndAllowed: true,
@@ -93,6 +95,7 @@ void main() {
     expect(find.text('PO-QUERY-001'), findsOneWidget);
     expect(find.text('产线试产件'), findsOneWidget);
     expect(find.text('切割段'), findsOneWidget);
+    expect(find.text('P1-31-1-PIPE0001'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, '详情'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).first, 'PO-QUERY');

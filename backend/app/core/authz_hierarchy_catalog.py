@@ -275,6 +275,14 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         dependency_permission_codes=("feature.product.catalog.read",),
     ),
     FeatureDefinition(
+        permission_code="feature.product.catalog.export",
+        permission_name="导出产品目录",
+        module_code="product",
+        page_code="product_management",
+        action_permission_codes=("product.products.export",),
+        dependency_permission_codes=("feature.product.catalog.read",),
+    ),
+    FeatureDefinition(
         permission_code="feature.product.version_analysis.view",
         permission_name="查看产品版本与影响分析",
         module_code="product",
@@ -298,6 +306,14 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         dependency_permission_codes=("feature.product.version_analysis.view",),
     ),
     FeatureDefinition(
+        permission_code="feature.product.version_activation.manage",
+        permission_name="生效产品版本",
+        module_code="product",
+        page_code="product_version_management",
+        action_permission_codes=("product.versions.activate",),
+        dependency_permission_codes=("feature.product.version_analysis.view",),
+    ),
+    FeatureDefinition(
         permission_code="feature.product.parameters.view",
         permission_name="查看产品参数",
         module_code="product",
@@ -313,6 +329,14 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         module_code="product",
         page_code="product_parameter_management",
         action_permission_codes=("product.parameters.update",),
+        dependency_permission_codes=("feature.product.parameters.view",),
+    ),
+    FeatureDefinition(
+        permission_code="feature.product.parameters.export",
+        permission_name="导出产品参数",
+        module_code="product",
+        page_code="product_parameter_query",
+        action_permission_codes=("product.parameters.export",),
         dependency_permission_codes=("feature.product.parameters.view",),
     ),
     FeatureDefinition(
@@ -348,6 +372,7 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         module_code="equipment",
         page_code="maintenance_plan",
         action_permission_codes=(
+            "equipment.plan_owner_options.list",
             "equipment.plans.list",
             "equipment.plans.create",
             "equipment.plans.update",
@@ -373,7 +398,17 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         permission_name="查看保养记录",
         module_code="equipment",
         page_code="maintenance_record",
-        action_permission_codes=("equipment.records.list",),
+        action_permission_codes=(
+            "equipment.record_executor_options.list",
+            "equipment.records.list",
+        ),
+    ),
+    FeatureDefinition(
+        permission_code="feature.equipment.rules.view",
+        permission_name="查看设备规则",
+        module_code="equipment",
+        page_code="equipment_rule_parameter",
+        action_permission_codes=("equipment.rules.list",),
     ),
     FeatureDefinition(
         permission_code="feature.equipment.rules.manage",
@@ -384,6 +419,13 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
             "equipment.rules.list",
             "equipment.rules.manage",
         ),
+    ),
+    FeatureDefinition(
+        permission_code="feature.equipment.runtime_parameters.view",
+        permission_name="查看运行参数",
+        module_code="equipment",
+        page_code="equipment_rule_parameter",
+        action_permission_codes=("equipment.runtime_parameters.list",),
     ),
     FeatureDefinition(
         permission_code="feature.equipment.runtime_parameters.manage",
@@ -516,8 +558,8 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         module_code="quality",
         page_code="quality_scrap_statistics",
         action_permission_codes=(
-            "production.scrap_statistics.list",
-            "production.scrap_statistics.detail",
+            "quality.scrap_statistics.list",
+            "quality.scrap_statistics.detail",
         ),
     ),
     FeatureDefinition(
@@ -525,7 +567,7 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         permission_name="导出报废统计（品质归口）",
         module_code="quality",
         page_code="quality_scrap_statistics",
-        action_permission_codes=("production.scrap_statistics.export",),
+        action_permission_codes=("quality.scrap_statistics.export",),
         dependency_permission_codes=("feature.quality.scrap_statistics.view",),
     ),
     FeatureDefinition(
@@ -534,10 +576,10 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         module_code="quality",
         page_code="quality_repair_orders",
         action_permission_codes=(
-            "production.repair_orders.list",
-            "production.repair_orders.detail",
-            "production.repair_orders.phenomena_summary",
-            "production.repair_orders.complete",
+            "quality.repair_orders.list",
+            "quality.repair_orders.detail",
+            "quality.repair_orders.phenomena_summary",
+            "quality.repair_orders.complete",
         ),
     ),
     FeatureDefinition(
@@ -545,7 +587,7 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         permission_name="导出维修订单（品质归口）",
         module_code="quality",
         page_code="quality_repair_orders",
-        action_permission_codes=("production.repair_orders.export",),
+        action_permission_codes=("quality.repair_orders.export",),
         dependency_permission_codes=("feature.quality.repair_orders.manage",),
     ),
     FeatureDefinition(
@@ -727,6 +769,22 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
             "message.messages.read",
             "message.messages.read_all",
         ),
+        dependency_permission_codes=("feature.message.center.view",),
+    ),
+    FeatureDefinition(
+        permission_code="feature.message.detail.view",
+        permission_name="查看消息详情",
+        module_code="message",
+        page_code="message_center",
+        action_permission_codes=("message.messages.detail",),
+        dependency_permission_codes=("feature.message.center.view",),
+    ),
+    FeatureDefinition(
+        permission_code="feature.message.jump.use",
+        permission_name="使用消息来源跳转",
+        module_code="message",
+        page_code="message_center",
+        action_permission_codes=("message.messages.jump",),
         dependency_permission_codes=("feature.message.center.view",),
     ),
     FeatureDefinition(

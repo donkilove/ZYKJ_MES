@@ -49,10 +49,76 @@ class _FakeCraftService extends CraftService {
     int pageSize = 500,
     int? productId,
     String? keyword,
+    String? productCategory,
+    bool? isDefault,
     bool? enabled = true,
     String? lifecycleStatus,
+    DateTime? updatedFrom,
+    DateTime? updatedTo,
   }) async {
-    return CraftTemplateListResult(total: 0, items: const []);
+    return CraftTemplateListResult(
+      total: 1,
+      items: [
+        CraftTemplateItem(
+          id: 21,
+          productId: 5,
+          productName: '产品A',
+          templateName: '模板A',
+          version: 2,
+          lifecycleStatus: 'published',
+          publishedVersion: 2,
+          isDefault: true,
+          isEnabled: true,
+          createdByUserId: 1,
+          createdByUsername: 'planner',
+          updatedByUserId: 1,
+          updatedByUsername: 'planner',
+          createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+          updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<CraftTemplateReferenceResult> getTemplateReferences({
+    required int templateId,
+  }) async {
+    return CraftTemplateReferenceResult(
+      templateId: templateId,
+      templateName: '模板A',
+      productId: 5,
+      productName: '产品A',
+      total: 2,
+      orderReferenceCount: 1,
+      userStageReferenceCount: 1,
+      templateReuseReferenceCount: 1,
+      blockingReferenceCount: 1,
+      hasBlockingReferences: true,
+      items: [
+        CraftReferenceItem(
+          refType: 'user_stage',
+          refId: 31,
+          refCode: 'operator_a',
+          refName: '操作员A',
+          detail: '工段：CUT 切割段',
+          jumpModule: 'user',
+          jumpTarget: 'user-management?user_id=31',
+          refStatus: '正在使用',
+          riskLevel: 'medium',
+        ),
+        CraftReferenceItem(
+          refType: 'template_reuse',
+          refId: 22,
+          refCode: 'TMP-22',
+          refName: '模板B',
+          detail: '复用到 产品B · published',
+          jumpModule: 'craft',
+          jumpTarget: 'process-configuration?template_id=22',
+          refStatus: '正在使用',
+        ),
+      ],
+    );
   }
 
   @override
@@ -112,5 +178,33 @@ void main() {
 
     expect(capturedModuleCode, 'craft');
     expect(capturedJumpTarget, 'process-management?process_id=11');
+  });
+
+  testWidgets('按模板查询纳入模板复用下游关系', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CraftReferenceAnalysisPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            craftService: _FakeCraftService(),
+            onNavigate: ({required String moduleCode, String? jumpTarget}) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.text('模板'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('模板A'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('用户工段 1'), findsOneWidget);
+    expect(find.text('模板复用 1'), findsOneWidget);
+    expect(find.text('阻断 1'), findsOneWidget);
+    expect(find.textContaining('operator_a'), findsOneWidget);
   });
 }

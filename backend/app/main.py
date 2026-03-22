@@ -9,15 +9,27 @@ from app.api.v1.api import api_router
 from app.bootstrap import run_startup_bootstrap
 from app.core.config import settings
 from app.services.maintenance_scheduler_service import run_maintenance_auto_generate_loop
+from app.services.message_service import run_message_delivery_maintenance_loop
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     scheduler_task: asyncio.Task[None] | None = None
+    message_maintenance_task: asyncio.Task[None] | None = None
     run_startup_bootstrap()
     if settings.maintenance_auto_generate_enabled:
         scheduler_task = asyncio.create_task(run_maintenance_auto_generate_loop())
+    if settings.message_delivery_maintenance_enabled:
+        message_maintenance_task = asyncio.create_task(
+            run_message_delivery_maintenance_loop()
+        )
     yield
+    if message_maintenance_task:
+        message_maintenance_task.cancel()
+        try:
+            await message_maintenance_task
+        except asyncio.CancelledError:
+            pass
     if scheduler_task:
         scheduler_task.cancel()
         try:

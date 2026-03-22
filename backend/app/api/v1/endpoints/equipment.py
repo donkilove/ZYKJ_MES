@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permission
+from app.api.deps import require_any_permission, require_permission
 from app.db.session import get_db
 from app.models.equipment import Equipment
 from app.models.equipment_rule import EquipmentRule
@@ -55,6 +55,7 @@ from app.services.equipment_service import (
     create_equipment,
     create_maintenance_item,
     create_maintenance_plan,
+    derive_attachment_name,
     delete_equipment,
     delete_maintenance_item,
     delete_maintenance_plan,
@@ -100,6 +101,7 @@ from app.services.equipment_rule_service import (
     update_runtime_parameter,
 )
 from app.services.craft_service import get_stage_by_code, resolve_user_stage_codes
+from app.services.authz_service import has_permission
 
 
 router = APIRouter()
@@ -203,6 +205,7 @@ def to_work_order_item(row: MaintenanceWorkOrder) -> MaintenanceWorkOrderItem:
         result_summary=row.result_summary,
         result_remark=row.result_remark,
         attachment_link=row.attachment_link,
+        attachment_name=derive_attachment_name(row.attachment_link),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -221,6 +224,7 @@ def to_maintenance_record_item(row: MaintenanceRecord) -> MaintenanceRecordItem:
         result_summary=row.result_summary,
         result_remark=row.result_remark,
         attachment_link=row.attachment_link,
+        attachment_name=derive_attachment_name(row.attachment_link),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -278,12 +282,24 @@ def _build_record_detail(
     db: Session, row: MaintenanceRecord
 ) -> MaintenanceRecordDetail:
     base = to_maintenance_record_item(row)
-    source_work_order = get_work_order_by_id(db, row.work_order_id)
     source_plan_id = row.source_plan_id
     source_plan_cycle_days = row.source_plan_cycle_days
     source_plan_start_date = row.source_plan_start_date
     source_equipment_name = row.source_equipment_name or None
-    source_execution_process_code = None
+    source_execution_process_code = row.source_execution_process_code or None
+    needs_work_order_lookup = any(
+        value in (None, "")
+        for value in (
+            source_plan_id,
+            source_plan_cycle_days,
+            source_plan_start_date,
+            source_equipment_name,
+            source_execution_process_code,
+        )
+    )
+    source_work_order = (
+        get_work_order_by_id(db, row.work_order_id) if needs_work_order_lookup else None
+    )
     if source_work_order is not None:
         if source_plan_id is None:
             source_plan_id = source_work_order.source_plan_id
@@ -293,7 +309,7 @@ def _build_record_detail(
             source_plan_start_date = source_work_order.source_plan_start_date
         if source_equipment_name is None:
             source_equipment_name = source_work_order.source_equipment_name or None
-        source_execution_process_code = (
+        source_execution_process_code = source_execution_process_code or (
             source_work_order.source_execution_process_code or None
         )
     return MaintenanceRecordDetail(
@@ -947,7 +963,15 @@ def get_maintenance_records(
 @router.get("/owners", response_model=ApiResponse[EquipmentOwnerOptionListResult])
 def get_all_owners(
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("equipment.admin_owners.list")),
+    _: User = Depends(
+        require_any_permission(
+            [
+                "equipment.admin_owners.list",
+                "equipment.plan_owner_options.list",
+                "equipment.record_executor_options.list",
+            ]
+        )
+    ),
 ) -> ApiResponse[EquipmentOwnerOptionListResult]:
     users = list_active_owners(db)
     return success_response(
@@ -969,9 +993,23 @@ def get_all_owners(
 def get_equipment_detail_api(
     equipment_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("equipment.ledger.list")),
+    current_user: User = Depends(require_permission("equipment.ledger.list")),
 ) -> ApiResponse[EquipmentDetailResult]:
-    result = get_equipment_detail(db, equipment_id)
+    result = get_equipment_detail(
+        db,
+        equipment_id,
+        current_user_role_codes=_current_user_role_codes(current_user),
+        current_user_stage_codes=_current_user_stage_codes(db, current_user),
+        can_view_plans=has_permission(
+            db, user=current_user, permission_code="equipment.plans.list"
+        ),
+        can_view_executions=has_permission(
+            db, user=current_user, permission_code="equipment.executions.list"
+        ),
+        can_view_records=has_permission(
+            db, user=current_user, permission_code="equipment.records.list"
+        ),
+    )
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Equipment not found"
@@ -980,6 +1018,9 @@ def get_equipment_detail_api(
         row,
         active_plan_count,
         pending_work_order_count,
+        active_plans_scope_limited,
+        pending_work_orders_scope_limited,
+        recent_records_scope_limited,
         active_plans,
         pending_work_orders,
         recent_records,
@@ -998,6 +1039,9 @@ def get_equipment_detail_api(
             updated_at=row.updated_at,
             active_plan_count=active_plan_count,
             pending_work_order_count=pending_work_order_count,
+            active_plans_scope_limited=active_plans_scope_limited,
+            pending_work_orders_scope_limited=pending_work_orders_scope_limited,
+            recent_records_scope_limited=recent_records_scope_limited,
             active_plans=[to_maintenance_plan_item(db, plan) for plan in active_plans],
             pending_work_orders=[
                 to_work_order_item(work_order) for work_order in pending_work_orders

@@ -8,6 +8,7 @@ import '../models/production_models.dart';
 import 'production_repair_order_detail_page.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
+import '../services/repair_scrap_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
 import '../widgets/unified_list_table_header_style.dart';
@@ -82,7 +83,7 @@ class ProductionRepairOrdersPage extends StatefulWidget {
   final bool canComplete;
   final bool canExport;
   final String? jumpPayloadJson;
-  final ProductionService? service;
+  final RepairScrapService? service;
 
   @override
   State<ProductionRepairOrdersPage> createState() =>
@@ -91,7 +92,7 @@ class ProductionRepairOrdersPage extends StatefulWidget {
 
 class _ProductionRepairOrdersPageState
     extends State<ProductionRepairOrdersPage> {
-  late final ProductionService _service;
+  late final RepairScrapService _service;
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;

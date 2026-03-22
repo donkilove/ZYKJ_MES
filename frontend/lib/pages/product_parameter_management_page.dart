@@ -22,6 +22,7 @@ class ProductParameterManagementPage extends StatefulWidget {
     this.service,
     this.jumpCommand,
     this.onJumpHandled,
+    this.canExportParameters = false,
   });
 
   final AppSession session;
@@ -30,6 +31,7 @@ class ProductParameterManagementPage extends StatefulWidget {
   final ProductService? service;
   final ProductJumpCommand? jumpCommand;
   final ValueChanged<int>? onJumpHandled;
+  final bool canExportParameters;
 
   @override
   State<ProductParameterManagementPage> createState() =>
@@ -166,6 +168,8 @@ class _ProductParameterManagementPageState
 
   String _historyTypeLabel(String value) {
     switch (value) {
+      case 'add':
+        return '新增';
       case 'create':
         return '创建';
       case 'copy':
@@ -218,7 +222,7 @@ class _ProductParameterManagementPageState
 
   List<PopupMenuEntry<_ProductParameterManagementListAction>>
   _buildListActionMenuItems() {
-    return const [
+    return [
       PopupMenuItem(
         value: _ProductParameterManagementListAction.view,
         child: Text('查看参数'),
@@ -231,10 +235,11 @@ class _ProductParameterManagementPageState
         value: _ProductParameterManagementListAction.edit,
         child: Text('编辑参数'),
       ),
-      PopupMenuItem(
-        value: _ProductParameterManagementListAction.export,
-        child: Text('导出参数'),
-      ),
+      if (widget.canExportParameters)
+        const PopupMenuItem(
+          value: _ProductParameterManagementListAction.export,
+          child: Text('导出参数'),
+        ),
     ];
   }
 
@@ -337,6 +342,8 @@ class _ProductParameterManagementPageState
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         versionKeyword: _versionFilterController.text.trim(),
+        paramNameKeyword: _paramNameFilterController.text.trim(),
+        paramCategoryKeyword: _paramCategoryFilterController.text.trim(),
         updatedAfter: _updatedAfter,
         updatedBefore: _updatedBefore,
       );
@@ -368,19 +375,7 @@ class _ProductParameterManagementPageState
   }
 
   List<ProductParameterVersionListItem> get _filteredVersionRows {
-    return _versionRows.where((row) {
-      final paramNameKeyword = _paramNameFilterController.text.trim();
-      final paramCategoryKeyword = _paramCategoryFilterController.text.trim();
-      final summary = row.parameterSummary ?? '';
-      if (paramNameKeyword.isNotEmpty && !summary.contains(paramNameKeyword)) {
-        return false;
-      }
-      if (paramCategoryKeyword.isNotEmpty &&
-          !summary.contains(paramCategoryKeyword)) {
-        return false;
-      }
-      return true;
-    }).toList();
+    return _versionRows;
   }
 
   Future<void> _handleJumpCommand(ProductJumpCommand command) async {
@@ -1467,42 +1462,42 @@ class _ProductParameterManagementPageState
         const SizedBox(height: 8),
         Row(
           children: [
-            SizedBox(
-              width: 200,
-              child: TextField(
-                controller: _versionFilterController,
-                decoration: const InputDecoration(
-                  labelText: '版本号筛选',
-                  hintText: '如 V1.2',
-                  border: OutlineInputBorder(),
+              SizedBox(
+                width: 200,
+                child: TextField(
+                  controller: _versionFilterController,
+                  decoration: const InputDecoration(
+                    labelText: '版本号筛选',
+                    hintText: '如 V1.2',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _loadProducts(),
                 ),
-                onChanged: (_) => setState(() {}),
               ),
-            ),
             const SizedBox(width: 12),
-            SizedBox(
-              width: 200,
-              child: TextField(
-                controller: _paramNameFilterController,
-                decoration: const InputDecoration(
-                  labelText: '参数摘要筛选',
-                  border: OutlineInputBorder(),
+              SizedBox(
+                width: 200,
+                child: TextField(
+                  controller: _paramNameFilterController,
+                  decoration: const InputDecoration(
+                    labelText: '参数名称筛选',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _loadProducts(),
                 ),
-                onSubmitted: (_) => _loadProducts(),
               ),
-            ),
             const SizedBox(width: 12),
-            SizedBox(
-              width: 200,
-              child: TextField(
-                controller: _paramCategoryFilterController,
-                decoration: const InputDecoration(
-                  labelText: '摘要补充筛选',
-                  border: OutlineInputBorder(),
+              SizedBox(
+                width: 200,
+                child: TextField(
+                  controller: _paramCategoryFilterController,
+                  decoration: const InputDecoration(
+                    labelText: '参数分组筛选',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _loadProducts(),
                 ),
-                onSubmitted: (_) => _loadProducts(),
               ),
-            ),
             const SizedBox(width: 12),
             OutlinedButton.icon(
               onPressed: _loading
@@ -1577,7 +1572,10 @@ class _ProductParameterManagementPageState
         const SizedBox(height: 12),
         Text('总数：$_total', style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
-        Text('首屏按版本行展示，查看/编辑/历史/导出均绑定当前版本行。', style: theme.textTheme.bodySmall),
+        Text(
+          '筛选条件直接命中版本参数明细；查看/编辑/历史/导出均绑定当前版本行。',
+          style: theme.textTheme.bodySmall,
+        ),
         const SizedBox(height: 12),
         if (_message.isNotEmpty)
           Padding(
@@ -1608,8 +1606,10 @@ class _ProductParameterManagementPageState
                           ),
                           UnifiedListTableHeaderStyle.column(context, '创建时间'),
                           UnifiedListTableHeaderStyle.column(context, '版本状态'),
-                          UnifiedListTableHeaderStyle.column(context, '参数摘要'),
-                          UnifiedListTableHeaderStyle.column(context, '最后修改参数'),
+                          UnifiedListTableHeaderStyle.column(context, '参数总数'),
+                          UnifiedListTableHeaderStyle.column(context, '命中参数名称'),
+                          UnifiedListTableHeaderStyle.column(context, '命中参数分组'),
+                          UnifiedListTableHeaderStyle.column(context, '最近变更参数'),
                           UnifiedListTableHeaderStyle.column(context, '最后修改时间'),
                           UnifiedListTableHeaderStyle.column(
                             context,
@@ -1641,8 +1641,21 @@ class _ProductParameterManagementPageState
                                   ].join(' / '),
                                 ),
                               ),
-                              DataCell(Text(row.parameterSummary ?? '-')),
-                              DataCell(Text(row.lastModifiedParameter ?? '-')),
+                              DataCell(Text('${row.parameterCount}')),
+                              DataCell(Text(row.matchedParameterName ?? '-')),
+                              DataCell(Text(row.matchedParameterCategory ?? '-')),
+                              DataCell(
+                                Text(
+                                  row.lastModifiedParameter == null
+                                      ? '-'
+                                      : row.lastModifiedParameterCategory ==
+                                                null ||
+                                            row.lastModifiedParameterCategory!
+                                                .isEmpty
+                                      ? row.lastModifiedParameter!
+                                      : '${row.lastModifiedParameter} / ${row.lastModifiedParameterCategory}',
+                                ),
+                              ),
                               DataCell(Text(_formatTime(row.updatedAt))),
                               DataCell(
                                 UnifiedListTableHeaderStyle.actionMenuButton<

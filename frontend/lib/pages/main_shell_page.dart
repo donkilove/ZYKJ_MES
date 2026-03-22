@@ -683,6 +683,12 @@ class _MainShellPageState extends State<MainShellPage>
           canPublishAnnouncement: messageCapabilityCodes.contains(
             'feature.message.announcement.publish',
           ),
+          canViewDetail: messageCapabilityCodes.contains(
+            'feature.message.detail.view',
+          ),
+          canUseJump: messageCapabilityCodes.contains(
+            'feature.message.jump.use',
+          ),
           refreshTick: _messageRefreshTick,
           onUnreadCountChanged: (count) {
             if (mounted) setState(() => _unreadCount = count);

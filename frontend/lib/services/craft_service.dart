@@ -359,8 +359,12 @@ class CraftService {
     int pageSize = 500,
     int? productId,
     String? keyword,
+    String? productCategory,
+    bool? isDefault,
     bool? enabled = true,
     String? lifecycleStatus,
+    DateTime? updatedFrom,
+    DateTime? updatedTo,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (productId != null) {
@@ -369,11 +373,23 @@ class CraftService {
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
     }
+    if (productCategory != null && productCategory.trim().isNotEmpty) {
+      query['product_category'] = productCategory.trim();
+    }
+    if (isDefault != null) {
+      query['is_default'] = '$isDefault';
+    }
     if (enabled != null) {
       query['enabled'] = '$enabled';
     }
     if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
       query['lifecycle_status'] = lifecycleStatus.trim().toLowerCase();
+    }
+    if (updatedFrom != null) {
+      query['updated_from'] = updatedFrom.toUtc().toIso8601String();
+    }
+    if (updatedTo != null) {
+      query['updated_to'] = updatedTo.toUtc().toIso8601String();
     }
     final uri = Uri.parse(
       '$_basePath/templates',
@@ -494,7 +510,6 @@ class CraftService {
     required String templateName,
     required bool isDefault,
     required List<CraftTemplateStepPayload> steps,
-    String lifecycleStatus = 'draft',
     String remark = '',
   }) async {
     final uri = Uri.parse('$_basePath/templates');
@@ -505,7 +520,6 @@ class CraftService {
         'product_id': productId,
         'template_name': templateName,
         'is_default': isDefault,
-        'lifecycle_status': lifecycleStatus,
         'remark': remark,
         'steps': steps.map((item) => item.toJson()).toList(),
       }),
@@ -781,7 +795,6 @@ class CraftService {
   Future<CraftTemplateBatchImportResult> importTemplates({
     required List<CraftTemplateBatchImportItem> items,
     bool overwriteExisting = false,
-    bool publishAfterImport = false,
   }) async {
     final uri = Uri.parse('$_basePath/templates/import');
     final response = await http.post(
@@ -789,7 +802,6 @@ class CraftService {
       headers: _authHeaders,
       body: jsonEncode({
         'overwrite_existing': overwriteExisting,
-        'publish_after_import': publishAfterImport,
         'items': items.map((item) => item.toJson()).toList(),
       }),
     );

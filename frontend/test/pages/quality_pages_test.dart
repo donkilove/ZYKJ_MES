@@ -6,6 +6,7 @@ import 'package:mes_client/models/quality_models.dart';
 import 'package:mes_client/pages/daily_first_article_page.dart';
 import 'package:mes_client/pages/production_repair_order_detail_page.dart';
 import 'package:mes_client/pages/production_scrap_statistics_detail_page.dart';
+import 'package:mes_client/pages/quality_page.dart';
 import 'package:mes_client/pages/quality_data_page.dart';
 import 'package:mes_client/pages/quality_defect_analysis_page.dart';
 import 'package:mes_client/services/production_service.dart';
@@ -103,6 +104,102 @@ void main() {
     expect(service.overviewCallCount, 0);
   });
 
+  testWidgets('质量数据页展示总览与工序人员质量口径', (tester) async {
+    final service = _FakeQualityService(
+      overviewResult: QualityStatsOverview(
+        firstArticleTotal: 0,
+        passedTotal: 0,
+        failedTotal: 0,
+        passRatePercent: 0,
+        defectTotal: 2,
+        scrapTotal: 2,
+        repairTotal: 1,
+        coveredOrderCount: 1,
+        coveredProcessCount: 1,
+        coveredOperatorCount: 1,
+        latestFirstArticleAt: null,
+      ),
+      processItems: [
+        QualityProcessStatItem(
+          processCode: 'QA-01',
+          processName: '检验',
+          firstArticleTotal: 0,
+          passedTotal: 0,
+          failedTotal: 0,
+          passRatePercent: 0,
+          defectTotal: 2,
+          scrapTotal: 2,
+          repairTotal: 1,
+          latestFirstArticleAt: null,
+        ),
+      ],
+      operatorItems: [
+        QualityOperatorStatItem(
+          operatorUserId: 9,
+          operatorUsername: 'quality_worker',
+          firstArticleTotal: 0,
+          passedTotal: 0,
+          failedTotal: 0,
+          passRatePercent: 0,
+          defectTotal: 2,
+          scrapTotal: 2,
+          repairTotal: 1,
+          latestFirstArticleAt: null,
+        ),
+      ],
+      productItems: const [
+        QualityProductStatItem(
+          productId: 3,
+          productCode: '',
+          productName: '产品A',
+          firstArticleTotal: 0,
+          passedTotal: 0,
+          failedTotal: 0,
+          passRatePercent: 0,
+          defectTotal: 2,
+          scrapTotal: 2,
+          repairTotal: 1,
+        ),
+      ],
+      trendItems: const [
+        QualityTrendItem(
+          date: '2026-03-02',
+          firstArticleTotal: 0,
+          passedTotal: 0,
+          failedTotal: 0,
+          passRatePercent: 0,
+          defectTotal: 2,
+          scrapTotal: 2,
+          repairTotal: 1,
+        ),
+      ],
+    );
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      wrapBody(
+        QualityDataPage(session: session, onLogout: () {}, service: service),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('不良总数'), findsOneWidget);
+    expect(find.text('报废总数'), findsOneWidget);
+    expect(find.text('维修总数'), findsOneWidget);
+    expect(find.text('2026-03-02'), findsOneWidget);
+    expect(find.text('检验'), findsOneWidget);
+    await tester.tap(find.text('按人员'));
+    await tester.pumpAndSettle();
+    expect(find.text('quality_worker'), findsOneWidget);
+    await tester.tap(find.text('按产品'));
+    await tester.pumpAndSettle();
+    expect(find.text('产品A'), findsOneWidget);
+  });
+
   testWidgets('不良分析页在非法日期范围时即时提示', (tester) async {
     final service = _FakeQualityService();
     tester.view.physicalSize = const Size(1600, 1200);
@@ -165,15 +262,78 @@ void main() {
     expect(find.text('缺陷现象'), findsOneWidget);
     expect(find.text('维修原因'), findsOneWidget);
     expect(find.textContaining('虚焊'), findsWidgets);
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pumpAndSettle();
     expect(find.textContaining('治具偏移'), findsOneWidget);
+  });
+
+  testWidgets('质量页透传报废消息后打开品质报废详情', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QualityPage(
+            session: session,
+            onLogout: () {},
+            visibleTabCodes: const [qualityScrapStatisticsTabCode],
+            capabilityCodes: const {'quality.scrap_statistics.export'},
+            preferredTabCode: qualityScrapStatisticsTabCode,
+            routePayloadJson: '{"action":"detail","scrap_id":21}',
+            repairScrapService: _FakeQualityRepairScrapService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('报废详情'), findsOneWidget);
+    expect(find.text('关联维修工单'), findsOneWidget);
+  });
+
+  testWidgets('质量页透传维修消息后打开品质维修详情', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QualityPage(
+            session: session,
+            onLogout: () {},
+            visibleTabCodes: const [qualityRepairOrdersTabCode],
+            capabilityCodes: const {
+              'quality.repair_orders.complete',
+              'quality.repair_orders.export',
+            },
+            preferredTabCode: qualityRepairOrdersTabCode,
+            routePayloadJson: '{"action":"detail","repair_order_id":7}',
+            repairScrapService: _FakeQualityRepairScrapService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('维修详情'), findsOneWidget);
+    expect(find.text('缺陷现象'), findsOneWidget);
   });
 }
 
 class _FakeQualityService extends QualityService {
-  _FakeQualityService({this.firstArticleResult})
+  _FakeQualityService({
+    this.firstArticleResult,
+    this.overviewResult,
+    this.processItems,
+    this.operatorItems,
+    this.productItems,
+    this.trendItems,
+  })
     : super(AppSession(baseUrl: 'http://localhost', accessToken: 'token'));
 
   final FirstArticleListResult? firstArticleResult;
+  final QualityStatsOverview? overviewResult;
+  final List<QualityProcessStatItem>? processItems;
+  final List<QualityOperatorStatItem>? operatorItems;
+  final List<QualityProductStatItem>? productItems;
+  final List<QualityTrendItem>? trendItems;
   int overviewCallCount = 0;
   int defectCallCount = 0;
 
@@ -208,11 +368,14 @@ class _FakeQualityService extends QualityService {
     String? result,
   }) async {
     overviewCallCount += 1;
-    return QualityStatsOverview(
+    return overviewResult ?? QualityStatsOverview(
       firstArticleTotal: 0,
       passedTotal: 0,
       failedTotal: 0,
       passRatePercent: 0,
+      defectTotal: 0,
+      scrapTotal: 0,
+      repairTotal: 0,
       coveredOrderCount: 0,
       coveredProcessCount: 0,
       coveredOperatorCount: 0,
@@ -228,7 +391,7 @@ class _FakeQualityService extends QualityService {
     String? processCode,
     String? operatorUsername,
     String? result,
-  }) async => const [];
+  }) async => processItems ?? const [];
 
   @override
   Future<List<QualityOperatorStatItem>> getQualityOperatorStats({
@@ -238,7 +401,7 @@ class _FakeQualityService extends QualityService {
     String? processCode,
     String? operatorUsername,
     String? result,
-  }) async => const [];
+  }) async => operatorItems ?? const [];
 
   @override
   Future<List<QualityProductStatItem>> getQualityProductStats({
@@ -248,7 +411,7 @@ class _FakeQualityService extends QualityService {
     String? processCode,
     String? operatorUsername,
     String? result,
-  }) async => const [];
+  }) async => productItems ?? const [];
 
   @override
   Future<List<QualityTrendItem>> getQualityTrend({
@@ -258,7 +421,7 @@ class _FakeQualityService extends QualityService {
     String? processCode,
     String? operatorUsername,
     String? result,
-  }) async => const [];
+  }) async => trendItems ?? const [];
 
   @override
   Future<DefectAnalysisResult> getDefectAnalysis({
@@ -338,7 +501,15 @@ class _FakeProductionService extends ProductionService {
       'created_at': '2026-03-05T09:00:00Z',
       'updated_at': '2026-03-05T10:00:00Z',
       'defect_rows': [
-        {'id': 1, 'phenomenon': '虚焊', 'quantity': 3},
+        {
+          'id': 1,
+          'phenomenon': '虚焊',
+          'quantity': 3,
+          'production_record_id': 31,
+          'production_record_type': 'production',
+          'production_record_quantity': 10,
+          'production_record_created_at': '2026-03-05T08:50:00Z',
+        },
       ],
       'cause_rows': [
         {
@@ -358,5 +529,178 @@ class _FakeProductionService extends ProductionService {
         },
       ],
     });
+  }
+}
+
+class _FakeQualityRepairScrapService extends _FakeQualityService {
+  @override
+  Future<ScrapStatisticsListResult> getScrapStatistics({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? productName,
+    String? processCode,
+    String progress = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    return ScrapStatisticsListResult(
+      total: 1,
+      items: [
+        await getScrapStatisticsDetail(scrapId: 21),
+      ],
+    );
+  }
+
+  @override
+  Future<ScrapStatisticsItem> getScrapStatisticsDetail({required int scrapId}) async {
+    return ScrapStatisticsItem.fromJson({
+      'id': scrapId,
+      'order_code': 'PO-21',
+      'product_name': '产品Q',
+      'process_name': '检验',
+      'scrap_reason': '破损',
+      'scrap_quantity': 3,
+      'progress': 'pending_apply',
+      'created_at': '2026-03-05T08:00:00Z',
+      'updated_at': '2026-03-05T08:10:00Z',
+      'related_repair_orders': [
+        {
+          'id': 7,
+          'repair_order_code': 'RW-21',
+          'status': 'completed',
+          'repair_quantity': 3,
+          'repaired_quantity': 2,
+          'scrap_quantity': 1,
+          'repair_time': '2026-03-05T09:00:00Z',
+        },
+      ],
+    });
+  }
+
+  @override
+  Future<RepairOrderListResult> getRepairOrders({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String status = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    return RepairOrderListResult(
+      total: 1,
+      items: [
+        RepairOrderItem.fromJson({
+          'id': 7,
+          'repair_order_code': 'RW-21',
+          'source_order_code': 'PO-21',
+          'product_name': '产品Q',
+          'source_process_code': 'QA-01',
+          'source_process_name': '检验',
+          'production_quantity': 10,
+          'repair_quantity': 3,
+          'repaired_quantity': 2,
+          'scrap_quantity': 1,
+          'scrap_replenished': false,
+          'repair_time': '2026-03-05T09:00:00Z',
+          'status': 'completed',
+          'created_at': '2026-03-05T09:00:00Z',
+          'updated_at': '2026-03-05T10:00:00Z',
+        }),
+      ],
+    );
+  }
+
+  @override
+  Future<RepairOrderDetailItem> getRepairOrderDetail({required int repairOrderId}) {
+    return _FakeProductionService().getRepairOrderDetail(
+      repairOrderId: repairOrderId,
+    );
+  }
+
+  @override
+  Future<RepairOrderPhenomenaSummaryResult> getRepairOrderPhenomenaSummary({
+    required int repairOrderId,
+  }) async {
+    return RepairOrderPhenomenaSummaryResult(
+      repairOrderId: repairOrderId,
+      items: [
+        RepairOrderPhenomenonSummaryItem(phenomenon: '虚焊', quantity: 3),
+      ],
+    );
+  }
+
+  @override
+  Future<ProductionOrderDetail> getOrderDetail({required int orderId}) async {
+    return ProductionOrderDetail.fromJson({
+      'order': {
+        'id': orderId,
+        'order_code': 'PO-21',
+        'product_id': 1,
+        'product_name': '产品Q',
+        'quantity': 10,
+        'status': 'in_progress',
+        'created_at': '2026-03-05T09:00:00Z',
+        'updated_at': '2026-03-05T10:00:00Z',
+      },
+      'processes': [
+        {
+          'id': 9,
+          'process_code': 'QA-01',
+          'process_name': '检验',
+          'process_order': 1,
+          'status': 'in_progress',
+          'visible_quantity': 10,
+          'completed_quantity': 0,
+          'created_at': '2026-03-05T09:00:00Z',
+          'updated_at': '2026-03-05T10:00:00Z',
+        },
+      ],
+      'sub_orders': [],
+      'records': [],
+      'events': [],
+    });
+  }
+
+  @override
+  Future<RepairOrderItem> completeRepairOrder({
+    required int repairOrderId,
+    required List<RepairCauseItemInput> causeItems,
+    required bool scrapReplenished,
+    required List<RepairReturnAllocationInput> returnAllocations,
+  }) async {
+    return (await getRepairOrders(page: 1, pageSize: 1)).items.first;
+  }
+
+  @override
+  Future<ProductionExportResult> exportRepairOrders({
+    String? keyword,
+    String status = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    return ProductionExportResult(
+      fileName: 'repair.csv',
+      mimeType: 'text/csv',
+      contentBase64: 'cmVwYWly',
+      exportedCount: 1,
+    );
+  }
+
+  @override
+  Future<ProductionExportResult> exportScrapStatistics({
+    String? keyword,
+    String? productName,
+    String? processCode,
+    String progress = 'all',
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    return ProductionExportResult(
+      fileName: 'scrap.csv',
+      mimeType: 'text/csv',
+      contentBase64: 'c2NyYXA=',
+      exportedCount: 1,
+    );
   }
 }

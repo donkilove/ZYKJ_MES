@@ -178,8 +178,25 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       );
       final templateResult = await _craftService.listTemplates(
         pageSize: 500,
-        enabled: null,
+        productId: _productFilterId,
+        keyword: _templateKeyword.isEmpty ? null : _templateKeyword,
+        productCategory: _productCategoryFilter,
+        isDefault: _defaultTemplateFilter,
+        enabled: _templateEnabledFilter,
         lifecycleStatus: _lifecycleFilter,
+        updatedFrom: _updatedFromDate,
+        updatedTo: _updatedToDate == null
+            ? null
+            : DateTime(
+                _updatedToDate!.year,
+                _updatedToDate!.month,
+                _updatedToDate!.day,
+                23,
+                59,
+                59,
+                999,
+                999,
+              ),
       );
       final systemMasterTemplate = await _craftService
           .getSystemMasterTemplate();
@@ -310,61 +327,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   List<CraftTemplateItem> get _filteredTemplates {
-    var rows = _templates;
-    if (_productFilterId != null) {
-      rows = rows.where((item) => item.productId == _productFilterId).toList();
-    }
-    if (_templateKeyword.isNotEmpty) {
-      final keyword = _templateKeyword.toLowerCase();
-      rows = rows
-          .where(
-            (item) =>
-                item.templateName.toLowerCase().contains(keyword) ||
-                item.productName.toLowerCase().contains(keyword),
-          )
-          .toList();
-    }
-    if (_productCategoryFilter != null && _productCategoryFilter!.isNotEmpty) {
-      rows = rows
-          .where((item) => item.productCategory == _productCategoryFilter)
-          .toList();
-    }
-    if (_defaultTemplateFilter != null) {
-      rows = rows
-          .where((item) => item.isDefault == _defaultTemplateFilter)
-          .toList();
-    }
-    if (_templateEnabledFilter != null) {
-      rows = rows
-          .where((item) => item.isEnabled == _templateEnabledFilter)
-          .toList();
-    }
-    if (_updatedFromDate != null) {
-      final from = DateTime(
-        _updatedFromDate!.year,
-        _updatedFromDate!.month,
-        _updatedFromDate!.day,
-      );
-      rows = rows
-          .where((item) => !item.updatedAt.toLocal().isBefore(from))
-          .toList();
-    }
-    if (_updatedToDate != null) {
-      final to = DateTime(
-        _updatedToDate!.year,
-        _updatedToDate!.month,
-        _updatedToDate!.day,
-        23,
-        59,
-        59,
-        999,
-        999,
-      );
-      rows = rows
-          .where((item) => !item.updatedAt.toLocal().isAfter(to))
-          .toList();
-    }
-    return rows;
+    return _templates;
   }
 
   List<String> get _productCategoryOptions {
@@ -601,7 +564,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     bool isDefault = existing?.isDefault ?? false;
     bool isEnabled = existing?.isEnabled ?? true;
     bool syncOrders = true;
-    bool createAsPublished = false;
 
     List<_TemplateStepDraft> steps = [];
     if (isEdit) {
@@ -728,16 +690,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                           },
                         ),
                         if (!isEdit)
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('新建后直接发布'),
-                            subtitle: const Text('关闭时将以草稿状态保存'),
-                            value: createAsPublished,
-                            onChanged: (value) {
-                              setDialogState(() {
-                                createAsPublished = value;
-                              });
-                            },
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              '新建模板统一先保存为草稿，完成评审后再由列表中的“发布”入口生效。',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           ),
                         if (isEdit)
                           SwitchListTile(
@@ -982,9 +940,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                           productId: selectedProductId,
                           templateName: templateNameController.text.trim(),
                           isDefault: isDefault,
-                          lifecycleStatus: createAsPublished
-                              ? 'published'
-                              : 'draft',
                           remark: remarkController.text.trim(),
                           steps: payloadSteps,
                         );
@@ -1747,22 +1702,11 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       _showNoPermission();
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('归档模板'),
-        content: Text('确认归档模板 ${item.templateName} 吗？归档后将无法用于新订单。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('归档'),
-          ),
-        ],
-      ),
+    final confirmed = await _confirmTemplateActionWithImpact(
+      item: item,
+      title: '归档模板',
+      confirmText: '归档',
+      description: '确认归档模板 ${item.templateName} 吗？归档后将无法用于新订单。',
     );
     if (confirmed != true) {
       return;
@@ -1815,24 +1759,37 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     if (item.isEnabled == enabled) {
       return;
     }
+    if (!mounted) {
+      return;
+    }
     final actionText = enabled ? '启用' : '停用';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('$actionText模板'),
-        content: Text('确认$actionText模板 ${item.templateName} 吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(actionText),
-          ),
-        ],
-      ),
-    );
+    final bool? confirmed;
+    if (enabled) {
+      confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('$actionText模板'),
+          content: Text('确认$actionText模板 ${item.templateName} 吗？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(actionText),
+            ),
+          ],
+        ),
+      );
+    } else {
+      confirmed = await _confirmTemplateActionWithImpact(
+        item: item,
+        title: '$actionText模板',
+        confirmText: actionText,
+        description: '确认$actionText模板 ${item.templateName} 吗？停用后模板将不能继续用于维护与新建流程。',
+      );
+    }
     if (confirmed != true) {
       return;
     }
@@ -1862,22 +1819,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       _showNoPermission();
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除模板'),
-        content: Text('确认删除模板 ${item.templateName} 吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final confirmed = await _confirmTemplateActionWithImpact(
+      item: item,
+      title: '删除模板',
+      confirmText: '删除',
+      description:
+          '确认删除模板 ${item.templateName} 吗？删除前已展示影响摘要；若存在订单、历史版本或下游复用模板，后端会继续拦截。',
     );
     if (confirmed != true) {
       return;
@@ -1921,6 +1868,95 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       default:
         return '手工创建';
     }
+  }
+
+  String _templateVersionActionLabel(CraftTemplateVersionItem version) {
+    final recordTitle = version.recordTitle.trim();
+    if (recordTitle.isNotEmpty) {
+      return recordTitle;
+    }
+    if (version.action == 'publish') {
+      return '发布记录 P${version.version}';
+    }
+    if (version.action == 'rollback') {
+      return '回滚发布记录 P${version.version}';
+    }
+    return '版本记录 P${version.version}';
+  }
+
+  String _templateVersionSummary(CraftTemplateVersionItem version) {
+    final recordSummary = version.recordSummary.trim();
+    if (recordSummary.isNotEmpty) {
+      return recordSummary;
+    }
+    if (version.action == 'publish') {
+      return '该记录对应一次正式发布，版本已进入生效态。';
+    }
+    if (version.action == 'rollback') {
+      return '该记录对应一次回滚后重新发布，已替换当前生效版本。';
+    }
+    return '该记录仅用于历史追溯，是否生效以发布记录为准。';
+  }
+
+  CraftTemplateItem? _requireFocusedTemplate(String actionLabel) {
+    final focused = _focusedTemplate;
+    if (focused != null) {
+      return focused;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('请先在模板列表中定位后再执行“$actionLabel”')));
+    return null;
+  }
+
+  Future<void> _showTopCopyFromMasterShortcut() async {
+    if (!_canManageTemplates) {
+      _showNoPermission();
+      return;
+    }
+    final focused = _focusedTemplate;
+    if (focused != null) {
+      await _copyFromSystemMaster(focused);
+      return;
+    }
+    if (_products.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('暂无可用产品')));
+      return;
+    }
+    final fallbackProductId = _productFilterId ?? _products.first.id;
+    final fallbackProduct = _products.firstWhere(
+      (item) => item.id == fallbackProductId,
+      orElse: () => _products.first,
+    );
+    await _copyFromSystemMaster(
+      CraftTemplateItem(
+        id: 0,
+        productId: fallbackProduct.id,
+        productName: fallbackProduct.name,
+        productCategory: '',
+        templateName: '系统母版套版',
+        version: 0,
+        lifecycleStatus: 'draft',
+        publishedVersion: 0,
+        isDefault: false,
+        isEnabled: true,
+        createdByUserId: null,
+        createdByUsername: null,
+        updatedByUserId: null,
+        updatedByUsername: null,
+        remark: '',
+        sourceType: 'manual',
+        sourceTemplateId: null,
+        sourceTemplateName: null,
+        sourceTemplateVersion: null,
+        sourceProductId: null,
+        sourceSystemMasterVersion: null,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
   }
 
   int _parseIntSafe(Object? value, {int fallback = 0}) {
@@ -2002,6 +2038,200 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     return result;
   }
 
+  String _impactReferenceTitle(CraftTemplateImpactReferenceItem item) {
+    final code = item.refCode?.trim();
+    if (code != null && code.isNotEmpty && code != item.refName) {
+      return '$code ${item.refName}';
+    }
+    return item.refName;
+  }
+
+  Widget _buildImpactSummaryWrap(CraftTemplateImpactAnalysis analysis) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        Chip(label: Text('总计 ${analysis.totalOrders}')),
+        Chip(label: Text('待开工 ${analysis.pendingOrders}')),
+        Chip(label: Text('生产中 ${analysis.inProgressOrders}')),
+        Chip(label: Text('可同步 ${analysis.syncableOrders}')),
+        Chip(label: Text('受阻 ${analysis.blockedOrders}')),
+        if (analysis.totalReferences > 0)
+          Chip(label: Text('关键引用 ${analysis.totalReferences}')),
+        if (analysis.userStageReferenceCount > 0)
+          Chip(label: Text('用户工段 ${analysis.userStageReferenceCount}')),
+        if (analysis.templateReuseReferenceCount > 0)
+          Chip(label: Text('模板复用 ${analysis.templateReuseReferenceCount}')),
+      ],
+    );
+  }
+
+  Widget _buildImpactReferenceSection(CraftTemplateImpactAnalysis analysis) {
+    if (analysis.referenceItems.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        const Text('关键引用对象', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 168,
+          child: ListView.separated(
+            itemCount: analysis.referenceItems.length,
+            separatorBuilder: (context, index) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final ref = analysis.referenceItems[index];
+              return ListTile(
+                dense: true,
+                title: Text(_impactReferenceTitle(ref)),
+                subtitle: Text(
+                  [
+                    if ((ref.detail ?? '').isNotEmpty) ref.detail!,
+                    if ((ref.riskNote ?? '').isNotEmpty) ref.riskNote!,
+                  ].join('｜'),
+                ),
+                trailing: Text(ref.refStatus ?? '-'),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionImpactPreview(CraftTemplateImpactAnalysis analysis) {
+    final previewOrders = analysis.items.take(3).toList();
+    final previewReferences = analysis.referenceItems.take(3).toList();
+    if (previewOrders.isEmpty && previewReferences.isEmpty) {
+      return const Text('当前未发现受影响订单与关键引用。');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (previewOrders.isNotEmpty) ...[
+          const Text('订单影响摘要', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          ...previewOrders.map(
+            (order) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '${order.orderCode} · ${order.orderStatus}${(order.reason ?? '').isNotEmpty ? ' · ${order.reason}' : ''}',
+              ),
+            ),
+          ),
+          if (analysis.items.length > previewOrders.length)
+            Text('其余 ${analysis.items.length - previewOrders.length} 条请通过“影响分析”查看。'),
+        ],
+        if (previewReferences.isNotEmpty) ...[
+          if (previewOrders.isNotEmpty) const SizedBox(height: 12),
+          const Text('关键引用摘要', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          ...previewReferences.map(
+            (ref) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '${_impactReferenceTitle(ref)}${(ref.detail ?? '').isNotEmpty ? ' · ${ref.detail}' : ''}${(ref.riskNote ?? '').isNotEmpty ? ' · ${ref.riskNote}' : ''}',
+              ),
+            ),
+          ),
+          if (analysis.referenceItems.length > previewReferences.length)
+            Text(
+              '其余 ${analysis.referenceItems.length - previewReferences.length} 条关键引用请通过“影响分析”查看。',
+            ),
+        ],
+      ],
+    );
+  }
+
+  bool _isTemplateActionBlocked(CraftTemplateImpactAnalysis analysis) {
+    return analysis.blockedOrders > 0;
+  }
+
+  Future<bool> _confirmTemplateActionWithImpact({
+    required CraftTemplateItem item,
+    required String title,
+    required String confirmText,
+    required String description,
+  }) async {
+    try {
+      final analysis = await _craftService.getTemplateImpactAnalysis(
+        templateId: item.id,
+      );
+      final isBlocked = _isTemplateActionBlocked(analysis);
+      if (!mounted) {
+        return false;
+      }
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 720,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(description),
+                  if (isBlocked) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(dialogContext).colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '当前存在 ${analysis.blockedOrders} 条阻断级引用，后端会拦截本次$confirmText；请先处理进行中工单后再操作。',
+                        style: TextStyle(
+                          color: Theme.of(
+                            dialogContext,
+                          ).colorScheme.onErrorContainer,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  _buildImpactSummaryWrap(analysis),
+                  const SizedBox(height: 12),
+                  _buildActionImpactPreview(analysis),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: isBlocked
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(true),
+              child: Text(confirmText),
+            ),
+          ],
+        ),
+      );
+      return confirmed == true;
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return false;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
+      return false;
+    }
+  }
+
   Future<void> _showImpactAnalysisDialog(CraftTemplateItem item) async {
     if (!_canViewTemplates) {
       _showNoPermission();
@@ -2025,17 +2255,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    Chip(label: Text('总计 ${analysis.totalOrders}')),
-                    Chip(label: Text('待开工 ${analysis.pendingOrders}')),
-                    Chip(label: Text('生产中 ${analysis.inProgressOrders}')),
-                    Chip(label: Text('可同步 ${analysis.syncableOrders}')),
-                    Chip(label: Text('受阻 ${analysis.blockedOrders}')),
-                  ],
-                ),
+                _buildImpactSummaryWrap(analysis),
                 const SizedBox(height: 12),
                 const Text(
                   '订单明细',
@@ -2069,6 +2289,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                           },
                         ),
                 ),
+                _buildImpactReferenceSection(analysis),
               ],
             ),
           ),
@@ -2165,15 +2386,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          Chip(label: Text('总计 ${analysis!.totalOrders}')),
-                          Chip(label: Text('可同步 ${analysis.syncableOrders}')),
-                          Chip(label: Text('受阻 ${analysis.blockedOrders}')),
-                        ],
-                      ),
+                      _buildImpactSummaryWrap(analysis!),
                       const SizedBox(height: 8),
                       if (analysis.items.any((item) => !item.syncable))
                         Text(
@@ -2182,6 +2395,14 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                             color: Theme.of(context).colorScheme.error,
                           ),
                         ),
+                      if (analysis.referenceItems.isNotEmpty)
+                        Text(
+                          '已纳入用户工段引用与模板复用关系，请发布前同步确认关键引用对象。',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      _buildImpactReferenceSection(analysis),
                       const SizedBox(height: 8),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -2404,33 +2625,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                     const SizedBox(height: 8),
                     if (loadingAnalysis) const LinearProgressIndicator(),
                     if (loadingAnalysis) const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        Chip(label: Text('总计 ${currentAnalysis.totalOrders}')),
-                        Chip(
-                          label: Text('待开工 ${currentAnalysis.pendingOrders}'),
-                        ),
-                        Chip(
-                          label: Text(
-                            '生产中 ${currentAnalysis.inProgressOrders}',
-                          ),
-                        ),
-                        Chip(
-                          label: Text('可同步 ${currentAnalysis.syncableOrders}'),
-                        ),
-                        Chip(
-                          label: Text('受阻 ${currentAnalysis.blockedOrders}'),
-                        ),
-                      ],
-                    ),
+                    _buildImpactSummaryWrap(currentAnalysis),
                     const SizedBox(height: 8),
                     if (currentAnalysis.items.any((order) => !order.syncable))
                       Text(
                         '存在无法同步的订单，回滚时会自动跳过受阻订单。',
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    if (currentAnalysis.referenceItems.isNotEmpty)
+                      Text(
+                        '已纳入用户工段引用与模板复用关系，请回滚前同步确认关键引用对象。',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                     const SizedBox(height: 8),
@@ -2502,6 +2710,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                               },
                             ),
                     ),
+                    _buildImpactReferenceSection(currentAnalysis),
                   ],
                 ),
               ),
@@ -2821,13 +3030,16 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                 : null,
                             title: Text(
                               isTargetVersion
-                                  ? 'v${version.version} · ${version.action} · 目标版本'
-                                  : 'v${version.version} · ${version.action}',
+                                  ? '${_templateVersionActionLabel(version)} · 目标版本'
+                                  : _templateVersionActionLabel(version),
                             ),
                             subtitle: Text(
-                              '${version.createdAt.toLocal()}'
-                              '${version.note != null && version.note!.trim().isNotEmpty ? ' · ${version.note}' : ''}',
+                              '${version.createdAt.toLocal()} · ${_templateVersionSummary(version)}'
+                              '${version.note != null && version.note!.trim().isNotEmpty ? '\n说明：${version.note}' : ''}'
+                              '${version.createdByUsername != null && version.createdByUsername!.trim().isNotEmpty ? '\n操作人：${version.createdByUsername}' : ''}'
+                              '${version.sourceVersion != null ? '\n来源版本：v${version.sourceVersion}' : ''}',
                             ),
+                            isThreeLine: true,
                             trailing: _canManageTemplates
                                 ? Wrap(
                                     spacing: 8,
@@ -3088,7 +3300,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
     final payloadController = TextEditingController();
     bool overwriteExisting = false;
-    bool publishAfterImport = false;
 
     final done = await showLockedFormDialog<bool>(
       context: context,
@@ -3113,15 +3324,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         });
                       },
                     ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('导入后直接发布'),
-                      value: publishAfterImport,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          publishAfterImport = value;
-                        });
-                      },
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        '说明：导入成功后统一生成草稿模板，不允许直接绕过发布流程。',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Expanded(
@@ -3164,7 +3372,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                       final result = await _craftService.importTemplates(
                         items: items,
                         overwriteExisting: overwriteExisting,
-                        publishAfterImport: publishAfterImport,
                       );
                       if (dialogContext.mounted) {
                         ScaffoldMessenger.of(dialogContext).showSnackBar(
@@ -3317,6 +3524,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       case _TemplateAction.publish:
         if (!_canManageTemplates) {
           _showNoPermission();
+          return;
+        }
+        if (item.lifecycleStatus != 'draft') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('只有草稿模板可执行发布，请先创建草稿后再发布')),
+          );
           return;
         }
         await _showPublishDialog(item);
@@ -3628,6 +3841,53 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           ),
           const SizedBox(height: 12),
           _buildJumpBanner(theme),
+          if (_canManageTemplates)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _loading ? null : _showTopCopyFromMasterShortcut,
+                    icon: const Icon(Icons.library_add),
+                    label: const Text('从系统母版套版'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _loading
+                        ? null
+                        : () async {
+                            final item = _requireFocusedTemplate('从已有模板复制');
+                            if (item == null) {
+                              return;
+                            }
+                            await _copyTemplate(item);
+                          },
+                    icon: const Icon(Icons.copy_all),
+                    label: const Text('从已有模板复制'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _loading
+                        ? null
+                        : () async {
+                            final item = _requireFocusedTemplate('导出版本参数');
+                            if (item == null) {
+                              return;
+                            }
+                            await _showVersionDialog(item);
+                          },
+                    icon: const Icon(Icons.tune),
+                    label: const Text('导出版本参数'),
+                  ),
+                  if (_focusedTemplate != null)
+                    Text(
+                      '当前定位：${_focusedTemplate!.templateName}（${_focusedTemplate!.productName}）',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                ],
+              ),
+            ),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -3638,7 +3898,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             child: Text(
               _systemMasterTemplate == null
                   ? '系统母版状态：未配置（新建产品将跳过自动绑定默认模板）'
-                  : '系统母版状态：已配置（版本 v${_systemMasterTemplate!.version}，步骤 ${_systemMasterTemplate!.steps.length}，最近更新人 ${_systemMasterTemplate!.updatedByUsername ?? '-'}，最近更新时间 ${_systemMasterTemplate!.updatedAt.toLocal()}）',
+                  : '系统母版状态：已配置（版本 v${_systemMasterTemplate!.version}，步骤 ${_systemMasterTemplate!.steps.length}，最近更新人 ${_systemMasterTemplate!.updatedByUsername ?? '-'}，最近更新时间 ${_systemMasterTemplate!.updatedAt.toLocal()}；自动套版门禁默认开启，可由后端配置 craft_auto_bind_default_template_enabled 关闭）',
             ),
           ),
           const SizedBox(height: 12),
@@ -3876,23 +4136,29 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                   final item = templates[index];
                                   final isFocused =
                                       item.id == _focusedTemplateId;
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 8,
-                                      horizontal: 12,
-                                    ),
-                                    decoration: isFocused
-                                        ? BoxDecoration(
-                                            color: theme
-                                                .colorScheme
-                                                .primaryContainer
-                                                .withValues(alpha: 0.28),
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          )
-                                        : null,
-                                    child: Row(
+                                  return InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        _focusedTemplateId = item.id;
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                        horizontal: 12,
+                                      ),
+                                      decoration: isFocused
+                                          ? BoxDecoration(
+                                              color: theme
+                                                  .colorScheme
+                                                  .primaryContainer
+                                                  .withValues(alpha: 0.28),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            )
+                                          : null,
+                                      child: Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.center,
                                       children: [
@@ -3972,13 +4238,16 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                                         ),
                                                       ),
                                                     );
-                                                    items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .publish,
-                                                        child: Text('发布'),
-                                                      ),
-                                                    );
+                                                    if (item.lifecycleStatus ==
+                                                        'draft') {
+                                                      items.add(
+                                                        const PopupMenuItem(
+                                                          value: _TemplateAction
+                                                              .publish,
+                                                          child: Text('发布'),
+                                                        ),
+                                                      );
+                                                    }
                                                     items.add(
                                                       const PopupMenuItem(
                                                         value: _TemplateAction
@@ -4088,6 +4357,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                               ),
                                         ),
                                       ],
+                                      ),
                                     ),
                                   );
                                 },

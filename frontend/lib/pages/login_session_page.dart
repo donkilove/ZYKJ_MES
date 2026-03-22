@@ -11,13 +11,17 @@ class LoginSessionPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
-    required this.canManage,
+    required this.canViewLoginLogs,
+    required this.canViewOnlineSessions,
+    required this.canForceOffline,
     this.userService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
-  final bool canManage;
+  final bool canViewLoginLogs;
+  final bool canViewOnlineSessions;
+  final bool canForceOffline;
   final UserService? userService;
 
   @override
@@ -89,7 +93,20 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   }
 
   Future<void> _loadAll() async {
-    await Future.wait([_loadLoginLogs(), _loadOnlineSessions()]);
+    final tasks = <Future<void>>[];
+    if (widget.canViewLoginLogs) {
+      tasks.add(_loadLoginLogs());
+    }
+    if (widget.canViewOnlineSessions) {
+      tasks.add(_loadOnlineSessions());
+    }
+    if (tasks.isEmpty) {
+      setState(() {
+        _message = '当前账号没有登录日志或在线会话查看权限。';
+      });
+      return;
+    }
+    await Future.wait(tasks);
   }
 
   Future<void> _loadLoginLogs({int? page}) async {
@@ -217,7 +234,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   }
 
   bool _canForceOfflineSession(OnlineSessionItem item) {
-    return widget.canManage && item.status == 'active';
+    return widget.canForceOffline && item.status == 'active';
   }
 
   Color _sessionStatusColor(BuildContext context, String status) {
@@ -225,7 +242,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   }
 
   Future<void> _forceOfflineSingle(String sessionTokenId) async {
-    if (!widget.canManage) {
+    if (!widget.canForceOffline) {
       return;
     }
     try {
@@ -249,7 +266,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   }
 
   Future<void> _forceOfflineBatch() async {
-    if (!widget.canManage || _selectedSessionIds.isEmpty) {
+    if (!widget.canForceOffline || _selectedSessionIds.isEmpty) {
       return;
     }
     try {
@@ -499,7 +516,8 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
               ),
               const SizedBox(width: 8),
               FilledButton(
-                onPressed: widget.canManage && _selectedSessionIds.isNotEmpty
+                onPressed:
+                    widget.canForceOffline && _selectedSessionIds.isNotEmpty
                     ? _forceOfflineBatch
                     : null,
                 child: Text('批量强制下线（${_selectedSessionIds.length}）'),
@@ -643,8 +661,25 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final tabs = <Tab>[];
+    final pages = <Widget>[];
+    if (widget.canViewLoginLogs) {
+      tabs.add(const Tab(text: '登录日志'));
+      pages.add(_buildLoginLogsTab());
+    }
+    if (widget.canViewOnlineSessions) {
+      tabs.add(const Tab(text: '在线会话'));
+      pages.add(_buildOnlineSessionsTab());
+    }
+
+    if (tabs.isEmpty) {
+      return Center(
+        child: Text(_message.isEmpty ? '当前账号没有登录日志或在线会话查看权限。' : _message),
+      );
+    }
+
     return DefaultTabController(
-      length: 2,
+      length: tabs.length,
       child: Column(
         children: [
           if (_message.isNotEmpty)
@@ -658,17 +693,8 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                 ),
               ),
             ),
-          const TabBar(
-            tabs: [
-              Tab(text: '登录日志'),
-              Tab(text: '在线会话'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [_buildLoginLogsTab(), _buildOnlineSessionsTab()],
-            ),
-          ),
+          TabBar(tabs: tabs),
+          Expanded(child: TabBarView(children: pages)),
         ],
       ),
     );

@@ -59,6 +59,115 @@ void main() {
             },
           );
         },
+        'GET /products/parameter-query': (request) {
+          expect(request.uri.queryParameters['page'], '1');
+          expect(request.uri.queryParameters['page_size'], '10');
+          expect(request.uri.queryParameters['keyword'], '参数查询');
+          expect(
+            request.uri.queryParameters['effective_version_keyword'],
+            'V1.0',
+          );
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'total': 1,
+                'items': [
+                  {
+                    'id': 18,
+                    'name': '参数查询产品',
+                    'category': '贴片',
+                    'lifecycle_status': 'active',
+                    'current_version': 2,
+                    'effective_version': 1,
+                    'created_at': '2026-03-01T00:00:00Z',
+                    'updated_at': '2026-03-02T00:00:00Z',
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'GET /products/8/detail': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'product': {
+                'id': 8,
+                'name': 'Product A',
+                'category': 'fixture',
+                'lifecycle_status': 'effective',
+                'current_version': 3,
+                'effective_version': 3,
+                'effective_at': '2026-03-01T00:00:00Z',
+                'created_at': '2026-03-01T00:00:00Z',
+                'updated_at': '2026-03-02T00:00:00Z',
+              },
+              'detail_parameters': {
+                'product_id': 8,
+                'product_name': 'Product A',
+                'parameter_scope': 'effective',
+                'version': 3,
+                'version_label': 'V1.3',
+                'lifecycle_status': 'effective',
+                'total': 1,
+                'items': [
+                  {
+                    'name': 'Param 1',
+                    'category': 'General',
+                    'type': 'Text',
+                    'value': 'v',
+                    'sort_order': 1,
+                    'is_preset': false,
+                  },
+                ],
+              },
+              'detail_parameter_message': null,
+              'latest_version_changed_at': '2026-03-02T01:00:00Z',
+              'version_total': 1,
+              'versions': [
+                {
+                  'version': 3,
+                  'version_label': 'V1.3',
+                  'lifecycle_status': 'effective',
+                  'action': 'activate',
+                  'created_by_username': 'admin',
+                  'created_at': '2026-03-02T00:00:00Z',
+                  'updated_at': '2026-03-02T01:00:00Z',
+                },
+              ],
+              'history_total': 1,
+              'history_items': [
+                {
+                  'id': 10,
+                  'version': 3,
+                  'version_label': 'V1.3',
+                  'remark': 'detail history',
+                  'changed_keys': ['Param 1'],
+                  'operator_username': 'admin',
+                  'created_at': '2026-03-02T00:00:00Z',
+                },
+              ],
+              'related_info_sections': [
+                {
+                  'code': 'process_templates',
+                  'title': '关联工艺路线',
+                  'total': 1,
+                  'items': [
+                    {'label': '贴片主线工艺', 'value': '版本 2 | 默认 | published'},
+                  ],
+                },
+                {
+                  'code': 'quality_standards',
+                  'title': '质检标准',
+                  'total': 0,
+                  'items': [],
+                  'empty_message': '当前仓库尚未沉淀产品-质检标准关联数据。',
+                },
+              ],
+            },
+          },
+        ),
         'POST /products': (request) {
           expect(jsonDecode(request.bodyText), {
             'name': 'Product B',
@@ -291,11 +400,18 @@ void main() {
         pageSize: 20,
         keyword: '  abc ',
       );
+      final detail = await service.getProductDetail(productId: 8);
       await service.createProduct(name: 'Product B', category: '贴片');
       await service.deleteProduct(productId: 8, password: 'pwd123');
       final parameters = await service.listProductParameters(
         productId: 8,
         version: 3,
+      );
+      final queryProducts = await service.listProductsForParameterQuery(
+        page: 1,
+        pageSize: 10,
+        keyword: '参数查询',
+        effectiveVersionKeyword: 'V1.0',
       );
       final updateResult = await service.updateProductParameters(
         productId: 8,
@@ -343,6 +459,10 @@ void main() {
       );
 
       expect(products.items.single.name, 'Product A');
+      expect(detail.detailParameters.parameterScope, 'effective');
+      expect(detail.historyItems.single.remark, 'detail history');
+      expect(detail.relatedInfoSections.first.items.single.label, '贴片主线工艺');
+      expect(queryProducts.items.single.name, '参数查询产品');
       expect(products.items.single.lifecycleStatus, 'effective');
       expect(parameters.items.single.name, 'Param 1');
       expect(parameters.versionLabel, 'V1.3');
@@ -356,7 +476,7 @@ void main() {
       expect(versions.items.first.displayVersion, 'V1.2');
       expect(compare.changedItems, 1);
       expect(rollback.changedKeys.single, 'Param 1');
-      expect(server.requests.length, 11);
+      expect(server.requests.length, 13);
     });
 
     test('throws ApiException when create product fails', () async {

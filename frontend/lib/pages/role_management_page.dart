@@ -11,13 +11,19 @@ class RoleManagementPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
-    required this.canManage,
+    required this.canCreateRole,
+    required this.canEditRole,
+    required this.canToggleRole,
+    required this.canDeleteRole,
     this.userService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
-  final bool canManage;
+  final bool canCreateRole;
+  final bool canEditRole;
+  final bool canToggleRole;
+  final bool canDeleteRole;
   final UserService? userService;
 
   @override
@@ -128,7 +134,10 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
   }
 
   Future<void> _showRoleDialog({RoleItem? role}) async {
-    if (!widget.canManage) {
+    if (role == null && !widget.canCreateRole) {
+      return;
+    }
+    if (role != null && !widget.canEditRole) {
       return;
     }
     final formKey = GlobalKey<FormState>();
@@ -140,7 +149,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
         : _roleTypeCustom;
     var selectedEnabled = role?.isEnabled ?? true;
     final canEditRoleType = role == null;
-    final canEditStatus = !(role?.isBuiltin ?? false);
+    final editingExistingRole = role != null;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -223,25 +232,34 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                             ),
                           ),
                         ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<bool>(
-                        initialValue: selectedEnabled,
-                        decoration: const InputDecoration(labelText: '状态'),
-                        items: const [
-                          DropdownMenuItem(value: true, child: Text('启用')),
-                          DropdownMenuItem(value: false, child: Text('停用')),
-                        ],
-                        onChanged: canEditStatus
-                            ? (value) {
-                                if (value == null) {
-                                  return;
-                                }
-                                setDialogState(() {
-                                  selectedEnabled = value;
-                                });
-                              }
-                            : null,
-                      ),
+                       const SizedBox(height: 12),
+                       if (!editingExistingRole)
+                         DropdownButtonFormField<bool>(
+                           initialValue: selectedEnabled,
+                           decoration: const InputDecoration(labelText: '状态'),
+                           items: const [
+                             DropdownMenuItem(value: true, child: Text('启用')),
+                             DropdownMenuItem(value: false, child: Text('停用')),
+                           ],
+                           onChanged: (value) {
+                             if (value == null) {
+                               return;
+                             }
+                             setDialogState(() {
+                               selectedEnabled = value;
+                             });
+                           },
+                         )
+                       else
+                          Align(
+                            alignment: Alignment.centerLeft,
+                           child: Text(
+                              role.isBuiltin
+                                  ? '系统内置角色仅禁止改名、删除；如需变更启停，请使用列表中的启停按钮。'
+                                  : '当前状态：${_statusLabel(selectedEnabled)}，如需变更请使用列表中的启停按钮。',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
                     ],
                   ),
                 ),
@@ -305,7 +323,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
   }
 
   Future<void> _toggleRole(RoleItem role) async {
-    if (!widget.canManage || role.isBuiltin) {
+    if (!widget.canToggleRole) {
       return;
     }
     try {
@@ -329,7 +347,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
   }
 
   Future<void> _deleteRole(RoleItem role) async {
-    if (!widget.canManage || role.isBuiltin) {
+    if (!widget.canDeleteRole || role.isBuiltin) {
       return;
     }
     final confirmed = await showDialog<bool>(
@@ -396,10 +414,11 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                 child: const Text('查询'),
               ),
               const SizedBox(width: 10),
-              FilledButton(
-                onPressed: widget.canManage ? () => _showRoleDialog() : null,
-                child: const Text('新增角色'),
-              ),
+              if (widget.canCreateRole)
+                FilledButton(
+                  onPressed: () => _showRoleDialog(),
+                  child: const Text('新增角色'),
+                ),
             ],
           ),
         ),
@@ -448,10 +467,9 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                                 DataColumn(label: Text('操作')),
                               ],
                               rows: _items.map((role) {
-                                final canToggle =
-                                    widget.canManage && !role.isBuiltin;
+                                final canToggle = widget.canToggleRole;
                                 final canDelete =
-                                    widget.canManage && !role.isBuiltin;
+                                    widget.canDeleteRole && !role.isBuiltin;
                                 return DataRow(
                                   cells: [
                                     DataCell(
@@ -496,34 +514,40 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                                       ),
                                     ),
                                     DataCell(
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          OutlinedButton(
-                                            onPressed: widget.canManage
-                                                ? () => _showRoleDialog(
-                                                    role: role,
-                                                  )
-                                                : null,
-                                            child: const Text('编辑'),
-                                          ),
-                                          OutlinedButton(
-                                            onPressed: canToggle
-                                                ? () => _toggleRole(role)
-                                                : null,
-                                            child: Text(
-                                              role.isEnabled ? '停用' : '启用',
-                                            ),
-                                          ),
-                                          OutlinedButton(
-                                            onPressed: canDelete
-                                                ? () => _deleteRole(role)
-                                                : null,
-                                            child: const Text('删除'),
-                                          ),
-                                        ],
-                                      ),
+                                      (widget.canEditRole ||
+                                              canToggle ||
+                                              canDelete)
+                                          ? Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: [
+                                                if (widget.canEditRole)
+                                                  OutlinedButton(
+                                                    onPressed: () =>
+                                                        _showRoleDialog(
+                                                          role: role,
+                                                        ),
+                                                    child: const Text('编辑'),
+                                                  ),
+                                                if (canToggle)
+                                                  OutlinedButton(
+                                                    onPressed: () =>
+                                                        _toggleRole(role),
+                                                    child: Text(
+                                                      role.isEnabled
+                                                          ? '停用'
+                                                          : '启用',
+                                                    ),
+                                                  ),
+                                                if (canDelete)
+                                                  OutlinedButton(
+                                                    onPressed: () =>
+                                                        _deleteRole(role),
+                                                    child: const Text('删除'),
+                                                  ),
+                                              ],
+                                            )
+                                          : const Text('-'),
                                     ),
                                   ],
                                 );

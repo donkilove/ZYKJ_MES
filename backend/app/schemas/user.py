@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserBase(BaseModel):
@@ -17,10 +17,11 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: str | None = Field(default=None, min_length=2, max_length=10)
     full_name: str | None = Field(default=None, max_length=128)
     remark: str | None = Field(default=None, max_length=255)
-    password: str | None = Field(default=None, min_length=6, max_length=128)
     role_code: str | None = Field(default=None, min_length=2, max_length=64)
     stage_id: int | None = Field(default=None, gt=0)
     is_active: bool | None = None

@@ -29,14 +29,18 @@ class ProductManagementPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canCreateProduct,
+    this.canExportProducts = false,
     required this.canDeleteProduct,
     required this.canUpdateLifecycle,
     required this.canViewVersions,
     required this.canCompareVersions,
     required this.canRollbackVersion,
+    this.canManageVersions = false,
+    this.canActivateVersions = false,
     required this.canViewImpactAnalysis,
     required this.canViewParameters,
     required this.canEditParameters,
+    this.canExportParameters = false,
     required this.onViewParameters,
     required this.onEditParameters,
     this.service,
@@ -45,14 +49,18 @@ class ProductManagementPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final bool canCreateProduct;
+  final bool canExportProducts;
   final bool canDeleteProduct;
   final bool canUpdateLifecycle;
   final bool canViewVersions;
   final bool canCompareVersions;
   final bool canRollbackVersion;
+  final bool canManageVersions;
+  final bool canActivateVersions;
   final bool canViewImpactAnalysis;
   final bool canViewParameters;
   final bool canEditParameters;
+  final bool canExportParameters;
   final ValueChanged<ProductItem> onViewParameters;
   final ValueChanged<ProductItem> onEditParameters;
   final ProductService? service;
@@ -242,14 +250,6 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     return 'V1.${version - 1}';
   }
 
-  String _noEffectiveVersionHint(ProductItem product) {
-    final reason = product.inactiveReason?.trim() ?? '';
-    if (reason.isNotEmpty) {
-      return reason;
-    }
-    return '当前无生效版本，请前往版本管理生效版本后恢复启用。';
-  }
-
   Future<bool> _confirmImpact(
     ProductImpactAnalysisResult impact, {
     required String title,
@@ -414,7 +414,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       if (!mounted) {
         return;
       }
-      final successText = targetStatus == 'inactive' ? '产品已停用' : '产品状态已更新';
+      final successText = targetStatus == 'inactive' ? '产品已停用' : '产品已启用';
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(successText)));
@@ -818,7 +818,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                             widget.onEditParameters(product);
                                           },
                                   ),
-                                if (isDraft)
+                                if (widget.canManageVersions && isDraft)
                                   buildActionButton(
                                     label: '编辑备注',
                                     onPressed:
@@ -893,42 +893,45 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                             );
                                           },
                                   ),
-                                buildActionButton(
-                                  label: '复制',
-                                  onPressed: operationLoading || loadingVersions
-                                      ? null
-                                      : () async {
-                                          await runVersionOperation(
-                                            setLocalState,
-                                            loadingText:
-                                                '正在复制 ${item.displayVersion}...',
-                                            errorPrefix: '复制版本失败',
-                                            action: () async {
-                                              await _productService
-                                                  .copyProductVersion(
-                                                    productId: product.id,
-                                                    sourceVersion: item.version,
-                                                  );
-                                              if (!mounted) {
-                                                return;
-                                              }
-                                              ScaffoldMessenger.of(
-                                                this.context,
-                                              ).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    '复制版本成功（来源：${item.displayVersion}）',
+                                if (widget.canManageVersions)
+                                  buildActionButton(
+                                    label: '复制',
+                                    onPressed:
+                                        operationLoading || loadingVersions
+                                        ? null
+                                        : () async {
+                                            await runVersionOperation(
+                                              setLocalState,
+                                              loadingText:
+                                                  '正在复制 ${item.displayVersion}...',
+                                              errorPrefix: '复制版本失败',
+                                              action: () async {
+                                                await _productService
+                                                    .copyProductVersion(
+                                                      productId: product.id,
+                                                      sourceVersion:
+                                                          item.version,
+                                                    );
+                                                if (!mounted) {
+                                                  return;
+                                                }
+                                                ScaffoldMessenger.of(
+                                                  this.context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      '复制版本成功（来源：${item.displayVersion}）',
+                                                    ),
                                                   ),
-                                                ),
-                                              );
-                                              await reloadVersions(
-                                                setLocalState,
-                                              );
-                                            },
-                                          );
-                                        },
-                                ),
-                                if (isDraft)
+                                                );
+                                                await reloadVersions(
+                                                  setLocalState,
+                                                );
+                                              },
+                                            );
+                                          },
+                                  ),
+                                if (widget.canActivateVersions && isDraft)
                                   buildActionButton(
                                     label: '激活',
                                     onPressed:
@@ -996,24 +999,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                                 if (!mounted) {
                                                   return;
                                                 }
-                                                final refreshedProduct =
-                                                    await _productService
-                                                        .getProduct(
-                                                          productId: product.id,
-                                                        );
-                                                if (!mounted) {
-                                                  return;
-                                                }
                                                 ScaffoldMessenger.of(
                                                   this.context,
                                                 ).showSnackBar(
                                                   SnackBar(
                                                     content: Text(
-                                                      refreshedProduct
-                                                                  .lifecycleStatus ==
-                                                              'active'
-                                                          ? '版本 ${item.displayVersion} 已生效，产品已恢复启用'
-                                                          : '版本 ${item.displayVersion} 已生效',
+                                                      '版本 ${item.displayVersion} 已生效',
                                                     ),
                                                   ),
                                                 );
@@ -1025,7 +1016,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                             );
                                           },
                                   ),
-                                if (isEffective)
+                                if (widget.canManageVersions && isEffective)
                                   buildActionButton(
                                     label: '停用',
                                     onPressed:
@@ -1709,7 +1700,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
           items.add(
             const PopupMenuItem(
               value: _ProductTableAction.reactivate,
-              child: Text('去版本管理生效'),
+              child: Text('启用'),
             ),
           );
           break;
@@ -1778,7 +1769,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         await _showEditProductDialog(product);
         return;
       case _ProductTableAction.reactivate:
-        await _showVersionDialog(product);
+        await _changeLifecycle(product, 'active');
         return;
       case _ProductTableAction.deactivate:
         await _changeLifecycle(product, 'inactive');
@@ -1799,287 +1790,390 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   }
 
   Future<void> _showDetailDrawer(ProductItem product) async {
-    List<ProductParameterItem>? parameters;
-    List<ProductParameterHistoryItem>? history;
-    List<ProductVersionItem>? versions;
-    String? paramError;
-    String? historyError;
-    String? versionError;
-
+    ProductDetailResult detail;
     try {
-      final paramResult = await _productService.listProductParameters(
-        productId: product.id,
-        effectiveOnly: true,
-      );
-      parameters = paramResult.items;
+      detail = await _productService.getProductDetail(productId: product.id);
     } catch (error) {
       if (_isUnauthorized(error)) {
         widget.onLogout();
         return;
       }
-      paramError = _errorMessage(error);
-    }
-
-    try {
-      final versionResult = await _productService.listProductVersions(
-        productId: product.id,
-      );
-      versions = versionResult.items;
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
-      versionError = _errorMessage(error);
-    }
-
-    try {
-      final historyResult = await _productService.listProductParameterHistory(
-        productId: product.id,
-        page: 1,
-        pageSize: 1000,
-      );
-      history = historyResult.items;
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      historyError = _errorMessage(error);
+      return;
     }
 
     if (!mounted) return;
 
     String paramSearch = '';
+    final detailProduct = detail.product;
+    final parameters = detail.detailParameters.items;
+    final history = detail.historyItems;
+    final versions = detail.versions;
+    final relatedInfoSections = detail.relatedInfoSections;
     final currentVersionItem = _findVersionByNumber(
       versions,
-      product.currentVersion,
+      detailProduct.currentVersion,
     );
     final effectiveVersionItem = _findVersionByNumber(
       versions,
-      product.effectiveVersion,
+      detailProduct.effectiveVersion,
     );
     final currentVersionLabel =
         currentVersionItem?.versionLabel ??
-        _formatDisplayVersion(product.currentVersion);
+        _formatDisplayVersion(detailProduct.currentVersion);
     final effectiveVersionLabel =
         effectiveVersionItem?.versionLabel ??
-        _formatDisplayVersion(product.effectiveVersion);
+        _formatDisplayVersion(detailProduct.effectiveVersion);
     final currentVersionStatus = currentVersionItem != null
         ? _versionLifecycleLabel(currentVersionItem.lifecycleStatus)
-        : versionError != null
-        ? '加载失败'
         : '-';
 
-    await showDialog<void>(
+    await showGeneralDialog<void>(
       context: context,
-      builder: (context) {
+      barrierDismissible: true,
+      barrierLabel: '关闭产品详情侧栏',
+      barrierColor: Colors.black54,
+      pageBuilder: (context, animation, secondaryAnimation) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final filteredParams = (parameters ?? []).where((p) {
+            final filteredParams = parameters.where((p) {
               if (paramSearch.isEmpty) return true;
               return p.name.toLowerCase().contains(paramSearch.toLowerCase());
             }).toList();
 
-            return AlertDialog(
-              title: Text('产品详情 - ${product.name}'),
-              content: SizedBox(
-                width: 620,
-                height: 560,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 基本信息区
-                      const Text(
-                        '基本信息',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const Divider(),
-                      _detailRow('产品名称', product.name),
-                      _detailRow(
-                        '产品分类',
-                        product.category.isEmpty ? '-' : product.category,
-                      ),
-                      _detailRow(
-                        '状态',
-                        _lifecycleLabel(product.lifecycleStatus),
-                      ),
-                      _detailRow('当前版本', currentVersionLabel),
-                      _detailRow('当前版本状态', currentVersionStatus),
-                      _detailRow(
-                        '生效版本',
-                        product.effectiveVersion > 0
-                            ? effectiveVersionLabel
-                            : '无',
-                      ),
-                      if (product.effectiveAt != null)
-                        _detailRow('生效时间', _formatTime(product.effectiveAt!)),
-                      if (product.inactiveReason != null &&
-                          product.inactiveReason!.isNotEmpty)
-                        _detailRow('停用原因', product.inactiveReason!),
-                      _detailRow(
-                        '备注',
-                        product.remark.isEmpty ? '-' : product.remark,
-                      ),
-                      _detailRow('创建时间', _formatTime(product.createdAt)),
-                      _detailRow('更新时间', _formatTime(product.updatedAt)),
+            final screenWidth = MediaQuery.of(context).size.width;
+            final drawerWidth = screenWidth < 1200 ? screenWidth * 0.92 : 720.0;
 
-                      // 当前生效参数快照区
-                      const SizedBox(height: 16),
-                      Text(
-                        '当前生效参数快照${effectiveVersionItem != null ? '（${effectiveVersionItem.versionLabel}）' : ''}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const Divider(),
-                      if (paramError != null)
-                        Text(
-                          paramError.contains('暂无生效版本')
-                              ? _noEffectiveVersionHint(product)
-                              : '加载参数失败：$paramError',
-                          style: TextStyle(
-                            color: paramError.contains('暂无生效版本')
-                                ? Colors.orange[700]
-                                : Colors.red,
-                          ),
-                        )
-                      else if (parameters == null || parameters.isEmpty)
-                        const Text('暂无参数', style: TextStyle(color: Colors.grey))
-                      else ...[
-                        SizedBox(
-                          width: 240,
-                          child: TextField(
-                            decoration: const InputDecoration(
-                              hintText: '搜索参数名称',
-                              prefixIcon: Icon(Icons.search, size: 18),
-                              isDense: true,
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (v) =>
-                                setDialogState(() => paramSearch = v),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        DataTable(
-                          columnSpacing: 16,
-                          headingRowHeight: 36,
-                          dataRowMinHeight: 32,
-                          dataRowMaxHeight: 40,
-                          columns: const [
-                            DataColumn(label: Text('参数名')),
-                            DataColumn(label: Text('分组')),
-                            DataColumn(label: Text('类型')),
-                            DataColumn(label: Text('值')),
-                            DataColumn(label: Text('说明')),
-                          ],
-                          rows: filteredParams
-                              .map(
-                                (p) => DataRow(
-                                  cells: [
-                                    DataCell(Text(p.name)),
-                                    DataCell(Text(p.category)),
-                                    DataCell(Text(p.type)),
-                                    DataCell(
-                                      Text(
-                                        p.value,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+            return SafeArea(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Material(
+                  color: Theme.of(context).colorScheme.surface,
+                  elevation: 12,
+                  child: SizedBox(
+                    width: drawerWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '产品详情 - ${detailProduct.name}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                     ),
-                                    DataCell(
-                                      Text(
-                                        p.description.isEmpty
-                                            ? '-'
-                                            : p.description,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '页内侧边栏展示完整详情快照',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
                                     ),
                                   ],
                                 ),
-                              )
-                              .toList(),
+                              ),
+                              IconButton(
+                                tooltip: '关闭',
+                                onPressed: () => Navigator.of(context).pop(),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-
-                      // 变更记录区
-                      const SizedBox(height: 16),
-                      const Text(
-                        '变更记录',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const Divider(),
-                      if (historyError != null)
-                        Text(
-                          '加载变更记录失败：$historyError',
-                          style: const TextStyle(color: Colors.red),
-                        )
-                      else if (history == null || history.isEmpty)
-                        const Text(
-                          '暂无变更记录',
-                          style: TextStyle(color: Colors.grey),
-                        )
-                      else
-                        ...history.map(
-                          (h) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
+                        const Divider(height: 1),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                SizedBox(
-                                  width: 140,
-                                  child: Text(
-                                    _formatTime(h.createdAt),
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey,
+                                // 基本信息区
+                                const Text(
+                                  '基本信息',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                const Divider(),
+                                _detailRow('产品名称', detailProduct.name),
+                                _detailRow(
+                                  '产品分类',
+                                  detailProduct.category.isEmpty
+                                      ? '-'
+                                      : detailProduct.category,
+                                ),
+                                _detailRow(
+                                  '状态',
+                                  _lifecycleLabel(
+                                    detailProduct.lifecycleStatus,
+                                  ),
+                                ),
+                                _detailRow('当前版本', currentVersionLabel),
+                                _detailRow('当前版本状态', currentVersionStatus),
+                                _detailRow(
+                                  '生效版本',
+                                  detailProduct.effectiveVersion > 0
+                                      ? effectiveVersionLabel
+                                      : '无',
+                                ),
+                                if (detail.latestVersionChangedAt != null)
+                                  _detailRow(
+                                    '最近一次版本变更时间',
+                                    _formatTime(detail.latestVersionChangedAt!),
+                                  ),
+                                if (detailProduct.effectiveAt != null)
+                                  _detailRow(
+                                    '生效时间',
+                                    _formatTime(detailProduct.effectiveAt!),
+                                  ),
+                                if (detailProduct.inactiveReason != null &&
+                                    detailProduct.inactiveReason!.isNotEmpty)
+                                  _detailRow(
+                                    '停用原因',
+                                    detailProduct.inactiveReason!,
+                                  ),
+                                _detailRow(
+                                  '备注',
+                                  detailProduct.remark.isEmpty
+                                      ? '-'
+                                      : detailProduct.remark,
+                                ),
+                                _detailRow(
+                                  '创建时间',
+                                  _formatTime(detailProduct.createdAt),
+                                ),
+                                _detailRow(
+                                  '更新时间',
+                                  _formatTime(detailProduct.updatedAt),
+                                ),
+
+                                // 当前生效参数快照区
+                                const SizedBox(height: 16),
+                                Text(
+                                  '${detail.detailParameters.parameterScope == 'effective' ? '当前生效参数快照' : '当前版本参数快照'}（${detail.detailParameters.versionLabel}）',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                const Divider(),
+                                if ((detail.detailParameterMessage ?? '')
+                                    .isNotEmpty) ...[
+                                  Text(
+                                    detail.detailParameterMessage!,
+                                    style: TextStyle(
+                                      color:
+                                          detail
+                                                  .detailParameters
+                                                  .parameterScope ==
+                                              'effective'
+                                          ? Colors.blueGrey[700]
+                                          : Colors.orange[700],
                                     ),
                                   ),
-                                ),
-                                SizedBox(
-                                  width: 80,
-                                  child: Text(
-                                    h.operatorUsername,
-                                    style: const TextStyle(fontSize: 12),
+                                  const SizedBox(height: 8),
+                                ],
+                                if (parameters.isEmpty)
+                                  const Text(
+                                    '暂无参数',
+                                    style: TextStyle(color: Colors.grey),
+                                  )
+                                else ...[
+                                  SizedBox(
+                                    width: 240,
+                                    child: TextField(
+                                      decoration: const InputDecoration(
+                                        hintText: '搜索参数名称',
+                                        prefixIcon: Icon(
+                                          Icons.search,
+                                          size: 18,
+                                        ),
+                                        isDense: true,
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      onChanged: (v) =>
+                                          setDialogState(() => paramSearch = v),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  DataTable(
+                                    columnSpacing: 16,
+                                    headingRowHeight: 36,
+                                    dataRowMinHeight: 32,
+                                    dataRowMaxHeight: 40,
+                                    columns: const [
+                                      DataColumn(label: Text('参数名')),
+                                      DataColumn(label: Text('分组')),
+                                      DataColumn(label: Text('类型')),
+                                      DataColumn(label: Text('值')),
+                                      DataColumn(label: Text('说明')),
+                                    ],
+                                    rows: filteredParams
+                                        .map(
+                                          (p) => DataRow(
+                                            cells: [
+                                              DataCell(Text(p.name)),
+                                              DataCell(Text(p.category)),
+                                              DataCell(Text(p.type)),
+                                              DataCell(
+                                                Text(
+                                                  p.value,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              DataCell(
+                                                Text(
+                                                  p.description.isEmpty
+                                                      ? '-'
+                                                      : p.description,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                ],
+
+                                const SizedBox(height: 16),
+                                const Text(
+                                  '关联信息',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
                                   ),
                                 ),
-                                Expanded(
-                                  child: Text(
-                                    [
-                                      if (h.versionLabel?.trim().isNotEmpty ==
-                                          true)
-                                        h.versionLabel!,
-                                      _parameterHistoryTypeLabel(h.changeType),
-                                      h.remark,
-                                      if (h.changedKeys.isNotEmpty)
-                                        '参数：${h.changedKeys.join(', ')}',
-                                    ].join('｜'),
-                                    style: const TextStyle(fontSize: 12),
+                                const Divider(),
+                                if (relatedInfoSections.isEmpty)
+                                  const Text(
+                                    '暂无关联信息',
+                                    style: TextStyle(color: Colors.grey),
+                                  )
+                                else
+                                  ...relatedInfoSections.map(
+                                    _buildRelatedInfoSectionCard,
+                                  ),
+
+                                // 变更记录区
+                                const SizedBox(height: 16),
+                                const Text(
+                                  '变更记录',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
                                   ),
                                 ),
+                                const Divider(),
+                                if (history.isEmpty)
+                                  const Text(
+                                    '暂无变更记录',
+                                    style: TextStyle(color: Colors.grey),
+                                  )
+                                else
+                                  ...history.map(
+                                    (h) => Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 4,
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          SizedBox(
+                                            width: 140,
+                                            child: Text(
+                                              _formatTime(h.createdAt),
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(
+                                            width: 80,
+                                            child: Text(
+                                              h.operatorUsername,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: Text(
+                                              [
+                                                if (h.versionLabel
+                                                        ?.trim()
+                                                        .isNotEmpty ==
+                                                    true)
+                                                  h.versionLabel!,
+                                                _parameterHistoryTypeLabel(
+                                                  h.changeType,
+                                                ),
+                                                h.remark,
+                                                if (h.changedKeys.isNotEmpty)
+                                                  '参数：${h.changedKeys.join(', ')}',
+                                              ].join('｜'),
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
                         ),
-                    ],
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('关闭'),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              actions: [
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('关闭'),
-                ),
-              ],
             );
           },
+        );
+      },
+      transitionBuilder: (context, animation, _, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
         );
       },
     );
@@ -2099,6 +2193,59 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
             ),
           ),
           Expanded(child: SelectableText(value)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRelatedInfoSectionCard(ProductRelatedInfoSection section) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(10),
+        color: Colors.grey.shade50,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  section.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              Text(
+                '${section.total}项',
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (section.items.isEmpty)
+            Text(
+              (section.emptyMessage ?? '暂无关联数据'),
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+            )
+          else
+            ...section.items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  item.value == null || item.value!.trim().isEmpty
+                      ? item.label
+                      : '${item.label}｜${item.value}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -2235,7 +2382,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
               ),
               const SizedBox(width: 12),
               OutlinedButton.icon(
-                onPressed: _loading ? null : _exportProducts,
+                onPressed: _loading || !widget.canExportProducts
+                    ? null
+                    : _exportProducts,
                 icon: const Icon(Icons.download),
                 label: const Text('导出'),
               ),

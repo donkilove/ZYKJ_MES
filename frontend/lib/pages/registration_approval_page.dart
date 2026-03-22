@@ -14,14 +14,16 @@ class RegistrationApprovalPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
-    required this.canReviewAction,
+    required this.canApprove,
+    required this.canReject,
     this.userService,
     this.craftService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
-  final bool canReviewAction;
+  final bool canApprove;
+  final bool canReject;
   final UserService? userService;
   final CraftService? craftService;
 
@@ -329,7 +331,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   }
 
   Future<void> _openApproveDialog(RegistrationRequestItem item) async {
-    if (!widget.canReviewAction) {
+    if (!widget.canApprove) {
       _showNoPermission();
       return;
     }
@@ -550,7 +552,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     RegistrationRequestItem item, {
     String? reason,
   }) async {
-    if (!widget.canReviewAction) {
+    if (!widget.canReject) {
       _showNoPermission();
       return;
     }
@@ -581,7 +583,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   }
 
   Future<void> _confirmReject(RegistrationRequestItem item) async {
-    if (!widget.canReviewAction) {
+    if (!widget.canReject) {
       _showNoPermission();
       return;
     }
@@ -775,22 +777,30 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         if (item.status == 'pending') ...[
-                                          TextButton(
-                                            onPressed: widget.canReviewAction
-                                                ? () => _openApproveDialog(item)
-                                                : null,
-                                            child: const Text('通过'),
-                                          ),
-                                          TextButton(
-                                            onPressed: widget.canReviewAction
-                                                ? () => _confirmReject(item)
-                                                : null,
-                                            style: TextButton.styleFrom(
-                                              foregroundColor:
-                                                  theme.colorScheme.error,
+                                          if (widget.canApprove)
+                                            TextButton(
+                                              onPressed: () =>
+                                                  _openApproveDialog(item),
+                                              child: const Text('通过'),
                                             ),
-                                            child: const Text('驳回'),
-                                          ),
+                                          if (widget.canReject)
+                                            TextButton(
+                                              onPressed: () =>
+                                                  _confirmReject(item),
+                                              style: TextButton.styleFrom(
+                                                foregroundColor:
+                                                    theme.colorScheme.error,
+                                              ),
+                                              child: const Text('驳回'),
+                                            ),
+                                          if (!widget.canApprove &&
+                                              !widget.canReject)
+                                            const Text(
+                                              '-',
+                                              style: TextStyle(
+                                                color: Colors.grey,
+                                              ),
+                                            ),
                                         ] else
                                           const Text(
                                             '-',

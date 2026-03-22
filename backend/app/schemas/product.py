@@ -63,7 +63,9 @@ class ProductItem(BaseModel):
     remark: str = ""
     lifecycle_status: str = PRODUCT_LIFECYCLE_ACTIVE
     current_version: int = 1
+    current_version_label: str = "V1.0"
     effective_version: int = 0
+    effective_version_label: str | None = None
     effective_at: datetime | None = None
     inactive_reason: str | None = None
     last_parameter_summary: str | None = None
@@ -137,7 +139,11 @@ class ProductParameterVersionListItem(BaseModel):
     is_effective_version: bool = False
     created_at: datetime
     parameter_summary: str | None = None
+    parameter_count: int = 0
+    matched_parameter_name: str | None = None
+    matched_parameter_category: str | None = None
     last_modified_parameter: str | None = None
+    last_modified_parameter_category: str | None = None
     updated_at: datetime
 
 
@@ -171,6 +177,31 @@ class ProductParameterHistoryListResult(BaseModel):
     lifecycle_status: str | None = None
     total: int
     items: list[ProductParameterHistoryItem]
+
+
+class ProductRelatedInfoItem(BaseModel):
+    label: str
+    value: str | None = None
+
+
+class ProductRelatedInfoSection(BaseModel):
+    code: str
+    title: str
+    total: int = 0
+    items: list[ProductRelatedInfoItem] = Field(default_factory=list)
+    empty_message: str | None = None
+
+
+class ProductDetailResult(BaseModel):
+    product: ProductItem
+    detail_parameters: ProductParameterListResult
+    detail_parameter_message: str | None = None
+    latest_version_changed_at: datetime | None = None
+    version_total: int
+    versions: list["ProductVersionItem"]
+    history_total: int
+    history_items: list[ProductParameterHistoryItem]
+    related_info_sections: list[ProductRelatedInfoSection] = Field(default_factory=list)
 
 
 class ProductLifecycleUpdateRequest(BaseModel):

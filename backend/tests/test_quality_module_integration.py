@@ -4,6 +4,7 @@ import time
 import unittest
 from datetime import UTC, date, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -28,6 +29,7 @@ from app.models.message import Message  # noqa: E402
 from app.models.message_recipient import MessageRecipient  # noqa: E402
 from app.models.process import Process  # noqa: E402
 from app.models.process_stage import ProcessStage  # noqa: E402
+from app.models.production_record import ProductionRecord  # noqa: E402
 from app.models.production_scrap_statistics import ProductionScrapStatistics  # noqa: E402
 from app.models.product import Product  # noqa: E402
 from app.models.production_order import ProductionOrder  # noqa: E402
@@ -36,6 +38,7 @@ from app.models.repair_cause import RepairCause  # noqa: E402
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon  # noqa: E402
 from app.models.repair_order import RepairOrder  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.services.production_repair_service import complete_repair_order  # noqa: E402
 from app.services.quality_service import (  # noqa: E402
     get_first_article_by_id,
     submit_first_article_disposition,
@@ -240,15 +243,7 @@ class QualityModuleIntegrationTest(unittest.TestCase):
 
     def _create_first_article_record(self, *, result: str) -> FirstArticleRecord:
         token = f"{self._suffix}-{len(self.record_ids) + 1}"
-        stage = self._create_stage(token=token)
-        process = self._create_process(stage=stage, token=token)
-        product = self._create_product(token=token)
-        order = self._create_order(product=product, token=token)
-        order_process = self._create_order_process(
-            order=order,
-            process=process,
-            stage=stage,
-        )
+        order, order_process = self._create_order_context(token=token)
         row = FirstArticleRecord(
             order_id=order.id,
             order_process_id=order_process.id,
@@ -266,6 +261,22 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.record_ids.append(int(row.id))
         return row
 
+    def _create_order_context(
+        self,
+        *,
+        token: str,
+    ) -> tuple[ProductionOrder, ProductionOrderProcess]:
+        stage = self._create_stage(token=token)
+        process = self._create_process(stage=stage, token=token)
+        product = self._create_product(token=token)
+        order = self._create_order(product=product, token=token)
+        order_process = self._create_order_process(
+            order=order,
+            process=process,
+            stage=stage,
+        )
+        return order, order_process
+
     def _create_operator_user(self, *, token: str) -> User:
         row = User(
             username=f"quality_operator_{token}",
@@ -281,11 +292,29 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.user_ids.append(int(row.id))
         return row
 
-    def _create_repair_order(self, *, record: FirstArticleRecord) -> RepairOrder:
+    def _create_repair_order(
+        self,
+        *,
+        record: FirstArticleRecord,
+        repair_quantity: int = 5,
+    ) -> RepairOrder:
         order = self.db.get(ProductionOrder, record.order_id)
         order_process = self.db.get(ProductionOrderProcess, record.order_process_id)
         self.assertIsNotNone(order)
         self.assertIsNotNone(order_process)
+        return self._create_repair_order_for_context(
+            order=order,
+            order_process=order_process,
+            repair_quantity=repair_quantity,
+        )
+
+    def _create_repair_order_for_context(
+        self,
+        *,
+        order: ProductionOrder,
+        order_process: ProductionOrderProcess,
+        repair_quantity: int = 5,
+    ) -> RepairOrder:
         row = RepairOrder(
             repair_order_code=f"RO-{self._suffix}-{len(self.repair_order_ids) + 1}",
             source_order_id=order.id,
@@ -298,7 +327,7 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             sender_user_id=self.admin_user.id,
             sender_username=self.admin_user.username,
             production_quantity=10,
-            repair_quantity=5,
+            repair_quantity=repair_quantity,
             repaired_quantity=0,
             scrap_quantity=0,
             repair_time=datetime(2026, 3, 2, 9, 0, tzinfo=UTC),
@@ -310,6 +339,34 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.db.commit()
         self.db.refresh(row)
         self.repair_order_ids.append(int(row.id))
+        return row
+
+    def _create_scrap_statistics_for_context(
+        self,
+        *,
+        order: ProductionOrder,
+        order_process: ProductionOrderProcess,
+        scrap_reason: str,
+        scrap_quantity: int,
+    ) -> ProductionScrapStatistics:
+        row = ProductionScrapStatistics(
+            order_id=order.id,
+            order_code=order.order_code,
+            product_id=order.product_id,
+            product_name=order.product.name,
+            process_id=order_process.id,
+            process_code=order_process.process_code,
+            process_name=order_process.process_name,
+            operator_username=self.admin_user.username,
+            scrap_reason=scrap_reason,
+            scrap_quantity=scrap_quantity,
+            last_scrap_time=datetime(2026, 3, 2, 9, 30, tzinfo=UTC),
+            progress="pending_apply",
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        self.scrap_statistics_ids.append(int(row.id))
         return row
 
     def _create_repair_defect(
@@ -590,7 +647,7 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             1,
         )
         self.assertEqual(
-            payload["product_quality_comparison"][0]["repair_order_count"],
+            payload["product_quality_comparison"][0]["repair_total"],
             1,
         )
 
@@ -602,11 +659,25 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             scrap_reason="焊点脱落",
             scrap_quantity=2,
         )
-        self._create_repair_defect(
+        defect_row = self._create_repair_defect(
             repair_order=repair_order,
             phenomenon="虚焊",
             quantity=2,
         )
+        production_record = ProductionRecord(
+            order_id=record.order_id,
+            order_process_id=record.order_process_id,
+            sub_order_id=None,
+            operator_user_id=self.admin_user.id,
+            production_quantity=8,
+            record_type="production",
+        )
+        self.db.add(production_record)
+        self.db.commit()
+        self.db.refresh(production_record)
+        defect_row.production_record_id = production_record.id
+        defect_row.production_time = datetime(2026, 3, 2, 8, 45, tzinfo=UTC)
+        self.db.commit()
 
         scrap_list_response = self.client.get(
             "/api/v1/quality/scrap-statistics",
@@ -629,6 +700,7 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         )
         scrap_detail_payload = scrap_detail_response.json()["data"]
         self.assertEqual(scrap_detail_payload["scrap_reason"], "焊点脱落")
+        self.assertEqual(scrap_detail_payload["applied_at"], None)
         self.assertEqual(
             scrap_detail_payload["related_repair_orders"][0]["repair_order_code"],
             repair_order.repair_order_code,
@@ -663,6 +735,281 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             repair_detail_payload["repair_order_code"], repair_order.repair_order_code
         )
         self.assertEqual(repair_detail_payload["defect_rows"][0]["phenomenon"], "虚焊")
+        self.assertEqual(
+            repair_detail_payload["defect_rows"][0]["production_record_id"],
+            production_record.id,
+        )
+        self.assertEqual(
+            repair_detail_payload["defect_rows"][0]["production_record_quantity"],
+            8,
+        )
+
+    def test_quality_stats_do_not_drop_repair_and_scrap_without_first_article(self) -> None:
+        token = f"{self._suffix}-scope"
+        order, order_process = self._create_order_context(token=token)
+        operator_user = self._create_operator_user(token=f"{token}-worker")
+        repair_order = self._create_repair_order_for_context(
+            order=order,
+            order_process=order_process,
+            repair_quantity=2,
+        )
+        repair_order.sender_user_id = operator_user.id
+        repair_order.sender_username = operator_user.username
+        self.db.commit()
+        defect_row = self._create_repair_defect(
+            repair_order=repair_order,
+            phenomenon="虚焊",
+            quantity=2,
+        )
+        defect_row.operator_user_id = operator_user.id
+        defect_row.operator_username = operator_user.username
+        production_record = ProductionRecord(
+            order_id=order.id,
+            order_process_id=order_process.id,
+            sub_order_id=None,
+            operator_user_id=self.admin_user.id,
+            production_quantity=8,
+            record_type="production",
+        )
+        self.db.add(production_record)
+        self.db.commit()
+        self.db.refresh(production_record)
+        defect_row.production_record_id = production_record.id
+        defect_row.production_time = datetime(2026, 3, 2, 8, 45, tzinfo=UTC)
+        self.db.commit()
+        scrap_row = self._create_scrap_statistics_for_context(
+            order=order,
+            order_process=order_process,
+            scrap_reason="焊点脱落",
+            scrap_quantity=2,
+        )
+        scrap_row.operator_user_id = operator_user.id
+        scrap_row.operator_username = operator_user.username
+        self.db.commit()
+
+        overview_response = self.client.get(
+            "/api/v1/quality/stats/overview",
+            headers=self._headers(),
+            params={"start_date": "2026-03-01", "end_date": "2026-03-03"},
+        )
+        self.assertEqual(overview_response.status_code, 200, overview_response.text)
+        overview_payload = overview_response.json()["data"]
+        self.assertEqual(overview_payload["first_article_total"], 0)
+        self.assertEqual(overview_payload["defect_total"], 2)
+        self.assertEqual(overview_payload["scrap_total"], 2)
+        self.assertEqual(overview_payload["repair_total"], 1)
+        self.assertEqual(overview_payload["covered_order_count"], 1)
+        self.assertEqual(overview_payload["covered_process_count"], 1)
+        self.assertEqual(overview_payload["covered_operator_count"], 1)
+
+        process_response = self.client.get(
+            "/api/v1/quality/stats/processes",
+            headers=self._headers(),
+            params={"start_date": "2026-03-01", "end_date": "2026-03-03"},
+        )
+        self.assertEqual(process_response.status_code, 200, process_response.text)
+        process_item = next(
+            item
+            for item in process_response.json()["data"]["items"]
+            if item["process_code"] == order_process.process_code
+        )
+        self.assertEqual(process_item["first_article_total"], 0)
+        self.assertEqual(process_item["process_name"], order_process.process_name)
+        self.assertEqual(process_item["defect_total"], 2)
+        self.assertEqual(process_item["scrap_total"], 2)
+        self.assertEqual(process_item["repair_total"], 1)
+
+        operator_response = self.client.get(
+            "/api/v1/quality/stats/operators",
+            headers=self._headers(),
+            params={"start_date": "2026-03-01", "end_date": "2026-03-03"},
+        )
+        self.assertEqual(operator_response.status_code, 200, operator_response.text)
+        operator_item = next(
+            item
+            for item in operator_response.json()["data"]["items"]
+            if item["operator_username"] == operator_user.username
+        )
+        self.assertEqual(operator_item["operator_user_id"], operator_user.id)
+        self.assertEqual(operator_item["first_article_total"], 0)
+        self.assertEqual(operator_item["defect_total"], 2)
+        self.assertEqual(operator_item["scrap_total"], 2)
+        self.assertEqual(operator_item["repair_total"], 1)
+
+        products_response = self.client.get(
+            "/api/v1/quality/stats/products",
+            headers=self._headers(),
+            params={"start_date": "2026-03-01", "end_date": "2026-03-03"},
+        )
+        self.assertEqual(products_response.status_code, 200, products_response.text)
+        product_item = products_response.json()["data"]["items"][0]
+        self.assertEqual(product_item["product_id"], order.product_id)
+        self.assertEqual(product_item["first_article_total"], 0)
+        self.assertEqual(product_item["defect_total"], 2)
+        self.assertEqual(product_item["scrap_total"], 2)
+        self.assertEqual(product_item["repair_total"], 1)
+
+        trend_response = self.client.get(
+            "/api/v1/quality/trend",
+            headers=self._headers(),
+            params={"start_date": "2026-03-01", "end_date": "2026-03-03"},
+        )
+        self.assertEqual(trend_response.status_code, 200, trend_response.text)
+        trend_items = trend_response.json()["data"]["items"]
+        matched = next(item for item in trend_items if item["stat_date"] == "2026-03-02")
+        self.assertEqual(matched["first_article_total"], 0)
+        self.assertEqual(matched["defect_total"], 2)
+        self.assertEqual(matched["scrap_total"], 2)
+        self.assertEqual(matched["repair_total"], 1)
+
+    def test_quality_repair_complete_and_export_contracts_are_available(self) -> None:
+        record = self._create_first_article_record(result="failed")
+        repair_order = self._create_repair_order(record=record)
+        repair_order.sender_user_id = None
+        repair_order.sender_username = None
+        self.db.commit()
+        self._create_repair_defect(
+            repair_order=repair_order,
+            phenomenon="虚焊",
+            quantity=5,
+        )
+
+        summary_response = self.client.get(
+            f"/api/v1/quality/repair-orders/{repair_order.id}/phenomena-summary",
+            headers=self._headers(),
+        )
+        self.assertEqual(summary_response.status_code, 200, summary_response.text)
+        self.assertEqual(summary_response.json()["data"]["items"][0]["quantity"], 5)
+
+        export_scrap_response = self.client.post(
+            "/api/v1/quality/scrap-statistics/export",
+            headers=self._headers(),
+            json={"keyword": record.order.order_code},
+        )
+        self.assertEqual(
+            export_scrap_response.status_code,
+            200,
+            export_scrap_response.text,
+        )
+
+        complete_response = self.client.post(
+            f"/api/v1/quality/repair-orders/{repair_order.id}/complete",
+            headers=self._headers(),
+            json={
+                "cause_items": [
+                    {
+                        "phenomenon": "虚焊",
+                        "reason": "治具偏移",
+                        "quantity": 5,
+                        "is_scrap": False,
+                    }
+                ],
+                "scrap_replenished": False,
+                "return_allocations": [
+                    {
+                        "target_order_process_id": record.order_process_id,
+                        "quantity": 5,
+                    }
+                ],
+            },
+        )
+        self.assertEqual(complete_response.status_code, 200, complete_response.text)
+        self.assertEqual(complete_response.json()["data"]["status"], "completed")
+
+        export_repair_response = self.client.post(
+            "/api/v1/quality/repair-orders/export",
+            headers=self._headers(),
+            json={"keyword": repair_order.repair_order_code},
+        )
+        self.assertEqual(
+            export_repair_response.status_code,
+            200,
+            export_repair_response.text,
+        )
+
+    def test_repair_completion_message_jumps_to_quality_tab(self) -> None:
+        record = self._create_first_article_record(result="failed")
+        repair_order = self._create_repair_order(record=record)
+
+        with patch(
+            "app.services.production_repair_service.create_message_for_users"
+        ) as mocked_create_message:
+            complete_repair_order(
+                self.db,
+                repair_order_id=repair_order.id,
+                cause_items=[
+                    {
+                        "phenomenon": "虚焊",
+                        "reason": "治具偏移",
+                        "quantity": 5,
+                        "is_scrap": False,
+                    }
+                ],
+                scrap_replenished=False,
+                return_allocations=[
+                    {
+                        "target_order_process_id": record.order_process_id,
+                        "quantity": 5,
+                    }
+                ],
+                operator=self.admin_user,
+            )
+
+        mocked_create_message.assert_called_once()
+        self.assertEqual(
+            mocked_create_message.call_args.kwargs["target_page_code"],
+            "quality",
+        )
+        self.assertEqual(
+            mocked_create_message.call_args.kwargs["target_tab_code"],
+            "quality_repair_orders",
+        )
+        self.assertEqual(
+            mocked_create_message.call_args.kwargs["source_module"],
+            "quality",
+        )
+
+    def test_quality_repair_completion_closes_pending_scrap_to_applied(self) -> None:
+        record = self._create_first_article_record(result="failed")
+        repair_order = self._create_repair_order(record=record, repair_quantity=2)
+        scrap_row = self._create_scrap_statistics(
+            record=record,
+            scrap_reason="治具偏移",
+            scrap_quantity=1,
+        )
+
+        with patch("app.services.production_repair_service.create_message_for_users"):
+            response = self.client.post(
+                f"/api/v1/quality/repair-orders/{repair_order.id}/complete",
+                headers=self._headers(),
+                json={
+                    "cause_items": [
+                        {
+                            "phenomenon": "虚焊",
+                            "reason": "治具偏移",
+                            "quantity": 2,
+                            "is_scrap": True,
+                        }
+                    ],
+                    "scrap_replenished": False,
+                    "return_allocations": [],
+                },
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["data"]["status"], "completed")
+
+        self.db.refresh(scrap_row)
+        self.assertEqual(scrap_row.progress, "applied")
+        self.assertIsNotNone(scrap_row.applied_at)
+
+        detail_response = self.client.get(
+            f"/api/v1/quality/scrap-statistics/{scrap_row.id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        detail_payload = detail_response.json()["data"]
+        self.assertEqual(detail_payload["progress"], "applied")
+        self.assertIsNotNone(detail_payload["applied_at"])
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ from app.core.production_constants import (
 )
 from app.models.daily_verification_code import DailyVerificationCode
 from app.models.first_article_record import FirstArticleRecord
+from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
@@ -35,7 +36,11 @@ from app.services.assist_authorization_service import (
 from app.services.production_event_log_service import add_order_event_log
 from app.services.production_order_service import (
     ensure_sub_orders_visible_quantity,
+    get_active_pipeline_instance_for_sub_order,
+    get_active_pipeline_instance_for_link_id,
+    get_active_pipeline_instance_for_process_sequence,
     is_pipeline_parallel_edge_for_processes,
+    is_pipeline_process_selected_for_order,
 )
 from app.services.production_repair_service import create_repair_order
 
@@ -150,6 +155,90 @@ def _lock_previous_process(
     ).scalars().first()
 
 
+def _get_required_pipeline_instance(
+    db: Session,
+    *,
+    order: ProductionOrder,
+    process_row: ProductionOrderProcess,
+    sub_order: ProductionSubOrder,
+    pipeline_instance_id: int | None,
+) -> OrderSubOrderPipelineInstance | None:
+    pipeline_process_selected = is_pipeline_process_selected_for_order(
+        order=order,
+        process_code=process_row.process_code,
+    )
+    if not pipeline_process_selected:
+        return None
+    if pipeline_instance_id is None:
+        raise ValueError("Pipeline instance binding is required for current process")
+    current_instance = get_active_pipeline_instance_for_sub_order(
+        db,
+        sub_order_id=sub_order.id,
+        order_process_id=process_row.id,
+    )
+    if current_instance is None:
+        raise RuntimeError("Current process has no active pipeline instance")
+    if current_instance.id != pipeline_instance_id:
+        raise RuntimeError("Pipeline instance binding does not match current executable task")
+    return current_instance
+
+
+def _ensure_pipeline_sequence_gate(
+    db: Session,
+    *,
+    order: ProductionOrder,
+    process_row: ProductionOrderProcess,
+    sub_order: ProductionSubOrder,
+    current_instance: OrderSubOrderPipelineInstance | None,
+) -> None:
+    if current_instance is None:
+        return
+    previous_process = _lock_previous_process(
+        db,
+        order_id=order.id,
+        process_order=process_row.process_order,
+    )
+    if previous_process is None:
+        return
+    if not is_pipeline_parallel_edge_for_processes(
+        order=order,
+        previous_process_code=previous_process.process_code,
+        current_process_code=process_row.process_code,
+    ):
+        return
+    pipeline_link_id = (current_instance.pipeline_link_id or "").strip()
+    previous_instance = None
+    if pipeline_link_id:
+        previous_instance = get_active_pipeline_instance_for_link_id(
+            db,
+            order_id=order.id,
+            order_process_id=previous_process.id,
+            pipeline_link_id=pipeline_link_id,
+        )
+    else:
+        previous_instance = get_active_pipeline_instance_for_process_sequence(
+            db,
+            order_id=order.id,
+            order_process_id=previous_process.id,
+            pipeline_seq=current_instance.pipeline_seq,
+        )
+    if previous_instance is None:
+        raise RuntimeError("Previous process pipeline instance is missing or inactive")
+    previous_sub_order = (
+        db.execute(
+            select(ProductionSubOrder)
+            .where(ProductionSubOrder.id == previous_instance.sub_order_id)
+            .with_for_update()
+        )
+        .scalars()
+        .first()
+    )
+    if previous_sub_order is None:
+        raise RuntimeError("Previous process linked sub-order is missing")
+    if previous_sub_order.completed_quantity <= 0:
+        raise RuntimeError("Current process is blocked by previous pipeline instance progress")
+
+
 def _is_start_gate_allowed(
     db: Session,
     *,
@@ -223,6 +312,7 @@ def submit_first_article(
     *,
     order_id: int,
     order_process_id: int,
+    pipeline_instance_id: int | None,
     verification_code: str,
     remark: str | None,
     operator: User,
@@ -261,6 +351,20 @@ def submit_first_article(
     )
     if sub_order.status != SUB_ORDER_STATUS_PENDING:
         raise ValueError("Current sub-order does not allow first-article operation")
+    pipeline_instance = _get_required_pipeline_instance(
+        db,
+        order=order,
+        process_row=process_row,
+        sub_order=sub_order,
+        pipeline_instance_id=pipeline_instance_id,
+    )
+    _ensure_pipeline_sequence_gate(
+        db,
+        order=order,
+        process_row=process_row,
+        sub_order=sub_order,
+        current_instance=pipeline_instance,
+    )
 
     process_remaining = max(process_row.visible_quantity - process_row.completed_quantity, 0)
     sub_remaining = max(sub_order.assigned_quantity - sub_order.completed_quantity, 0)
@@ -318,6 +422,10 @@ def submit_first_article(
             "operator_user_id": operator.id,
             "effective_operator_user_id": effective_user_id,
             "assist_authorization_id": assist_row.id if assist_row else None,
+            "pipeline_instance_id": pipeline_instance.id if pipeline_instance else None,
+            "pipeline_instance_no": pipeline_instance.pipeline_sub_order_no
+            if pipeline_instance
+            else None,
         },
     )
     if assist_row is not None:
@@ -338,6 +446,7 @@ def end_production(
     *,
     order_id: int,
     order_process_id: int,
+    pipeline_instance_id: int | None,
     quantity: int,
     remark: str | None,
     operator: User,
@@ -380,6 +489,20 @@ def end_production(
     )
     if sub_order.status != SUB_ORDER_STATUS_IN_PROGRESS:
         raise ValueError("Current sub-order is not in progress")
+    pipeline_instance = _get_required_pipeline_instance(
+        db,
+        order=order,
+        process_row=process_row,
+        sub_order=sub_order,
+        pipeline_instance_id=pipeline_instance_id,
+    )
+    _ensure_pipeline_sequence_gate(
+        db,
+        order=order,
+        process_row=process_row,
+        sub_order=sub_order,
+        current_instance=pipeline_instance,
+    )
 
     process_remaining = max(process_row.visible_quantity - process_row.completed_quantity, 0)
     sub_remaining = max(sub_order.assigned_quantity - sub_order.completed_quantity, 0)
@@ -448,29 +571,37 @@ def end_production(
             target_visible_quantity=next_process.visible_quantity,
         )
 
+    record_row = ProductionRecord(
+        order_id=order.id,
+        order_process_id=process_row.id,
+        sub_order_id=sub_order.id,
+        operator_user_id=operator.id,
+        production_quantity=quantity,
+        record_type=RECORD_TYPE_PRODUCTION,
+    )
+    db.add(record_row)
+    db.flush()
+
     repair_row = None
     if defect_items:
         if defect_quantity > 0:
+            enriched_defect_items = []
+            for item in defect_items:
+                if not isinstance(item, dict):
+                    continue
+                enriched_item = dict(item)
+                enriched_item["production_record_id"] = record_row.id
+                enriched_item["production_time"] = record_row.created_at
+                enriched_defect_items.append(enriched_item)
             repair_row = create_repair_order(
                 db,
                 order_id=order.id,
                 order_process_id=process_row.id,
                 sender=operator,
                 production_quantity=quantity + defect_quantity,
-                defect_items=defect_items,
+                defect_items=enriched_defect_items,
                 auto_created=True,
             )
-
-    db.add(
-        ProductionRecord(
-            order_id=order.id,
-            order_process_id=process_row.id,
-            sub_order_id=sub_order.id,
-            operator_user_id=operator.id,
-            production_quantity=quantity,
-            record_type=RECORD_TYPE_PRODUCTION,
-        )
-    )
     add_order_event_log(
         db,
         order_id=order.id,
@@ -491,6 +622,12 @@ def end_production(
             "operator_user_id": operator.id,
             "effective_operator_user_id": effective_user_id,
             "assist_authorization_id": assist_row.id if assist_row else None,
+            "production_record_id": record_row.id,
+            "pipeline_instance_id": pipeline_instance.id if pipeline_instance else None,
+            "pipeline_link_id": pipeline_instance.pipeline_link_id if pipeline_instance else None,
+            "pipeline_instance_no": pipeline_instance.pipeline_sub_order_no
+            if pipeline_instance
+            else None,
             "repair_order_id": repair_row.id if repair_row else None,
             "repair_order_code": repair_row.repair_order_code if repair_row else None,
         },

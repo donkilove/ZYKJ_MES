@@ -31,7 +31,11 @@ class Settings(BaseSettings):
     maintenance_auto_generate_enabled: bool = True
     maintenance_auto_generate_time: str = "00:05"
     maintenance_auto_generate_timezone: str = "Asia/Shanghai"
+    message_delivery_maintenance_enabled: bool = True
+    message_delivery_maintenance_interval_seconds: int = 15
+    message_delivery_pending_grace_seconds: int = 5
     production_default_verification_code: str = "123456"
+    craft_auto_bind_default_template_enabled: bool = True
 
     jwt_secret_key: str = "replace_with_a_strong_secret"
     jwt_algorithm: str = "HS256"

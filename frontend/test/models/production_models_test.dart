@@ -5,12 +5,15 @@ void main() {
   test('production status helpers map known statuses and keep unknown', () {
     expect(productionOrderStatusLabel('pending'), isNot('pending'));
     expect(productionOrderStatusLabel('in_progress'), isNot('in_progress'));
-    expect(productionOrderStatusLabel('completed'), isNot('completed'));
+    expect(productionOrderStatusLabel('completed'), '生产完成');
     expect(productionOrderStatusLabel('custom'), 'custom');
 
     expect(productionProcessStatusLabel('partial'), isNot('partial'));
     expect(productionProcessStatusLabel('x'), 'x');
 
+    expect(productionProcessStatusLabel('completed'), '生产完成');
+    expect(productionSubOrderStatusLabel('pending'), '待执行');
+    expect(productionSubOrderStatusLabel('in_progress'), '执行中');
     expect(productionSubOrderStatusLabel('done'), isNot('done'));
     expect(productionSubOrderStatusLabel('y'), 'y');
     expect(repairOrderStatusLabel('in_repair'), isNot('in_repair'));
@@ -154,6 +157,8 @@ void main() {
       'user_assigned_quantity': 50,
       'user_completed_quantity': 20,
       'pipeline_mode_enabled': true,
+      'pipeline_instance_id': 88,
+      'pipeline_instance_no': 'P9-10-2-ABCD1234',
       'pipeline_start_allowed': true,
       'pipeline_end_allowed': false,
       'max_producible_quantity': 30,
@@ -220,6 +225,8 @@ void main() {
 
     expect(myOrder.canFirstArticle, isTrue);
     expect(myOrder.pipelineModeEnabled, isTrue);
+    expect(myOrder.pipelineInstanceId, 88);
+    expect(myOrder.pipelineInstanceNo, 'P9-10-2-ABCD1234');
     expect(myOrder.pipelineStartAllowed, isTrue);
     expect(myOrder.pipelineEndAllowed, isFalse);
     expect(pipelineMode.availableProcessCodes.length, 3);
@@ -402,6 +409,33 @@ void main() {
       'content_base64': 'YWJj',
       'exported_count': 12,
     });
+    final detail = RepairOrderDetailItem.fromJson({
+      'id': 1,
+      'repair_order_code': 'RW-1',
+      'source_process_code': '01-01',
+      'source_process_name': '切割',
+      'production_quantity': 10,
+      'repair_quantity': 2,
+      'repaired_quantity': 1,
+      'scrap_quantity': 1,
+      'scrap_replenished': true,
+      'repair_time': '2026-03-01T00:00:00Z',
+      'status': 'completed',
+      'created_at': '2026-03-01T00:00:00Z',
+      'updated_at': '2026-03-01T00:00:00Z',
+      'defect_rows': [
+        {
+          'id': 1,
+          'phenomenon': '毛刺',
+          'quantity': 1,
+          'production_record_id': 88,
+          'production_sub_order_id': 7,
+          'production_record_type': 'production',
+          'production_record_quantity': 6,
+          'production_record_created_at': '2026-03-01T00:30:00Z',
+        },
+      ],
+    });
 
     expect(defectInput.toJson()['quantity'], 1);
     expect(causeInput.toJson()['is_scrap'], isTrue);
@@ -410,6 +444,8 @@ void main() {
     expect(summary.items.single.phenomenon, '毛刺');
     expect(scrap.scrapReason, '刀具磨损');
     expect(export.exportedCount, 12);
+    expect(detail.defectRows.single.productionRecordId, 88);
+    expect(detail.defectRows.single.productionRecordQuantity, 6);
     expect(RepairOrderListResult(total: 1, items: [repair]).items.single.id, 1);
     expect(
       ScrapStatisticsListResult(total: 1, items: [scrap]).items.single.id,

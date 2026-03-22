@@ -124,7 +124,16 @@ class _FakeRepairAndScrapService extends ProductionService {
       'repair_operator_user_id': 18,
       'repair_operator_username': 'fixer',
       'defect_rows': [
-        {'id': 1, 'phenomenon': '毛刺', 'quantity': 2},
+        {
+          'id': 1,
+          'phenomenon': '毛刺',
+          'quantity': 2,
+          'production_record_id': 91,
+          'production_sub_order_id': 12,
+          'production_record_type': 'production',
+          'production_record_quantity': 6,
+          'production_record_created_at': '2026-03-01T00:30:00Z',
+        },
       ],
       'cause_rows': [
         {
@@ -236,6 +245,7 @@ void main() {
     expect(find.text('PO-1'), findsOneWidget);
     expect(find.text('刀具磨损'), findsOneWidget);
     expect(find.text('产品名称（精确）'), findsOneWidget);
+    expect(find.text('关键词（订单/原因/工序名称）'), findsOneWidget);
     expect(find.text('工序编码（精确）'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).at(0), 'PO-1');
@@ -293,7 +303,10 @@ void main() {
 
       expect(find.text('维修详情 - RW-1'), findsOneWidget);
       expect(find.textContaining('毛刺'), findsWidgets);
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pumpAndSettle();
       expect(find.textContaining('刀具偏移'), findsOneWidget);
+      expect(find.textContaining('关联报工记录#91'), findsOneWidget);
     },
   );
 

@@ -27,6 +27,7 @@ from app.core.production_constants import (
 )
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
+from app.models.production_record import ProductionRecord
 from app.models.production_scrap_statistics import ProductionScrapStatistics
 from app.models.repair_cause import RepairCause
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
@@ -129,6 +130,8 @@ def _sanitize_defect_items(
             {
                 "phenomenon": phenomenon,
                 "quantity": quantity,
+                "production_record_id": int(item.get("production_record_id") or 0) or None,
+                "production_time": item.get("production_time"),
             }
         )
     return normalized
@@ -273,10 +276,36 @@ def create_repair_order(
     db.add(repair_row)
     db.flush()
 
+    production_record_by_id: dict[int, ProductionRecord] = {}
+    production_record_ids = {
+        int(item["production_record_id"])
+        for item in defects
+        if item.get("production_record_id")
+    }
+    if production_record_ids:
+        production_record_rows = (
+            db.execute(
+                select(ProductionRecord).where(ProductionRecord.id.in_(production_record_ids))
+            )
+            .scalars()
+            .all()
+        )
+        production_record_by_id = {int(row.id): row for row in production_record_rows}
+
     for item in defects:
+        production_record_id = item.get("production_record_id")
+        production_record = (
+            production_record_by_id.get(int(production_record_id))
+            if production_record_id
+            else None
+        )
+        production_time = item.get("production_time")
+        if not isinstance(production_time, datetime):
+            production_time = production_record.created_at if production_record else event_time
         db.add(
             RepairDefectPhenomenon(
                 repair_order_id=repair_row.id,
+                production_record_id=production_record.id if production_record else None,
                 order_id=order.id,
                 order_code=order.order_code,
                 product_id=order.product_id,
@@ -288,7 +317,7 @@ def create_repair_order(
                 quantity=int(item["quantity"]),
                 operator_user_id=sender.id if sender else None,
                 operator_username=sender.username if sender else None,
-                production_time=event_time,
+                production_time=production_time,
             )
         )
 
@@ -584,7 +613,8 @@ def complete_repair_order(
                         scrap_reason=reason,
                         scrap_quantity=qty,
                         last_scrap_time=now,
-                        progress=SCRAP_PROGRESS_PENDING_APPLY,
+                        progress=SCRAP_PROGRESS_APPLIED,
+                        applied_at=now,
                     )
                 )
             else:
@@ -592,6 +622,8 @@ def complete_repair_order(
                 existing.last_scrap_time = now
                 existing.operator_user_id = repair_row.sender_user_id
                 existing.operator_username = repair_row.sender_username
+                existing.progress = SCRAP_PROGRESS_APPLIED
+                existing.applied_at = now
 
     repair_row.repaired_quantity = repaired_quantity
     repair_row.scrap_quantity = scrap_quantity
@@ -637,12 +669,12 @@ def complete_repair_order(
                 f"订单 {repair_row.source_order_code or ''} / {repair_row.source_process_name or ''} "
                 f"维修完成，回流 {repaired_quantity}，报废 {scrap_quantity}"
             ),
-            source_module="production",
+            source_module="quality",
             source_type="repair_order",
             source_id=str(repair_row.id),
             source_code=repair_row.repair_order_code,
-            target_page_code="production",
-            target_tab_code="production_repair_orders",
+            target_page_code="quality",
+            target_tab_code="quality_repair_orders",
             target_route_payload_json=json.dumps(
                 {
                     "action": "detail",
@@ -655,6 +687,45 @@ def complete_repair_order(
             dedupe_key=f"repair_complete_{repair_row.id}",
             created_by_user_id=operator.id,
         )
+        if scrap_quantity > 0:
+            scrap_row = (
+                db.execute(
+                    select(ProductionScrapStatistics)
+                    .where(
+                        ProductionScrapStatistics.order_id == repair_row.source_order_id,
+                        ProductionScrapStatistics.process_id
+                        == repair_row.source_order_process_id,
+                    )
+                    .order_by(ProductionScrapStatistics.applied_at.desc(), ProductionScrapStatistics.id.desc())
+                )
+                .scalars()
+                .first()
+            )
+            if scrap_row is not None:
+                create_message_for_users(
+                    db,
+                    message_type="notice",
+                    priority="normal",
+                    title=f"报废已处理：{repair_row.source_order_code or ''} / {repair_row.source_process_name or ''}",
+                    summary=f"维修完成后已归档报废 {scrap_quantity} 件，可直接查看品质报废详情。",
+                    source_module="quality",
+                    source_type="scrap_statistics",
+                    source_id=str(scrap_row.id),
+                    source_code=repair_row.source_order_code,
+                    target_page_code="quality",
+                    target_tab_code="quality_scrap_statistics",
+                    target_route_payload_json=json.dumps(
+                        {
+                            "action": "detail",
+                            "scrap_id": scrap_row.id,
+                            "order_code": scrap_row.order_code,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    recipient_user_ids=[repair_row.sender_user_id],
+                    dedupe_key=f"scrap_applied_{repair_row.id}_{scrap_row.id}",
+                    created_by_user_id=operator.id,
+                )
 
     return repair_row
 
@@ -858,7 +929,12 @@ def export_scrap_statistics_csv(
                 row.last_scrap_time.astimezone().strftime("%Y-%m-%d %H:%M:%S")
                 if row.last_scrap_time
                 else "",
+                row.process_code or "",
+                row.operator_username or "",
                 "待处理" if row.progress == SCRAP_PROGRESS_PENDING_APPLY else "已处理",
+                row.applied_at.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+                if row.applied_at
+                else "",
             ]
         )
     content_base64 = _build_csv_base64(
@@ -869,7 +945,10 @@ def export_scrap_statistics_csv(
             "报废原因",
             "报废数量",
             "最近报废时间",
+            "工序编码",
+            "操作员",
             "进度",
+            "处理时间",
         ],
         csv_rows,
     )
@@ -900,14 +979,16 @@ def export_repair_orders_csv(
                 row.repair_order_code,
                 row.source_order_code or "",
                 row.product_name or "",
+                row.source_process_code,
                 row.source_process_name,
                 row.sender_username or "",
+                row.repair_operator_username or "",
                 int(row.production_quantity),
                 int(row.repair_quantity),
                 int(row.repaired_quantity),
                 int(row.scrap_quantity),
                 "是" if row.scrap_replenished else "否",
-                "维修中" if row.status == REPAIR_STATUS_IN_REPAIR else "维修完成",
+                "维修中" if row.status == REPAIR_STATUS_IN_REPAIR else "已完成",
                 row.repair_time.astimezone().strftime("%Y-%m-%d %H:%M:%S")
                 if row.repair_time
                 else "",
@@ -921,8 +1002,10 @@ def export_repair_orders_csv(
             "维修单编号",
             "订单编号",
             "产品名称",
+            "送修工序编码",
             "送修工序",
             "送修人",
+            "维修人",
             "本次生产数量",
             "送修数量",
             "已修复数量",

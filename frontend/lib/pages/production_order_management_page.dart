@@ -436,7 +436,7 @@ class _ProductionOrderManagementPageState
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('结束订单'),
-        content: Text('确认将订单 ${order.orderCode} 标记为已完成吗？'),
+        content: Text('确认将订单 ${order.orderCode} 标记为生产完成吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -767,7 +767,7 @@ class _ProductionOrderManagementPageState
                     ),
                     DropdownMenuItem<String?>(
                       value: 'completed',
-                      child: Text('已完成'),
+                      child: Text('生产完成'),
                     ),
                   ],
                   onChanged: (value) {
@@ -789,8 +789,8 @@ class _ProductionOrderManagementPageState
                   ),
                   items: const [
                     DropdownMenuItem<bool?>(value: null, child: Text('全部')),
-                    DropdownMenuItem<bool?>(value: true, child: Text('已开启')),
-                    DropdownMenuItem<bool?>(value: false, child: Text('未开启')),
+                    DropdownMenuItem<bool?>(value: true, child: Text('开启')),
+                    DropdownMenuItem<bool?>(value: false, child: Text('关闭')),
                   ],
                   onChanged: (value) {
                     setState(() {
@@ -960,7 +960,7 @@ class _ProductionOrderManagementPageState
                               DataCell(Text(item.currentProcessName ?? '-')),
                               DataCell(Text(templateLabel)),
                               DataCell(
-                                Text(item.pipelineEnabled ? '已开启' : '未开启'),
+                                Text(item.pipelineEnabled ? '开启' : '关闭'),
                               ),
                               DataCell(Text(item.createdByUsername ?? '-')),
                               DataCell(Text(_formatDate(item.startDate))),

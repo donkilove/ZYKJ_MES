@@ -25,7 +25,13 @@ class _FakeEquipmentService extends EquipmentService {
 
   @override
   Future<List<EquipmentOwnerOption>> listAllOwners() async {
-    return const [];
+    return [
+      EquipmentOwnerOption(
+        userId: 8,
+        username: 'worker',
+        fullName: null,
+      ),
+    ];
   }
 
   @override
@@ -56,6 +62,7 @@ MaintenanceRecordItem _buildRecord({required int id, String? attachmentLink}) {
     resultSummary: '完成',
     resultRemark: '正常',
     attachmentLink: attachmentLink,
+    attachmentName: attachmentLink == null ? null : 'a',
     createdAt: DateTime.parse('2026-03-31T10:00:00Z'),
     updatedAt: DateTime.parse('2026-03-31T10:00:00Z'),
   );
@@ -102,10 +109,10 @@ void main() {
       },
     );
 
-    expect(find.text('查看附件'), findsOneWidget);
+    expect(find.text('下载附件'), findsOneWidget);
     expect(find.text('无附件'), findsNothing);
 
-    await tester.tap(find.text('查看附件'));
+    await tester.tap(find.text('下载附件'));
     await tester.pump();
 
     expect(openedUrl, 'https://example.com/a');
@@ -120,6 +127,15 @@ void main() {
     );
 
     expect(find.text('无附件'), findsOneWidget);
-    expect(find.text('查看附件'), findsNothing);
+    expect(find.text('下载附件'), findsNothing);
+  });
+
+  testWidgets('存在候选人员时展示执行人筛选器', (tester) async {
+    await _pumpPage(
+      tester,
+      equipmentService: _FakeEquipmentService(records: [_buildRecord(id: 3)]),
+    );
+
+    expect(find.text('执行人'), findsWidgets);
   });
 }

@@ -327,6 +327,7 @@ class _CraftReferenceAnalysisPageState
       'process' => ('工序', Colors.blue),
       'user' => ('用户', Colors.purple),
       'template' => ('工艺模板', Colors.teal),
+      'template_reuse' => ('模板复用', Colors.teal),
       'system_master_template' => ('系统母版', Colors.indigo),
       'template_revision' => ('模板历史版本', Colors.teal),
       'system_master_revision' => ('母版历史版本', Colors.indigo),
@@ -347,9 +348,11 @@ class _CraftReferenceAnalysisPageState
     if (riskLevel == null || riskLevel == 'none') {
       return const SizedBox.shrink();
     }
-    final (label, color) = riskLevel == 'high'
-        ? ('高风险', Colors.red)
-        : ('低风险', Colors.amber);
+    final (label, color) = switch (riskLevel) {
+      'high' => ('高风险', Colors.red),
+      'medium' => ('中风险', Colors.deepOrange),
+      _ => ('低风险', Colors.amber),
+    };
     return Chip(
       label: Text(label, style: const TextStyle(fontSize: 10)),
       backgroundColor: color.withValues(alpha: 0.12),
@@ -440,13 +443,19 @@ class _CraftReferenceAnalysisPageState
         return ListTile(
           dense: true,
           leading: _buildRefTypeChip(item.refType),
-          title: Row(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: Text(item.refName)),
-              const SizedBox(width: 4),
-              _buildStatusChip(item.refStatus),
-              const SizedBox(width: 4),
-              _buildRiskChip(item.riskLevel),
+              Text(item.refName),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  _buildStatusChip(item.refStatus),
+                  _buildRiskChip(item.riskLevel),
+                ],
+              ),
             ],
           ),
           subtitle: Column(
@@ -571,21 +580,46 @@ class _CraftReferenceAnalysisPageState
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
                 '模板引用分析：${r.templateName}',
                 style: theme.textTheme.titleMedium,
               ),
-              const SizedBox(width: 8),
               Text('(${r.productName})', style: theme.textTheme.bodySmall),
-              const SizedBox(width: 12),
               Chip(
                 label: Text('共 ${r.total} 处引用'),
                 backgroundColor: r.total == 0
                     ? Colors.green.withValues(alpha: 0.12)
                     : Colors.orange.withValues(alpha: 0.12),
               ),
+              if (r.orderReferenceCount > 0) ...[
+                Chip(
+                  label: Text('生产工单 ${r.orderReferenceCount}'),
+                  backgroundColor: Colors.orange.withValues(alpha: 0.12),
+                ),
+              ],
+              if (r.userStageReferenceCount > 0) ...[
+                Chip(
+                  label: Text('用户工段 ${r.userStageReferenceCount}'),
+                  backgroundColor: Colors.blue.withValues(alpha: 0.12),
+                ),
+              ],
+              if (r.templateReuseReferenceCount > 0) ...[
+                Chip(
+                  label: Text('模板复用 ${r.templateReuseReferenceCount}'),
+                  backgroundColor: Colors.teal.withValues(alpha: 0.12),
+                ),
+              ],
+              if (r.hasBlockingReferences) ...[
+                Chip(
+                  label: Text('阻断 ${r.blockingReferenceCount}'),
+                  backgroundColor: Colors.red.withValues(alpha: 0.12),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 8),

@@ -489,6 +489,8 @@ class _ProductionOrderQueryDetailPageState
                         Text(
                           '并行模式：${detail.order.pipelineEnabled ? '开启' : '关闭'}',
                         ),
+                        if (contextItem != null)
+                          Text('并行实例：${contextItem.pipelineInstanceNo ?? '-'}'),
                         Text('创建人：${detail.order.createdByUsername ?? '-'}'),
                         Text('创建时间：${_formatDateTime(detail.order.createdAt)}'),
                         Text('开始日期：${_formatDate(detail.order.startDate)}'),

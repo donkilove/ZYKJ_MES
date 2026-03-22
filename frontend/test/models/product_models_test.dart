@@ -71,6 +71,7 @@ void main() {
       'version': 3,
       'version_label': 'V1.3',
       'remark': '变更备注',
+      'change_type': 'add',
       'changed_keys': ['参数1'],
       'operator_username': null,
       'created_at': '2026-03-02T10:00:00Z',
@@ -93,6 +94,7 @@ void main() {
     expect(list.versionLabel, 'V1.3');
     expect(list.items.single.isPreset, isTrue);
     expect(history.operatorUsername, '-');
+    expect(history.changeType, 'add');
     expect(history.versionLabel, 'V1.3');
     expect(historyList.total, 1);
     expect(update.updatedCount, 3);
@@ -111,5 +113,75 @@ void main() {
     expect(command.seq, 8);
     expect(command.targetTabCode, 'product_management');
     expect(command.productId, 123);
+  });
+
+  test('ProductDetailResult parses aggregated detail payload', () {
+    final detail = ProductDetailResult.fromJson({
+      'product': {
+        'id': 7,
+        'name': '测试产品',
+        'created_at': '2026-03-01T00:00:00Z',
+        'updated_at': '2026-03-02T00:00:00Z',
+      },
+      'detail_parameters': {
+        'product_id': 7,
+        'product_name': '测试产品',
+        'parameter_scope': 'version',
+        'version': 2,
+        'version_label': 'V1.1',
+        'lifecycle_status': 'draft',
+        'total': 1,
+        'items': [
+          {
+            'name': '参数A',
+            'category': '基础参数',
+            'type': 'Text',
+            'value': '1',
+            'sort_order': 1,
+            'is_preset': false,
+          },
+        ],
+      },
+      'detail_parameter_message': '当前无生效版本',
+      'latest_version_changed_at': '2026-03-02T01:00:00Z',
+      'version_total': 1,
+      'versions': [
+        {
+          'version': 2,
+          'version_label': 'V1.1',
+          'lifecycle_status': 'draft',
+          'action': 'copy',
+          'created_at': '2026-03-02T00:00:00Z',
+        },
+      ],
+      'history_total': 1,
+      'history_items': [
+        {
+          'id': 11,
+          'remark': '变更',
+          'changed_keys': ['参数A'],
+          'operator_username': 'admin',
+          'created_at': '2026-03-02T00:00:00Z',
+        },
+      ],
+      'related_info_sections': [
+        {
+          'code': 'process_templates',
+          'title': '关联工艺路线',
+          'total': 1,
+          'items': [
+            {'label': '贴片工艺', 'value': '版本 3 | 默认 | published'},
+          ],
+        },
+      ],
+    });
+
+    expect(detail.product.name, '测试产品');
+    expect(detail.detailParameters.versionLabel, 'V1.1');
+    expect(detail.detailParameterMessage, '当前无生效版本');
+    expect(detail.versions.single.version, 2);
+    expect(detail.historyItems.single.remark, '变更');
+    expect(detail.relatedInfoSections.single.title, '关联工艺路线');
+    expect(detail.relatedInfoSections.single.items.single.label, '贴片工艺');
   });
 }

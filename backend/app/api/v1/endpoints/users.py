@@ -11,6 +11,7 @@ from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.user import UserCreate, UserExportResult, UserItem, UserListResult, UserResetPasswordRequest, UserUpdate
 from app.services.audit_service import write_audit_log
+from app.services.message_service import create_message_for_users
 from app.services.session_service import list_online_user_ids
 from app.services.user_service import (
     create_user,
@@ -345,6 +346,26 @@ def disable_user_api(
         terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
+    create_message_for_users(
+        db,
+        message_type="notice",
+        priority="important",
+        title="账号已被停用",
+        summary=f"账号 {updated.username} 已被管理员停用，如需恢复请联系系统管理员。",
+        content=(
+            f"您的账号 {updated.username} 已被管理员 {current_user.username} 停用。"
+            "如该操作与预期不符，请联系系统管理员核实。"
+        ),
+        source_module="user",
+        source_type="user_disable",
+        source_id=str(updated.id),
+        source_code=updated.username,
+        target_page_code="user",
+        target_tab_code="account_settings",
+        recipient_user_ids=[updated.id],
+        dedupe_key=f"user_disabled_{updated.id}_{int(updated.updated_at.timestamp()) if updated.updated_at else 'now'}",
+        created_by_user_id=current_user.id,
+    )
     return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
 
 

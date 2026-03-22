@@ -60,6 +60,7 @@ MaintenanceWorkOrderItem _buildWorkOrder(int id) {
     resultSummary: null,
     resultRemark: null,
     attachmentLink: null,
+    attachmentName: null,
     createdAt: DateTime.parse('2026-03-20T00:00:00Z'),
     updatedAt: DateTime.parse('2026-03-20T00:00:00Z'),
   );
@@ -78,6 +79,7 @@ MaintenanceRecordItem _buildRecord() {
     resultSummary: '润滑正常',
     resultRemark: '无需更换耗材',
     attachmentLink: null,
+    attachmentName: null,
     createdAt: DateTime.parse('2026-03-24T08:30:00Z'),
     updatedAt: DateTime.parse('2026-03-24T08:30:00Z'),
   );
@@ -97,6 +99,9 @@ EquipmentDetailResult _buildDetail() {
     updatedAt: DateTime.parse('2026-03-20T00:00:00Z'),
     activePlanCount: 2,
     pendingWorkOrderCount: 3,
+    activePlansScopeLimited: true,
+    pendingWorkOrdersScopeLimited: true,
+    recentRecordsScopeLimited: true,
     activePlans: [_buildPlan(1), _buildPlan(2)],
     pendingWorkOrders: [_buildWorkOrder(11), _buildWorkOrder(12)],
     recentRecords: [_buildRecord()],
@@ -130,6 +135,7 @@ void main() {
     await _pumpPage(tester);
 
     expect(find.text('设备风险提示'), findsOneWidget);
+    expect(find.text('当前详情仅展示你在计划、执行与记录范围内可见的数据，不能替代全量排程复核。'), findsOneWidget);
     expect(find.text('待执行工单 3'), findsOneWidget);
     expect(find.text('活跃计划 2'), findsOneWidget);
     expect(find.text('当前有3个待执行工单未收口，调整设备前请先核对到期任务与现场状态。'), findsOneWidget);

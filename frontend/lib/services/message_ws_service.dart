@@ -28,6 +28,7 @@ class MessageWsService {
   bool _disposed = false;
   int _retryCount = 0;
   Timer? _retryTimer;
+  final Map<String, DateTime> _recentEventFingerprints = <String, DateTime>{};
 
   /// 建立连接
   void connect() {
@@ -58,10 +59,30 @@ class MessageWsService {
     try {
       final json = jsonDecode(raw as String) as Map<String, dynamic>;
       final event = WsEvent.fromJson(json);
+      if (_shouldSuppressDuplicateEvent(event)) {
+        return;
+      }
       onEvent(event);
     } catch (_) {
       // 忽略解析错误
     }
+  }
+
+  bool _shouldSuppressDuplicateEvent(WsEvent event) {
+    if (event.event == 'connected' || event.event.isEmpty) {
+      return false;
+    }
+    final now = DateTime.now();
+    _recentEventFingerprints.removeWhere(
+      (_, timestamp) => now.difference(timestamp).inSeconds >= 10,
+    );
+    final fingerprint = event.dedupeFingerprint;
+    final previous = _recentEventFingerprints[fingerprint];
+    if (previous != null && now.difference(previous).inSeconds < 10) {
+      return true;
+    }
+    _recentEventFingerprints[fingerprint] = now;
+    return false;
   }
 
   void _onError(Object _) {
@@ -106,6 +127,7 @@ class MessageWsService {
   void disconnect() {
     _disposed = true;
     _cancelRetry();
+    _recentEventFingerprints.clear();
     _sub?.cancel();
     _channel?.sink.close();
     _channel = null;
@@ -116,6 +138,7 @@ class MessageWsService {
     _disposed = false;
     _retryCount = 0;
     _cancelRetry();
+    _recentEventFingerprints.clear();
     _sub?.cancel();
     _channel?.sink.close();
     _channel = null;

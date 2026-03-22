@@ -82,3 +82,24 @@ def require_permission(permission_code: str) -> Callable[[User, Session], User]:
         return current_user
 
     return dependency
+
+
+def require_any_permission(permission_codes: list[str]) -> Callable[[User, Session], User]:
+    normalized_codes = [code for code in permission_codes if code]
+    if not normalized_codes:
+        raise ValueError("permission_codes is required")
+    for code in normalized_codes:
+        validate_permission_code(code)
+
+    def dependency(
+        current_user: User = Depends(get_current_active_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        if not any(
+            has_permission(db, user=current_user, permission_code=code)
+            for code in normalized_codes
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        return current_user
+
+    return dependency

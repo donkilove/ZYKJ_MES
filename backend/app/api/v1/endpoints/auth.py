@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, oauth2_scheme, require_permission
 from app.core.config import settings
+from app.core.rbac import ROLE_SYSTEM_ADMIN
 from app.core.security import create_access_token, decode_access_token, verify_password
 from app.db.session import get_db
 from app.models.registration_request import RegistrationRequest
@@ -36,6 +37,7 @@ from app.services.session_service import (
 from app.services.user_service import (
     approve_registration_request,
     ensure_admin_account,
+    get_active_user_ids_by_role,
     get_registration_request_by_account,
     get_registration_request_by_id,
     get_user_by_username,
@@ -212,6 +214,28 @@ def register(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to submit registration request",
+        )
+    approver_user_ids = get_active_user_ids_by_role(db, ROLE_SYSTEM_ADMIN)
+    if approver_user_ids:
+        create_message_for_users(
+            db,
+            message_type="todo",
+            priority="important",
+            title=f"注册审批待处理：{request_row.account}",
+            summary=f"账号 {request_row.account} 已提交注册申请，请进入注册审批页面处理。",
+            source_module="user",
+            source_type="registration_request",
+            source_id=str(request_row.id),
+            source_code=request_row.account,
+            target_page_code="user",
+            target_tab_code="registration_approval",
+            target_route_payload_json=json.dumps(
+                {"action": "detail", "request_id": request_row.id},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            recipient_user_ids=approver_user_ids,
+            dedupe_key=f"registration_request_pending_{request_row.id}",
         )
     return success_response(
         RegisterResult(

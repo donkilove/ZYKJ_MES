@@ -667,6 +667,49 @@ class CraftTemplateImpactOrderItem {
   }
 }
 
+class CraftTemplateImpactReferenceItem {
+  CraftTemplateImpactReferenceItem({
+    required this.refType,
+    required this.refId,
+    required this.refCode,
+    required this.refName,
+    required this.detail,
+    required this.refStatus,
+    required this.jumpModule,
+    required this.jumpTarget,
+    required this.riskLevel,
+    required this.riskNote,
+  });
+
+  final String refType;
+  final int refId;
+  final String? refCode;
+  final String refName;
+  final String? detail;
+  final String? refStatus;
+  final String? jumpModule;
+  final String? jumpTarget;
+  final String? riskLevel;
+  final String? riskNote;
+
+  factory CraftTemplateImpactReferenceItem.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return CraftTemplateImpactReferenceItem(
+      refType: (json['ref_type'] as String?) ?? '',
+      refId: (json['ref_id'] as int?) ?? 0,
+      refCode: json['ref_code'] as String?,
+      refName: (json['ref_name'] as String?) ?? '',
+      detail: json['detail'] as String?,
+      refStatus: json['ref_status'] as String?,
+      jumpModule: json['jump_module'] as String?,
+      jumpTarget: json['jump_target'] as String?,
+      riskLevel: json['risk_level'] as String?,
+      riskNote: json['risk_note'] as String?,
+    );
+  }
+}
+
 class CraftTemplateImpactAnalysis {
   CraftTemplateImpactAnalysis({
     required this.targetVersion,
@@ -675,7 +718,11 @@ class CraftTemplateImpactAnalysis {
     required this.inProgressOrders,
     required this.syncableOrders,
     required this.blockedOrders,
+    required this.totalReferences,
+    required this.userStageReferenceCount,
+    required this.templateReuseReferenceCount,
     required this.items,
+    required this.referenceItems,
   });
 
   final int targetVersion;
@@ -684,7 +731,11 @@ class CraftTemplateImpactAnalysis {
   final int inProgressOrders;
   final int syncableOrders;
   final int blockedOrders;
+  final int totalReferences;
+  final int userStageReferenceCount;
+  final int templateReuseReferenceCount;
   final List<CraftTemplateImpactOrderItem> items;
+  final List<CraftTemplateImpactReferenceItem> referenceItems;
 
   factory CraftTemplateImpactAnalysis.fromJson(Map<String, dynamic> json) {
     return CraftTemplateImpactAnalysis(
@@ -694,6 +745,11 @@ class CraftTemplateImpactAnalysis {
       inProgressOrders: (json['in_progress_orders'] as int?) ?? 0,
       syncableOrders: (json['syncable_orders'] as int?) ?? 0,
       blockedOrders: (json['blocked_orders'] as int?) ?? 0,
+      totalReferences: (json['total_references'] as int?) ?? 0,
+      userStageReferenceCount:
+          (json['user_stage_reference_count'] as int?) ?? 0,
+      templateReuseReferenceCount:
+          (json['template_reuse_reference_count'] as int?) ?? 0,
       items: (json['items'] as List<dynamic>? ?? const [])
           .map(
             (entry) => CraftTemplateImpactOrderItem.fromJson(
@@ -701,6 +757,14 @@ class CraftTemplateImpactAnalysis {
             ),
           )
           .toList(),
+      referenceItems:
+          (json['reference_items'] as List<dynamic>? ?? const [])
+              .map(
+                (entry) => CraftTemplateImpactReferenceItem.fromJson(
+                  entry as Map<String, dynamic>,
+                ),
+              )
+              .toList(),
     );
   }
 }
@@ -709,6 +773,9 @@ class CraftTemplateVersionItem {
   CraftTemplateVersionItem({
     required this.version,
     required this.action,
+    required this.recordType,
+    required this.recordTitle,
+    required this.recordSummary,
     required this.note,
     required this.sourceVersion,
     required this.createdByUserId,
@@ -718,6 +785,9 @@ class CraftTemplateVersionItem {
 
   final int version;
   final String action;
+  final String recordType;
+  final String recordTitle;
+  final String recordSummary;
   final String? note;
   final int? sourceVersion;
   final int? createdByUserId;
@@ -728,6 +798,9 @@ class CraftTemplateVersionItem {
     return CraftTemplateVersionItem(
       version: (json['version'] as int?) ?? 0,
       action: (json['action'] as String?) ?? '',
+      recordType: (json['record_type'] as String?) ?? '',
+      recordTitle: (json['record_title'] as String?) ?? '',
+      recordSummary: (json['record_summary'] as String?) ?? '',
       note: json['note'] as String?,
       sourceVersion: json['source_version'] as int?,
       createdByUserId: json['created_by_user_id'] as int?,
@@ -915,6 +988,10 @@ class CraftTemplateBatchExportItem {
     required this.isDefault,
     required this.isEnabled,
     required this.lifecycleStatus,
+    this.sourceType = 'manual',
+    this.sourceTemplateName,
+    this.sourceTemplateVersion,
+    this.sourceSystemMasterVersion,
     required this.steps,
   });
 
@@ -924,6 +1001,10 @@ class CraftTemplateBatchExportItem {
   final bool isDefault;
   final bool isEnabled;
   final String lifecycleStatus;
+  final String sourceType;
+  final String? sourceTemplateName;
+  final int? sourceTemplateVersion;
+  final int? sourceSystemMasterVersion;
   final List<CraftTemplateStepPayload> steps;
 
   factory CraftTemplateBatchExportItem.fromJson(Map<String, dynamic> json) {
@@ -934,6 +1015,10 @@ class CraftTemplateBatchExportItem {
       isDefault: (json['is_default'] as bool?) ?? false,
       isEnabled: (json['is_enabled'] as bool?) ?? true,
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
+      sourceType: (json['source_type'] as String?) ?? 'manual',
+      sourceTemplateName: json['source_template_name'] as String?,
+      sourceTemplateVersion: json['source_template_version'] as int?,
+      sourceSystemMasterVersion: json['source_system_master_version'] as int?,
       steps: (json['steps'] as List<dynamic>? ?? const [])
           .map(
             (entry) => CraftTemplateStepPayload.fromJson(
@@ -952,6 +1037,12 @@ class CraftTemplateBatchExportItem {
       'is_default': isDefault,
       'is_enabled': isEnabled,
       'lifecycle_status': lifecycleStatus,
+      'source_type': sourceType,
+      if (sourceTemplateName != null) 'source_template_name': sourceTemplateName,
+      if (sourceTemplateVersion != null)
+        'source_template_version': sourceTemplateVersion,
+      if (sourceSystemMasterVersion != null)
+        'source_system_master_version': sourceSystemMasterVersion,
       'steps': steps.map((item) => item.toJson()).toList(),
     };
   }
@@ -991,6 +1082,10 @@ class CraftTemplateBatchImportItem {
     required this.isDefault,
     required this.isEnabled,
     required this.lifecycleStatus,
+    this.sourceType = 'manual',
+    this.sourceTemplateName,
+    this.sourceTemplateVersion,
+    this.sourceSystemMasterVersion,
     required this.steps,
   });
 
@@ -1000,6 +1095,10 @@ class CraftTemplateBatchImportItem {
   final bool isDefault;
   final bool isEnabled;
   final String lifecycleStatus;
+  final String sourceType;
+  final String? sourceTemplateName;
+  final int? sourceTemplateVersion;
+  final int? sourceSystemMasterVersion;
   final List<CraftTemplateStepPayload> steps;
 
   Map<String, dynamic> toJson() {
@@ -1011,6 +1110,12 @@ class CraftTemplateBatchImportItem {
       'is_default': isDefault,
       'is_enabled': isEnabled,
       'lifecycle_status': lifecycleStatus,
+      'source_type': sourceType,
+      if (sourceTemplateName != null) 'source_template_name': sourceTemplateName,
+      if (sourceTemplateVersion != null)
+        'source_template_version': sourceTemplateVersion,
+      if (sourceSystemMasterVersion != null)
+        'source_system_master_version': sourceSystemMasterVersion,
       'steps': steps.map((item) => item.toJson()).toList(),
     };
   }
@@ -1099,6 +1204,7 @@ class CraftReferenceItem {
     this.jumpTarget,
     this.riskLevel,
     this.riskNote,
+    this.isBlocking = false,
   });
 
   final String refType;
@@ -1111,6 +1217,7 @@ class CraftReferenceItem {
   final String? jumpTarget;
   final String? riskLevel;
   final String? riskNote;
+  final bool isBlocking;
 
   factory CraftReferenceItem.fromJson(Map<String, dynamic> json) {
     return CraftReferenceItem(
@@ -1124,6 +1231,7 @@ class CraftReferenceItem {
       jumpTarget: json['jump_target'] as String?,
       riskLevel: json['risk_level'] as String?,
       riskNote: json['risk_note'] as String?,
+      isBlocking: json['is_blocking'] as bool? ?? false,
     );
   }
 }
@@ -1191,6 +1299,11 @@ class CraftTemplateReferenceResult {
     required this.productId,
     required this.productName,
     required this.total,
+    required this.orderReferenceCount,
+    required this.userStageReferenceCount,
+    required this.templateReuseReferenceCount,
+    required this.blockingReferenceCount,
+    required this.hasBlockingReferences,
     required this.items,
   });
 
@@ -1199,6 +1312,11 @@ class CraftTemplateReferenceResult {
   final int productId;
   final String productName;
   final int total;
+  final int orderReferenceCount;
+  final int userStageReferenceCount;
+  final int templateReuseReferenceCount;
+  final int blockingReferenceCount;
+  final bool hasBlockingReferences;
   final List<CraftReferenceItem> items;
 
   factory CraftTemplateReferenceResult.fromJson(Map<String, dynamic> json) {
@@ -1208,6 +1326,13 @@ class CraftTemplateReferenceResult {
       productId: (json['product_id'] as int?) ?? 0,
       productName: (json['product_name'] as String?) ?? '',
       total: (json['total'] as int?) ?? 0,
+      orderReferenceCount: (json['order_reference_count'] as int?) ?? 0,
+      userStageReferenceCount: (json['user_stage_reference_count'] as int?) ?? 0,
+      templateReuseReferenceCount:
+          (json['template_reuse_reference_count'] as int?) ?? 0,
+      blockingReferenceCount: (json['blocking_reference_count'] as int?) ?? 0,
+      hasBlockingReferences:
+          json['has_blocking_references'] as bool? ?? false,
       items: (json['items'] as List<dynamic>? ?? const [])
           .map((e) => CraftReferenceItem.fromJson(e as Map<String, dynamic>))
           .toList(),

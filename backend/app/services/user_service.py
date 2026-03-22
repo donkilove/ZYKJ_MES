@@ -266,8 +266,6 @@ def _resolve_processes(
         .order_by(Process.id.asc())
     )
     processes = db.execute(stmt).scalars().all()
-    if not processes:
-        return None, "Selected stage has no enabled processes"
     return processes, None
 
 
@@ -665,14 +663,7 @@ def update_user(
         user.full_name = payload.full_name
     if payload.remark is not None:
         user.remark = payload.remark.strip() if payload.remark else None
-    if payload.password:
-        pwd_error = validate_password(payload.password, db=db, exclude_user_id=user.id)
-        if pwd_error:
-            return None, pwd_error
-        user.password_hash = get_password_hash(payload.password)
-        user.must_change_password = bool(payload.must_change_password) if payload.must_change_password is not None else True
-        user.password_changed_at = _now_utc()
-    elif payload.must_change_password is not None:
+    if payload.must_change_password is not None:
         user.must_change_password = payload.must_change_password
 
     if payload.role_code is not None:

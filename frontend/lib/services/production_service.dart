@@ -5,8 +5,9 @@ import 'package:http/http.dart' as http;
 import '../models/app_session.dart';
 import '../models/production_models.dart';
 import 'api_exception.dart';
+import 'repair_scrap_service.dart';
 
-class ProductionService {
+class ProductionService implements RepairScrapService {
   ProductionService(this.session);
 
   final AppSession session;
@@ -290,6 +291,7 @@ class ProductionService {
     return ProductionActionResult.fromJson(data);
   }
 
+  @override
   Future<ProductionOrderDetail> getOrderDetail({required int orderId}) async {
     final uri = Uri.parse('$_basePath/orders/$orderId');
     final response = await http.get(uri, headers: _authHeaders);
@@ -425,6 +427,7 @@ class ProductionService {
   Future<ProductionActionResult> submitFirstArticle({
     required int orderId,
     required int orderProcessId,
+    int? pipelineInstanceId,
     required String verificationCode,
     String? remark,
     int? effectiveOperatorUserId,
@@ -436,6 +439,7 @@ class ProductionService {
       headers: _authHeaders,
       body: jsonEncode({
         'order_process_id': orderProcessId,
+        'pipeline_instance_id': pipelineInstanceId,
         'verification_code': verificationCode,
         'remark': remark,
         'effective_operator_user_id': effectiveOperatorUserId,
@@ -456,6 +460,7 @@ class ProductionService {
   Future<ProductionActionResult> endProduction({
     required int orderId,
     required int orderProcessId,
+    int? pipelineInstanceId,
     required int quantity,
     String? remark,
     int? effectiveOperatorUserId,
@@ -468,6 +473,7 @@ class ProductionService {
       headers: _authHeaders,
       body: jsonEncode({
         'order_process_id': orderProcessId,
+        'pipeline_instance_id': pipelineInstanceId,
         'quantity': quantity,
         'remark': remark,
         'effective_operator_user_id': effectiveOperatorUserId,
@@ -679,6 +685,7 @@ class ProductionService {
     return ProductionManualExportResult.fromJson(data);
   }
 
+  @override
   Future<ScrapStatisticsListResult> getScrapStatistics({
     required int page,
     required int pageSize,
@@ -735,6 +742,7 @@ class ProductionService {
     );
   }
 
+  @override
   Future<ProductionExportResult> exportScrapStatistics({
     String? keyword,
     String? productName,
@@ -767,6 +775,7 @@ class ProductionService {
     return ProductionExportResult.fromJson(data);
   }
 
+  @override
   Future<ScrapStatisticsItem> getScrapStatisticsDetail({
     required int scrapId,
   }) async {
@@ -783,6 +792,7 @@ class ProductionService {
     return ScrapStatisticsItem.fromJson(data);
   }
 
+  @override
   Future<RepairOrderDetailItem> getRepairOrderDetail({
     required int repairOrderId,
   }) async {
@@ -799,6 +809,7 @@ class ProductionService {
     return RepairOrderDetailItem.fromJson(data);
   }
 
+  @override
   Future<RepairOrderListResult> getRepairOrders({
     required int page,
     required int pageSize,
@@ -871,6 +882,7 @@ class ProductionService {
     return RepairOrderItem.fromJson(data);
   }
 
+  @override
   Future<RepairOrderPhenomenaSummaryResult> getRepairOrderPhenomenaSummary({
     required int repairOrderId,
   }) async {
@@ -889,6 +901,7 @@ class ProductionService {
     return RepairOrderPhenomenaSummaryResult.fromJson(data);
   }
 
+  @override
   Future<RepairOrderItem> completeRepairOrder({
     required int repairOrderId,
     required List<RepairCauseItemInput> causeItems,
@@ -918,6 +931,7 @@ class ProductionService {
     return RepairOrderItem.fromJson(data);
   }
 
+  @override
   Future<ProductionExportResult> exportRepairOrders({
     String? keyword,
     String status = 'all',
@@ -1284,6 +1298,8 @@ class ProductionService {
         return 'Set Default';
       case 'order_process_id':
         return 'Order Process';
+      case 'pipeline_instance_id':
+        return 'Pipeline Instance';
       case 'target_operator_user_id':
         return 'Target Operator';
       case 'helper_user_id':

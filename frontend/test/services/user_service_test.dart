@@ -113,7 +113,7 @@ void main() {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['username'], 'updated_user');
             expect(body['full_name'], 'updated_user');
-            expect(body['password'], 'new-pass');
+            expect(body.containsKey('password'), isFalse);
             expect(body['role_code'], 'system_admin');
             expect(body['stage_id'], 2);
             return TestResponse.json(200, body: {'data': {}});
@@ -162,7 +162,6 @@ void main() {
         await service.updateUser(
           userId: 9,
           account: 'updated_user',
-          password: 'new-pass',
           roleCode: 'system_admin',
           stageId: 2,
         );

@@ -1086,14 +1086,17 @@ class ProductPermissionCodes {
   static const String productsList = 'product.products.list';
   static const String productsCreate = 'product.products.create';
   static const String productsDelete = 'product.products.delete';
+  static const String productsExport = 'product.products.export';
   static const String lifecycleUpdate = 'product.lifecycle.update';
   static const String versionsList = 'product.versions.list';
   static const String versionsCompare = 'product.versions.compare';
+  static const String versionsActivate = 'product.versions.activate';
   static const String rollback = 'product.rollback';
   static const String impactAnalysis = 'product.impact.analysis';
   static const String parametersView = 'product.parameters.view';
   static const String parametersUpdate = 'product.parameters.update';
   static const String parameterHistoryList = 'product.parameter_history.list';
+  static const String parametersExport = 'product.parameters.export';
 }
 
 class EquipmentPermissionCodes {
@@ -1107,6 +1110,10 @@ class EquipmentPermissionCodes {
       'page.maintenance_record.view';
 
   static const String adminOwnersList = 'equipment.admin_owners.list';
+  static const String planOwnerOptionsList =
+      'equipment.plan_owner_options.list';
+  static const String recordExecutorOptionsList =
+      'equipment.record_executor_options.list';
   static const String ledgerList = 'equipment.ledger.list';
   static const String ledgerCreate = 'equipment.ledger.create';
   static const String ledgerUpdate = 'equipment.ledger.update';
@@ -1235,11 +1242,15 @@ class ProductFeaturePermissionCodes {
   static const String catalogRead = 'feature.product.catalog.read';
   static const String productManagementManage =
       'feature.product.product_management.manage';
+  static const String catalogExport = 'feature.product.catalog.export';
   static const String versionAnalysisView =
       'feature.product.version_analysis.view';
   static const String versionsManage = 'feature.product.versions.manage';
+  static const String versionActivationManage =
+      'feature.product.version_activation.manage';
   static const String parametersView = 'feature.product.parameters.view';
   static const String parametersEdit = 'feature.product.parameters.edit';
+  static const String parametersExport = 'feature.product.parameters.export';
 }
 
 class EquipmentFeaturePermissionCodes {
@@ -1249,7 +1260,10 @@ class EquipmentFeaturePermissionCodes {
   static const String executionsOperate =
       'feature.equipment.executions.operate';
   static const String recordsView = 'feature.equipment.records.view';
+  static const String rulesView = 'feature.equipment.rules.view';
   static const String rulesManage = 'feature.equipment.rules.manage';
+  static const String runtimeParametersView =
+      'feature.equipment.runtime_parameters.view';
   static const String runtimeParametersManage =
       'feature.equipment.runtime_parameters.manage';
 }

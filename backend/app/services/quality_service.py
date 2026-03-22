@@ -22,7 +22,6 @@ from app.models.production_scrap_statistics import ProductionScrapStatistics
 from app.models.product import Product
 from app.models.repair_cause import RepairCause
 from app.models.repair_order import RepairOrder
-from app.models.repair_order import RepairOrder
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
 from app.models.user import User
 
@@ -77,27 +76,390 @@ def _round_rate(passed: int, total: int) -> float:
     return round((passed * 100.0) / total, 2)
 
 
-def _collect_quality_scope(
-    rows: list[FirstArticleRecord],
-) -> dict[str, set[int] | set[str]]:
+def _normalize_process_key(value: object) -> str:
+    return str(value or "").strip()
+
+
+def _normalize_operator_key(*, user_id: object, username: object) -> str:
+    if user_id is not None:
+        return f"id:{_coerce_int(user_id)}"
+    text = str(username or "").strip()
+    if text:
+        return f"name:{text}"
+    return ""
+
+
+def _record_process_name(
+    mapping: dict[str, str],
+    *,
+    process_code: object,
+    process_name: object,
+) -> None:
+    key = _normalize_process_key(process_code)
+    if not key:
+        return
+    if key not in mapping or not mapping[key]:
+        mapping[key] = str(process_name or "").strip()
+
+
+def _record_operator_meta(
+    mapping: dict[str, dict[str, object]],
+    *,
+    user_id: object,
+    username: object,
+) -> str:
+    key = _normalize_operator_key(user_id=user_id, username=username)
+    if not key:
+        return ""
+    current = mapping.get(key)
+    normalized_username = str(username or "").strip()
+    normalized_user_id = _coerce_int(user_id) if user_id is not None else None
+    if current is None:
+        mapping[key] = {
+            "operator_user_id": normalized_user_id,
+            "operator_username": normalized_username,
+        }
+        return key
+    if current.get("operator_user_id") is None and normalized_user_id is not None:
+        current["operator_user_id"] = normalized_user_id
+    if not current.get("operator_username") and normalized_username:
+        current["operator_username"] = normalized_username
+    return key
+
+
+def _coerce_int(value: object, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return default
+        try:
+            return int(text)
+        except ValueError:
+            return default
+    return default
+
+
+def _aggregate_quality_related_totals(
+    db: Session,
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+) -> dict[str, Any]:
+    scrap_by_product: dict[int, int] = {}
+    scrap_by_process: dict[str, int] = {}
+    scrap_by_operator: dict[str, int] = {}
+    process_name_by_code: dict[str, str] = {}
+    operator_meta_by_key: dict[str, dict[str, object]] = {}
+    covered_order_ids: set[int] = set()
+    covered_process_keys: set[str] = set()
+    covered_operator_keys: set[str] = set()
+    scrap_total = 0
+    for row in db.execute(
+        select(
+            ProductionScrapStatistics.order_id,
+            ProductionScrapStatistics.product_id,
+            ProductionScrapStatistics.process_code,
+            ProductionScrapStatistics.process_name,
+            ProductionScrapStatistics.operator_user_id,
+            ProductionScrapStatistics.operator_username,
+            func.sum(ProductionScrapStatistics.scrap_quantity).label("total"),
+        )
+        .where(
+            *_build_scrap_filters(
+                start_date=start_date,
+                end_date=end_date,
+                product_name=product_name,
+                process_code=process_code,
+                operator_username=operator_username,
+            )
+        )
+        .group_by(
+            ProductionScrapStatistics.order_id,
+            ProductionScrapStatistics.product_id,
+            ProductionScrapStatistics.process_code,
+            ProductionScrapStatistics.process_name,
+            ProductionScrapStatistics.operator_user_id,
+            ProductionScrapStatistics.operator_username,
+        )
+    ).all():
+        quantity = int(row.total or 0)
+        scrap_total += quantity
+        if row.order_id is not None:
+            covered_order_ids.add(int(row.order_id))
+        if row.product_id is not None:
+            key = int(row.product_id)
+            scrap_by_product[key] = int(scrap_by_product.get(key, 0)) + quantity
+        process_key = _normalize_process_key(row.process_code)
+        if process_key:
+            covered_process_keys.add(process_key)
+            _record_process_name(
+                process_name_by_code,
+                process_code=row.process_code,
+                process_name=row.process_name,
+            )
+            scrap_by_process[process_key] = int(scrap_by_process.get(process_key, 0)) + quantity
+        operator_key = _record_operator_meta(
+            operator_meta_by_key,
+            user_id=row.operator_user_id,
+            username=row.operator_username,
+        )
+        if operator_key:
+            covered_operator_keys.add(operator_key)
+            scrap_by_operator[operator_key] = int(
+                scrap_by_operator.get(operator_key, 0)
+            ) + quantity
+
+    repair_by_product: dict[int, int] = {}
+    repair_by_process: dict[str, int] = {}
+    repair_by_operator: dict[str, int] = {}
+    repair_total = 0
+    for row in db.execute(
+        select(
+            RepairOrder.source_order_id,
+            RepairOrder.product_id,
+            RepairOrder.source_process_code,
+            RepairOrder.source_process_name,
+            RepairOrder.sender_user_id,
+            RepairOrder.sender_username,
+            func.count(RepairOrder.id).label("total"),
+        )
+        .where(
+            *_build_repair_filters(
+                start_date=start_date,
+                end_date=end_date,
+                product_name=product_name,
+                process_code=process_code,
+                operator_username=operator_username,
+            )
+        )
+        .group_by(
+            RepairOrder.source_order_id,
+            RepairOrder.product_id,
+            RepairOrder.source_process_code,
+            RepairOrder.source_process_name,
+            RepairOrder.sender_user_id,
+            RepairOrder.sender_username,
+        )
+    ).all():
+        quantity = int(row.total or 0)
+        repair_total += quantity
+        if row.source_order_id is not None:
+            covered_order_ids.add(int(row.source_order_id))
+        if row.product_id is not None:
+            key = int(row.product_id)
+            repair_by_product[key] = int(repair_by_product.get(key, 0)) + quantity
+        process_key = _normalize_process_key(row.source_process_code)
+        if process_key:
+            covered_process_keys.add(process_key)
+            _record_process_name(
+                process_name_by_code,
+                process_code=row.source_process_code,
+                process_name=row.source_process_name,
+            )
+            repair_by_process[process_key] = int(repair_by_process.get(process_key, 0)) + quantity
+        operator_key = _record_operator_meta(
+            operator_meta_by_key,
+            user_id=row.sender_user_id,
+            username=row.sender_username,
+        )
+        if operator_key:
+            covered_operator_keys.add(operator_key)
+            repair_by_operator[operator_key] = int(
+                repair_by_operator.get(operator_key, 0)
+            ) + quantity
+
+    defect_by_product: dict[int, int] = {}
+    defect_by_process: dict[str, int] = {}
+    defect_by_operator: dict[str, int] = {}
+    defect_total = 0
+    for row in db.execute(
+        select(
+            RepairDefectPhenomenon.order_id,
+            RepairDefectPhenomenon.product_id,
+            RepairDefectPhenomenon.process_code,
+            RepairDefectPhenomenon.process_name,
+            RepairDefectPhenomenon.operator_user_id,
+            RepairDefectPhenomenon.operator_username,
+            func.sum(RepairDefectPhenomenon.quantity).label("total"),
+        )
+        .where(
+            *_build_defect_filters(
+                start_date=start_date,
+                end_date=end_date,
+                product_name=product_name,
+                process_code=process_code,
+                operator_username=operator_username,
+            )
+        )
+        .group_by(
+            RepairDefectPhenomenon.order_id,
+            RepairDefectPhenomenon.product_id,
+            RepairDefectPhenomenon.process_code,
+            RepairDefectPhenomenon.process_name,
+            RepairDefectPhenomenon.operator_user_id,
+            RepairDefectPhenomenon.operator_username,
+        )
+    ).all():
+        quantity = int(row.total or 0)
+        defect_total += quantity
+        if row.order_id is not None:
+            covered_order_ids.add(int(row.order_id))
+        if row.product_id is not None:
+            key = int(row.product_id)
+            defect_by_product[key] = int(defect_by_product.get(key, 0)) + quantity
+        process_key = _normalize_process_key(row.process_code)
+        if process_key:
+            covered_process_keys.add(process_key)
+            _record_process_name(
+                process_name_by_code,
+                process_code=row.process_code,
+                process_name=row.process_name,
+            )
+            defect_by_process[process_key] = int(defect_by_process.get(process_key, 0)) + quantity
+        operator_key = _record_operator_meta(
+            operator_meta_by_key,
+            user_id=row.operator_user_id,
+            username=row.operator_username,
+        )
+        if operator_key:
+            covered_operator_keys.add(operator_key)
+            defect_by_operator[operator_key] = int(
+                defect_by_operator.get(operator_key, 0)
+            ) + quantity
+
     return {
-        "product_ids": {
-            int(row.order.product_id)
-            for row in rows
-            if row.order is not None and row.order.product_id is not None
-        },
-        "order_ids": {int(row.order_id) for row in rows if row.order_id is not None},
-        "order_process_ids": {
-            int(row.order_process_id)
-            for row in rows
-            if row.order_process_id is not None
-        },
-        "process_codes": {
-            row.order_process.process_code
-            for row in rows
-            if row.order_process is not None and row.order_process.process_code
-        },
+        "scrap_by_product": scrap_by_product,
+        "scrap_by_process": scrap_by_process,
+        "scrap_by_operator": scrap_by_operator,
+        "scrap_total": {"all": scrap_total},
+        "repair_by_product": repair_by_product,
+        "repair_by_process": repair_by_process,
+        "repair_by_operator": repair_by_operator,
+        "repair_total": {"all": repair_total},
+        "defect_by_product": defect_by_product,
+        "defect_by_process": defect_by_process,
+        "defect_by_operator": defect_by_operator,
+        "defect_total": {"all": defect_total},
+        "process_name_by_code": process_name_by_code,
+        "operator_meta_by_key": operator_meta_by_key,
+        "covered_order_ids": {"all": covered_order_ids},
+        "covered_process_keys": {"all": covered_process_keys},
+        "covered_operator_keys": {"all": covered_operator_keys},
     }
+
+
+def _append_exact_or_like_filter(
+    filters: list[object],
+    column,
+    value: str | None,
+    *,
+    exact: bool = False,
+) -> None:
+    text = (value or "").strip()
+    if not text:
+        return
+    filters.append(column == text if exact else column.ilike(f"%{text}%"))
+
+
+def _build_scrap_filters(
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+) -> list[object]:
+    filters = _build_datetime_range_filters(
+        ProductionScrapStatistics.last_scrap_time,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    _append_exact_or_like_filter(
+        filters,
+        ProductionScrapStatistics.product_name,
+        product_name,
+    )
+    _append_exact_or_like_filter(
+        filters,
+        ProductionScrapStatistics.process_code,
+        process_code,
+        exact=True,
+    )
+    _append_exact_or_like_filter(
+        filters,
+        ProductionScrapStatistics.operator_username,
+        operator_username,
+    )
+    return filters
+
+
+def _build_repair_filters(
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+) -> list[object]:
+    filters = _build_datetime_range_filters(
+        RepairOrder.repair_time,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    _append_exact_or_like_filter(filters, RepairOrder.product_name, product_name)
+    _append_exact_or_like_filter(
+        filters,
+        RepairOrder.source_process_code,
+        process_code,
+        exact=True,
+    )
+    _append_exact_or_like_filter(
+        filters,
+        RepairOrder.sender_username,
+        operator_username,
+    )
+    return filters
+
+
+def _build_defect_filters(
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+) -> list[object]:
+    filters = _build_datetime_range_filters(
+        RepairDefectPhenomenon.production_time,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    _append_exact_or_like_filter(
+        filters,
+        RepairDefectPhenomenon.product_name,
+        product_name,
+    )
+    _append_exact_or_like_filter(
+        filters,
+        RepairDefectPhenomenon.process_code,
+        process_code,
+        exact=True,
+    )
+    _append_exact_or_like_filter(
+        filters,
+        RepairDefectPhenomenon.operator_username,
+        operator_username,
+    )
+    return filters
 
 
 def list_first_articles(
@@ -287,6 +649,14 @@ def get_quality_overview(
         operator_username=operator_username,
         result_filter=result_filter,
     )
+    related_totals = _aggregate_quality_related_totals(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+    )
     first_article_total = len(rows)
     passed_total = sum(1 for row in rows if row.result == "passed")
     failed_total = sum(1 for row in rows if row.result == "failed")
@@ -299,15 +669,39 @@ def get_quality_overview(
         if row.order_process is not None and row.order_process.process_code
     }
     covered_operator_ids = {row.operator_user_id for row in rows}
+    related_order_ids = related_totals.get("covered_order_ids", {}).get("all", set())
+    related_process_keys = related_totals.get("covered_process_keys", {}).get(
+        "all", set()
+    )
+    related_operator_keys = related_totals.get("covered_operator_keys", {}).get(
+        "all", set()
+    )
+    if isinstance(related_order_ids, set):
+        covered_order_ids.update(related_order_ids)
+    if isinstance(related_process_keys, set):
+        covered_process_codes.update(related_process_keys)
+    covered_operator_keys = (
+        set(related_operator_keys) if isinstance(related_operator_keys, set) else set()
+    )
+    for row in rows:
+        covered_operator_keys.add(
+            _normalize_operator_key(
+                user_id=row.operator_user_id,
+                username=row.operator.username if row.operator else "",
+            )
+        )
 
     return {
         "first_article_total": first_article_total,
         "passed_total": passed_total,
         "failed_total": failed_total,
         "pass_rate_percent": _round_rate(passed_total, first_article_total),
+        "defect_total": int(related_totals["defect_total"]["all"]),
+        "scrap_total": int(related_totals["scrap_total"]["all"]),
+        "repair_total": int(related_totals["repair_total"]["all"]),
         "covered_order_count": len(covered_order_ids),
         "covered_process_count": len(covered_process_codes),
-        "covered_operator_count": len(covered_operator_ids),
+        "covered_operator_count": len({key for key in covered_operator_keys if key}),
         "latest_first_article_at": latest_first_article_at,
     }
 
@@ -331,36 +725,78 @@ def get_quality_process_stats(
         operator_username=operator_username,
         result_filter=result_filter,
     )
+    related_totals = _aggregate_quality_related_totals(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+    )
     grouped: dict[str, dict[str, object]] = {}
     for row in rows:
         process_row = row.order_process
-        process_code = process_row.process_code if process_row else ""
+        process_key = process_row.process_code if process_row else ""
         process_name = process_row.process_name if process_row else ""
-        if process_code not in grouped:
-            grouped[process_code] = {
-                "process_code": process_code,
+        if process_key not in grouped:
+            grouped[process_key] = {
+                "process_code": process_key,
                 "process_name": process_name,
                 "first_article_total": 0,
                 "passed_total": 0,
                 "failed_total": 0,
                 "pass_rate_percent": 0.0,
+                "defect_total": 0,
+                "scrap_total": 0,
+                "repair_total": 0,
                 "latest_first_article_at": None,
             }
 
-        item = grouped[process_code]
-        item["first_article_total"] = int(item["first_article_total"]) + 1
+        item = grouped[process_key]
+        item["first_article_total"] = _coerce_int(item["first_article_total"]) + 1
         if row.result == "passed":
-            item["passed_total"] = int(item["passed_total"]) + 1
+            item["passed_total"] = _coerce_int(item["passed_total"]) + 1
         elif row.result == "failed":
-            item["failed_total"] = int(item["failed_total"]) + 1
+            item["failed_total"] = _coerce_int(item["failed_total"]) + 1
         if item["latest_first_article_at"] is None:
             item["latest_first_article_at"] = row.created_at
+
+    for process_key, process_name in related_totals["process_name_by_code"].items():
+        grouped.setdefault(
+            process_key,
+            {
+                "process_code": process_key,
+                "process_name": process_name,
+                "first_article_total": 0,
+                "passed_total": 0,
+                "failed_total": 0,
+                "pass_rate_percent": 0.0,
+                "defect_total": 0,
+                "scrap_total": 0,
+                "repair_total": 0,
+                "latest_first_article_at": None,
+            },
+        )
 
     result = list(grouped.values())
     for item in result:
         item["pass_rate_percent"] = _round_rate(
-            int(item["passed_total"]),
-            int(item["first_article_total"]),
+            _coerce_int(item["passed_total"]),
+            _coerce_int(item["first_article_total"]),
+        )
+        process_key = _normalize_process_key(item["process_code"])
+        if not item["process_name"]:
+            item["process_name"] = related_totals["process_name_by_code"].get(
+                process_key, ""
+            )
+        item["defect_total"] = int(
+            related_totals["defect_by_process"].get(process_key, 0)
+        )
+        item["scrap_total"] = int(
+            related_totals["scrap_by_process"].get(process_key, 0)
+        )
+        item["repair_total"] = int(
+            related_totals["repair_by_process"].get(process_key, 0)
         )
 
     result.sort(key=lambda item: str(item["process_code"]))
@@ -386,42 +822,102 @@ def get_quality_operator_stats(
         operator_username=operator_username,
         result_filter=result_filter,
     )
-    grouped: dict[int, dict[str, object]] = defaultdict(dict)
+    related_totals = _aggregate_quality_related_totals(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+    )
+    grouped: dict[str, dict[str, object]] = {}
     for row in rows:
-        operator_user_id = row.operator_user_id
         operator_name = row.operator.username if row.operator else ""
-        item = grouped.get(operator_user_id)
-        if not item:
+        operator_key = _normalize_operator_key(
+            user_id=row.operator_user_id,
+            username=operator_name,
+        )
+        if not operator_key:
+            continue
+        item = grouped.get(operator_key)
+        if item is None:
             item = {
-                "operator_user_id": operator_user_id,
+                "operator_user_id": row.operator_user_id,
                 "operator_username": operator_name,
                 "first_article_total": 0,
                 "passed_total": 0,
                 "failed_total": 0,
                 "pass_rate_percent": 0.0,
+                "defect_total": 0,
+                "scrap_total": 0,
+                "repair_total": 0,
                 "latest_first_article_at": None,
             }
-            grouped[operator_user_id] = item
+            grouped[operator_key] = item
 
-        item["first_article_total"] = int(item["first_article_total"]) + 1
+        item["first_article_total"] = _coerce_int(item["first_article_total"]) + 1
         if row.result == "passed":
-            item["passed_total"] = int(item["passed_total"]) + 1
+            item["passed_total"] = _coerce_int(item["passed_total"]) + 1
         elif row.result == "failed":
-            item["failed_total"] = int(item["failed_total"]) + 1
+            item["failed_total"] = _coerce_int(item["failed_total"]) + 1
         if item["latest_first_article_at"] is None:
             item["latest_first_article_at"] = row.created_at
+
+    for operator_key, meta in related_totals["operator_meta_by_key"].items():
+        grouped.setdefault(
+            operator_key,
+            {
+                "operator_user_id": _coerce_int(meta.get("operator_user_id"), 0),
+                "operator_username": str(meta.get("operator_username") or ""),
+                "first_article_total": 0,
+                "passed_total": 0,
+                "failed_total": 0,
+                "pass_rate_percent": 0.0,
+                "defect_total": 0,
+                "scrap_total": 0,
+                "repair_total": 0,
+                "latest_first_article_at": None,
+            },
+        )
 
     result = list(grouped.values())
     for item in result:
         item["pass_rate_percent"] = _round_rate(
-            int(item["passed_total"]),
-            int(item["first_article_total"]),
+            _coerce_int(item["passed_total"]),
+            _coerce_int(item["first_article_total"]),
+        )
+        operator_key = _normalize_operator_key(
+            user_id=item["operator_user_id"]
+            if _coerce_int(item["operator_user_id"], 0) > 0
+            else None,
+            username=item["operator_username"],
+        )
+        meta = related_totals["operator_meta_by_key"].get(operator_key)
+        if meta is not None:
+            if _coerce_int(item["operator_user_id"], 0) <= 0 and meta.get(
+                "operator_user_id"
+            ):
+                item["operator_user_id"] = _coerce_int(meta["operator_user_id"], 0)
+            if not item["operator_username"] and meta.get("operator_username"):
+                item["operator_username"] = str(meta["operator_username"])
+        item["defect_total"] = int(
+            related_totals["defect_by_operator"].get(operator_key, 0)
+        )
+        item["scrap_total"] = int(
+            related_totals["scrap_by_operator"].get(operator_key, 0)
+        )
+        item["repair_total"] = int(
+            related_totals["repair_by_operator"].get(operator_key, 0)
         )
 
     result.sort(
         key=lambda item: (
-            -int(item["first_article_total"]),
-            int(item["operator_user_id"]),
+            -_coerce_int(item["first_article_total"]),
+            -_coerce_int(item["defect_total"]),
+            -_coerce_int(item["scrap_total"]),
+            -_coerce_int(item["repair_total"]),
+            str(item["operator_username"]),
+            _coerce_int(item["operator_user_id"]),
         )
     )
     return result
@@ -602,6 +1098,14 @@ def get_quality_product_stats(
         operator_username=operator_username,
         result_filter=result_filter,
     )
+    related_totals = _aggregate_quality_related_totals(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+    )
 
     grouped: dict[int, dict[str, Any]] = {}
     for row in rows:
@@ -620,8 +1124,9 @@ def get_quality_product_stats(
                 "passed_total": 0,
                 "failed_total": 0,
                 "pass_rate_percent": 0.0,
+                "defect_total": 0,
                 "scrap_total": 0,
-                "repair_order_count": 0,
+                "repair_total": 0,
             }
         item = grouped[pid]
         item["first_article_total"] = int(item["first_article_total"]) + 1
@@ -630,92 +1135,80 @@ def get_quality_product_stats(
         elif row.result == "failed":
             item["failed_total"] = int(item["failed_total"]) + 1
 
-    scope = _collect_quality_scope(rows)
-
-    # 补充报废和维修数量
-    if grouped:
-        product_ids = list(grouped.keys())
-        scrap_time_filters = _build_datetime_range_filters(
-            ProductionScrapStatistics.last_scrap_time,
-            start_date=start_date,
-            end_date=end_date,
+    scrap_rows = db.execute(
+        select(
+            ProductionScrapStatistics.product_id,
+            ProductionScrapStatistics.product_name,
+            func.sum(ProductionScrapStatistics.scrap_quantity).label("total"),
         )
-        scrap_rows = db.execute(
-            select(
-                ProductionScrapStatistics.product_id,
-                func.sum(ProductionScrapStatistics.scrap_quantity).label("total"),
-            )
-            .where(
-                ProductionScrapStatistics.product_id.in_(product_ids),
-                *scrap_time_filters,
-            )
-            .where(
-                ProductionScrapStatistics.process_code == process_code
-                if process_code and process_code.strip()
-                else True,
-            )
-            .where(
-                ProductionScrapStatistics.operator_username.ilike(
-                    f"%{operator_username.strip()}%"
-                )
-                if operator_username and operator_username.strip()
-                else True,
-            )
-            .where(
-                ProductionScrapStatistics.process_id.in_(scope["order_process_ids"])
-                if scope["order_process_ids"]
-                else True,
-            )
-            .where(
-                ProductionScrapStatistics.order_id.in_(scope["order_ids"])
-                if scope["order_ids"]
-                else True,
-            )
-            .group_by(ProductionScrapStatistics.product_id)
-        ).all()
-        for sr in scrap_rows:
-            if sr.product_id in grouped:
-                grouped[sr.product_id]["scrap_total"] = int(sr.total or 0)
-
-        repair_time_filters = _build_datetime_range_filters(
-            RepairOrder.repair_time,
-            start_date=start_date,
-            end_date=end_date,
+        .where(
+            ProductionScrapStatistics.product_id.is_not(None),
+            *_build_scrap_filters(
+                start_date=start_date,
+                end_date=end_date,
+                product_name=product_name,
+                process_code=process_code,
+                operator_username=operator_username,
+            ),
         )
-        repair_rows = db.execute(
-            select(
-                RepairOrder.product_id,
-                func.count(RepairOrder.id).label("cnt"),
-            )
-            .where(
-                RepairOrder.product_id.in_(product_ids),
-                *repair_time_filters,
-            )
-            .where(
-                RepairOrder.source_process_code == process_code
-                if process_code and process_code.strip()
-                else True,
-            )
-            .where(
-                RepairOrder.sender_username.ilike(f"%{operator_username.strip()}%")
-                if operator_username and operator_username.strip()
-                else True,
-            )
-            .where(
-                RepairOrder.source_order_process_id.in_(scope["order_process_ids"])
-                if scope["order_process_ids"]
-                else True,
-            )
-            .where(
-                RepairOrder.source_order_id.in_(scope["order_ids"])
-                if scope["order_ids"]
-                else True,
-            )
-            .group_by(RepairOrder.product_id)
-        ).all()
-        for rr in repair_rows:
-            if rr.product_id in grouped:
-                grouped[rr.product_id]["repair_order_count"] = int(rr.cnt or 0)
+        .group_by(
+            ProductionScrapStatistics.product_id,
+            ProductionScrapStatistics.product_name,
+        )
+    ).all()
+    for sr in scrap_rows:
+        product_id = int(sr.product_id)
+        item = grouped.setdefault(
+            product_id,
+            {
+                "product_id": product_id,
+                "product_name": sr.product_name or "",
+                "first_article_total": 0,
+                "passed_total": 0,
+                "failed_total": 0,
+                "pass_rate_percent": 0.0,
+                "defect_total": 0,
+                "scrap_total": 0,
+                "repair_total": 0,
+            },
+        )
+        item["scrap_total"] = int(sr.total or 0)
+
+    repair_rows = db.execute(
+        select(
+            RepairOrder.product_id,
+            RepairOrder.product_name,
+            func.count(RepairOrder.id).label("cnt"),
+        )
+        .where(
+            RepairOrder.product_id.is_not(None),
+            *_build_repair_filters(
+                start_date=start_date,
+                end_date=end_date,
+                product_name=product_name,
+                process_code=process_code,
+                operator_username=operator_username,
+            ),
+        )
+        .group_by(RepairOrder.product_id, RepairOrder.product_name)
+    ).all()
+    for rr in repair_rows:
+        product_id = int(rr.product_id)
+        item = grouped.setdefault(
+            product_id,
+            {
+                "product_id": product_id,
+                "product_name": rr.product_name or "",
+                "first_article_total": 0,
+                "passed_total": 0,
+                "failed_total": 0,
+                "pass_rate_percent": 0.0,
+                "defect_total": 0,
+                "scrap_total": 0,
+                "repair_total": 0,
+            },
+        )
+        item["repair_total"] = int(rr.cnt or 0)
 
     result = list(grouped.values())
     for item in result:
@@ -723,7 +1216,18 @@ def get_quality_product_stats(
             int(item["passed_total"]),
             int(item["first_article_total"]),
         )
-    result.sort(key=lambda x: -int(x["first_article_total"]))
+        product_id = int(item["product_id"])
+        item["defect_total"] = int(
+            related_totals["defect_by_product"].get(product_id, 0)
+        )
+    result.sort(
+        key=lambda x: (
+            -int(x["first_article_total"]),
+            -int(x["repair_total"]),
+            -int(x["scrap_total"]),
+            str(x["product_name"]),
+        )
+    )
     return result
 
 
@@ -799,143 +1303,66 @@ def get_quality_trend(
         elif row.result == "failed":
             item["failed_total"] = int(item["failed_total"]) + 1
 
-    scope = _collect_quality_scope(rows)
-
-    defect_rows = []
-    if scope["product_ids"] or scope["order_ids"]:
-        defect_rows = db.execute(
-            select(
-                func.date(RepairDefectPhenomenon.production_time).label("d"),
-                func.sum(RepairDefectPhenomenon.quantity).label("total"),
+    defect_rows = db.execute(
+        select(
+            func.date(RepairDefectPhenomenon.production_time).label("d"),
+            func.sum(RepairDefectPhenomenon.quantity).label("total"),
+        )
+        .where(
+            *_build_defect_filters(
+                start_date=resolved_start,
+                end_date=resolved_end,
+                product_name=product_name,
+                process_code=process_code,
+                operator_username=operator_username,
             )
-            .where(
-                RepairDefectPhenomenon.production_time
-                >= datetime.combine(resolved_start, time.min),
-                RepairDefectPhenomenon.production_time
-                < datetime.combine(resolved_end + timedelta(days=1), time.min),
-            )
-            .where(
-                RepairDefectPhenomenon.product_id.in_(scope["product_ids"])
-                if scope["product_ids"]
-                else True,
-            )
-            .where(
-                RepairDefectPhenomenon.process_code == process_code
-                if process_code and process_code.strip()
-                else True,
-            )
-            .where(
-                RepairDefectPhenomenon.operator_username.ilike(
-                    f"%{operator_username.strip()}%"
-                )
-                if operator_username and operator_username.strip()
-                else True,
-            )
-            .where(
-                RepairDefectPhenomenon.process_id.in_(scope["order_process_ids"])
-                if scope["order_process_ids"]
-                else True,
-            )
-            .where(
-                RepairDefectPhenomenon.order_id.in_(scope["order_ids"])
-                if scope["order_ids"]
-                else True,
-            )
-            .group_by(func.date(RepairDefectPhenomenon.production_time))
-        ).all()
+        )
+        .group_by(func.date(RepairDefectPhenomenon.production_time))
+    ).all()
     for dr in defect_rows:
         stat_date = _normalize_stat_date(dr.d)
         if stat_date is not None and stat_date in grouped:
             grouped[stat_date]["defect_total"] = int(dr.total or 0)
 
     # 补充报废数量
-    scrap_rows = []
-    if scope["product_ids"] or scope["order_ids"]:
-        scrap_rows = db.execute(
-            select(
-                func.date(ProductionScrapStatistics.last_scrap_time).label("d"),
-                func.sum(ProductionScrapStatistics.scrap_quantity).label("total"),
+    scrap_rows = db.execute(
+        select(
+            func.date(ProductionScrapStatistics.last_scrap_time).label("d"),
+            func.sum(ProductionScrapStatistics.scrap_quantity).label("total"),
+        )
+        .where(
+            *_build_scrap_filters(
+                start_date=resolved_start,
+                end_date=resolved_end,
+                product_name=product_name,
+                process_code=process_code,
+                operator_username=operator_username,
             )
-            .where(
-                ProductionScrapStatistics.last_scrap_time
-                >= datetime.combine(resolved_start, time.min),
-                ProductionScrapStatistics.last_scrap_time
-                < datetime.combine(resolved_end + timedelta(days=1), time.min),
-            )
-            .where(
-                ProductionScrapStatistics.product_id.in_(scope["product_ids"])
-                if scope["product_ids"]
-                else True,
-            )
-            .where(
-                ProductionScrapStatistics.process_code == process_code
-                if process_code and process_code.strip()
-                else True,
-            )
-            .where(
-                ProductionScrapStatistics.operator_username.ilike(
-                    f"%{operator_username.strip()}%"
-                )
-                if operator_username and operator_username.strip()
-                else True,
-            )
-            .where(
-                ProductionScrapStatistics.process_id.in_(scope["order_process_ids"])
-                if scope["order_process_ids"]
-                else True,
-            )
-            .where(
-                ProductionScrapStatistics.order_id.in_(scope["order_ids"])
-                if scope["order_ids"]
-                else True,
-            )
-            .group_by(func.date(ProductionScrapStatistics.last_scrap_time))
-        ).all()
+        )
+        .group_by(func.date(ProductionScrapStatistics.last_scrap_time))
+    ).all()
     for sr in scrap_rows:
         stat_date = _normalize_stat_date(sr.d)
         if stat_date is not None and stat_date in grouped:
             grouped[stat_date]["scrap_total"] = int(sr.total or 0)
 
     # 补充维修数量（按维修单创建日期聚合）
-    repair_rows = []
-    if scope["product_ids"] or scope["order_ids"]:
-        repair_rows = db.execute(
-            select(
-                func.date(RepairOrder.repair_time).label("d"),
-                func.count(RepairOrder.id).label("total"),
+    repair_rows = db.execute(
+        select(
+            func.date(RepairOrder.repair_time).label("d"),
+            func.count(RepairOrder.id).label("total"),
+        )
+        .where(
+            *_build_repair_filters(
+                start_date=resolved_start,
+                end_date=resolved_end,
+                product_name=product_name,
+                process_code=process_code,
+                operator_username=operator_username,
             )
-            .where(
-                RepairOrder.repair_time >= datetime.combine(resolved_start, time.min),
-                RepairOrder.repair_time
-                < datetime.combine(resolved_end + timedelta(days=1), time.min),
-            )
-            .where(
-                RepairOrder.product_id.in_(scope["product_ids"])
-                if scope["product_ids"]
-                else True,
-            )
-            .where(
-                RepairOrder.source_process_code == process_code
-                if process_code and process_code.strip()
-                else True,
-            )
-            .where(
-                RepairOrder.sender_username.ilike(f"%{operator_username.strip()}%")
-                if operator_username and operator_username.strip()
-                else True,
-            )
-            .where(
-                RepairOrder.source_order_process_id.in_(scope["order_process_ids"])
-                if scope["order_process_ids"]
-                else True,
-            )
-            .where(
-                RepairOrder.source_order_id.in_(scope["order_ids"])
-                if scope["order_ids"]
-                else True,
-            )
-            .group_by(func.date(RepairOrder.repair_time))
-        ).all()
+        )
+        .group_by(func.date(RepairOrder.repair_time))
+    ).all()
     for rr in repair_rows:
         stat_date = _normalize_stat_date(rr.d)
         if stat_date is not None and stat_date in grouped:
@@ -1017,6 +1444,9 @@ def export_quality_stats_csv(
             "通过数",
             "不通过数",
             "通过率",
+            "不良总数",
+            "报废总数",
+            "维修总数",
             "覆盖订单数",
             "覆盖工序数",
             "覆盖人员数",
@@ -1029,6 +1459,9 @@ def export_quality_stats_csv(
             overview["passed_total"],
             overview["failed_total"],
             f"{overview['pass_rate_percent']}%",
+            overview["defect_total"],
+            overview["scrap_total"],
+            overview["repair_total"],
             overview["covered_order_count"],
             overview["covered_process_count"],
             overview["covered_operator_count"],
@@ -1048,6 +1481,9 @@ def export_quality_stats_csv(
             "通过数",
             "不通过数",
             "通过率",
+            "不良数",
+            "报废数",
+            "维修数",
             "最近首件时间",
         ]
     )
@@ -1060,6 +1496,9 @@ def export_quality_stats_csv(
                 item["passed_total"],
                 item["failed_total"],
                 f"{item['pass_rate_percent']}%",
+                item["defect_total"],
+                item["scrap_total"],
+                item["repair_total"],
                 str(item["latest_first_article_at"])[:19]
                 if item["latest_first_article_at"]
                 else "",
@@ -1069,7 +1508,17 @@ def export_quality_stats_csv(
 
     writer.writerow(["== 人员统计 =="])
     writer.writerow(
-        ["操作员", "首件总数", "通过数", "不通过数", "通过率", "最近首件时间"]
+        [
+            "操作员",
+            "首件总数",
+            "通过数",
+            "不通过数",
+            "通过率",
+            "不良数",
+            "报废数",
+            "维修数",
+            "最近首件时间",
+        ]
     )
     for item in operator_stats:
         writer.writerow(
@@ -1079,6 +1528,9 @@ def export_quality_stats_csv(
                 item["passed_total"],
                 item["failed_total"],
                 f"{item['pass_rate_percent']}%",
+                item["defect_total"],
+                item["scrap_total"],
+                item["repair_total"],
                 str(item["latest_first_article_at"])[:19]
                 if item["latest_first_article_at"]
                 else "",
@@ -1088,7 +1540,16 @@ def export_quality_stats_csv(
     writer.writerow([])
     writer.writerow(["== 产品统计 =="])
     writer.writerow(
-        ["产品名称", "首件总数", "通过数", "不通过数", "通过率", "报废数", "维修数"]
+        [
+            "产品名称",
+            "首件总数",
+            "通过数",
+            "不通过数",
+            "通过率",
+            "不良数",
+            "报废数",
+            "维修数",
+        ]
     )
     for item in product_stats:
         writer.writerow(
@@ -1098,15 +1559,16 @@ def export_quality_stats_csv(
                 item["passed_total"],
                 item["failed_total"],
                 f"{item['pass_rate_percent']}%",
+                item["defect_total"],
                 item["scrap_total"],
-                item["repair_order_count"],
+                item["repair_total"],
             ]
         )
 
     writer.writerow([])
     writer.writerow(["== 趋势分析 =="])
     writer.writerow(
-        ["日期", "首件总数", "通过数", "不通过数", "通过率", "报废数", "维修数"]
+        ["日期", "首件总数", "通过数", "不通过数", "通过率", "不良数", "报废数", "维修数"]
     )
     for item in trend_stats:
         writer.writerow(
@@ -1116,6 +1578,7 @@ def export_quality_stats_csv(
                 item["passed_total"],
                 item["failed_total"],
                 f"{item['pass_rate_percent']}%",
+                item["defect_total"],
                 item["scrap_total"],
                 item["repair_total"],
             ]

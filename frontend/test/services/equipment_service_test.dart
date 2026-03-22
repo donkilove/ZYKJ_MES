@@ -77,6 +77,7 @@ Map<String, dynamic> _workOrderJson() {
     'result_summary': null,
     'result_remark': null,
     'attachment_link': null,
+    'attachment_name': null,
     'created_at': '2026-03-01T00:00:00Z',
     'updated_at': '2026-03-01T00:00:00Z',
   };
@@ -108,7 +109,8 @@ Map<String, dynamic> _recordJson() {
     'completed_at': '2026-03-31T10:00:00Z',
     'result_summary': '完成',
     'result_remark': '正常',
-    'attachment_link': null,
+    'attachment_link': 'https://example.com/reports/checklist.pdf',
+    'attachment_name': 'checklist.pdf',
     'created_at': '2026-03-31T10:00:00Z',
     'updated_at': '2026-03-31T10:00:00Z',
   };
@@ -134,6 +136,9 @@ Map<String, dynamic> _equipmentDetailJson() {
     ..._equipmentJson(),
     'active_plan_count': 2,
     'pending_work_order_count': 1,
+    'active_plans_scope_limited': true,
+    'pending_work_orders_scope_limited': false,
+    'recent_records_scope_limited': true,
     'active_plans': [_maintenancePlanJson()],
     'pending_work_orders': [_workOrderJson()],
     'recent_records': [_recordJson()],
@@ -500,6 +505,8 @@ void main() {
       expect(owners.single.username, 'admin');
       expect(owners.single.userId, 1);
       expect(equipmentDetail.activePlanCount, 2);
+      expect(equipmentDetail.activePlansScopeLimited, isTrue);
+      expect(equipmentDetail.recentRecordsScopeLimited, isTrue);
       expect(equipment.items.single.code, 'EQ-01');
       expect(items.items.single.name, '点检');
       expect(plans.items.single.executionProcessCode, '01-01');
@@ -508,9 +515,11 @@ void main() {
       expect(workOrderDetail.sourcePlanId, 3);
       expect(workOrderDetail.sourcePlanSummary, '计划#3 / 周期30天 / 起始2026-03-01');
       expect(records.items.single.workOrderId, 4);
+      expect(records.items.single.attachmentName, 'checklist.pdf');
       expect(recordDetail.sourceEquipmentCode, 'EQ-01');
       expect(recordDetail.sourceEquipmentName, '设备1');
       expect(recordDetail.sourceExecutionProcessCode, '01-01');
+      expect(recordDetail.attachmentName, 'checklist.pdf');
       expect(runtimeParameters.items.single.equipmentType, '冲压机');
       expect(server.requests.length, 28);
     });

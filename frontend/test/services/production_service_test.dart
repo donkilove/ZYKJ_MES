@@ -61,6 +61,8 @@ Map<String, dynamic> _myOrderJson({
     'operator_username': 'worker',
     'work_view': workView,
     'assist_authorization_id': assistAuthorizationId,
+    'pipeline_instance_id': 301,
+    'pipeline_instance_no': 'P1-12-1-PIPE0001',
     'max_producible_quantity': 10,
     'can_first_article': canFirstArticle,
     'can_end_production': canEndProduction,
@@ -395,6 +397,7 @@ void main() {
           'POST /production/orders/1/first-article': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['order_process_id'], 11);
+            expect(body['pipeline_instance_id'], 301);
             expect(body['verification_code'], 'code-1');
             expect(body['remark'], 'first');
             expect(body['effective_operator_user_id'], 8);
@@ -413,6 +416,7 @@ void main() {
           'POST /production/orders/1/end-production': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['order_process_id'], 11);
+            expect(body['pipeline_instance_id'], 301);
             expect(body['quantity'], 5);
             expect(body['remark'], 'done');
             expect(body['effective_operator_user_id'], 8);
@@ -878,6 +882,7 @@ void main() {
         final firstArticle = await service.submitFirstArticle(
           orderId: 1,
           orderProcessId: 11,
+          pipelineInstanceId: 301,
           verificationCode: 'code-1',
           remark: 'first',
           effectiveOperatorUserId: 8,
@@ -886,6 +891,7 @@ void main() {
         final endProduction = await service.endProduction(
           orderId: 1,
           orderProcessId: 11,
+          pipelineInstanceId: 301,
           quantity: 5,
           remark: 'done',
           effectiveOperatorUserId: 8,

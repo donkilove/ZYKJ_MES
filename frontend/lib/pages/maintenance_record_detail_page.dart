@@ -22,15 +22,19 @@ class MaintenanceAttachmentAction extends StatelessWidget {
   const MaintenanceAttachmentAction({
     super.key,
     required this.attachmentLink,
+    this.attachmentName,
     this.onOpen,
     this.emptyLabel = '无附件',
-    this.buttonLabel = '查看附件',
+    this.buttonLabel = '下载附件',
+    this.showAttachmentName = true,
   });
 
   final String? attachmentLink;
+  final String? attachmentName;
   final MaintenanceAttachmentOpenCallback? onOpen;
   final String emptyLabel;
   final String buttonLabel;
+  final bool showAttachmentName;
 
   @override
   Widget build(BuildContext context) {
@@ -38,12 +42,23 @@ class MaintenanceAttachmentAction extends StatelessWidget {
     if (normalizedLink.isEmpty) {
       return Text(emptyLabel);
     }
-    return TextButton.icon(
-      onPressed: () async {
-        await (onOpen ?? openMaintenanceAttachment)(normalizedLink);
-      },
-      icon: const Icon(Icons.attach_file),
-      label: Text(buttonLabel),
+    final normalizedName = attachmentName?.trim() ?? '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showAttachmentName && normalizedName.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: SelectableText(normalizedName),
+          ),
+        TextButton.icon(
+          onPressed: () async {
+            await (onOpen ?? openMaintenanceAttachment)(normalizedLink);
+          },
+          icon: const Icon(Icons.download_outlined),
+          label: Text(buttonLabel),
+        ),
+      ],
     );
   }
 }
@@ -182,6 +197,7 @@ class _MaintenanceRecordDetailPageState
                     alignment: Alignment.centerLeft,
                     child: MaintenanceAttachmentAction(
                       attachmentLink: detail.attachmentLink,
+                      attachmentName: detail.attachmentName,
                       onOpen: widget.onOpenAttachment,
                     ),
                   ),

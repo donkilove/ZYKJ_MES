@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import csv
 import io
+import json
 from collections.abc import Iterable
 from datetime import UTC, date, datetime
 from uuid import uuid4
@@ -21,6 +22,8 @@ from app.core.production_constants import (
     SUB_ORDER_STATUS_DONE,
     SUB_ORDER_STATUS_IN_PROGRESS,
     SUB_ORDER_STATUS_PENDING,
+    order_status_label,
+    pipeline_mode_label,
 )
 from app.core.product_lifecycle import PRODUCT_LIFECYCLE_ACTIVE
 from app.core.authz_catalog import (
@@ -30,12 +33,13 @@ from app.core.authz_catalog import (
     PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE,
     PERM_PROD_ORDERS_PIPELINE_MODE_VIEW_ALL,
 )
-from app.core.rbac import ROLE_OPERATOR
+from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.process import Process
 from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
 from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.process_stage import ProcessStage
 from app.models.product import Product
+from app.models.role import Role
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.product_process_template_step import ProductProcessTemplateStep
 from app.models.production_record import ProductionRecord
@@ -44,12 +48,69 @@ from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_sub_order import ProductionSubOrder
 from app.models.order_event_log import OrderEventLog
 from app.models.user import User
+from app.services.message_service import create_message_for_users
 from app.services.assist_authorization_service import (
     ASSIST_STATUS_APPROVED,
     ASSIST_STATUS_CONSUMED,
 )
 from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
+
+
+def _message_recipient_user_ids_for_order(db: Session, *, order: ProductionOrder) -> list[int]:
+    rows = db.execute(
+        select(User.id)
+        .join(User.roles)
+        .where(
+            User.is_deleted.is_(False),
+            User.is_active.is_(True),
+            Role.code.in_((ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN)),
+        )
+        .distinct()
+    ).scalars().all()
+    recipient_ids = {int(user_id) for user_id in rows}
+    if order.created_by_user_id is not None:
+        recipient_ids.add(int(order.created_by_user_id))
+    return sorted(recipient_ids)
+
+
+def _notify_order_changed(
+    db: Session,
+    *,
+    order: ProductionOrder,
+    operator: User,
+    event_code: str,
+    title: str,
+    summary: str,
+) -> None:
+    recipient_user_ids = _message_recipient_user_ids_for_order(db, order=order)
+    if not recipient_user_ids:
+        return
+    create_message_for_users(
+        db,
+        message_type="notice",
+        priority="important",
+        title=title,
+        summary=summary,
+        content=summary,
+        source_module="production",
+        source_type="production_order",
+        source_id=str(order.id),
+        source_code=order.order_code,
+        target_page_code="production",
+        target_tab_code="production_order_management",
+        target_route_payload_json=json.dumps(
+            {
+                "action": "detail",
+                "order_id": order.id,
+                "order_code": order.order_code,
+            },
+            ensure_ascii=False,
+        ),
+        recipient_user_ids=recipient_user_ids,
+        dedupe_key=f"production_order_{event_code}_{order.id}_{int(order.updated_at.timestamp()) if order.updated_at else 'now'}",
+        created_by_user_id=operator.id,
+    )
 
 
 def _normalize_process_codes(process_codes: Iterable[str]) -> list[str]:
@@ -91,6 +152,14 @@ def _pipeline_selected_code_set(order: ProductionOrder) -> set[str]:
     if not order.pipeline_enabled:
         return set()
     return set(_parse_pipeline_process_codes_text(order.pipeline_process_codes))
+
+
+def is_pipeline_process_selected_for_order(
+    *,
+    order: ProductionOrder,
+    process_code: str,
+) -> bool:
+    return process_code in _pipeline_selected_code_set(order)
 
 
 def _is_parallel_edge_enabled(
@@ -136,6 +205,34 @@ def _find_previous_process_row(
         ),
         None,
     )
+
+
+def get_active_pipeline_instance_for_sub_order(
+    db: Session,
+    *,
+    sub_order_id: int,
+    order_process_id: int,
+) -> OrderSubOrderPipelineInstance | None:
+    rows = (
+        db.execute(
+            select(OrderSubOrderPipelineInstance)
+            .where(
+                OrderSubOrderPipelineInstance.sub_order_id == sub_order_id,
+                OrderSubOrderPipelineInstance.order_process_id == order_process_id,
+                OrderSubOrderPipelineInstance.is_active.is_(True),
+            )
+            .order_by(OrderSubOrderPipelineInstance.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return None
+    if len(rows) > 1:
+        raise RuntimeError(
+            "Multiple active pipeline instances found for current sub-order"
+        )
+    return rows[0]
 
 
 def is_pipeline_start_allowed_for_process(
@@ -665,26 +762,109 @@ def _create_pipeline_instances_for_order(
             ProductionSubOrder.id.asc(),
         )
     ).all()
+    grouped_by_process: dict[int, list[tuple[ProductionSubOrder, ProductionOrderProcess]]] = {}
+    for sub_order, process_row in sub_rows:
+        grouped_by_process.setdefault(int(process_row.id), []).append((sub_order, process_row))
+
+    link_ids_by_seq: dict[int, str] = {}
+    max_pipeline_seq = 0
+    for process_code in selected_codes:
+        process_rows = [
+            item
+            for rows in grouped_by_process.values()
+            for item in rows
+            if item[1].process_code == process_code
+        ]
+        max_pipeline_seq = max(max_pipeline_seq, len(process_rows))
+    for pipeline_seq in range(1, max_pipeline_seq + 1):
+        link_ids_by_seq[pipeline_seq] = f"PL{order.id}-{pipeline_seq}-{uuid4().hex[:10]}"
+
     created = 0
-    for pipeline_seq, (sub_order, process_row) in enumerate(sub_rows, start=1):
-        pipeline_no = f"P{order.id}-{sub_order.id}-{pipeline_seq}-{uuid4().hex[:8]}"
-        db.add(
-            OrderSubOrderPipelineInstance(
-                sub_order_id=sub_order.id,
-                order_id=order.id,
-                order_process_id=process_row.id,
-                process_code=process_row.process_code,
-                pipeline_seq=pipeline_seq,
-                pipeline_sub_order_no=pipeline_no,
-                is_active=True,
-                invalid_reason=None,
-                invalidated_at=None,
+    for process_code in selected_codes:
+        process_rows = [
+            item
+            for rows in grouped_by_process.values()
+            for item in rows
+            if item[1].process_code == process_code
+        ]
+        for pipeline_seq, (sub_order, process_row) in enumerate(process_rows, start=1):
+            pipeline_no = (
+                f"P{order.id}-{process_row.process_order}-{pipeline_seq}-{uuid4().hex[:6]}"
             )
-        )
-        created += 1
+            db.add(
+                OrderSubOrderPipelineInstance(
+                    pipeline_link_id=link_ids_by_seq[pipeline_seq],
+                    sub_order_id=sub_order.id,
+                    order_id=order.id,
+                    order_process_id=process_row.id,
+                    process_code=process_row.process_code,
+                    pipeline_seq=pipeline_seq,
+                    pipeline_sub_order_no=pipeline_no,
+                    is_active=True,
+                    invalid_reason=None,
+                    invalidated_at=None,
+                )
+            )
+            created += 1
     if created:
         db.flush()
     return created
+
+
+def get_active_pipeline_instance_for_process_sequence(
+    db: Session,
+    *,
+    order_id: int,
+    order_process_id: int,
+    pipeline_seq: int,
+) -> OrderSubOrderPipelineInstance | None:
+    rows = (
+        db.execute(
+            select(OrderSubOrderPipelineInstance)
+            .where(
+                OrderSubOrderPipelineInstance.order_id == order_id,
+                OrderSubOrderPipelineInstance.order_process_id == order_process_id,
+                OrderSubOrderPipelineInstance.pipeline_seq == pipeline_seq,
+                OrderSubOrderPipelineInstance.is_active.is_(True),
+            )
+            .order_by(OrderSubOrderPipelineInstance.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return None
+    if len(rows) > 1:
+        raise RuntimeError("Multiple active pipeline instances found for same process sequence")
+    return rows[0]
+
+
+def get_active_pipeline_instance_for_link_id(
+    db: Session,
+    *,
+    order_id: int,
+    order_process_id: int,
+    pipeline_link_id: str,
+) -> OrderSubOrderPipelineInstance | None:
+    rows = (
+        db.execute(
+            select(OrderSubOrderPipelineInstance)
+            .where(
+                OrderSubOrderPipelineInstance.order_id == order_id,
+                OrderSubOrderPipelineInstance.order_process_id == order_process_id,
+                OrderSubOrderPipelineInstance.pipeline_link_id == pipeline_link_id,
+                OrderSubOrderPipelineInstance.is_active.is_(True),
+            )
+            .order_by(OrderSubOrderPipelineInstance.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return None
+    if len(rows) > 1:
+        raise RuntimeError("Multiple active pipeline instances found for same link id")
+    return rows[0]
 
 
 def get_order_pipeline_mode(
@@ -861,6 +1041,17 @@ def update_order_pipeline_mode(
         )
 
     db.commit()
+    _notify_order_changed(
+        db,
+        order=order,
+        operator=operator,
+        event_code="pipeline_updated",
+        title=f"生产订单并行模式已更新：{order.order_code}",
+        summary=(
+            f"订单 {order.order_code} 的并行模式已{'开启' if enabled else '关闭'}，"
+            f"工序范围：{', '.join(selected_codes) if selected_codes else '无'}。"
+        ),
+    )
     return {
         "order_id": order.id,
         "enabled": bool(order.pipeline_enabled),
@@ -1213,6 +1404,14 @@ def create_order(
     )
     db.commit()
     db.refresh(order)
+    _notify_order_changed(
+        db,
+        order=order,
+        operator=operator,
+        event_code="created",
+        title=f"生产订单已创建：{order.order_code}",
+        summary=f"订单 {order.order_code} 已创建，数量 {order.quantity}，可进入订单管理查看详情。",
+    )
     return order
 
 
@@ -1320,6 +1519,14 @@ def update_order(
     )
     db.commit()
     db.refresh(order)
+    _notify_order_changed(
+        db,
+        order=order,
+        operator=operator,
+        event_code="updated",
+        title=f"生产订单已更新：{order.order_code}",
+        summary=f"订单 {order.order_code} 已更新工序路线或基础信息，请及时复核。",
+    )
     return order
 
 
@@ -1342,6 +1549,14 @@ def delete_order(
     )
     db.delete(order)
     db.commit()
+    _notify_order_changed(
+        db,
+        order=order,
+        operator=operator,
+        event_code="deleted",
+        title=f"生产订单已删除：{order.order_code}",
+        summary=f"订单 {order.order_code} 已被删除，相关计划请同步调整。",
+    )
 
 
 def complete_order_manually(
@@ -1385,10 +1600,19 @@ def complete_order_manually(
     )
     db.commit()
     db.refresh(order)
+    _notify_order_changed(
+        db,
+        order=order,
+        operator=operator,
+        event_code="completed_manual",
+        title=f"生产订单已手工完工：{order.order_code}",
+        summary=f"订单 {order.order_code} 已被手工标记完工，请核对收尾数据。",
+    )
     return order
 
 
 def _build_my_order_item(
+    db: Session,
     *,
     order: ProductionOrder,
     process_row: ProductionOrderProcess,
@@ -1414,16 +1638,30 @@ def _build_my_order_item(
     pipeline_start_allowed = False
     pipeline_end_allowed = False
     pipeline_mode_enabled = bool(order.pipeline_enabled)
+    pipeline_instance = None
+    pipeline_process_selected = False
     if is_operator_context and sub_order is not None and sub_order.is_visible:
+        pipeline_process_selected = is_pipeline_process_selected_for_order(
+            order=order,
+            process_code=process_row.process_code,
+        )
+        if pipeline_process_selected:
+            pipeline_instance = get_active_pipeline_instance_for_sub_order(
+                db,
+                sub_order_id=sub_order.id,
+                order_process_id=process_row.id,
+            )
         first_article_base = (
             process_row.status in {PROCESS_STATUS_PENDING, PROCESS_STATUS_PARTIAL}
             and sub_order.status == SUB_ORDER_STATUS_PENDING
             and max_producible > 0
+            and (not pipeline_process_selected or pipeline_instance is not None)
         )
         end_production_base = (
             process_row.status == PROCESS_STATUS_IN_PROGRESS
             and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
             and max_producible > 0
+            and (not pipeline_process_selected or pipeline_instance is not None)
         )
         pipeline_start_allowed = (
             first_article_base
@@ -1475,6 +1713,10 @@ def _build_my_order_item(
         else None,
         "work_view": work_view,
         "assist_authorization_id": assist_authorization_id,
+        "pipeline_instance_id": pipeline_instance.id if pipeline_instance else None,
+        "pipeline_instance_no": pipeline_instance.pipeline_sub_order_no
+        if pipeline_instance
+        else None,
         "pipeline_mode_enabled": pipeline_mode_enabled,
         "pipeline_start_allowed": pipeline_start_allowed,
         "pipeline_end_allowed": pipeline_end_allowed,
@@ -1557,6 +1799,7 @@ def _collect_my_order_items(
                 continue
             items.append(
                 _build_my_order_item(
+                    db,
                     order=order,
                     process_row=process_row,
                     sub_order=sub_order,
@@ -1655,6 +1898,7 @@ def _collect_my_order_items(
             )
             items.append(
                 _build_my_order_item(
+                    db,
                     order=order,
                     process_row=process_row,
                     sub_order=sub_order,
@@ -1710,6 +1954,7 @@ def _collect_my_order_items(
                 continue
             items.append(
                 _build_my_order_item(
+                    db,
                     order=order,
                     process_row=current_process,
                     sub_order=None,
@@ -1761,6 +2006,7 @@ def _collect_my_order_items(
                 continue
             items.append(
                 _build_my_order_item(
+                    db,
                     order=order,
                     process_row=process_row,
                     sub_order=sub_order,
@@ -1876,6 +2122,7 @@ def export_orders_csv(
         "产品版本",
         "数量",
         "当前状态",
+        "当前工序",
         "工艺模板",
         "模板版本",
         "并行模式",
@@ -1886,16 +2133,27 @@ def export_orders_csv(
     ]
     csv_rows = []
     for row in rows:
+        process_rows = sorted(row.processes, key=lambda item: (item.process_order, item.id))
+        current_process = next(
+            (item for item in process_rows if item.status != PROCESS_STATUS_COMPLETED),
+            None,
+        )
+        if current_process is None and row.current_process_code:
+            current_process = next(
+                (item for item in process_rows if item.process_code == row.current_process_code),
+                None,
+            )
         csv_rows.append(
             [
                 row.order_code,
                 row.product.name if row.product else "",
                 row.product_version or "",
                 row.quantity,
-                row.status,
+                order_status_label(row.status),
+                current_process.process_name if current_process else "",
                 row.process_template_name or "",
                 row.process_template_version or "",
-                "开启" if row.pipeline_enabled else "关闭",
+                pipeline_mode_label(bool(row.pipeline_enabled)),
                 str(row.start_date) if row.start_date else "",
                 str(row.due_date) if row.due_date else "",
                 row.created_by.username if row.created_by else "",

@@ -27,6 +27,10 @@ class MessageItem(BaseModel):
     is_read: bool
     read_at: datetime | None
     delivered_at: datetime | None
+    delivery_status: str
+    delivery_attempt_count: int
+    last_push_at: datetime | None
+    next_retry_at: datetime | None
 
 
 class MessageListResult(BaseModel):
@@ -34,6 +38,41 @@ class MessageListResult(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class MessageDetailResult(BaseModel):
+    id: int
+    message_type: str
+    priority: str
+    title: str
+    summary: str | None
+    content: str | None = None
+    source_module: str | None
+    source_type: str | None
+    source_id: str | None
+    source_code: str | None
+    target_page_code: str | None
+    target_tab_code: str | None
+    target_route_payload_json: str | None
+    status: str
+    inactive_reason: str | None = None
+    published_at: datetime | None
+    is_read: bool
+    read_at: datetime | None
+    delivered_at: datetime | None
+    delivery_status: str
+    delivery_attempt_count: int
+    last_push_at: datetime | None
+    next_retry_at: datetime | None
+    failure_reason_hint: str | None = None
+
+
+class MessageJumpResult(BaseModel):
+    can_jump: bool
+    disabled_reason: str | None = None
+    target_page_code: str | None = None
+    target_tab_code: str | None = None
+    target_route_payload_json: str | None = None
 
 
 class MessageSummaryResult(BaseModel):
@@ -85,3 +124,10 @@ class AnnouncementPublishRequest(BaseModel):
 class AnnouncementPublishResult(BaseModel):
     message_id: int
     recipient_count: int
+
+
+class MessageMaintenanceResult(BaseModel):
+    pending_compensated: int
+    failed_retried: int
+    source_unavailable_updated: int
+    archived_messages: int

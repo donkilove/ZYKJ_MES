@@ -249,6 +249,7 @@ class MaintenanceWorkOrderItem {
     required this.resultSummary,
     required this.resultRemark,
     required this.attachmentLink,
+    required this.attachmentName,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -271,6 +272,7 @@ class MaintenanceWorkOrderItem {
   final String? resultSummary;
   final String? resultRemark;
   final String? attachmentLink;
+  final String? attachmentName;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -299,6 +301,7 @@ class MaintenanceWorkOrderItem {
       resultSummary: json['result_summary'] as String?,
       resultRemark: json['result_remark'] as String?,
       attachmentLink: json['attachment_link'] as String?,
+      attachmentName: json['attachment_name'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -325,6 +328,7 @@ class MaintenanceRecordItem {
     required this.resultSummary,
     required this.resultRemark,
     required this.attachmentLink,
+    required this.attachmentName,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -340,6 +344,7 @@ class MaintenanceRecordItem {
   final String resultSummary;
   final String? resultRemark;
   final String? attachmentLink;
+  final String? attachmentName;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -356,6 +361,7 @@ class MaintenanceRecordItem {
       resultSummary: (json['result_summary'] as String?) ?? '',
       resultRemark: json['result_remark'] as String?,
       attachmentLink: json['attachment_link'] as String?,
+      attachmentName: json['attachment_name'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -383,6 +389,9 @@ class EquipmentDetailResult {
     required this.updatedAt,
     required this.activePlanCount,
     required this.pendingWorkOrderCount,
+    required this.activePlansScopeLimited,
+    required this.pendingWorkOrdersScopeLimited,
+    required this.recentRecordsScopeLimited,
     required this.activePlans,
     required this.pendingWorkOrders,
     required this.recentRecords,
@@ -400,6 +409,9 @@ class EquipmentDetailResult {
   final DateTime updatedAt;
   final int activePlanCount;
   final int pendingWorkOrderCount;
+  final bool activePlansScopeLimited;
+  final bool pendingWorkOrdersScopeLimited;
+  final bool recentRecordsScopeLimited;
   final List<MaintenancePlanItem> activePlans;
   final List<MaintenanceWorkOrderItem> pendingWorkOrders;
   final List<MaintenanceRecordItem> recentRecords;
@@ -418,6 +430,12 @@ class EquipmentDetailResult {
       updatedAt: DateTime.parse(json['updated_at'] as String),
       activePlanCount: (json['active_plan_count'] as int?) ?? 0,
       pendingWorkOrderCount: (json['pending_work_order_count'] as int?) ?? 0,
+      activePlansScopeLimited:
+          (json['active_plans_scope_limited'] as bool?) ?? false,
+      pendingWorkOrdersScopeLimited:
+          (json['pending_work_orders_scope_limited'] as bool?) ?? false,
+      recentRecordsScopeLimited:
+          (json['recent_records_scope_limited'] as bool?) ?? false,
       activePlans: (json['active_plans'] as List<dynamic>? ?? const [])
           .map((e) => MaintenancePlanItem.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -456,6 +474,7 @@ class MaintenanceWorkOrderDetail extends MaintenanceWorkOrderItem {
     required super.resultSummary,
     required super.resultRemark,
     required super.attachmentLink,
+    required super.attachmentName,
     required super.createdAt,
     required super.updatedAt,
     required this.sourcePlanId,
@@ -500,6 +519,7 @@ class MaintenanceWorkOrderDetail extends MaintenanceWorkOrderItem {
       resultSummary: json['result_summary'] as String?,
       resultRemark: json['result_remark'] as String?,
       attachmentLink: json['attachment_link'] as String?,
+      attachmentName: json['attachment_name'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       sourcePlanId: json['source_plan_id'] as int?,
@@ -528,6 +548,7 @@ class MaintenanceRecordDetail extends MaintenanceRecordItem {
     required super.resultSummary,
     required super.resultRemark,
     required super.attachmentLink,
+    required super.attachmentName,
     required super.createdAt,
     required super.updatedAt,
     required this.sourcePlanId,
@@ -564,6 +585,7 @@ class MaintenanceRecordDetail extends MaintenanceRecordItem {
       resultSummary: (json['result_summary'] as String?) ?? '',
       resultRemark: json['result_remark'] as String?,
       attachmentLink: json['attachment_link'] as String?,
+      attachmentName: json['attachment_name'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       sourcePlanId: json['source_plan_id'] as int?,

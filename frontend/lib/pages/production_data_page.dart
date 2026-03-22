@@ -1023,7 +1023,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                 DropdownMenuItem(value: 'all', child: Text('全部状态')),
                 DropdownMenuItem(value: 'pending', child: Text('待生产')),
                 DropdownMenuItem(value: 'in_progress', child: Text('生产中')),
-                DropdownMenuItem(value: 'completed', child: Text('已完成')),
+                DropdownMenuItem(value: 'completed', child: Text('生产完成')),
               ],
               onChanged: _loadingManual
                   ? null
@@ -1317,7 +1317,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
             DataColumn(label: Text('待生产')),
             DataColumn(label: Text('生产中')),
             DataColumn(label: Text('部分完成')),
-            DataColumn(label: Text('已完成')),
+            DataColumn(label: Text('生产完成')),
             DataColumn(label: Text('可见总量')),
             DataColumn(label: Text('完成总量')),
           ],
@@ -1425,7 +1425,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                 theme: theme,
               ),
               _buildOverviewCard(
-                title: '已完成',
+                title: '生产完成',
                 value: _overview.completedOrders,
                 theme: theme,
               ),

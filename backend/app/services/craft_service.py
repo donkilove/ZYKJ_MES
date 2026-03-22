@@ -96,6 +96,10 @@ class TemplateImpactResult:
     syncable_orders: int
     blocked_orders: int
     items: list[TemplateSyncConflictReason]
+    total_references: int
+    user_stage_reference_count: int
+    template_reuse_reference_count: int
+    reference_items: list["ReferenceItem"]
 
 
 @dataclass(slots=True)
@@ -189,6 +193,35 @@ def _normalize_template_lifecycle_status(value: str | None) -> str:
     if normalized not in TEMPLATE_LIFECYCLE_OPTIONS:
         raise ValueError("Invalid template lifecycle status")
     return normalized
+
+
+def _validate_step_orders_are_sequential(steps: list[TemplateStepPayloadItem]) -> None:
+    expected_order = 1
+    for item in sorted(steps, key=lambda payload: payload.step_order):
+        if item.step_order != expected_order:
+            raise ValueError("step_order must start at 1 and remain continuous")
+        expected_order += 1
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return int(value)
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, float):
+        return int(value)
+    raise ValueError("Invalid integer value")
+
+
+def _required_int(payload: dict[str, object], key: str) -> int:
+    value = _optional_int(payload[key])
+    if value is None:
+        raise ValueError(f"{key} is required")
+    return value
 
 
 def _get_stage_by_id(db: Session, stage_id: int) -> ProcessStage | None:
@@ -686,20 +719,21 @@ def _build_template_steps_payload(
     seen_orders: set[int] = set()
     result: list[TemplateStepPayloadItem] = []
     for item in steps:
-        step_order = int(item["step_order"])
+        step_order = _required_int(item, "step_order")
         if step_order in seen_orders:
             raise ValueError("step_order cannot be duplicated")
         seen_orders.add(step_order)
         result.append(
             TemplateStepPayloadItem(
                 step_order=step_order,
-                stage_id=int(item["stage_id"]),
-                process_id=int(item["process_id"]),
-                standard_minutes=max(int(item.get("standard_minutes") or 0), 0),
+                stage_id=_required_int(item, "stage_id"),
+                process_id=_required_int(item, "process_id"),
+                standard_minutes=max(_optional_int(item.get("standard_minutes")) or 0, 0),
                 is_key_process=bool(item.get("is_key_process") or False),
                 step_remark=str(item.get("step_remark") or "").strip(),
             )
         )
+    _validate_step_orders_are_sequential(result)
     return result
 
 
@@ -761,8 +795,12 @@ def list_templates(
     page_size: int,
     product_id: int | None,
     keyword: str | None,
+    product_category: str | None,
+    is_default: bool | None,
     enabled: bool | None,
     lifecycle_status: str | None = None,
+    updated_from: datetime | None = None,
+    updated_to: datetime | None = None,
 ) -> tuple[int, list[ProductProcessTemplate]]:
     stmt = (
         select(ProductProcessTemplate)
@@ -783,6 +821,10 @@ def list_templates(
                 ProductProcessTemplate.template_name.ilike(like_pattern),
             )
         )
+    if product_category is not None and product_category.strip():
+        stmt = stmt.where(Product.category == product_category.strip())
+    if is_default is not None:
+        stmt = stmt.where(ProductProcessTemplate.is_default.is_(is_default))
     if enabled is not None:
         stmt = stmt.where(ProductProcessTemplate.is_enabled.is_(enabled))
     if lifecycle_status is not None:
@@ -790,6 +832,10 @@ def list_templates(
             ProductProcessTemplate.lifecycle_status
             == _normalize_template_lifecycle_status(lifecycle_status)
         )
+    if updated_from is not None:
+        stmt = stmt.where(ProductProcessTemplate.updated_at >= updated_from)
+    if updated_to is not None:
+        stmt = stmt.where(ProductProcessTemplate.updated_at <= updated_to)
     stmt = stmt.order_by(
         ProductProcessTemplate.updated_at.desc(),
         ProductProcessTemplate.id.desc(),
@@ -799,6 +845,84 @@ def list_templates(
         db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     )
     return int(total), rows
+
+
+def _build_user_stage_reference_items(
+    db: Session,
+    *,
+    step_processes: list[TemplateStepResolvedItem],
+) -> list[ReferenceItem]:
+    reference_items: list[ReferenceItem] = []
+    stage_ids = sorted({item.stage.id for item in step_processes})
+
+    if stage_ids:
+        users = (
+            db.execute(
+                select(User, ProcessStage)
+                .join(ProcessStage, ProcessStage.id == User.stage_id)
+                .where(User.stage_id.in_(stage_ids), User.is_deleted.is_(False))
+                .order_by(ProcessStage.sort_order.asc(), User.id.asc())
+            )
+            .all()
+        )
+        for user, stage in users:
+            reference_items.append(
+                ReferenceItem(
+                    ref_type="user_stage",
+                    ref_id=user.id,
+                    ref_code=_reference_code(user.username, fallback_id=user.id),
+                    ref_name=user.full_name or user.username,
+                    detail=f"工段：{stage.code} {stage.name}",
+                    ref_status="正在使用",
+                    jump_module="user",
+                    jump_target=f"user-management?user_id={user.id}",
+                    risk_level="medium",
+                    risk_note="模板涉及的工段仍绑定操作用户，发布/回滚前需确认现场作业分配。",
+                )
+            )
+
+    return reference_items
+
+
+def _build_template_impact_reference_items(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+    step_processes: list[TemplateStepResolvedItem],
+) -> tuple[int, int, list[ReferenceItem]]:
+    reference_items = _build_user_stage_reference_items(
+        db,
+        step_processes=step_processes,
+    )
+
+    reference_items.extend(_build_template_reuse_reference_items(db, template=template))
+
+    user_stage_reference_count = sum(
+        1 for item in reference_items if item.ref_type == "user_stage"
+    )
+    template_reuse_reference_count = sum(
+        1 for item in reference_items if item.ref_type == "template_reuse"
+    )
+    return user_stage_reference_count, template_reuse_reference_count, reference_items
+
+
+def _is_blocking_template_reference(item: TemplateReferenceItem) -> bool:
+    return item.ref_type == "order" and item.ref_status == "不可同步"
+
+
+def _raise_if_template_action_blocked(
+    items: list[TemplateReferenceItem],
+    *,
+    action_label: str,
+) -> None:
+    blocking_items = [item for item in items if _is_blocking_template_reference(item)]
+    if not blocking_items:
+        return
+    preview = "、".join(item.ref_name for item in blocking_items[:3])
+    suffix = "等" if len(blocking_items) > 3 else ""
+    raise ValueError(
+        f"当前存在 {len(blocking_items)} 条阻断级引用（{preview}{suffix}），不可{action_label}；请先处理进行中工单。"
+    )
 
 
 def get_template_by_id(db: Session, template_id: int) -> ProductProcessTemplate | None:
@@ -1120,7 +1244,6 @@ def create_template(
     product_id: int,
     template_name: str,
     is_default: bool,
-    lifecycle_status: str = TEMPLATE_LIFECYCLE_PUBLISHED,
     remark: str = "",
     steps: list[dict[str, object]],
     operator: User,
@@ -1147,15 +1270,12 @@ def create_template(
 
     step_payload = _build_template_steps_payload(steps)
     step_processes = _load_template_step_process_map(db, steps=step_payload)
-    normalized_status = _normalize_template_lifecycle_status(lifecycle_status)
-    is_published = normalized_status == TEMPLATE_LIFECYCLE_PUBLISHED
-
     row = ProductProcessTemplate(
         product_id=product_id,
         template_name=normalized_name,
         version=1,
-        lifecycle_status=normalized_status,
-        published_version=1 if is_published else 0,
+        lifecycle_status=TEMPLATE_LIFECYCLE_DRAFT,
+        published_version=0,
         is_default=is_default,
         is_enabled=True,
         created_by_user_id=operator.id,
@@ -1166,36 +1286,6 @@ def create_template(
     db.add(row)
     db.flush()
     _replace_template_steps(db, template=row, steps=step_processes)
-
-    if is_default and is_published:
-        _set_product_default_template(db, product_id=product_id, template_id=row.id)
-    elif is_published:
-        has_default = (
-            db.execute(
-                select(ProductProcessTemplate.id).where(
-                    ProductProcessTemplate.product_id == product_id,
-                    ProductProcessTemplate.is_enabled.is_(True),
-                    ProductProcessTemplate.lifecycle_status
-                    == TEMPLATE_LIFECYCLE_PUBLISHED,
-                    ProductProcessTemplate.is_default.is_(True),
-                )
-            )
-            .scalars()
-            .first()
-        )
-        if has_default is None:
-            row.is_default = True
-    else:
-        row.is_default = is_default
-
-    if is_published:
-        _create_template_revision_snapshot(
-            db,
-            template=row,
-            operator=operator,
-            action="publish",
-            note="Template created and published",
-        )
 
     db.commit()
     db.refresh(row)
@@ -1478,6 +1568,10 @@ def set_template_enabled(
     if template.is_enabled == is_enabled:
         return get_template_by_id(db, template.id) or template
 
+    if not is_enabled:
+        reference_result = get_template_references(db, template=template)
+        _raise_if_template_action_blocked(reference_result.items, action_label="停用")
+
     template.is_enabled = is_enabled
     template.updated_by_user_id = operator.id
     template.version += 1
@@ -1522,6 +1616,15 @@ def analyze_template_impact(
             target_version=resolved_target_version,
         )
         resolved_target_version = target_revision.version
+    (
+        user_stage_reference_count,
+        template_reuse_reference_count,
+        reference_items,
+    ) = _build_template_impact_reference_items(
+        db,
+        template=template,
+        step_processes=step_processes,
+    )
     preview = _sync_template_to_orders(
         db,
         template=template,
@@ -1578,6 +1681,10 @@ def analyze_template_impact(
         syncable_orders=max(preview.synced, 0),
         blocked_orders=max(preview.skipped, 0),
         items=items,
+        total_references=len(reference_items),
+        user_stage_reference_count=user_stage_reference_count,
+        template_reuse_reference_count=template_reuse_reference_count,
+        reference_items=reference_items,
     )
 
 
@@ -1593,6 +1700,8 @@ def publish_template(
 ) -> tuple[ProductProcessTemplate, TemplateSyncResult]:
     if not template.is_enabled:
         raise ValueError("Disabled template cannot be published")
+    if template.lifecycle_status != TEMPLATE_LIFECYCLE_DRAFT:
+        raise ValueError("Only draft templates can be published")
     if expected_version is not None and template.version != expected_version:
         raise ValueError(
             "Template has been updated by another user, please refresh and retry"
@@ -1840,6 +1949,9 @@ def _normalize_kanban_datetime(value: datetime) -> datetime:
     return value.astimezone(UTC).replace(tzinfo=None)
 
 
+CRAFT_KANBAN_SAMPLE_LIMIT_MAX = 100
+
+
 def get_craft_kanban_process_metrics(
     db: Session,
     *,
@@ -1850,7 +1962,7 @@ def get_craft_kanban_process_metrics(
     start_date: datetime | None = None,
     end_date: datetime | None = None,
 ) -> CraftKanbanProcessMetricsResult:
-    normalized_limit = max(1, min(int(limit), 20))
+    normalized_limit = max(1, min(int(limit), CRAFT_KANBAN_SAMPLE_LIMIT_MAX))
     product = (
         db.execute(select(Product).where(Product.id == product_id)).scalars().first()
     )
@@ -2075,7 +2187,6 @@ def import_templates(
     *,
     items: list[dict[str, object]],
     overwrite_existing: bool,
-    publish_after_import: bool,
     operator: User,
 ) -> tuple[list[ProductProcessTemplate], int, int, int, list[str]]:
     created = 0
@@ -2139,12 +2250,6 @@ def import_templates(
                     skipped += 1
                     continue
 
-                lifecycle_status = _normalize_template_lifecycle_status(
-                    TEMPLATE_LIFECYCLE_PUBLISHED
-                    if publish_after_import
-                    else str(item.get("lifecycle_status") or "draft")
-                )
-                is_published = lifecycle_status == TEMPLATE_LIFECYCLE_PUBLISHED
                 is_default = bool(item.get("is_default", False))
                 is_enabled = bool(item.get("is_enabled", True))
                 steps = item.get("steps")
@@ -2162,53 +2267,49 @@ def import_templates(
                         product_id=product.id,
                         template_name=template_name,
                         version=1,
-                        lifecycle_status=lifecycle_status,
-                        published_version=1 if is_published else 0,
+                        lifecycle_status=TEMPLATE_LIFECYCLE_DRAFT,
+                        published_version=0,
                         is_default=is_default,
                         is_enabled=is_enabled,
                         created_by_user_id=operator.id,
                         updated_by_user_id=operator.id,
-                        source_type="manual",
+                        source_type=str(item.get("source_type") or "manual"),
+                        source_template_name=(
+                            str(item.get("source_template_name") or "").strip() or None
+                        ),
+                        source_template_version=_optional_int(
+                            item.get("source_template_version")
+                        ),
+                        source_system_master_version=_optional_int(
+                            item.get("source_system_master_version")
+                        ),
                     )
                     db.add(row)
                     db.flush()
                     _replace_template_steps(db, template=row, steps=step_processes)
-                    if is_published:
-                        _create_template_revision_snapshot(
-                            db,
-                            template=row,
-                            operator=operator,
-                            action="import",
-                            note="Batch import",
-                        )
-                        if row.is_default and row.is_enabled:
-                            _set_product_default_template(
-                                db, product_id=row.product_id, template_id=row.id
-                            )
                     touched_rows.append(row)
                     created += 1
                     continue
 
+                if existing.published_version > 0 or existing.revisions:
+                    raise ValueError("不允许导入覆盖已发布模板历史，请复制为新草稿后再发布")
+
                 existing.is_default = is_default
                 existing.is_enabled = is_enabled
-                existing.lifecycle_status = lifecycle_status
+                existing.lifecycle_status = TEMPLATE_LIFECYCLE_DRAFT
                 existing.version += 1
                 existing.updated_by_user_id = operator.id
-                if is_published:
-                    existing.published_version = max(existing.published_version, 0) + 1
+                existing.source_type = str(item.get("source_type") or existing.source_type)
+                existing.source_template_name = (
+                    str(item.get("source_template_name") or "").strip() or None
+                )
+                existing.source_template_version = _optional_int(
+                    item.get("source_template_version")
+                )
+                existing.source_system_master_version = _optional_int(
+                    item.get("source_system_master_version")
+                )
                 _replace_template_steps(db, template=existing, steps=step_processes)
-                if is_published:
-                    _create_template_revision_snapshot(
-                        db,
-                        template=existing,
-                        operator=operator,
-                        action="import",
-                        note="Batch import overwrite",
-                    )
-                    if existing.is_default and existing.is_enabled:
-                        _set_product_default_template(
-                            db, product_id=existing.product_id, template_id=existing.id
-                        )
 
                 touched_rows.append(existing)
                 updated += 1
@@ -2221,6 +2322,13 @@ def import_templates(
 
 
 def delete_template(db: Session, *, template: ProductProcessTemplate) -> None:
+    reused_templates = _list_template_reuse_rows(db, template_id=template.id)
+    if reused_templates:
+        reused_names = "，".join(row.template_name for row in reused_templates[:3])
+        suffix = " 等" if len(reused_templates) > 3 else ""
+        raise ValueError(
+            f"Template is reused by downstream templates: {reused_names}{suffix}"
+        )
     any_order_ref = (
         db.execute(
             select(ProductionOrder.id).where(
@@ -2440,6 +2548,8 @@ def archive_template(
         raise ValueError("Template is already archived")
     if template.lifecycle_status != TEMPLATE_LIFECYCLE_PUBLISHED:
         raise ValueError("Only published templates can be archived")
+    reference_result = get_template_references(db, template=template)
+    _raise_if_template_action_blocked(reference_result.items, action_label="归档")
     template.lifecycle_status = TEMPLATE_LIFECYCLE_ARCHIVED
     template.is_default = False
     template.updated_by_user_id = operator.id
@@ -3385,6 +3495,7 @@ class TemplateReferenceItem:
     jump_target: str | None = None
     risk_level: str | None = None
     risk_note: str | None = None
+    is_blocking: bool = False
 
 
 @dataclass(slots=True)
@@ -3394,7 +3505,57 @@ class TemplateReferenceResult:
     product_id: int
     product_name: str
     total: int
+    order_reference_count: int
+    user_stage_reference_count: int
+    template_reuse_reference_count: int
+    blocking_reference_count: int
+    has_blocking_references: bool
     items: list[TemplateReferenceItem]
+
+
+def _list_template_reuse_rows(
+    db: Session,
+    *,
+    template_id: int,
+) -> list[ProductProcessTemplate]:
+    return (
+        db.execute(
+            select(ProductProcessTemplate)
+            .where(ProductProcessTemplate.source_template_id == template_id)
+            .order_by(
+                ProductProcessTemplate.updated_at.desc(),
+                ProductProcessTemplate.id.desc(),
+            )
+            .options(selectinload(ProductProcessTemplate.product))
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _build_template_reuse_reference_items(
+    db: Session,
+    *,
+    template: ProductProcessTemplate,
+) -> list[ReferenceItem]:
+    items: list[ReferenceItem] = []
+    for reused in _list_template_reuse_rows(db, template_id=template.id):
+        product_name = reused.product.name if reused.product else f"产品#{reused.product_id}"
+        items.append(
+            ReferenceItem(
+                ref_type="template_reuse",
+                ref_id=reused.id,
+                ref_code=_reference_code(reused.template_name, fallback_id=reused.id),
+                ref_name=reused.template_name,
+                detail=f"复用到 {product_name} · {reused.lifecycle_status}",
+                ref_status="正在使用" if reused.is_enabled else "历史引用",
+                jump_module="craft",
+                jump_target=f"process-configuration?template_id={reused.id}",
+                risk_level="medium" if reused.is_enabled else "low",
+                risk_note="该模板被其他模板复制复用，建议同步评估下游模板是否需要跟进更新。",
+            )
+        )
+    return items
 
 
 def get_template_references(
@@ -3403,6 +3564,10 @@ def get_template_references(
     template: ProductProcessTemplate,
 ) -> TemplateReferenceResult:
     items: list[TemplateReferenceItem] = []
+    step_payload = _build_steps_payload_from_template_row(template)
+    step_processes = (
+        _load_template_step_process_map(db, steps=step_payload) if step_payload else []
+    )
 
     product_name = template.product.name if template.product else ""
     items.append(
@@ -3416,8 +3581,26 @@ def get_template_references(
             jump_module="product",
             jump_target=f"product-management?product_id={template.product_id}",
             risk_level="none",
+            is_blocking=False,
         )
     )
+
+    for ref in _build_user_stage_reference_items(db, step_processes=step_processes):
+        items.append(
+            TemplateReferenceItem(
+                ref_type=ref.ref_type,
+                ref_id=ref.ref_id,
+                ref_code=ref.ref_code,
+                ref_name=ref.ref_name,
+                detail=ref.detail,
+                ref_status=ref.ref_status,
+                jump_module=ref.jump_module,
+                jump_target=ref.jump_target,
+                risk_level=ref.risk_level,
+                risk_note=ref.risk_note,
+                is_blocking=False,
+            )
+        )
 
     active_orders = db.execute(
         select(
@@ -3447,8 +3630,35 @@ def get_template_references(
                     if blocked
                     else ("模板可同步到未开工工单" if can_sync else None)
                 ),
+                is_blocking=blocked,
             )
         )
+
+    for ref in _build_template_reuse_reference_items(db, template=template):
+        items.append(
+            TemplateReferenceItem(
+                ref_type=ref.ref_type,
+                ref_id=ref.ref_id,
+                ref_code=ref.ref_code,
+                ref_name=ref.ref_name,
+                detail=ref.detail,
+                ref_status=ref.ref_status,
+                jump_module=ref.jump_module,
+                jump_target=ref.jump_target,
+                risk_level=ref.risk_level,
+                risk_note=ref.risk_note,
+                is_blocking=False,
+            )
+        )
+
+    order_reference_count = sum(1 for item in items if item.ref_type == "order")
+    user_stage_reference_count = sum(
+        1 for item in items if item.ref_type == "user_stage"
+    )
+    template_reuse_reference_count = sum(
+        1 for item in items if item.ref_type == "template_reuse"
+    )
+    blocking_reference_count = sum(1 for item in items if item.is_blocking)
 
     return TemplateReferenceResult(
         template_id=template.id,
@@ -3456,6 +3666,11 @@ def get_template_references(
         product_id=template.product_id,
         product_name=product_name,
         total=len(items),
+        order_reference_count=order_reference_count,
+        user_stage_reference_count=user_stage_reference_count,
+        template_reuse_reference_count=template_reuse_reference_count,
+        blocking_reference_count=blocking_reference_count,
+        has_blocking_references=blocking_reference_count > 0,
         items=items,
     )
 

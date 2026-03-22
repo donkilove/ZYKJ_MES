@@ -121,6 +121,8 @@ MyOrderItem _buildMyOrderItem() {
     operatorUsername: 'worker',
     workView: 'own',
     assistAuthorizationId: null,
+    pipelineInstanceId: 501,
+    pipelineInstanceNo: 'P1-21-1-PIPE0501',
     pipelineModeEnabled: false,
     pipelineStartAllowed: true,
     pipelineEndAllowed: true,
@@ -189,6 +191,7 @@ void main() {
     expect(find.text('产品版本：3'), findsOneWidget);
     expect(find.text('模板名称/版本：标准模板 v5'), findsOneWidget);
     expect(find.text('并行模式：开启'), findsOneWidget);
+    expect(find.text('并行实例：P1-21-1-PIPE0501'), findsOneWidget);
     expect(find.text('创建人：admin'), findsOneWidget);
     expect(find.textContaining('创建时间：2026-03-01'), findsOneWidget);
 

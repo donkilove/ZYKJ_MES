@@ -111,6 +111,32 @@ class MessageService {
     );
   }
 
+  Future<MessageMaintenanceResult> runMaintenance() async {
+    final uri = Uri.parse('$_base/maintenance/run');
+    final resp = await http.post(uri, headers: _headers);
+    _checkStatus(resp);
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    return MessageMaintenanceResult.fromJson(
+      body['data'] as Map<String, dynamic>,
+    );
+  }
+
+  Future<MessageDetailResult> getMessageDetail(int messageId) async {
+    final uri = Uri.parse('$_base/$messageId');
+    final resp = await http.get(uri, headers: _headers);
+    _checkStatus(resp);
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    return MessageDetailResult.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<MessageJumpResult> getMessageJumpTarget(int messageId) async {
+    final uri = Uri.parse('$_base/$messageId/jump-target');
+    final resp = await http.get(uri, headers: _headers);
+    _checkStatus(resp);
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    return MessageJumpResult.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
   void _checkStatus(http.Response resp) {
     if (resp.statusCode == 401) {
       throw ApiException('登录已过期，请重新登录', 401);

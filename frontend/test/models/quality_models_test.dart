@@ -114,9 +114,7 @@ void main() {
     expect(operatorStat.passRatePercent, 100);
   });
 
-  test(
-    'QualityProductStatItem parses repair_order_count field from backend',
-    () {
+  test('QualityProductStatItem parses quality totals from backend', () {
       final item = QualityProductStatItem.fromJson({
         'product_id': 9,
         'product_name': '产品C',
@@ -124,15 +122,16 @@ void main() {
         'passed_total': 8,
         'failed_total': 2,
         'pass_rate_percent': 80,
+        'defect_total': 4,
         'scrap_total': 3,
-        'repair_order_count': 6,
+        'repair_total': 6,
       });
 
       expect(item.productId, 9);
       expect(item.productName, '产品C');
+      expect(item.defectTotal, 4);
       expect(item.repairTotal, 6);
-    },
-  );
+    });
 
   test('QualityTrendItem parses stat_date field from backend', () {
     final item = QualityTrendItem.fromJson({
@@ -168,8 +167,9 @@ void main() {
           'passed_total': 5,
           'failed_total': 2,
           'pass_rate_percent': 71.43,
+          'defect_total': 3,
           'scrap_total': 1,
-          'repair_order_count': 4,
+          'repair_total': 4,
         },
       ],
       'by_process': [

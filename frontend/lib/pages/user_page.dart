@@ -20,7 +20,6 @@ const List<String> _defaultTabOrder = [
   'function_permission_config',
 ];
 
-const String _functionPermissionConfigTabCode = 'function_permission_config';
 const String _accountSettingsTabCode = 'account_settings';
 
 class UserPage extends StatefulWidget {
@@ -66,29 +65,54 @@ class _UserPageState extends State<UserPage> {
 
   bool _hasPermission(String code) => widget.capabilityCodes.contains(code);
 
-  bool get _canManageUsers =>
-      _hasPermission(UserFeaturePermissionCodes.userManagementCreate) ||
-      _hasPermission(UserFeaturePermissionCodes.userManagementUpdate) ||
-      _hasPermission(UserFeaturePermissionCodes.userManagementLifecycle) ||
-      _hasPermission(UserFeaturePermissionCodes.userManagementPasswordReset) ||
+  bool get _canCreateUser =>
+      _hasPermission(UserFeaturePermissionCodes.userManagementCreate);
+
+  bool get _canEditUser =>
+      _hasPermission(UserFeaturePermissionCodes.userManagementUpdate);
+
+  bool get _canToggleUser =>
+      _hasPermission(UserFeaturePermissionCodes.userManagementLifecycle);
+
+  bool get _canResetUserPassword =>
+      _hasPermission(UserFeaturePermissionCodes.userManagementPasswordReset);
+
+  bool get _canDeleteUser =>
       _hasPermission(UserFeaturePermissionCodes.userManagementDelete);
 
-  bool get _canReviewAction =>
-      _hasPermission(UserFeaturePermissionCodes.registrationApprovalApprove) ||
+  bool get _canExportUsers =>
+      _hasPermission(UserFeaturePermissionCodes.userManagementExport);
+
+  bool get _canApproveRegistration =>
+      _hasPermission(UserFeaturePermissionCodes.registrationApprovalApprove);
+
+  bool get _canRejectRegistration =>
       _hasPermission(UserFeaturePermissionCodes.registrationApprovalReject);
 
-  bool get _canManageRoles =>
-      _hasPermission(UserFeaturePermissionCodes.roleManagementCreate) ||
-      _hasPermission(UserFeaturePermissionCodes.roleManagementUpdate) ||
-      _hasPermission(UserFeaturePermissionCodes.roleManagementLifecycle) ||
+  bool get _canCreateRole =>
+      _hasPermission(UserFeaturePermissionCodes.roleManagementCreate);
+
+  bool get _canEditRole =>
+      _hasPermission(UserFeaturePermissionCodes.roleManagementUpdate);
+
+  bool get _canToggleRole =>
+      _hasPermission(UserFeaturePermissionCodes.roleManagementLifecycle);
+
+  bool get _canDeleteRole =>
       _hasPermission(UserFeaturePermissionCodes.roleManagementDelete);
 
   bool get _canChangeMyPassword => true;
 
   bool get _canViewMySession => true;
 
+  bool get _canViewLoginLogs =>
+      _hasPermission(UserFeaturePermissionCodes.loginSessionLoginLogsView);
+
+  bool get _canViewOnlineSessions =>
+      _hasPermission(UserFeaturePermissionCodes.loginSessionOnlineView);
+
   bool get _canManageSessions =>
-      widget.visibleTabCodes.contains(_functionPermissionConfigTabCode) &&
+      _canViewOnlineSessions &&
       _hasPermission(UserFeaturePermissionCodes.loginSessionForceOffline);
 
   List<String> _sortedVisibleTabCodes() {
@@ -121,7 +145,12 @@ class _UserPageState extends State<UserPage> {
               child: UserManagementPage(
                 session: widget.session,
                 onLogout: widget.onLogout,
-                canWrite: _canManageUsers,
+                canCreateUser: _canCreateUser,
+                canEditUser: _canEditUser,
+                canToggleUser: _canToggleUser,
+                canResetPassword: _canResetUserPassword,
+                canDeleteUser: _canDeleteUser,
+                canExport: _canExportUsers,
                 onNavigateToRoleManagement: roleManagementIndex >= 0
                     ? () {
                         setState(() => _currentTabIndex = roleManagementIndex);
@@ -139,7 +168,8 @@ class _UserPageState extends State<UserPage> {
               child: RegistrationApprovalPage(
                 session: widget.session,
                 onLogout: widget.onLogout,
-                canReviewAction: _canReviewAction,
+                canApprove: _canApproveRegistration,
+                canReject: _canRejectRegistration,
               ),
             ),
           );
@@ -152,7 +182,10 @@ class _UserPageState extends State<UserPage> {
               child: RoleManagementPage(
                 session: widget.session,
                 onLogout: widget.onLogout,
-                canManage: _canManageRoles,
+                canCreateRole: _canCreateRole,
+                canEditRole: _canEditRole,
+                canToggleRole: _canToggleRole,
+                canDeleteRole: _canDeleteRole,
               ),
             ),
           );
@@ -192,7 +225,9 @@ class _UserPageState extends State<UserPage> {
               child: LoginSessionPage(
                 session: widget.session,
                 onLogout: widget.onLogout,
-                canManage: _canManageSessions,
+                canViewLoginLogs: _canViewLoginLogs,
+                canViewOnlineSessions: _canViewOnlineSessions,
+                canForceOffline: _canManageSessions,
               ),
             ),
           );

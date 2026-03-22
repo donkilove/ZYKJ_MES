@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import '../models/app_session.dart';
 import '../services/quality_service.dart';
 import 'daily_first_article_page.dart';
-import 'production_repair_orders_page.dart';
-import 'production_scrap_statistics_page.dart';
 import 'quality_data_page.dart';
 import 'quality_defect_analysis_page.dart';
+import 'quality_repair_orders_page.dart';
+import 'quality_scrap_statistics_page.dart';
 import 'quality_trend_page.dart';
 
 const String firstArticleManagementTabCode = 'first_article_management';
@@ -36,6 +36,7 @@ class QualityPage extends StatefulWidget {
     this.preferredTabCode,
     this.routePayloadJson,
     this.firstArticleService,
+    this.repairScrapService,
   });
 
   final AppSession session;
@@ -45,6 +46,7 @@ class QualityPage extends StatefulWidget {
   final String? preferredTabCode;
   final String? routePayloadJson;
   final QualityService? firstArticleService;
+  final QualityService? repairScrapService;
 
   @override
   State<QualityPage> createState() => _QualityPageState();
@@ -172,23 +174,31 @@ class _QualityPageState extends State<QualityPage>
           canExport: widget.capabilityCodes.contains('quality.stats.export'),
         );
       case qualityScrapStatisticsTabCode:
-        return ProductionScrapStatisticsPage(
+        return QualityScrapStatisticsPage(
           session: widget.session,
           onLogout: widget.onLogout,
           canExport: widget.capabilityCodes.contains(
-            'production.scrap_statistics.export',
+            'quality.scrap_statistics.export',
           ),
+          service: widget.repairScrapService,
+          jumpPayloadJson: widget.preferredTabCode == qualityScrapStatisticsTabCode
+              ? widget.routePayloadJson
+              : null,
         );
       case qualityRepairOrdersTabCode:
-        return ProductionRepairOrdersPage(
+        return QualityRepairOrdersPage(
           session: widget.session,
           onLogout: widget.onLogout,
           canComplete: widget.capabilityCodes.contains(
-            'production.repair_orders.complete',
+            'quality.repair_orders.complete',
           ),
           canExport: widget.capabilityCodes.contains(
-            'production.repair_orders.export',
+            'quality.repair_orders.export',
           ),
+          service: widget.repairScrapService,
+          jumpPayloadJson: widget.preferredTabCode == qualityRepairOrdersTabCode
+              ? widget.routePayloadJson
+              : null,
         );
       case qualityTrendTabCode:
         return QualityTrendPage(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -35,9 +35,9 @@ class Message(Base, TimestampMixin):
     target_tab_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 跳转路由附加参数（JSON 字符串）
     target_route_payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # 去重键，防止同一事件重复创建消息
+    # 去重键，防止同一事件重复创建消息；非空时全局唯一
     dedupe_key: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    # 消息状态：active=有效 / expired=已失效 / archived=已归档
+    # 消息状态：active=有效 / source_unavailable=来源失效 / archived=已归档
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", index=True)
     published_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
@@ -52,6 +52,13 @@ class Message(Base, TimestampMixin):
     )
 
     __table_args__ = (
+        Index(
+            "uq_msg_message_dedupe_key_not_null",
+            "dedupe_key",
+            unique=True,
+            postgresql_where=dedupe_key.isnot(None),
+            sqlite_where=dedupe_key.isnot(None),
+        ),
         Index("ix_msg_message_type_priority_published", "message_type", "priority", "published_at"),
         Index("ix_msg_message_source", "source_module", "source_type", "source_id"),
     )

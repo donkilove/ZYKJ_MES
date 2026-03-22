@@ -47,6 +47,7 @@ from app.schemas.craft import (
     ProductProcessTemplateListResult,
     TemplateImpactAnalysisResult,
     TemplateImpactOrderItem,
+    TemplateImpactReferenceItem,
     TemplatePublishRequest,
     TemplateRollbackRequest,
     TemplateVersionCompareResult,
@@ -316,6 +317,10 @@ def _to_impact_result_item(
     syncable_orders: int,
     blocked_orders: int,
     items: list[TemplateImpactOrderItem],
+    total_references: int,
+    user_stage_reference_count: int,
+    template_reuse_reference_count: int,
+    reference_items: list[TemplateImpactReferenceItem],
 ) -> TemplateImpactAnalysisResult:
     return TemplateImpactAnalysisResult(
         target_version=target_version,
@@ -325,6 +330,10 @@ def _to_impact_result_item(
         syncable_orders=syncable_orders,
         blocked_orders=blocked_orders,
         items=items,
+        total_references=total_references,
+        user_stage_reference_count=user_stage_reference_count,
+        template_reuse_reference_count=template_reuse_reference_count,
+        reference_items=reference_items,
     )
 
 
@@ -371,6 +380,41 @@ def _to_template_update_result(
         detail=_to_template_detail(row),
         sync_result=TemplateSyncResult(total=0, synced=0, skipped=0, reasons=[]),
     )
+
+
+def _template_version_record_type(action: str) -> str:
+    normalized = action.strip().lower()
+    if normalized == "publish":
+        return "publish"
+    if normalized == "rollback":
+        return "rollback_publish"
+    if normalized in {"create", "copy", "snapshot"}:
+        return "snapshot"
+    return "change"
+
+
+def _template_version_record_title(*, version: int, action: str) -> str:
+    record_type = _template_version_record_type(action)
+    if record_type == "publish":
+        return f"发布记录 P{version}"
+    if record_type == "rollback_publish":
+        return f"回滚发布记录 P{version}"
+    if record_type == "snapshot":
+        return f"历史快照 P{version}"
+    return f"版本变更记录 P{version}"
+
+
+def _template_version_record_summary(*, action: str, source_version: int | None) -> str:
+    record_type = _template_version_record_type(action)
+    if record_type == "publish":
+        return "草稿经发布门禁确认后成为当前生效版本"
+    if record_type == "rollback_publish":
+        if source_version is not None:
+            return f"基于历史版本 v{source_version} 重新发布并替换当前生效版本"
+        return "基于历史版本重新发布并替换当前生效版本"
+    if record_type == "snapshot":
+        return "仅用于追溯当时模板内容，不代表当前已生效"
+    return "记录模板历史变更，是否生效以发布记录为准"
 
 
 def _to_stage_reference_result(result) -> StageReferenceResult:
@@ -900,7 +944,7 @@ def list_system_master_template_versions_api(
 )
 def get_craft_kanban_process_metrics_api(
     product_id: int = Query(ge=1),
-    limit: int = Query(default=5, ge=1, le=20),
+    limit: int = Query(default=5, ge=1, le=100),
     stage_id: int | None = Query(default=None, ge=1),
     process_id: int | None = Query(default=None, ge=1),
     start_date: datetime | None = Query(default=None),
@@ -935,7 +979,7 @@ def export_craft_kanban_process_metrics_api(
     process_id: int | None = Query(default=None, ge=1),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
-    limit: int = Query(default=5, ge=1, le=20),
+    limit: int = Query(default=5, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.kanban.process_metrics.view")),
 ) -> ApiResponse[CraftExportResult]:
@@ -963,8 +1007,12 @@ def get_templates_api(
     page_size: int = Query(default=100, ge=1, le=500),
     product_id: int | None = Query(default=None, ge=1),
     keyword: str | None = Query(default=None),
+    product_category: str | None = Query(default=None),
+    is_default: bool | None = Query(default=None),
     enabled: bool | None = Query(default=True),
     lifecycle_status: str | None = Query(default=None),
+    updated_from: datetime | None = Query(default=None),
+    updated_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("craft.templates.list")),
 ) -> ApiResponse[ProductProcessTemplateListResult]:
@@ -974,8 +1022,12 @@ def get_templates_api(
         page_size=page_size,
         product_id=product_id,
         keyword=keyword,
+        product_category=product_category,
+        is_default=is_default,
         enabled=enabled,
         lifecycle_status=lifecycle_status,
+        updated_from=updated_from,
+        updated_to=updated_to,
     )
     return success_response(
         ProductProcessTemplateListResult(
@@ -1039,7 +1091,6 @@ def create_template_api(
             product_id=payload.product_id,
             template_name=payload.template_name,
             is_default=payload.is_default,
-            lifecycle_status=payload.lifecycle_status,
             remark=payload.remark,
             steps=[item.model_dump() for item in payload.steps],
             operator=current_user,
@@ -1092,6 +1143,10 @@ def export_templates_api(
                 is_default=row.is_default,
                 is_enabled=row.is_enabled,
                 lifecycle_status=row.lifecycle_status,
+                source_type=row.source_type,
+                source_template_name=row.source_template_name,
+                source_template_version=row.source_template_version,
+                source_system_master_version=row.source_system_master_version,
                 steps=[
                     TemplateStepPayload(
                         step_order=step.step_order,
@@ -1124,7 +1179,6 @@ def import_templates_api(
         db,
         items=[item.model_dump() for item in payload.items],
         overwrite_existing=payload.overwrite_existing,
-        publish_after_import=payload.publish_after_import,
         operator=current_user,
     )
     items = [
@@ -1200,6 +1254,21 @@ def get_template_impact_analysis_api(
         )
         for item in impact.items
     ]
+    reference_items = [
+        TemplateImpactReferenceItem(
+            ref_type=item.ref_type,
+            ref_id=item.ref_id,
+            ref_code=item.ref_code,
+            ref_name=item.ref_name,
+            detail=item.detail,
+            ref_status=item.ref_status,
+            jump_module=item.jump_module,
+            jump_target=item.jump_target,
+            risk_level=item.risk_level,
+            risk_note=item.risk_note,
+        )
+        for item in impact.reference_items
+    ]
     return success_response(
         _to_impact_result_item(
             target_version=impact.target_version,
@@ -1209,6 +1278,10 @@ def get_template_impact_analysis_api(
             syncable_orders=impact.syncable_orders,
             blocked_orders=impact.blocked_orders,
             items=items,
+            total_references=impact.total_references,
+            user_stage_reference_count=impact.user_stage_reference_count,
+            template_reuse_reference_count=impact.template_reuse_reference_count,
+            reference_items=reference_items,
         )
     )
 
@@ -1251,6 +1324,8 @@ def publish_template_api(
         after_data={"version": updated.version, "note": payload.note},
     )
     db.commit()
+    published_template_id = int(updated.id)
+    published_version = int(updated.version)
     try:
         _notify_craft_template_published(
             db=db,
@@ -1258,10 +1333,11 @@ def publish_template_api(
             operator=current_user,
         )
     except Exception:
+        db.rollback()
         logger.exception(
             "[MSG] 工艺模板发布消息创建失败: template_id=%s version=%s",
-            row.id,
-            updated.version,
+            published_template_id,
+            published_version,
         )
     return success_response(
         ProductProcessTemplateUpdateResult(
@@ -1303,6 +1379,15 @@ def list_template_versions_api(
         TemplateVersionItem(
             version=item.version,
             action=item.action,
+            record_type=_template_version_record_type(item.action),
+            record_title=_template_version_record_title(
+                version=item.version,
+                action=item.action,
+            ),
+            record_summary=_template_version_record_summary(
+                action=item.action,
+                source_version=item.source_revision.version if item.source_revision else None,
+            ),
             note=item.note,
             source_version=item.source_revision.version
             if item.source_revision
@@ -1578,12 +1663,15 @@ def disable_template_api(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Template not found",
         )
-    updated = set_template_enabled(
-        db,
-        template=row,
-        is_enabled=False,
-        operator=current_user,
-    )
+    try:
+        updated = set_template_enabled(
+            db,
+            template=row,
+            is_enabled=False,
+            operator=current_user,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     write_audit_log(
         db,
         action_code="craft.template.disable",
@@ -1854,6 +1942,11 @@ def get_template_references_api(
             product_id=result.product_id,
             product_name=result.product_name,
             total=result.total,
+            order_reference_count=result.order_reference_count,
+            user_stage_reference_count=result.user_stage_reference_count,
+            template_reuse_reference_count=result.template_reuse_reference_count,
+            blocking_reference_count=result.blocking_reference_count,
+            has_blocking_references=result.has_blocking_references,
             items=[
                 TemplateReferenceItem(
                     ref_type=item.ref_type,
@@ -1866,6 +1959,7 @@ def get_template_references_api(
                     jump_target=item.jump_target,
                     risk_level=item.risk_level,
                     risk_note=item.risk_note,
+                    is_blocking=item.is_blocking,
                 )
                 for item in result.items
             ],

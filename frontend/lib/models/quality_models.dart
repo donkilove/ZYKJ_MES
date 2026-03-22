@@ -155,6 +155,9 @@ class QualityStatsOverview {
     required this.passedTotal,
     required this.failedTotal,
     required this.passRatePercent,
+    required this.defectTotal,
+    required this.scrapTotal,
+    required this.repairTotal,
     required this.coveredOrderCount,
     required this.coveredProcessCount,
     required this.coveredOperatorCount,
@@ -165,6 +168,9 @@ class QualityStatsOverview {
   final int passedTotal;
   final int failedTotal;
   final double passRatePercent;
+  final int defectTotal;
+  final int scrapTotal;
+  final int repairTotal;
   final int coveredOrderCount;
   final int coveredProcessCount;
   final int coveredOperatorCount;
@@ -176,6 +182,9 @@ class QualityStatsOverview {
       passedTotal: (json['passed_total'] as int?) ?? 0,
       failedTotal: (json['failed_total'] as int?) ?? 0,
       passRatePercent: ((json['pass_rate_percent'] as num?) ?? 0).toDouble(),
+      defectTotal: (json['defect_total'] as int?) ?? 0,
+      scrapTotal: (json['scrap_total'] as int?) ?? 0,
+      repairTotal: (json['repair_total'] as int?) ?? 0,
       coveredOrderCount: (json['covered_order_count'] as int?) ?? 0,
       coveredProcessCount: (json['covered_process_count'] as int?) ?? 0,
       coveredOperatorCount: (json['covered_operator_count'] as int?) ?? 0,
@@ -194,6 +203,9 @@ class QualityProcessStatItem {
     required this.passedTotal,
     required this.failedTotal,
     required this.passRatePercent,
+    required this.defectTotal,
+    required this.scrapTotal,
+    required this.repairTotal,
     required this.latestFirstArticleAt,
   });
 
@@ -203,6 +215,9 @@ class QualityProcessStatItem {
   final int passedTotal;
   final int failedTotal;
   final double passRatePercent;
+  final int defectTotal;
+  final int scrapTotal;
+  final int repairTotal;
   final DateTime? latestFirstArticleAt;
 
   factory QualityProcessStatItem.fromJson(Map<String, dynamic> json) {
@@ -213,6 +228,9 @@ class QualityProcessStatItem {
       passedTotal: (json['passed_total'] as int?) ?? 0,
       failedTotal: (json['failed_total'] as int?) ?? 0,
       passRatePercent: ((json['pass_rate_percent'] as num?) ?? 0).toDouble(),
+      defectTotal: (json['defect_total'] as int?) ?? 0,
+      scrapTotal: (json['scrap_total'] as int?) ?? 0,
+      repairTotal: (json['repair_total'] as int?) ?? 0,
       latestFirstArticleAt: _parseDateTimeOrNull(
         json['latest_first_article_at'],
       ),
@@ -228,6 +246,9 @@ class QualityOperatorStatItem {
     required this.passedTotal,
     required this.failedTotal,
     required this.passRatePercent,
+    required this.defectTotal,
+    required this.scrapTotal,
+    required this.repairTotal,
     required this.latestFirstArticleAt,
   });
 
@@ -237,6 +258,9 @@ class QualityOperatorStatItem {
   final int passedTotal;
   final int failedTotal;
   final double passRatePercent;
+  final int defectTotal;
+  final int scrapTotal;
+  final int repairTotal;
   final DateTime? latestFirstArticleAt;
 
   factory QualityOperatorStatItem.fromJson(Map<String, dynamic> json) {
@@ -247,6 +271,9 @@ class QualityOperatorStatItem {
       passedTotal: (json['passed_total'] as int?) ?? 0,
       failedTotal: (json['failed_total'] as int?) ?? 0,
       passRatePercent: ((json['pass_rate_percent'] as num?) ?? 0).toDouble(),
+      defectTotal: (json['defect_total'] as int?) ?? 0,
+      scrapTotal: (json['scrap_total'] as int?) ?? 0,
+      repairTotal: (json['repair_total'] as int?) ?? 0,
       latestFirstArticleAt: _parseDateTimeOrNull(
         json['latest_first_article_at'],
       ),
@@ -263,6 +290,7 @@ class QualityProductStatItem {
     required this.passedTotal,
     required this.failedTotal,
     required this.passRatePercent,
+    required this.defectTotal,
     required this.scrapTotal,
     required this.repairTotal,
   });
@@ -274,6 +302,7 @@ class QualityProductStatItem {
   final int passedTotal;
   final int failedTotal;
   final double passRatePercent;
+  final int defectTotal;
   final int scrapTotal;
   final int repairTotal;
 
@@ -286,6 +315,7 @@ class QualityProductStatItem {
       passedTotal: (json['passed_total'] as int?) ?? 0,
       failedTotal: (json['failed_total'] as int?) ?? 0,
       passRatePercent: ((json['pass_rate_percent'] as num?) ?? 0).toDouble(),
+      defectTotal: (json['defect_total'] as int?) ?? 0,
       scrapTotal: (json['scrap_total'] as int?) ?? 0,
       repairTotal:
           (json['repair_total'] as int?) ??

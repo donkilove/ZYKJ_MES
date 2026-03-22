@@ -11,6 +11,10 @@ class _FakeApprovalUserService extends UserService {
   _FakeApprovalUserService()
     : super(AppSession(baseUrl: '', accessToken: 'token'));
 
+  int approveCalls = 0;
+  int rejectCalls = 0;
+  int? lastApprovedStageId;
+
   @override
   Future<RegistrationRequestListResult> listRegistrationRequests({
     required int page,
@@ -70,6 +74,26 @@ class _FakeApprovalUserService extends UserService {
       ],
     );
   }
+
+  @override
+  Future<void> approveRegistrationRequest({
+    required int requestId,
+    required String account,
+    required String roleCode,
+    String? password,
+    int? stageId,
+  }) async {
+    approveCalls += 1;
+    lastApprovedStageId = stageId;
+  }
+
+  @override
+  Future<void> rejectRegistrationRequest({
+    required int requestId,
+    String? reason,
+  }) async {
+    rejectCalls += 1;
+  }
 }
 
 class _FakeApprovalCraftService extends CraftService {
@@ -119,6 +143,8 @@ Future<void> _pumpApprovalPage(
   WidgetTester tester, {
   required _FakeApprovalUserService userService,
   required _FakeApprovalCraftService craftService,
+  bool canApprove = true,
+  bool canReject = true,
 }) async {
   tester.view.physicalSize = const Size(1920, 1200);
   tester.view.devicePixelRatio = 1.0;
@@ -133,7 +159,8 @@ Future<void> _pumpApprovalPage(
         body: RegistrationApprovalPage(
           session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
           onLogout: () {},
-          canReviewAction: true,
+          canApprove: canApprove,
+          canReject: canReject,
           userService: userService,
           craftService: craftService,
         ),
@@ -164,5 +191,49 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('最新工段'), findsOneWidget);
+  });
+
+  testWidgets('注册审批弹窗允许展示无启用工序的工段', (tester) async {
+    final userService = _FakeApprovalUserService();
+    final craftService = _FakeApprovalCraftService();
+    await _pumpApprovalPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.text('通过'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('操作员').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('最新工段').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('最新工段'), findsOneWidget);
+    expect(userService.approveCalls, 0);
+  });
+
+  testWidgets('注册审批按钮按通过与驳回权限分别展示', (tester) async {
+    final userService = _FakeApprovalUserService();
+    final craftService = _FakeApprovalCraftService();
+    await _pumpApprovalPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      canApprove: false,
+      canReject: true,
+    );
+
+    expect(find.text('通过'), findsNothing);
+    expect(find.text('驳回'), findsOneWidget);
+
+    await tester.tap(find.text('驳回'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('驳回').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.rejectCalls, 1);
+    expect(userService.approveCalls, 0);
   });
 }

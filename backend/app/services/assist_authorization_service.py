@@ -7,6 +7,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.core.authz_catalog import PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW
+from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.core.production_constants import (
     ORDER_STATUS_COMPLETED,
     PROCESS_STATUS_COMPLETED,
@@ -19,6 +20,7 @@ from app.models.user import User
 from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
 from app.services.message_service import create_message_for_users
+from app.services.user_service import get_active_user_ids_by_role
 
 ASSIST_STATUS_PENDING = "pending"
 ASSIST_STATUS_APPROVED = "approved"
@@ -172,6 +174,37 @@ def create_assist_authorization(
     )
     db.commit()
     db.refresh(row)
+    approver_user_ids = sorted(
+        {
+            *get_active_user_ids_by_role(db, ROLE_PRODUCTION_ADMIN),
+            *get_active_user_ids_by_role(db, ROLE_SYSTEM_ADMIN),
+        }
+    )
+    if approver_user_ids:
+        create_message_for_users(
+            db,
+            message_type="todo",
+            priority="important",
+            title=f"代班审批待处理：{row.order_code or ''} / {row.process_name or ''}",
+            summary="存在新的代班申请，请进入代班审批页面处理。",
+            source_module="production",
+            source_type="assist_authorization",
+            source_id=str(row.id),
+            source_code=row.order_code,
+            target_page_code="production",
+            target_tab_code="production_assist_approval",
+            target_route_payload_json=json.dumps(
+                {
+                    "action": "detail",
+                    "authorization_id": row.id,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            recipient_user_ids=approver_user_ids,
+            dedupe_key=f"assist_authorization_pending_{row.id}",
+            created_by_user_id=requester.id,
+        )
     return row
 
 

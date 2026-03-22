@@ -14,12 +14,14 @@ from app.api.deps import require_permission
 from app.core.security import verify_password
 from app.db.session import get_db
 from app.models.product import Product
+from app.models.product_process_template import ProductProcessTemplate
 from app.models.product_parameter_history import ProductParameterHistory
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
 from app.services.message_service import create_message_for_users
 from app.schemas.product import (
+    ProductDetailResult,
     ProductImpactAnalysisQuery,
     ProductImpactAnalysisResult,
     ProductImpactOrderItem,
@@ -32,6 +34,8 @@ from app.schemas.product import (
     ProductParameterHistoryListResult,
     ProductParameterItem,
     ProductParameterListResult,
+    ProductRelatedInfoItem,
+    ProductRelatedInfoSection,
     ProductParameterVersionListItem,
     ProductParameterVersionListResult,
     ProductParameterUpdateRequest,
@@ -75,6 +79,7 @@ from app.services.product_service import (
     list_products,
     append_product_history_event,
     rollback_product_to_version,
+    sync_product_master_data_to_parameters,
     summarize_changed_keys,
     update_product_parameters,
     update_product_version_parameters,
@@ -104,7 +109,15 @@ def to_product_item(
         remark=product.remark or "",
         lifecycle_status=product.lifecycle_status,
         current_version=product.current_version,
+        current_version_label=(
+            f"V1.{product.current_version - 1}" if product.current_version > 0 else "-"
+        ),
         effective_version=product.effective_version,
+        effective_version_label=(
+            f"V1.{product.effective_version - 1}"
+            if product.effective_version > 0
+            else None
+        ),
         effective_at=product.effective_at,
         inactive_reason=product.inactive_reason,
         last_parameter_summary=last_parameter_summary,
@@ -229,6 +242,143 @@ def _to_parameter_list_result(
     )
 
 
+def _build_product_detail_result(*, db: Session, product: Product) -> ProductDetailResult:
+    from sqlalchemy import select
+
+    latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(product.id)
+    versions = list_product_versions(db, product_id=product.id)
+    template_rows = (
+        db.execute(
+            select(ProductProcessTemplate)
+            .where(ProductProcessTemplate.product_id == product.id)
+            .order_by(
+                ProductProcessTemplate.is_default.desc(),
+                ProductProcessTemplate.updated_at.desc(),
+                ProductProcessTemplate.id.desc(),
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    latest_version_changed_at: datetime | None = None
+    for row in versions:
+        candidate = row.updated_at or row.effective_at or row.created_at
+        if latest_version_changed_at is None or candidate > latest_version_changed_at:
+            latest_version_changed_at = candidate
+
+    detail_parameter_message: str | None = None
+    detail_parameters: ProductParameterListResult
+    effective_revision = get_effective_revision(db, product=product)
+    if effective_revision is not None:
+        revision, parameters = get_effective_product_parameters(db, product=product)
+        detail_parameters = _to_parameter_list_result(
+            product=product,
+            parameter_scope="effective",
+            version=revision.version,
+            version_label=revision.version_label,
+            lifecycle_status=revision.lifecycle_status,
+            parameters=parameters,
+        )
+    else:
+        current_revision = get_current_revision(db, product=product)
+        if current_revision is None:
+            detail_parameters = ProductParameterListResult(
+                product_id=product.id,
+                product_name=product.name,
+                parameter_scope="version",
+                version=0,
+                version_label="-",
+                lifecycle_status=product.lifecycle_status,
+                total=0,
+                items=[],
+            )
+            detail_parameter_message = "当前产品暂无可展示的版本参数。"
+        else:
+            revision, parameters = get_product_version_parameters(
+                db,
+                product=product,
+                version=current_revision.version,
+            )
+            detail_parameters = _to_parameter_list_result(
+                product=product,
+                parameter_scope="version",
+                version=revision.version,
+                version_label=revision.version_label,
+                lifecycle_status=revision.lifecycle_status,
+                parameters=parameters,
+            )
+            detail_parameter_message = "当前无生效版本，详情已回退展示当前版本参数快照。"
+
+    history_total, history_rows = list_parameter_history(
+        db,
+        product_id=product.id,
+        version=None,
+        page=1,
+        page_size=1000,
+    )
+
+    related_info_sections = [
+        ProductRelatedInfoSection(
+            code="process_templates",
+            title="关联工艺路线",
+            total=len(template_rows),
+            items=[
+                ProductRelatedInfoItem(
+                    label=row.template_name,
+                    value=f"版本 {row.version} | {'默认' if row.is_default else '非默认'} | {row.lifecycle_status}",
+                )
+                for row in template_rows
+            ],
+            empty_message=(
+                "当前产品暂未绑定工艺路线，可后续在工艺路线模块补充。"
+                if not template_rows
+                else None
+            ),
+        ),
+        ProductRelatedInfoSection(
+            code="applicable_lines",
+            title="适用产线",
+            total=0,
+            items=[],
+            empty_message="当前仓库尚未沉淀产品-产线关联数据。",
+        ),
+        ProductRelatedInfoSection(
+            code="equipment",
+            title="关联设备",
+            total=0,
+            items=[],
+            empty_message="当前仓库尚未沉淀产品-设备关联数据。",
+        ),
+        ProductRelatedInfoSection(
+            code="quality_standards",
+            title="质检标准",
+            total=0,
+            items=[],
+            empty_message="当前仓库尚未沉淀产品-质检标准关联数据。",
+        ),
+        ProductRelatedInfoSection(
+            code="packaging_rules",
+            title="包装规则",
+            total=0,
+            items=[],
+            empty_message="当前仓库尚未沉淀产品-包装规则关联数据。",
+        ),
+    ]
+
+    return ProductDetailResult(
+        product=to_product_item(product, latest_history),
+        detail_parameters=detail_parameters,
+        detail_parameter_message=detail_parameter_message,
+        latest_version_changed_at=latest_version_changed_at,
+        version_total=len(versions),
+        versions=[_to_version_item(row) for row in versions],
+        history_total=history_total,
+        history_items=[_to_history_item(product=product, row=row) for row in history_rows],
+        related_info_sections=related_info_sections,
+    )
+
+
 def _notify_product_version_activated(
     *,
     db: Session,
@@ -308,6 +458,37 @@ def get_products(
     )
 
 
+@router.get("/parameter-query", response_model=ApiResponse[ProductListResult])
+def get_product_parameter_query_products(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    keyword: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    lifecycle_status: str | None = Query(default=None),
+    effective_version_keyword: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("product.parameters.view")),
+) -> ApiResponse[ProductListResult]:
+    total, products, latest_map = list_products(
+        db,
+        page,
+        page_size,
+        keyword,
+        category,
+        lifecycle_status,
+        effective_version_keyword=effective_version_keyword,
+    )
+    return success_response(
+        ProductListResult(
+            total=total,
+            items=[
+                to_product_item(product, latest_map.get(product.id))
+                for product in products
+            ],
+        )
+    )
+
+
 @router.get(
     "/parameter-versions",
     response_model=ApiResponse[ProductParameterVersionListResult],
@@ -318,6 +499,8 @@ def get_product_parameter_versions(
     keyword: str | None = Query(default=None),
     category: str | None = Query(default=None),
     version_keyword: str | None = Query(default=None),
+    param_name_keyword: str | None = Query(default=None),
+    param_category_keyword: str | None = Query(default=None),
     lifecycle_status: str | None = Query(default=None),
     updated_after: datetime | None = Query(default=None),
     updated_before: datetime | None = Query(default=None),
@@ -331,6 +514,8 @@ def get_product_parameter_versions(
         keyword=keyword,
         category=category,
         version_keyword=version_keyword,
+        param_name_keyword=param_name_keyword,
+        param_category_keyword=param_category_keyword,
         lifecycle_status=lifecycle_status,
         updated_after=updated_after,
         updated_before=updated_before,
@@ -352,7 +537,11 @@ def get_product_parameter_versions(
                     == row.revision.version,
                     created_at=row.revision.created_at,
                     parameter_summary=row.parameter_summary,
+                    parameter_count=row.parameter_count,
+                    matched_parameter_name=row.matched_parameter_name,
+                    matched_parameter_category=row.matched_parameter_category,
                     last_modified_parameter=row.last_modified_parameter,
+                    last_modified_parameter_category=row.last_modified_parameter_category,
                     updated_at=row.revision.updated_at,
                 )
                 for row in rows
@@ -423,6 +612,20 @@ def get_product_detail_api(
     return success_response(to_product_item(product, latest_history))
 
 
+@router.get("/{product_id}/detail", response_model=ApiResponse[ProductDetailResult])
+def get_product_detail_bundle_api(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("product.products.list")),
+) -> ApiResponse[ProductDetailResult]:
+    product = get_product_by_id(db, product_id)
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
+    return success_response(_build_product_detail_result(db=db, product=product))
+
+
 @router.put("/{product_id}", response_model=ApiResponse[ProductItem])
 def update_product_api(
     product_id: int,
@@ -464,6 +667,7 @@ def update_product_api(
     product.name = normalized_name
     product.category = payload.category
     product.remark = (payload.remark or "").strip()
+    sync_product_master_data_to_parameters(db, product=product)
     after_snapshot = json.dumps(
         {
             "name": product.name,
@@ -1056,7 +1260,7 @@ def activate_product_version_api(
     version: int,
     payload: ProductVersionActivateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("product.versions.manage")),
+    current_user: User = Depends(require_permission("product.versions.activate")),
 ) -> ApiResponse[ProductVersionItem]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -1099,6 +1303,8 @@ def activate_product_version_api(
         .first()
         or revision
     )
+    safe_product_id = product.id
+    safe_version = version
     try:
         _notify_product_version_activated(
             db=db,
@@ -1107,10 +1313,11 @@ def activate_product_version_api(
             operator=current_user,
         )
     except Exception:
+        db.rollback()
         logger.exception(
             "[MSG] 产品版本发布消息创建失败: product_id=%s version=%s",
-            product.id,
-            version,
+            safe_product_id,
+            safe_version,
         )
     return success_response(_to_version_item(revision), message="activated")
 
@@ -1423,7 +1630,7 @@ def export_products(
     updated_after: datetime | None = Query(default=None),
     updated_before: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.products.list")),
+    _: User = Depends(require_permission("product.products.export")),
 ) -> StreamingResponse:
     _, products, latest_map = list_products(
         db,
@@ -1468,7 +1675,7 @@ def export_product_version_parameters(
     product_id: int,
     version: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.parameters.view")),
+    _: User = Depends(require_permission("product.parameters.export")),
 ) -> StreamingResponse:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -1513,7 +1720,7 @@ def export_product_parameters(
     updated_before: datetime | None = Query(default=None),
     effective_only: bool = Query(default=False),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.parameters.view")),
+    _: User = Depends(require_permission("product.parameters.export")),
 ) -> StreamingResponse:
     _, products, latest_history_map = list_products(
         db,

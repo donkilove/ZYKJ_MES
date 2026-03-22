@@ -21,8 +21,11 @@ class _FakeCraftService extends CraftService {
   final Map<int, List<CraftTemplateVersionItem>> templateVersions;
   final CraftSystemMasterTemplateVersionListResult?
   systemMasterTemplateVersions;
-  final Map<int, CraftTemplateImpactAnalysis> templateImpactByVersion;
+  final Map<int?, CraftTemplateImpactAnalysis> templateImpactByVersion;
   final List<int?> requestedImpactVersions = [];
+  final List<int> archivedTemplateIds = [];
+  final List<int> disabledTemplateIds = [];
+  final List<int> deletedTemplateIds = [];
 
   @override
   Future<CraftStageListResult> listStages({
@@ -80,8 +83,12 @@ class _FakeCraftService extends CraftService {
     int pageSize = 500,
     int? productId,
     String? keyword,
+    String? productCategory,
+    bool? isDefault,
     bool? enabled = true,
     String? lifecycleStatus,
+    DateTime? updatedFrom,
+    DateTime? updatedTo,
   }) async {
     return CraftTemplateListResult(total: templates.length, items: templates);
   }
@@ -136,8 +143,29 @@ class _FakeCraftService extends CraftService {
           inProgressOrders: 0,
           syncableOrders: 0,
           blockedOrders: 0,
+          totalReferences: 0,
+          userStageReferenceCount: 0,
+          templateReuseReferenceCount: 0,
           items: const [],
+          referenceItems: const [],
         );
+  }
+
+  @override
+  Future<CraftTemplateDetail> archiveTemplate({required int templateId}) async {
+    archivedTemplateIds.add(templateId);
+    return CraftTemplateDetail(template: templates.first, steps: const []);
+  }
+
+  @override
+  Future<CraftTemplateDetail> disableTemplate({required int templateId}) async {
+    disabledTemplateIds.add(templateId);
+    return CraftTemplateDetail(template: templates.first, steps: const []);
+  }
+
+  @override
+  Future<void> deleteTemplate({required int templateId}) async {
+    deletedTemplateIds.add(templateId);
   }
 }
 
@@ -297,6 +325,9 @@ void main() {
           CraftTemplateVersionItem(
             version: 5,
             action: 'publish',
+            recordType: 'publish',
+            recordTitle: '发布记录 P5',
+            recordSummary: '草稿经发布门禁确认后成为当前生效版本',
             note: '当前版本',
             sourceVersion: 4,
             createdByUserId: 9,
@@ -306,6 +337,9 @@ void main() {
           CraftTemplateVersionItem(
             version: 4,
             action: 'publish',
+            recordType: 'publish',
+            recordTitle: '发布记录 P4',
+            recordSummary: '草稿经发布门禁确认后成为当前生效版本',
             note: '目标版本',
             sourceVersion: 3,
             createdByUserId: 9,
@@ -323,7 +357,7 @@ void main() {
 
     expect(find.text('版本管理 - 切割模板18'), findsOneWidget);
     expect(find.textContaining('已自动定位目标版本 v4'), findsOneWidget);
-    expect(find.text('v4 · publish · 目标版本'), findsOneWidget);
+    expect(find.text('发布记录 P4 · 目标版本'), findsOneWidget);
   });
 
   testWidgets('接收系统母版历史版本跳转参数后自动打开历史版本视图', (tester) async {
@@ -377,6 +411,9 @@ void main() {
           CraftTemplateVersionItem(
             version: 5,
             action: 'publish',
+            recordType: 'publish',
+            recordTitle: '发布记录 P5',
+            recordSummary: '草稿经发布门禁确认后成为当前生效版本',
             note: '当前版本',
             sourceVersion: 4,
             createdByUserId: 9,
@@ -386,6 +423,9 @@ void main() {
           CraftTemplateVersionItem(
             version: 4,
             action: 'publish',
+            recordType: 'publish',
+            recordTitle: '发布记录 P4',
+            recordSummary: '草稿经发布门禁确认后成为当前生效版本',
             note: '可回滚版本',
             sourceVersion: 3,
             createdByUserId: 9,
@@ -402,6 +442,9 @@ void main() {
           inProgressOrders: 1,
           syncableOrders: 3,
           blockedOrders: 0,
+          totalReferences: 0,
+          userStageReferenceCount: 0,
+          templateReuseReferenceCount: 0,
           items: [
             CraftTemplateImpactOrderItem(
               orderId: 1001,
@@ -411,6 +454,7 @@ void main() {
               reason: null,
             ),
           ],
+          referenceItems: const [],
         ),
         4: CraftTemplateImpactAnalysis(
           targetVersion: 4,
@@ -419,6 +463,9 @@ void main() {
           inProgressOrders: 1,
           syncableOrders: 0,
           blockedOrders: 1,
+          totalReferences: 2,
+          userStageReferenceCount: 1,
+          templateReuseReferenceCount: 1,
           items: [
             CraftTemplateImpactOrderItem(
               orderId: 1002,
@@ -426,6 +473,32 @@ void main() {
               orderStatus: 'in_progress',
               syncable: false,
               reason: '当前工序无法对齐目标版本',
+            ),
+          ],
+          referenceItems: [
+            CraftTemplateImpactReferenceItem(
+              refType: 'user_stage',
+              refId: 31,
+              refCode: 'operator_a',
+              refName: '操作员A',
+              detail: '工段：CUT 切割段',
+              refStatus: '正在使用',
+              jumpModule: 'user',
+              jumpTarget: 'user-management?user_id=31',
+              riskLevel: 'medium',
+              riskNote: '需确认用户工段分配',
+            ),
+            CraftTemplateImpactReferenceItem(
+              refType: 'template_reuse',
+              refId: 32,
+              refCode: 'TMP-32',
+              refName: '复用模板32',
+              detail: '复用到 产品B · published',
+              refStatus: '正在使用',
+              jumpModule: 'craft',
+              jumpTarget: 'process-configuration?template_id=32',
+              riskLevel: 'medium',
+              riskNote: '需确认复用模板联动',
             ),
           ],
         ),
@@ -459,7 +532,80 @@ void main() {
     expect(find.text('当前预览版本：v4'), findsOneWidget);
     expect(find.text('总计 1'), findsOneWidget);
     expect(find.text('MO-1002'), findsOneWidget);
+    expect(find.text('关键引用对象'), findsOneWidget);
+    expect(find.textContaining('operator_a 操作员A'), findsOneWidget);
+    expect(find.textContaining('TMP-32 复用模板32'), findsOneWidget);
     expect(find.textContaining('当前工序无法对齐目标版本'), findsOneWidget);
     expect(craftService.requestedImpactVersions, containsAllInOrder([5, 4]));
   });
+
+  testWidgets('主页面显式提供套版复制与导出版本参数入口', (tester) async {
+    await pumpPage(
+      tester,
+      templates: [buildTemplate(id: 18, version: 5)],
+      templateId: 18,
+      jumpRequestId: 5,
+    );
+
+    expect(find.text('从系统母版套版'), findsAtLeastNWidgets(1));
+    expect(find.text('从已有模板复制'), findsOneWidget);
+    expect(find.text('导出版本参数'), findsOneWidget);
+  });
+
+  testWidgets('新建模板不再显示直接发布入口', (tester) async {
+    await pumpPage(tester, templates: [buildTemplate(id: 18, version: 5)]);
+
+    await tester.tap(find.widgetWithText(FilledButton, '新增模板'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('新建后直接发布'), findsNothing);
+    expect(find.textContaining('统一先保存为草稿'), findsOneWidget);
+  });
+
+  testWidgets('停用模板遇到阻断级引用时展示后端拦截状态', (tester) async {
+    final craftService = _FakeCraftService(
+      templates: [buildTemplate(id: 18, version: 5)],
+      templateImpactByVersion: {
+        null: CraftTemplateImpactAnalysis(
+          targetVersion: 5,
+          totalOrders: 1,
+          pendingOrders: 0,
+          inProgressOrders: 1,
+          syncableOrders: 0,
+          blockedOrders: 1,
+          totalReferences: 1,
+          userStageReferenceCount: 0,
+          templateReuseReferenceCount: 0,
+          items: [
+            CraftTemplateImpactOrderItem(
+              orderId: 1002,
+              orderCode: 'MO-1002',
+              orderStatus: 'in_progress',
+              syncable: false,
+              reason: '当前工序无法对齐目标版本',
+            ),
+          ],
+          referenceItems: const [],
+        ),
+      },
+    );
+
+    await pumpPage(tester, craftService: craftService);
+
+    await tester.tap(
+      find.byWidgetPredicate((widget) => widget is PopupMenuButton).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('当前存在 1 条阻断级引用'), findsOneWidget);
+    final confirmButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '停用'),
+    );
+    expect(confirmButton.onPressed, isNull);
+    expect(craftService.disabledTemplateIds, isEmpty);
+  });
+
 }

@@ -48,6 +48,7 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
   final AuthService _authService = AuthService();
   AppSession? _session;
   bool _loading = true;
+  String? _loginNotice;
 
   @override
   void initState() {
@@ -77,6 +78,18 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
     }
     setState(() {
       _session = session;
+      _loginNotice = null;
+    });
+  }
+
+  Future<void> _handleForcePasswordChanged() async {
+    await _sessionStore.clear();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _session = null;
+      _loginNotice = '密码已修改，请使用新密码重新登录。';
     });
   }
 
@@ -108,20 +121,16 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
     }
 
     if (_session == null) {
-      return LoginPage(onLoginSuccess: _handleLoginSuccess);
+      return LoginPage(
+        onLoginSuccess: _handleLoginSuccess,
+        initialMessage: _loginNotice,
+      );
     }
 
     if (_session!.mustChangePassword) {
       return ForceChangePasswordPage(
         session: _session!,
-        onPasswordChanged: () {
-          setState(() {
-            _session = AppSession(
-              baseUrl: _session!.baseUrl,
-              accessToken: _session!.accessToken,
-            );
-          });
-        },
+        onRequireRelogin: _handleForcePasswordChanged,
       );
     }
 

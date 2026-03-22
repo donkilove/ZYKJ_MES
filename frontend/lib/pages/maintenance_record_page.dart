@@ -464,7 +464,9 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                               DataCell(
                                 MaintenanceAttachmentAction(
                                   attachmentLink: item.attachmentLink,
+                                  attachmentName: item.attachmentName,
                                   onOpen: widget.onOpenAttachment,
+                                  showAttachmentName: false,
                                 ),
                               ),
                               DataCell(

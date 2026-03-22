@@ -25,6 +25,8 @@ class ProductParameterQueryPage extends StatefulWidget {
     required this.tabCode,
     this.jumpCommand,
     this.onJumpHandled,
+    this.service,
+    this.canExportParameters = false,
   });
 
   final AppSession session;
@@ -32,6 +34,8 @@ class ProductParameterQueryPage extends StatefulWidget {
   final String tabCode;
   final ProductJumpCommand? jumpCommand;
   final ValueChanged<int>? onJumpHandled;
+  final ProductService? service;
+  final bool canExportParameters;
 
   @override
   State<ProductParameterQueryPage> createState() =>
@@ -54,7 +58,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   @override
   void initState() {
     super.initState();
-    _productService = ProductService(widget.session);
+    _productService = widget.service ?? ProductService(widget.session);
     _loadProducts();
   }
 
@@ -151,12 +155,13 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       _message = '';
     });
     try {
-      final result = await _productService.listProducts(
+      final result = await _productService.listProductsForParameterQuery(
         page: 1,
         pageSize: 10000,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         lifecycleStatus: _selectedStatusFilter,
+        effectiveVersionKeyword: _versionFilterController.text.trim(),
       );
       if (!mounted) {
         return;
@@ -186,12 +191,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   }
 
   List<ProductItem> get _filteredProducts {
-    final versionFilter = _versionFilterController.text.trim().toLowerCase();
-    if (versionFilter.isEmpty) return _products;
-    return _products.where((p) {
-      final label = p.effectiveVersion > 0 ? 'v1.${p.effectiveVersion - 1}' : '';
-      return label.contains(versionFilter);
-    }).toList();
+    return _products;
   }
 
   Future<void> _handleJumpCommand(ProductJumpCommand command) async {
@@ -491,7 +491,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
               ),
               const SizedBox(width: 12),
               OutlinedButton.icon(
-                onPressed: _loading ? null : _exportParameters,
+                onPressed: _loading || !widget.canExportParameters
+                    ? null
+                    : _exportParameters,
                 icon: const Icon(Icons.download),
                 label: const Text('导出'),
               ),
@@ -509,7 +511,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                     hintText: '如 V1.2',
                     border: OutlineInputBorder(),
                   ),
-                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _loadProducts(),
                 ),
               ),
             ],
@@ -554,7 +556,14 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                               cells: [
                                 DataCell(Text(product.name)),
                                 DataCell(Text(product.category.isEmpty ? '-' : product.category)),
-                                DataCell(Text(product.effectiveVersion > 0 ? 'V1.${product.effectiveVersion - 1}' : '-')),
+                                DataCell(
+                                  Text(
+                                    product.effectiveVersionLabel ??
+                                        (product.effectiveVersion > 0
+                                            ? 'V1.${product.effectiveVersion - 1}'
+                                            : '-'),
+                                  ),
+                                ),
                                 DataCell(Text(_lifecycleLabel(product.lifecycleStatus))),
                                 DataCell(Text(_formatTime(product.createdAt))),
                                 DataCell(

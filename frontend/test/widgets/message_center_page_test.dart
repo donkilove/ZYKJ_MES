@@ -13,8 +13,11 @@ class _FakeMessageService extends MessageService {
   _FakeMessageService() : super(AppSession(baseUrl: '', accessToken: ''));
 
   bool lastTodoOnly = false;
+  int lastPage = 1;
+  int lastPageSize = 20;
   int batchReadCount = 0;
   int publishCount = 0;
+  int maintenanceRunCount = 0;
   int unreadCount = 4;
 
   List<MessageItem> _items = <MessageItem>[
@@ -34,6 +37,10 @@ class _FakeMessageService extends MessageService {
       'status': 'active',
       'published_at': '2026-03-19T08:00:00Z',
       'is_read': false,
+      'delivery_status': 'failed',
+      'delivery_attempt_count': 2,
+      'last_push_at': '2026-03-19T08:05:00Z',
+      'next_retry_at': '2026-03-19T08:10:00Z',
     }),
     MessageItem.fromJson({
       'id': 2,
@@ -50,7 +57,10 @@ class _FakeMessageService extends MessageService {
       'status': 'no_permission',
       'inactive_reason': 'no_permission',
       'published_at': '2026-03-19T09:00:00Z',
-      'is_read': false,
+      'is_read': true,
+      'read_at': '2026-03-19T09:05:00Z',
+      'delivery_status': 'delivered',
+      'delivery_attempt_count': 1,
     }),
     MessageItem.fromJson({
       'id': 3,
@@ -68,6 +78,8 @@ class _FakeMessageService extends MessageService {
       'status': 'active',
       'published_at': '2026-03-19T10:00:00Z',
       'is_read': false,
+      'delivery_status': 'delivered',
+      'delivery_attempt_count': 1,
     }),
     MessageItem.fromJson({
       'id': 4,
@@ -86,6 +98,8 @@ class _FakeMessageService extends MessageService {
       'status': 'active',
       'published_at': '2026-03-19T11:00:00Z',
       'is_read': false,
+      'delivery_status': 'delivered',
+      'delivery_attempt_count': 1,
     }),
     MessageItem.fromJson({
       'id': 5,
@@ -104,8 +118,53 @@ class _FakeMessageService extends MessageService {
       'status': 'active',
       'published_at': '2026-03-19T12:00:00Z',
       'is_read': false,
+      'delivery_status': 'delivered',
+      'delivery_attempt_count': 1,
     }),
+    for (var i = 0; i < 6; i++)
+      MessageItem.fromJson({
+        'id': 100 + i,
+        'message_type': 'notice',
+        'priority': 'normal',
+        'title': '扩展消息$i',
+        'summary': '用于分页验证',
+        'content': '分页测试数据',
+        'source_module': 'message',
+        'source_type': 'announcement',
+        'source_code': 'ANN-$i',
+        'status': 'active',
+        'published_at': '2026-03-18T12:00:00Z',
+        'is_read': false,
+        'delivery_status': 'pending',
+        'delivery_attempt_count': 0,
+      }),
   ];
+
+  MessageItem _copyItem(MessageItem item, {bool? isRead, DateTime? readAt}) {
+    return MessageItem.fromJson({
+      'id': item.id,
+      'message_type': item.messageType,
+      'priority': item.priority,
+      'title': item.title,
+      'summary': item.summary,
+      'content': item.content,
+      'source_module': item.sourceModule,
+      'source_type': item.sourceType,
+      'source_code': item.sourceCode,
+      'target_page_code': item.targetPageCode,
+      'target_tab_code': item.targetTabCode,
+      'target_route_payload_json': item.targetRoutePayloadJson,
+      'status': item.status,
+      'inactive_reason': item.inactiveReason,
+      'published_at': item.publishedAt?.toUtc().toIso8601String(),
+      'is_read': isRead ?? item.isRead,
+      'read_at': (readAt ?? item.readAt)?.toUtc().toIso8601String(),
+      'delivery_status': item.deliveryStatus,
+      'delivery_attempt_count': item.deliveryAttemptCount,
+      'last_push_at': item.lastPushAt?.toUtc().toIso8601String(),
+      'next_retry_at': item.nextRetryAt?.toUtc().toIso8601String(),
+    });
+  }
 
   @override
   Future<MessageSummaryResult> getSummary() async {
@@ -140,11 +199,17 @@ class _FakeMessageService extends MessageService {
     bool activeOnly = true,
   }) async {
     lastTodoOnly = todoOnly;
+    lastPage = page;
+    lastPageSize = pageSize;
     final filtered = todoOnly
         ? _items.where((item) => item.messageType == 'todo').toList()
         : _items;
+    final start = (page - 1) * pageSize;
+    final paged = start >= filtered.length
+        ? const <MessageItem>[]
+        : filtered.skip(start).take(pageSize).toList();
     return MessageListResult(
-      items: filtered,
+      items: paged,
       total: filtered.length,
       page: page,
       pageSize: pageSize,
@@ -153,27 +218,11 @@ class _FakeMessageService extends MessageService {
 
   @override
   Future<void> markRead(int messageId) async {
+    final now = DateTime.utc(2026, 3, 20, 9, 30);
     _items = _items
         .map(
           (item) => item.id == messageId
-              ? MessageItem.fromJson({
-                  'id': item.id,
-                  'message_type': item.messageType,
-                  'priority': item.priority,
-                  'title': item.title,
-                  'summary': item.summary,
-                  'content': item.content,
-                  'source_module': item.sourceModule,
-                  'source_type': item.sourceType,
-                  'source_code': item.sourceCode,
-                  'target_page_code': item.targetPageCode,
-                  'target_tab_code': item.targetTabCode,
-                  'target_route_payload_json': item.targetRoutePayloadJson,
-                  'status': item.status,
-                  'inactive_reason': item.inactiveReason,
-                  'published_at': item.publishedAt?.toUtc().toIso8601String(),
-                  'is_read': true,
-                })
+              ? _copyItem(item, isRead: true, readAt: now)
               : item,
         )
         .toList();
@@ -181,54 +230,20 @@ class _FakeMessageService extends MessageService {
 
   @override
   Future<void> markAllRead() async {
+    final now = DateTime.utc(2026, 3, 20, 9, 30);
     _items = _items
-        .map(
-          (item) => MessageItem.fromJson({
-            'id': item.id,
-            'message_type': item.messageType,
-            'priority': item.priority,
-            'title': item.title,
-            'summary': item.summary,
-            'content': item.content,
-            'source_module': item.sourceModule,
-            'source_type': item.sourceType,
-            'source_code': item.sourceCode,
-            'target_page_code': item.targetPageCode,
-            'target_tab_code': item.targetTabCode,
-            'target_route_payload_json': item.targetRoutePayloadJson,
-            'status': item.status,
-            'inactive_reason': item.inactiveReason,
-            'published_at': item.publishedAt?.toUtc().toIso8601String(),
-            'is_read': true,
-          }),
-        )
+        .map((item) => _copyItem(item, isRead: true, readAt: now))
         .toList();
   }
 
   @override
   Future<int> markBatchRead(List<int> messageIds) async {
     batchReadCount = messageIds.length;
+    final now = DateTime.utc(2026, 3, 20, 9, 30);
     _items = _items
         .map(
           (item) => messageIds.contains(item.id)
-              ? MessageItem.fromJson({
-                  'id': item.id,
-                  'message_type': item.messageType,
-                  'priority': item.priority,
-                  'title': item.title,
-                  'summary': item.summary,
-                  'content': item.content,
-                  'source_module': item.sourceModule,
-                  'source_type': item.sourceType,
-                  'source_code': item.sourceCode,
-                  'target_page_code': item.targetPageCode,
-                  'target_tab_code': item.targetTabCode,
-                  'target_route_payload_json': item.targetRoutePayloadJson,
-                  'status': item.status,
-                  'inactive_reason': item.inactiveReason,
-                  'published_at': item.publishedAt?.toUtc().toIso8601String(),
-                  'is_read': true,
-                })
+              ? _copyItem(item, isRead: true, readAt: now)
               : item,
         )
         .toList();
@@ -254,15 +269,76 @@ class _FakeMessageService extends MessageService {
         'status': 'active',
         'published_at': '2026-03-20T10:00:00Z',
         'is_read': false,
+        'delivery_status': 'pending',
+        'delivery_attempt_count': 0,
       }),
       ..._items,
     ];
     return const AnnouncementPublishResult(messageId: 99, recipientCount: 2);
   }
+
+  @override
+  Future<MessageMaintenanceResult> runMaintenance() async {
+    maintenanceRunCount += 1;
+    return const MessageMaintenanceResult(
+      pendingCompensated: 2,
+      failedRetried: 1,
+      sourceUnavailableUpdated: 0,
+      archivedMessages: 0,
+    );
+  }
+
+  @override
+  Future<MessageDetailResult> getMessageDetail(int messageId) async {
+    final item = _items.firstWhere((entry) => entry.id == messageId);
+    return MessageDetailResult(
+      item: item,
+      sourceId: messageId == 1 ? '101' : null,
+      failureReasonHint: messageId == 1 ? '实时推送失败，系统将按计划继续重试。' : null,
+    );
+  }
+
+  @override
+  Future<MessageJumpResult> getMessageJumpTarget(int messageId) async {
+    final item = _items.firstWhere((entry) => entry.id == messageId);
+    return MessageJumpResult(
+      canJump: item.isActive && item.targetPageCode != null,
+      disabledReason: item.isActive ? null : item.inactiveReason,
+      targetPageCode: item.targetPageCode,
+      targetTabCode: item.targetTabCode,
+      targetRoutePayloadJson: item.targetRoutePayloadJson,
+    );
+  }
 }
 
 class _FakeUserService extends UserService {
   _FakeUserService() : super(AppSession(baseUrl: '', accessToken: ''));
+
+  final List<UserItem> _allUsers = List<UserItem>.generate(205, (index) {
+    final id = index + 11;
+    final username = index == 204 ? 'overflow_user' : 'user_$id';
+    final fullName = index == 204 ? '第205位用户' : '用户$id';
+    return UserItem(
+      id: id,
+      username: username,
+      fullName: fullName,
+      remark: null,
+      isOnline: index.isEven,
+      isActive: true,
+      isDeleted: false,
+      mustChangePassword: false,
+      lastSeenAt: null,
+      stageId: null,
+      stageName: null,
+      roleCode: index.isEven ? 'system_admin' : 'quality_admin',
+      roleName: index.isEven ? '系统管理员' : '品质管理员',
+      lastLoginAt: null,
+      lastLoginIp: null,
+      passwordChangedAt: null,
+      createdAt: null,
+      updatedAt: null,
+    );
+  });
 
   @override
   Future<RoleListResult> listAllRoles({String? keyword}) async {
@@ -308,51 +384,11 @@ class _FakeUserService extends UserService {
     bool? isActive,
     bool includeDeleted = false,
   }) async {
-    return UserListResult(
-      total: 2,
-      items: [
-        UserItem(
-          id: 11,
-          username: 'admin',
-          fullName: '管理员',
-          remark: null,
-          isOnline: true,
-          isActive: true,
-          isDeleted: false,
-          mustChangePassword: false,
-          lastSeenAt: null,
-          stageId: null,
-          stageName: null,
-          roleCode: 'system_admin',
-          roleName: '系统管理员',
-          lastLoginAt: null,
-          lastLoginIp: null,
-          passwordChangedAt: null,
-          createdAt: null,
-          updatedAt: null,
-        ),
-        UserItem(
-          id: 12,
-          username: 'quality',
-          fullName: '质检员',
-          remark: null,
-          isOnline: false,
-          isActive: true,
-          isDeleted: false,
-          mustChangePassword: false,
-          lastSeenAt: null,
-          stageId: null,
-          stageName: null,
-          roleCode: 'quality_admin',
-          roleName: '品质管理员',
-          lastLoginAt: null,
-          lastLoginIp: null,
-          passwordChangedAt: null,
-          createdAt: null,
-          updatedAt: null,
-        ),
-      ],
-    );
+    final start = (page - 1) * pageSize;
+    final items = start >= _allUsers.length
+        ? const <UserItem>[]
+        : _allUsers.skip(start).take(pageSize).toList();
+    return UserListResult(total: _allUsers.length, items: items);
   }
 }
 
@@ -383,6 +419,8 @@ void main() {
               session: AppSession(baseUrl: '', accessToken: ''),
               onLogout: () {},
               canPublishAnnouncement: true,
+              canViewDetail: true,
+              canUseJump: true,
               service: service,
               userService: userService,
               onUnreadCountChanged: (count) {
@@ -403,25 +441,52 @@ void main() {
 
     expect(find.text('消息详情预览'), findsOneWidget);
     expect(find.text('暂无目标页面访问权限'), findsOneWidget);
-    expect(unreadCountFromPage, 5);
+    expect(find.text('有效'), findsWidgets);
+    expect(find.text('详情'), findsWidgets);
+    expect(find.textContaining('阅读：已读于'), findsOneWidget);
+    expect(unreadCountFromPage, 10);
+    expect(find.text('全部消息'), findsOneWidget);
 
     await tester.tap(find.text('待办消息').first);
     await tester.pumpAndSettle();
     expect(find.text('正文内容'), findsOneWidget);
+    expect(find.text('投递失败'), findsWidgets);
+    expect(find.text('查看详情'), findsOneWidget);
+
+    await tester.tap(find.text('20条').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('10条').last);
+    await tester.pumpAndSettle();
+    expect(service.lastPageSize, 10);
+    expect(find.text('下一页'), findsOneWidget);
+
+    await tester.tap(find.text('下一页'));
+    await tester.pumpAndSettle();
+    expect(service.lastPage, 2);
 
     await tester.tap(find.text('仅看待处理'));
     await tester.pumpAndSettle();
     expect(service.lastTodoOnly, isTrue);
+    expect(service.lastPage, 1);
+    expect(service.lastPageSize, 10);
 
     await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('批量已读'));
     await tester.pumpAndSettle();
     expect(service.batchReadCount, 1);
-    expect(unreadCountFromPage, 4);
+    expect(unreadCountFromPage, 9);
+
+    await tester.tap(find.text('执行维护'));
+    await tester.pumpAndSettle();
+    expect(service.maintenanceRunCount, 1);
+    expect(find.textContaining('维护完成：补偿2条，重试1条'), findsOneWidget);
 
     await tester.tap(find.text('发布公告'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('指定用户'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('可选用户 205 人'), findsOneWidget);
     await tester.enterText(find.widgetWithText(TextField, '标题'), '系统公告');
     await tester.enterText(find.widgetWithText(TextField, '正文'), '今晚发布公告');
     await tester.tap(find.text('指定角色'));
@@ -436,6 +501,12 @@ void main() {
     expect(find.text('系统公告'), findsOneWidget);
 
     await tester.tap(find.text('待办消息').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('详情').first);
+    await tester.pumpAndSettle();
+    expect(find.text('消息详情'), findsOneWidget);
+    expect(find.text('阅读状态'), findsWidgets);
+    await tester.tap(find.text('关闭'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('跳转').first);
     await tester.pumpAndSettle();

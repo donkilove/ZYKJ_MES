@@ -8,6 +8,7 @@ import '../models/production_models.dart';
 import 'production_scrap_statistics_detail_page.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
+import '../services/repair_scrap_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
@@ -17,13 +18,15 @@ class ProductionScrapStatisticsPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canExport,
+    this.jumpPayloadJson,
     this.service,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canExport;
-  final ProductionService? service;
+  final String? jumpPayloadJson;
+  final RepairScrapService? service;
 
   @override
   State<ProductionScrapStatisticsPage> createState() =>
@@ -32,7 +35,7 @@ class ProductionScrapStatisticsPage extends StatefulWidget {
 
 class _ProductionScrapStatisticsPageState
     extends State<ProductionScrapStatisticsPage> {
-  late final ProductionService _service;
+  late final RepairScrapService _service;
   final TextEditingController _keywordController = TextEditingController();
   final TextEditingController _productNameController = TextEditingController();
   final TextEditingController _processCodeController = TextEditingController();
@@ -45,12 +48,24 @@ class _ProductionScrapStatisticsPageState
   DateTime? _endDate;
   int _total = 0;
   List<ScrapStatisticsItem> _items = const [];
+  String? _lastHandledJumpPayloadJson;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? ProductionService(widget.session);
     _loadItems();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumeJumpPayload(widget.jumpPayloadJson);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductionScrapStatisticsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.jumpPayloadJson != oldWidget.jumpPayloadJson) {
+      _consumeJumpPayload(widget.jumpPayloadJson);
+    }
   }
 
   @override
@@ -261,6 +276,49 @@ class _ProductionScrapStatisticsPageState
     );
   }
 
+  Future<void> _showDetailById({required int scrapId, String? orderCode}) async {
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProductionScrapStatisticsDetailPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          scrapId: scrapId,
+          orderCode: orderCode,
+          service: _service,
+        ),
+      ),
+    );
+  }
+
+  void _consumeJumpPayload(String? rawPayload) {
+    if (!mounted ||
+        rawPayload == null ||
+        rawPayload.trim().isEmpty ||
+        rawPayload == _lastHandledJumpPayloadJson) {
+      return;
+    }
+    try {
+      final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
+      final action = (payload['action'] as String? ?? '').trim();
+      final rawScrapId = payload['scrap_id'];
+      final scrapId = rawScrapId is int
+          ? rawScrapId
+          : int.tryParse('${rawScrapId ?? ''}');
+      if (action != 'detail' || scrapId == null || scrapId <= 0) {
+        return;
+      }
+      _lastHandledJumpPayloadJson = rawPayload;
+      final orderCode = payload['order_code'] as String?;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _showDetailById(scrapId: scrapId, orderCode: orderCode);
+      });
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -294,7 +352,7 @@ class _ProductionScrapStatisticsPageState
                 child: TextField(
                   controller: _keywordController,
                   decoration: const InputDecoration(
-                    labelText: '关键词（订单/原因）',
+                    labelText: '关键词（订单/原因/工序名称）',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -319,6 +377,7 @@ class _ProductionScrapStatisticsPageState
                   controller: _processCodeController,
                   decoration: const InputDecoration(
                     labelText: '工序编码（精确）',
+                    hintText: '关键词已支持工序名称',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),

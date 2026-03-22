@@ -315,6 +315,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       await _service.submitFirstArticle(
         orderId: item.orderId,
         orderProcessId: item.currentProcessId,
+        pipelineInstanceId: item.pipelineInstanceId,
         verificationCode: codeController.text.trim(),
         effectiveOperatorUserId: item.operatorUserId,
         assistAuthorizationId: item.assistAuthorizationId,
@@ -508,6 +509,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       await _service.endProduction(
         orderId: item.orderId,
         orderProcessId: item.currentProcessId,
+        pipelineInstanceId: item.pipelineInstanceId,
         quantity: payload.quantity,
         effectiveOperatorUserId: item.operatorUserId,
         assistAuthorizationId: item.assistAuthorizationId,
@@ -1014,7 +1016,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                     DropdownMenuItem(value: 'all', child: Text('全部')),
                     DropdownMenuItem(value: 'pending', child: Text('待生产')),
                     DropdownMenuItem(value: 'in_progress', child: Text('生产中')),
-                    DropdownMenuItem(value: 'completed', child: Text('已完成')),
+                    DropdownMenuItem(value: 'completed', child: Text('生产完成')),
                   ],
                   onChanged: (value) {
                     if (value == null || value == _orderStatusFilter) {
@@ -1089,6 +1091,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                           DataColumn(label: Text('分配数量')),
                           DataColumn(label: Text('完成数量')),
                           DataColumn(label: Text('查看视角')),
+                          DataColumn(label: Text('并行实例')),
                           DataColumn(label: Text('更新时间')),
                           DataColumn(label: Text('详情')),
                         ],
@@ -1129,6 +1132,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                                 Text('${item.processCompletedQuantity}'),
                               ),
                               DataCell(Text(viewLabel)),
+                              DataCell(Text(item.pipelineInstanceNo ?? '-')),
                               DataCell(Text(_formatDateTime(item.updatedAt))),
                               DataCell(
                                 OutlinedButton(

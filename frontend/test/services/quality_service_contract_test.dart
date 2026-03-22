@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
+import 'package:mes_client/models/production_models.dart';
 import 'package:mes_client/services/quality_service.dart';
 
 import '../support/http_test_server.dart';
@@ -169,8 +170,9 @@ void main() {
                     'passed_total': 3,
                     'failed_total': 1,
                     'pass_rate_percent': 75,
+                    'defect_total': 4,
                     'scrap_total': 2,
-                    'repair_order_count': 5,
+                    'repair_total': 5,
                   },
                 ],
               },
@@ -217,8 +219,9 @@ void main() {
                     'passed_total': 3,
                     'failed_total': 1,
                     'pass_rate_percent': 75,
+                    'defect_total': 4,
                     'scrap_total': 2,
-                    'repair_order_count': 5,
+                    'repair_total': 5,
                   },
                 ],
                 'by_process': [
@@ -378,6 +381,71 @@ void main() {
             },
           );
         },
+        'GET /quality/repair-orders/7/phenomena-summary': (_) {
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'repair_order_id': 7,
+                'items': [
+                  {'phenomenon': '虚焊', 'quantity': 3},
+                ],
+              },
+            },
+          );
+        },
+        'POST /quality/scrap-statistics/export': (_) {
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'file_name': 'quality_scrap.csv',
+                'mime_type': 'text/csv',
+                'content_base64': 'c2NyYXA=',
+                'exported_count': 1,
+              },
+            },
+          );
+        },
+        'POST /quality/repair-orders/7/complete': (request) {
+          final body = request.decodedBody as Map<String, dynamic>? ?? const {};
+          expect((body['cause_items'] as List).first['reason'], '治具偏移');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'id': 7,
+                'repair_order_code': 'RW-7',
+                'source_order_code': 'PO-21',
+                'product_name': '产品Q',
+                'source_process_code': 'QA-01',
+                'source_process_name': '检验',
+                'production_quantity': 10,
+                'repair_quantity': 3,
+                'repaired_quantity': 2,
+                'scrap_quantity': 1,
+                'scrap_replenished': false,
+                'repair_time': '2026-03-05T09:00:00Z',
+                'status': 'completed',
+                'created_at': '2026-03-05T09:00:00Z',
+                'updated_at': '2026-03-05T10:00:00Z',
+              },
+            },
+          );
+        },
+        'POST /quality/repair-orders/export': (_) {
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'file_name': 'quality_repair.csv',
+                'mime_type': 'text/csv',
+                'content_base64': 'cmVwYWly',
+                'exported_count': 1,
+              },
+            },
+          );
+        },
       });
       addTearDown(server.close);
 
@@ -398,11 +466,35 @@ void main() {
       final repairDetail = await service.getQualityRepairOrderDetail(
         repairOrderId: 7,
       );
+      final phenomena = await service.getRepairOrderPhenomenaSummary(
+        repairOrderId: 7,
+      );
+      final scrapExport = await service.exportScrapStatistics(keyword: '报废');
+      final completed = await service.completeRepairOrder(
+        repairOrderId: 7,
+        causeItems: [
+          const RepairCauseItemInput(
+            phenomenon: '虚焊',
+            reason: '治具偏移',
+            quantity: 3,
+            isScrap: false,
+          ),
+        ],
+        scrapReplenished: false,
+        returnAllocations: [
+          const RepairReturnAllocationInput(targetOrderProcessId: 9, quantity: 3),
+        ],
+      );
+      final repairExport = await service.exportRepairOrders(keyword: 'RW-7');
 
       expect(scrapList.total, 1);
       expect(scrapDetail.relatedRepairOrders.single.repairOrderCode, 'RW-7');
       expect(repairList.items.single.repairOrderCode, 'RW-7');
       expect(repairDetail.defectRows.single.phenomenon, '虚焊');
+      expect(phenomena.items.single.quantity, 3);
+      expect(scrapExport.fileName, 'quality_scrap.csv');
+      expect(completed.status, 'completed');
+      expect(repairExport.fileName, 'quality_repair.csv');
     });
 
     test('trend and defect exports keep backend filename fields', () async {

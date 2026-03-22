@@ -3,6 +3,7 @@ import time
 import unittest
 import urllib.parse
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
@@ -15,6 +16,7 @@ from app.db.session import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.product import Product  # noqa: E402
 from app.models.production_order import ProductionOrder  # noqa: E402
+from app.services.product_service import _list_product_reference_blockers  # noqa: E402
 
 
 class ProductModuleIntegrationTest(unittest.TestCase):
@@ -127,6 +129,11 @@ class ProductModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()["data"]
+
+    def _find_parameter_value(self, payload: dict, parameter_name: str) -> str:
+        return next(
+            item["value"] for item in payload["items"] if item["name"] == parameter_name
+        )
 
     def test_copy_and_activate_keep_effective_parameters_isolated(self) -> None:
         product = self._create_product(suffix="复制生效")
@@ -262,6 +269,47 @@ class ProductModuleIntegrationTest(unittest.TestCase):
         self.assertFalse(version_rows[1]["is_current_version"])
         self.assertTrue(version_rows[1]["is_effective_version"])
 
+    def test_product_detail_endpoint_aggregates_versions_parameters_and_history(self) -> None:
+        product = self._create_product(suffix="详情聚合")
+        v1 = int(product["current_version"])
+
+        self._update_chip_value(version=v1, chip_value="DETAIL-V1", remark="初始化详情")
+        activate_response = self._activate_version(
+            version=v1,
+            expected_effective_version=0,
+        )
+        self.assertEqual(activate_response.status_code, 200, activate_response.text)
+
+        copy_response = self.client.post(
+            f"/api/v1/products/{self.product_id}/versions/{v1}/copy",
+            headers=self._headers(),
+            json={"source_version": v1},
+        )
+        self.assertEqual(copy_response.status_code, 201, copy_response.text)
+        v2 = int(copy_response.json()["data"]["version"])
+        self._update_chip_value(version=v2, chip_value="DETAIL-V2", remark="编辑草稿详情")
+
+        detail_response = self.client.get(
+            f"/api/v1/products/{self.product_id}/detail",
+            headers=self._headers(),
+        )
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+
+        payload = detail_response.json()["data"]
+        self.assertEqual(payload["product"]["id"], self.product_id)
+        self.assertEqual(payload["detail_parameters"]["parameter_scope"], "effective")
+        self.assertEqual(payload["detail_parameters"]["version"], v1)
+        self.assertIsNone(payload["detail_parameter_message"])
+        self.assertEqual(payload["version_total"], 2)
+        self.assertEqual(payload["versions"][0]["version"], v2)
+        self.assertGreaterEqual(payload["history_total"], 2)
+        self.assertIsNotNone(payload["latest_version_changed_at"])
+        self.assertEqual(len(payload["related_info_sections"]), 5)
+        self.assertEqual(payload["related_info_sections"][0]["code"], "process_templates")
+        self.assertGreaterEqual(payload["related_info_sections"][0]["total"], 0)
+        self.assertEqual(payload["related_info_sections"][1]["title"], "适用产线")
+        self.assertEqual(payload["related_info_sections"][4]["title"], "包装规则")
+
     def test_history_and_exports_include_version_labels(self) -> None:
         product = self._create_product(suffix="历史导出")
         v1 = int(product["current_version"])
@@ -318,6 +366,95 @@ class ProductModuleIntegrationTest(unittest.TestCase):
         export_effective_text = export_effective.content.decode("utf-8-sig")
         self.assertIn("生效版本", export_effective_text)
         self.assertIn("V1.1", export_effective_text)
+
+    def test_parameter_history_distinguishes_add_edit_delete(self) -> None:
+        product = self._create_product(suffix="历史粒度")
+        v1 = int(product["current_version"])
+
+        parameters = self._load_version_parameters(version=v1)
+        editable_items = [item for item in parameters["items"] if item["name"] != "产品名称"]
+        self.assertGreaterEqual(len(editable_items), 2)
+
+        edited_name = editable_items[0]["name"]
+        deleted_name = editable_items[1]["name"]
+        next_items = []
+        for item in parameters["items"]:
+            if item["name"] == deleted_name:
+                continue
+            cloned = dict(item)
+            if cloned["name"] == edited_name:
+                cloned["value"] = "EDIT-VALUE"
+            next_items.append(cloned)
+        next_items.append(
+            {
+                "name": "新增参数-历史粒度",
+                "category": "基础参数",
+                "type": "Text",
+                "value": "ADD-VALUE",
+                "description": "新增参数",
+            }
+        )
+
+        update_response = self.client.put(
+            f"/api/v1/products/{self.product_id}/versions/{v1}/parameters",
+            headers=self._headers(),
+            json={
+                "remark": "同时新增编辑删除参数",
+                "confirmed": False,
+                "items": next_items,
+            },
+        )
+        self.assertEqual(update_response.status_code, 200, update_response.text)
+
+        history_response = self.client.get(
+            f"/api/v1/products/{self.product_id}/versions/{v1}/parameter-history?page=1&page_size=20",
+            headers=self._headers(),
+        )
+        self.assertEqual(history_response.status_code, 200, history_response.text)
+        history_items = history_response.json()["data"]["items"]
+        change_type_map = {item["change_type"]: item["changed_keys"] for item in history_items}
+
+        self.assertIn("add", change_type_map)
+        self.assertIn("edit", change_type_map)
+        self.assertIn("delete", change_type_map)
+        self.assertIn("新增参数-历史粒度", change_type_map["add"])
+        self.assertIn(edited_name, change_type_map["edit"])
+        self.assertIn(deleted_name, change_type_map["delete"])
+
+    def test_update_product_syncs_parameter_rows_and_revision_snapshots(self) -> None:
+        product = self._create_product(suffix="主数据同步")
+        v1 = int(product["current_version"])
+
+        activate_response = self._activate_version(version=v1, expected_effective_version=0)
+        self.assertEqual(activate_response.status_code, 200, activate_response.text)
+
+        copy_response = self.client.post(
+            f"/api/v1/products/{self.product_id}/versions/{v1}/copy",
+            headers=self._headers(),
+            json={"source_version": v1},
+        )
+        self.assertEqual(copy_response.status_code, 201, copy_response.text)
+        v2 = int(copy_response.json()["data"]["version"])
+
+        update_response = self.client.put(
+            f"/api/v1/products/{self.product_id}",
+            headers=self._headers(),
+            json={
+                "name": f"已改名产品{int(time.time() * 1000)}",
+                "category": "贴片",
+                "remark": "同步产品名称快照",
+            },
+        )
+        self.assertEqual(update_response.status_code, 200, update_response.text)
+        new_name = update_response.json()["data"]["name"]
+
+        current_parameters = self._get_current_parameters()
+        v1_parameters = self._load_version_parameters(version=v1)
+        v2_parameters = self._load_version_parameters(version=v2)
+
+        self.assertEqual(self._find_parameter_value(current_parameters, "产品名称"), new_name)
+        self.assertEqual(self._find_parameter_value(v1_parameters, "产品名称"), new_name)
+        self.assertEqual(self._find_parameter_value(v2_parameters, "产品名称"), new_name)
 
     def test_new_product_defaults_to_active_and_requires_category(self) -> None:
         product = self._create_product(suffix="状态联动")
@@ -385,6 +522,62 @@ class ProductModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(direct_reactivate.status_code, 400, direct_reactivate.text)
         self.assertIn("请前往版本管理", direct_reactivate.json()["detail"])
 
+    def test_enable_action_is_independent_from_version_activation(self) -> None:
+        product = self._create_product(suffix="独立启停")
+        v1 = int(product["current_version"])
+
+        activate_v1 = self._activate_version(version=v1, expected_effective_version=0)
+        self.assertEqual(activate_v1.status_code, 200, activate_v1.text)
+
+        copy_response = self.client.post(
+            f"/api/v1/products/{self.product_id}/versions/{v1}/copy",
+            headers=self._headers(),
+            json={"source_version": v1},
+        )
+        self.assertEqual(copy_response.status_code, 201, copy_response.text)
+        v2 = int(copy_response.json()["data"]["version"])
+
+        inactive_response = self.client.post(
+            f"/api/v1/products/{self.product_id}/lifecycle",
+            headers=self._headers(),
+            json={
+                "target_status": "inactive",
+                "confirmed": False,
+                "inactive_reason": "手动停用验证",
+            },
+        )
+        self.assertEqual(inactive_response.status_code, 200, inactive_response.text)
+        inactive_detail = self._get_product_detail()
+        self.assertEqual(inactive_detail["lifecycle_status"], "inactive")
+        self.assertEqual(inactive_detail["effective_version"], v1)
+
+        activate_while_inactive = self._activate_version(
+            version=v2,
+            expected_effective_version=v1,
+        )
+        self.assertEqual(activate_while_inactive.status_code, 400, activate_while_inactive.text)
+        self.assertIn("请先启用产品", activate_while_inactive.json()["detail"])
+
+        enable_response = self.client.post(
+            f"/api/v1/products/{self.product_id}/lifecycle",
+            headers=self._headers(),
+            json={
+                "target_status": "active",
+                "confirmed": False,
+                "inactive_reason": None,
+            },
+        )
+        self.assertEqual(enable_response.status_code, 200, enable_response.text)
+        enabled_detail = self._get_product_detail()
+        self.assertEqual(enabled_detail["lifecycle_status"], "active")
+        self.assertEqual(enabled_detail["effective_version"], v1)
+
+        activate_after_enable = self._activate_version(
+            version=v2,
+            expected_effective_version=v1,
+        )
+        self.assertEqual(activate_after_enable.status_code, 200, activate_after_enable.text)
+
     def test_delete_product_is_blocked_when_referenced(self) -> None:
         product = self._create_product(suffix="删除保护")
         v1 = int(product["current_version"])
@@ -411,6 +604,79 @@ class ProductModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(blocked_delete.status_code, 400, blocked_delete.text)
         self.assertIn("生产工单", blocked_delete.json()["detail"])
+
+    def test_delete_product_blockers_include_production_and_quality_records(self) -> None:
+        db = MagicMock()
+
+        def scalar_result(value: int) -> MagicMock:
+            result = MagicMock()
+            result.scalar_one.return_value = value
+            return result
+
+        db.execute.side_effect = [
+            scalar_result(0),
+            scalar_result(3),
+            scalar_result(2),
+            scalar_result(0),
+            scalar_result(0),
+            scalar_result(0),
+            scalar_result(0),
+        ]
+
+        blockers = _list_product_reference_blockers(db, product_id=999)
+
+        self.assertIn("存在 3 条生产记录", blockers)
+        self.assertIn("存在 2 条首件质检记录", blockers)
+
+    def test_parameter_version_filters_use_real_parameter_contract(self) -> None:
+        product = self._create_product(suffix="参数契约筛选")
+        v1 = int(product["current_version"])
+
+        response = self.client.get(
+            "/api/v1/products/parameter-versions"
+            f"?keyword={urllib.parse.quote(str(product['name']))}"
+            "&param_name_keyword=产品芯片&param_category_keyword=基础参数",
+            headers=self._headers(),
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        items = response.json()["data"]["items"]
+        target = next(item for item in items if int(item["product_id"]) == self.product_id)
+        self.assertEqual(target["version"], v1)
+        self.assertEqual(target["matched_parameter_name"], "产品芯片")
+        self.assertEqual(target["matched_parameter_category"], "基础参数")
+        self.assertGreaterEqual(int(target["parameter_count"]), 1)
+
+    def test_parameter_query_supports_effective_version_keyword_contract(self) -> None:
+        product = self._create_product(suffix="参数查询版本筛选")
+        v1 = int(product["current_version"])
+
+        activate_response = self._activate_version(
+            version=v1,
+            expected_effective_version=0,
+        )
+        self.assertEqual(activate_response.status_code, 200, activate_response.text)
+
+        matched = self.client.get(
+            "/api/v1/products/parameter-query"
+            f"?keyword={urllib.parse.quote(str(product['name']))}&effective_version_keyword=V1.0",
+            headers=self._headers(),
+        )
+        self.assertEqual(matched.status_code, 200, matched.text)
+        matched_items = matched.json()["data"]["items"]
+        self.assertTrue(any(int(item["id"]) == self.product_id for item in matched_items))
+        matched_row = next(item for item in matched_items if int(item["id"]) == self.product_id)
+        self.assertEqual(matched_row["effective_version_label"], "V1.0")
+
+        missed = self.client.get(
+            "/api/v1/products/parameter-query"
+            f"?keyword={urllib.parse.quote(str(product['name']))}&effective_version_keyword=V1.9",
+            headers=self._headers(),
+        )
+        self.assertEqual(missed.status_code, 200, missed.text)
+        self.assertFalse(
+            any(int(item["id"]) == self.product_id for item in missed.json()["data"]["items"])
+        )
 
     def test_delete_draft_version_is_blocked_when_referenced_by_order(self) -> None:
         product = self._create_product(suffix="版本删除保护")

@@ -20,7 +20,12 @@ class UserManagementPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
-    required this.canWrite,
+    required this.canCreateUser,
+    required this.canEditUser,
+    required this.canToggleUser,
+    required this.canResetPassword,
+    required this.canDeleteUser,
+    required this.canExport,
     this.onNavigateToRoleManagement,
     this.userService,
     this.craftService,
@@ -28,7 +33,12 @@ class UserManagementPage extends StatefulWidget {
 
   final AppSession session;
   final VoidCallback onLogout;
-  final bool canWrite;
+  final bool canCreateUser;
+  final bool canEditUser;
+  final bool canToggleUser;
+  final bool canResetPassword;
+  final bool canDeleteUser;
+  final bool canExport;
   final VoidCallback? onNavigateToRoleManagement;
   final UserService? userService;
   final CraftService? craftService;
@@ -305,7 +315,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _showCreateUserDialog() async {
-    if (!widget.canWrite) {
+    if (!widget.canCreateUser) {
       _showNoPermission();
       return;
     }
@@ -367,6 +377,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: passwordController,
+                          obscureText: true,
                           decoration: const InputDecoration(labelText: '密码'),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -559,7 +570,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _showEditUserDialog(UserItem user) async {
-    if (!widget.canWrite) {
+    if (!widget.canEditUser) {
       _showNoPermission();
       return;
     }
@@ -575,7 +586,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
       return;
     }
     final accountController = TextEditingController(text: user.username);
-    final passwordController = TextEditingController();
     final remarkController = TextEditingController(text: user.remark ?? '');
     final formKey = GlobalKey<FormState>();
     final canEditAccount = _isCurrentUserSystemAdmin();
@@ -616,21 +626,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             }
                             if (value.trim().length > 10) {
                               return '账号最多 10 个字符';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: passwordController,
-                          decoration: const InputDecoration(
-                            labelText: '新密码（留空不修改）',
-                          ),
-                          validator: (value) {
-                            if (value != null &&
-                                value.isNotEmpty &&
-                                value.length < 6) {
-                              return '密码至少 6 个字符';
                             }
                             return null;
                           },
@@ -759,9 +754,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         account: canEditAccount
                             ? accountController.text.trim()
                             : null,
-                        password: passwordController.text.trim().isEmpty
-                            ? null
-                            : passwordController.text.trim(),
                         roleCode: selectedRoleCode!,
                         stageId: selectedStageId,
                         remark: remarkController.text.trim().isEmpty
@@ -800,6 +792,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _confirmDeleteUser(UserItem user) async {
+    if (!widget.canDeleteUser) {
+      _showNoPermission();
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -849,7 +845,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _toggleUserActive(UserItem user, {required bool active}) async {
-    if (!widget.canWrite) {
+    if (!widget.canToggleUser) {
       _showNoPermission();
       return;
     }
@@ -902,7 +898,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _showResetPasswordDialog(UserItem user) async {
-    if (!widget.canWrite) {
+    if (!widget.canResetPassword) {
       _showNoPermission();
       return;
     }
@@ -973,6 +969,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _exportUsers({String format = 'csv'}) async {
+    if (!widget.canExport) {
+      _showNoPermission();
+      return;
+    }
     setState(() => _loading = true);
     try {
       final result = await _userService.exportUsers(
@@ -1017,8 +1017,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _handleUserAction(_UserAction action, UserItem user) async {
-    if (!widget.canWrite) {
-      _showNoPermission();
+    if (action == _UserAction.resetPassword) {
+      await _showResetPasswordDialog(user);
       return;
     }
     switch (action) {
@@ -1032,7 +1032,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
         await _toggleUserActive(user, active: true);
         return;
       case _UserAction.resetPassword:
-        await _showResetPasswordDialog(user);
         return;
       case _UserAction.delete:
         await _confirmDeleteUser(user);
@@ -1086,7 +1085,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: (_loading || !widget.canWrite)
+                onPressed: (_loading || !widget.canCreateUser)
                     ? null
                     : _showCreateUserDialog,
                 icon: const Icon(Icons.person_add),
@@ -1100,19 +1099,23 @@ class _UserManagementPageState extends State<UserManagementPage> {
                   label: const Text('角色管理'),
                 ),
               ],
-              const SizedBox(width: 12),
-              PopupMenuButton<String>(
-                onSelected: (value) => _exportUsers(format: value),
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'csv', child: Text('导出 CSV')),
-                  PopupMenuItem(value: 'excel', child: Text('导出 Excel')),
-                ],
-                child: OutlinedButton.icon(
-                  onPressed: _loading ? null : () {},
-                  icon: const Icon(Icons.download),
-                  label: const Text('导出'),
+              if (widget.canExport) ...[
+                const SizedBox(width: 12),
+                PopupMenuButton<String>(
+                  onSelected: _loading
+                      ? null
+                      : (value) => _exportUsers(format: value),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'csv', child: Text('导出 CSV')),
+                    PopupMenuItem(value: 'excel', child: Text('导出 Excel')),
+                  ],
+                  child: OutlinedButton.icon(
+                    onPressed: _loading ? null : () {},
+                    icon: const Icon(Icons.download),
+                    label: const Text('导出'),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
           const SizedBox(height: 8),
@@ -1322,31 +1325,39 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                   DataCell(Text(createdAtStr)),
                                   DataCell(
                                     PopupMenuButton<_UserAction>(
+                                      enabled:
+                                          widget.canEditUser ||
+                                          widget.canToggleUser ||
+                                          widget.canResetPassword ||
+                                          widget.canDeleteUser,
                                       onSelected: (action) =>
                                           _handleUserAction(action, user),
                                       itemBuilder: (context) => [
-                                        const PopupMenuItem(
-                                          value: _UserAction.edit,
-                                          child: Text('编辑'),
-                                        ),
-                                        if (user.isActive)
+                                        if (widget.canEditUser)
+                                          const PopupMenuItem(
+                                            value: _UserAction.edit,
+                                            child: Text('编辑'),
+                                          ),
+                                        if (widget.canToggleUser && user.isActive)
                                           const PopupMenuItem(
                                             value: _UserAction.disable,
                                             child: Text('停用'),
                                           )
-                                        else
+                                        else if (widget.canToggleUser)
                                           const PopupMenuItem(
                                             value: _UserAction.enable,
                                             child: Text('启用'),
                                           ),
-                                        const PopupMenuItem(
-                                          value: _UserAction.resetPassword,
-                                          child: Text('重置密码'),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: _UserAction.delete,
-                                          child: Text('删除'),
-                                        ),
+                                        if (widget.canResetPassword)
+                                          const PopupMenuItem(
+                                            value: _UserAction.resetPassword,
+                                            child: Text('重置密码'),
+                                          ),
+                                        if (widget.canDeleteUser)
+                                          const PopupMenuItem(
+                                            value: _UserAction.delete,
+                                            child: Text('删除'),
+                                          ),
                                       ],
                                       child: const Text('操作'),
                                     ),

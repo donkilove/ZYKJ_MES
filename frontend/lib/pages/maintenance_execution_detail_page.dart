@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/app_session.dart';
 import '../models/equipment_models.dart';
@@ -103,12 +102,6 @@ class _MaintenanceExecutionDetailPageState
     return normalized.isEmpty ? '-' : normalized;
   }
 
-  Future<void> _openAttachment(String urlText) async {
-    final uri = Uri.tryParse(urlText.trim());
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   Widget _row(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -163,11 +156,10 @@ class _MaintenanceExecutionDetailPageState
                   if (detail.attachmentLink?.trim().isNotEmpty == true)
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () =>
-                            _openAttachment(detail.attachmentLink!),
-                        icon: const Icon(Icons.attach_file),
-                        label: const Text('查看附件'),
+                      child: MaintenanceAttachmentAction(
+                        attachmentLink: detail.attachmentLink,
+                        attachmentName: detail.attachmentName,
+                        onOpen: openMaintenanceAttachment,
                       ),
                     ),
                   if (detail.recordId != null)

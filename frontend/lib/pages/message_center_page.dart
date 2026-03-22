@@ -15,6 +15,8 @@ class MessageCenterPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     this.canPublishAnnouncement = false,
+    this.canViewDetail = false,
+    this.canUseJump = false,
     this.onUnreadCountChanged,
     this.onNavigateToPage,
     this.service,
@@ -25,6 +27,8 @@ class MessageCenterPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final bool canPublishAnnouncement;
+  final bool canViewDetail;
+  final bool canUseJump;
   final void Function(int count)? onUnreadCountChanged;
   final void Function(
     String pageCode, {
@@ -50,8 +54,11 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   List<MessageItem> _items = [];
   MessageItem? _selectedItem;
   int _total = 0;
+  int _allMessageCount = 0;
   int _page = 1;
-  static const int _pageSize = 20;
+  int _pageSize = 20;
+  bool _detailLoading = false;
+  MessageDetailResult? _selectedDetail;
 
   // 概览统计
   int _unreadCount = 0;
@@ -122,15 +129,24 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       setState(() {
         _items = result.items;
         _total = result.total;
+        _page = result.page;
+        _pageSize = result.pageSize;
         _selectedItem = result.items.isEmpty
             ? null
             : result.items.firstWhere(
                 (item) => item.id == _selectedItem?.id,
                 orElse: () => result.items.first,
               );
+        if (_selectedItem == null ||
+            _selectedItem!.id != _selectedDetail?.item.id) {
+          _selectedDetail = null;
+        }
         _selectedIds.removeWhere((id) => !_items.any((item) => item.id == id));
       });
       _refreshStats();
+      if (widget.canViewDetail && _selectedItem != null) {
+        await _loadSelectedDetail(_selectedItem!.id, silent: true);
+      }
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.statusCode == 401) {
@@ -152,11 +168,50 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       widget.onUnreadCountChanged?.call(summary.unreadCount);
       if (!mounted) return;
       setState(() {
+        _allMessageCount = summary.totalCount;
         _unreadCount = summary.unreadCount;
         _todoCount = summary.todoUnreadCount;
         _urgentCount = summary.urgentUnreadCount;
       });
     } catch (_) {}
+  }
+
+  Future<void> _loadSelectedDetail(int messageId, {bool silent = false}) async {
+    if (!widget.canViewDetail) {
+      return;
+    }
+    if (!silent && mounted) {
+      setState(() => _detailLoading = true);
+    }
+    try {
+      final detail = await _service.getMessageDetail(messageId);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _selectedDetail = detail;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      if (e.statusCode == 401) {
+        widget.onLogout();
+        return;
+      }
+      if (!silent) {
+        setState(() => _error = e.message);
+      }
+    } catch (e) {
+      if (!mounted || silent) {
+        return;
+      }
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted && !silent) {
+        setState(() => _detailLoading = false);
+      }
+    }
   }
 
   Future<void> _markRead(MessageItem item) async {
@@ -215,6 +270,31 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     }
   }
 
+  Future<void> _runMaintenance() async {
+    try {
+      final result = await _service.runMaintenance();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '维护完成：补偿${result.pendingCompensated}条，重试${result.failedRetried}条，失效同步${result.sourceUnavailableUpdated}条，归档${result.archivedMessages}条',
+          ),
+        ),
+      );
+      await _load(reset: false);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 401) {
+        widget.onLogout();
+        return;
+      }
+      setState(() => _error = e.message);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
+  }
+
   void _resetFilters() {
     setState(() {
       _keywordCtrl.clear();
@@ -254,14 +334,63 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     }
   }
 
-  void _navigateToPage(MessageItem item) {
-    final pageCode = item.targetPageCode;
-    if (pageCode == null || pageCode.isEmpty) return;
-    widget.onNavigateToPage?.call(
-      pageCode,
-      tabCode: item.targetTabCode,
-      routePayloadJson: item.targetRoutePayloadJson,
-    );
+  Future<void> _navigateToPage(MessageItem item) async {
+    if (!widget.canUseJump || widget.onNavigateToPage == null) {
+      return;
+    }
+    try {
+      final jumpResult = await _service.getMessageJumpTarget(item.id);
+      if (!mounted) {
+        return;
+      }
+      if (!jumpResult.canJump ||
+          jumpResult.targetPageCode == null ||
+          jumpResult.targetPageCode!.isEmpty) {
+        final disabledReason = _messageDisabledReasonName(
+          jumpResult.disabledReason,
+        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(disabledReason)));
+        return;
+      }
+      widget.onNavigateToPage?.call(
+        jumpResult.targetPageCode!,
+        tabCode: jumpResult.targetTabCode,
+        routePayloadJson: jumpResult.targetRoutePayloadJson,
+      );
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      if (e.statusCode == 401) {
+        widget.onLogout();
+        return;
+      }
+      setState(() => _error = e.message);
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _error = e.toString());
+    }
+  }
+
+  String _messageDisabledReasonName(String? code) {
+    switch (code) {
+      case 'expired':
+        return '该消息已过期，无法继续跳转';
+      case 'archived':
+        return '该消息已归档，无法继续跳转';
+      case 'no_permission':
+        return '当前账号暂无目标页面访问权限';
+      case 'source_unavailable':
+        return '来源对象已失效，无法继续跳转';
+      case 'missing_target':
+        return '该消息未配置业务跳转目标';
+      default:
+        return '当前消息暂不可跳转';
+    }
   }
 
   String _formatDateTime(DateTime dt) {
@@ -271,6 +400,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   }
 
   void _showDetailDialog(MessageItem item) {
+    final detail = _selectedDetail?.item.id == item.id ? _selectedDetail : null;
     showDialog(
       context: context,
       builder: (_) {
@@ -281,17 +411,31 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           _detailRow('优先级', item.priorityName, theme),
           if (item.summary != null && item.summary!.isNotEmpty)
             _detailRow('摘要', item.summary!, theme),
-          if (item.content != null && item.content!.isNotEmpty)
-            _detailRow('内容', item.content!, theme),
+          if (widget.canViewDetail &&
+              detail?.item.content != null &&
+              detail!.item.content!.isNotEmpty)
+            _detailRow('内容', detail.item.content!, theme),
           if (item.sourceModuleName.isNotEmpty)
             _detailRow('来源模块', item.sourceModuleName, theme),
+          if (detail?.sourceId != null && detail!.sourceId!.isNotEmpty)
+            _detailRow('来源ID', detail.sourceId!, theme),
           if (item.sourceCode != null && item.sourceCode!.isNotEmpty)
             _detailRow('来源编号', item.sourceCode!, theme),
           if (item.publishedAt != null)
             _detailRow('发布时间', _formatDateTime(item.publishedAt!), theme),
-          _detailRow('状态', item.isRead ? '已读' : '未读', theme),
+          _detailRow('消息状态', item.statusName, theme),
+          _detailRow('阅读状态', item.readStatusName, theme),
+          _detailRow('投递状态', item.deliveryStatusName, theme),
+          _detailRow('投递次数', '${item.deliveryAttemptCount}', theme),
+          if (item.lastPushAt != null)
+            _detailRow('最近投递', _formatDateTime(item.lastPushAt!), theme),
+          if (item.nextRetryAt != null)
+            _detailRow('下次重试', _formatDateTime(item.nextRetryAt!), theme),
           if (item.readAt != null)
             _detailRow('阅读时间', _formatDateTime(item.readAt!), theme),
+          if (detail?.failureReasonHint != null &&
+              detail!.failureReasonHint!.isNotEmpty)
+            _detailRow('排障提示', detail.failureReasonHint!, theme),
         ];
         return AlertDialog(
           title: const Text('消息详情'),
@@ -386,6 +530,12 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           ),
           if (widget.canPublishAnnouncement) ...[
             const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: _loading ? null : _runMaintenance,
+              icon: const Icon(Icons.build_circle_outlined, size: 16),
+              label: const Text('执行维护'),
+            ),
+            const SizedBox(width: 8),
             FilledButton.icon(
               onPressed: _loading ? null : _publishAnnouncement,
               icon: const Icon(Icons.campaign_outlined, size: 16),
@@ -420,9 +570,14 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           const SizedBox(width: 12),
           _overviewCard(theme, '待处理', _todoCount, Colors.orange),
           const SizedBox(width: 12),
-          _overviewCard(theme, '紧急未读', _urgentCount, theme.colorScheme.error),
+          _overviewCard(theme, '高优先级', _urgentCount, theme.colorScheme.error),
           const SizedBox(width: 12),
-          _overviewCard(theme, '全部消息', _total, theme.colorScheme.outline),
+          _overviewCard(
+            theme,
+            '全部消息',
+            _allMessageCount,
+            theme.colorScheme.outline,
+          ),
         ],
       ),
     );
@@ -545,6 +700,18 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
             },
           ),
           _dateRangeButton(theme),
+          _filterDropdown(
+            '每页条数',
+            '$_pageSize',
+            const {'10': '10条', '20': '20条', '50': '50条', '100': '100条'},
+            (v) {
+              setState(() {
+                _pageSize = int.tryParse(v) ?? 20;
+                _page = 1;
+              });
+              _load(reset: false);
+            },
+          ),
         ],
       ),
     );
@@ -639,15 +806,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                     _buildMessageTile(_items[index], theme),
               ),
             ),
-            if (_total > _pageSize)
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text(
-                  '共 $_total 条，当前第 $_page 页',
-                  style: theme.textTheme.bodySmall,
-                  textAlign: TextAlign.center,
-                ),
-              ),
+            if (_total > _pageSize) _buildPaginationBar(theme),
           ],
         );
         if (constraints.maxWidth < 1100) {
@@ -666,6 +825,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
 
   Widget _buildPreview(ThemeData theme) {
     final item = _selectedItem;
+    final detail = _selectedDetail?.item.id == item?.id
+        ? _selectedDetail
+        : null;
     if (item == null) {
       return Center(
         child: Text(
@@ -694,28 +856,60 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           _detailRow('优先级', item.priorityName, theme),
           if (item.summary != null && item.summary!.isNotEmpty)
             _detailRow('摘要', item.summary!, theme),
-          if (item.content != null && item.content!.isNotEmpty)
-            _detailRow('正文', item.content!, theme),
+          if (widget.canViewDetail &&
+              detail?.item.content != null &&
+              detail!.item.content!.isNotEmpty)
+            _detailRow('正文', detail.item.content!, theme),
           if (item.sourceModuleName.isNotEmpty)
             _detailRow('来源模块', item.sourceModuleName, theme),
+          if (detail?.sourceId != null && detail!.sourceId!.isNotEmpty)
+            _detailRow('来源ID', detail.sourceId!, theme),
           if (item.sourceCode != null && item.sourceCode!.isNotEmpty)
             _detailRow('来源对象', item.sourceCode!, theme),
           if (item.publishedAt != null)
             _detailRow('推送时间', _formatDateTime(item.publishedAt!), theme),
-          _detailRow('当前状态', item.isRead ? '已读' : '未读', theme),
+          _detailRow('消息状态', item.statusName, theme),
+          _detailRow('阅读状态', item.readStatusName, theme),
+          _detailRow('投递状态', item.deliveryStatusName, theme),
+          _detailRow('投递次数', '${item.deliveryAttemptCount}', theme),
+          if (item.lastPushAt != null)
+            _detailRow('最近投递', _formatDateTime(item.lastPushAt!), theme),
+          if (item.nextRetryAt != null)
+            _detailRow('下次重试', _formatDateTime(item.nextRetryAt!), theme),
           if (item.readAt != null)
             _detailRow('已读时间', _formatDateTime(item.readAt!), theme),
+          if (detail?.failureReasonHint != null &&
+              detail!.failureReasonHint!.isNotEmpty)
+            _detailRow('排障提示', detail.failureReasonHint!, theme),
           if (disabledReason != null) _detailRow('跳转状态', disabledReason, theme),
+          if (!widget.canViewDetail)
+            _detailRow('详情权限', '当前账号未开通消息详情查看权限', theme),
+          if (_detailLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
           const Spacer(),
           Row(
             children: [
               TextButton(
-                onPressed: () => _showDetailDialog(item),
-                child: const Text('弹窗查看'),
+                onPressed: widget.canViewDetail
+                    ? () => _showDetailDialog(item)
+                    : null,
+                child: const Text('查看详情'),
               ),
               const Spacer(),
+              if (!item.isRead)
+                TextButton(
+                  onPressed: () => _markRead(item),
+                  child: const Text('标记已读'),
+                ),
+              const SizedBox(width: 8),
               FilledButton(
-                onPressed: item.isActive && widget.onNavigateToPage != null
+                onPressed:
+                    item.isActive &&
+                        widget.canUseJump &&
+                        widget.onNavigateToPage != null
                     ? () {
                         _markRead(item);
                         _navigateToPage(item);
@@ -742,13 +936,20 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         item.targetPageCode != null &&
         item.targetPageCode!.isNotEmpty;
     final inactiveReason = item.isActive ? null : item.inactiveReasonName;
+    final readTimeText = item.readAt == null
+        ? '未读'
+        : '已读于 ${_formatDateTime(item.readAt!)}';
 
     return InkWell(
       onTap: () {
-        setState(() => _selectedItem = item);
-        _markRead(item);
-        if (MediaQuery.of(context).size.width < 1100) {
-          _showDetailDialog(item);
+        setState(() {
+          _selectedItem = item;
+          if (_selectedDetail?.item.id != item.id) {
+            _selectedDetail = null;
+          }
+        });
+        if (widget.canViewDetail) {
+          _loadSelectedDetail(item.id, silent: true);
         }
       },
       child: Container(
@@ -828,6 +1029,17 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      _buildInfoChip(
+                        theme,
+                        item.statusName,
+                        backgroundColor: item.isActive
+                            ? theme.colorScheme.primaryContainer
+                            : theme.colorScheme.surfaceContainerHighest,
+                        foregroundColor: item.isActive
+                            ? theme.colorScheme.onPrimaryContainer
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
                     ],
                   ),
                   if (item.summary != null && item.summary!.isNotEmpty) ...[
@@ -841,34 +1053,45 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                  const SizedBox(height: 4),
-                  Row(
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
                       if (item.sourceModuleName.isNotEmpty)
-                        Text(
-                          item.sourceModuleName,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
+                        _buildMetaText(theme, '来源：${item.sourceModuleName}'),
                       if (item.sourceCode != null &&
-                          item.sourceCode!.isNotEmpty) ...[
-                        Text(' · ', style: theme.textTheme.labelSmall),
-                        Text(
-                          item.sourceCode!,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
-                      ],
-                      const Spacer(),
+                          item.sourceCode!.isNotEmpty)
+                        _buildMetaText(theme, '来源对象：${item.sourceCode!}'),
+                      _buildMetaText(theme, '阅读：$readTimeText'),
                       if (item.publishedAt != null)
-                        Text(
-                          _formatTime(item.publishedAt!),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                          ),
+                        _buildMetaText(
+                          theme,
+                          '推送：${_formatDateTime(item.publishedAt!)}',
                         ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _buildInfoChip(
+                        theme,
+                        item.readStatusName,
+                        backgroundColor: isUnread
+                            ? theme.colorScheme.primaryContainer
+                            : theme.colorScheme.surfaceContainerHighest,
+                        foregroundColor: isUnread
+                            ? theme.colorScheme.onPrimaryContainer
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                      _buildInfoChip(
+                        theme,
+                        item.deliveryStatusName,
+                        backgroundColor: theme.colorScheme.secondaryContainer,
+                        foregroundColor: theme.colorScheme.onSecondaryContainer,
+                      ),
                     ],
                   ),
                 ],
@@ -896,11 +1119,39 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                       ),
                     ),
                   ),
-                if (hasTarget && widget.onNavigateToPage != null)
+                TextButton(
+                  onPressed: widget.canViewDetail
+                      ? () async {
+                          setState(() {
+                            _selectedItem = item;
+                            if (_selectedDetail?.item.id != item.id) {
+                              _selectedDetail = null;
+                            }
+                          });
+                          await _loadSelectedDetail(item.id);
+                          if (!mounted) {
+                            return;
+                          }
+                          _showDetailDialog(item);
+                        }
+                      : null,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('详情', style: TextStyle(fontSize: 12)),
+                ),
+                if (hasTarget &&
+                    widget.canUseJump &&
+                    widget.onNavigateToPage != null)
                   TextButton(
-                    onPressed: () {
+                    onPressed: () async {
                       _markRead(item);
-                      _navigateToPage(item);
+                      await _navigateToPage(item);
                     },
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
@@ -933,15 +1184,72 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     );
   }
 
-  String _formatTime(DateTime dt) {
-    final local = dt.toLocal();
-    final now = DateTime.now();
-    final diff = now.difference(local);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inHours < 1) return '${diff.inMinutes}分钟前';
-    if (diff.inDays < 1) return '${diff.inHours}小时前';
-    if (diff.inDays < 7) return '${diff.inDays}天前';
-    return '${local.month}-${local.day}';
+  Widget _buildMetaText(ThemeData theme, String text) {
+    return Text(
+      text,
+      style: theme.textTheme.labelSmall?.copyWith(
+        color: theme.colorScheme.outline,
+      ),
+    );
+  }
+
+  Widget _buildInfoChip(
+    ThemeData theme,
+    String label, {
+    required Color backgroundColor,
+    required Color foregroundColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: foregroundColor,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar(ThemeData theme) {
+    final totalPages = (_total / _pageSize).ceil();
+    final hasPrevious = _page > 1;
+    final hasNext = _page < totalPages;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Text(
+            '共 $_total 条，第 $_page / $totalPages 页',
+            style: theme.textTheme.bodySmall,
+          ),
+          const Spacer(),
+          OutlinedButton(
+            onPressed: _loading || !hasPrevious
+                ? null
+                : () {
+                    setState(() => _page -= 1);
+                    _load(reset: false);
+                  },
+            child: const Text('上一页'),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton(
+            onPressed: _loading || !hasNext
+                ? null
+                : () {
+                    setState(() => _page += 1);
+                    _load(reset: false);
+                  },
+            child: const Text('下一页'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -996,7 +1304,7 @@ class _AnnouncementPublishDialogState
     try {
       final results = await Future.wait([
         widget.userService.listAllRoles(),
-        widget.userService.listUsers(page: 1, pageSize: 200, isActive: true),
+        _loadAllActiveUsers(),
       ]);
       if (!mounted) {
         return;
@@ -1024,6 +1332,30 @@ class _AnnouncementPublishDialogState
         setState(() => _loadingOptions = false);
       }
     }
+  }
+
+  Future<UserListResult> _loadAllActiveUsers() async {
+    const pageSize = 200;
+    var page = 1;
+    var total = 0;
+    final items = <UserItem>[];
+    while (true) {
+      final result = await widget.userService.listUsers(
+        page: page,
+        pageSize: pageSize,
+        isActive: true,
+      );
+      total = result.total;
+      items.addAll(result.items);
+      if (result.items.isEmpty) {
+        break;
+      }
+      if (total > 0 && items.length >= total) {
+        break;
+      }
+      page += 1;
+    }
+    return UserListResult(total: total, items: items);
   }
 
   Future<void> _pickExpiresAt() async {
@@ -1158,29 +1490,42 @@ class _AnnouncementPublishDialogState
     }
     return SizedBox(
       height: 220,
-      child: ListView.builder(
-        itemCount: _users.length,
-        itemBuilder: (context, index) {
-          final user = _users[index];
-          final label = user.fullName?.trim().isNotEmpty == true
-              ? '${user.fullName}(${user.username})'
-              : user.username;
-          return CheckboxListTile(
-            value: _selectedUserIds.contains(user.id),
-            contentPadding: EdgeInsets.zero,
-            title: Text(label),
-            subtitle: Text(user.roleName ?? user.roleCode ?? '未分配角色'),
-            onChanged: (selected) {
-              setState(() {
-                if (selected ?? false) {
-                  _selectedUserIds.add(user.id);
-                } else {
-                  _selectedUserIds.remove(user.id);
-                }
-              });
-            },
-          );
-        },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              '可选用户 ${_users.length} 人，已选择 ${_selectedUserIds.length} 人',
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _users.length,
+              itemBuilder: (context, index) {
+                final user = _users[index];
+                final label = user.fullName?.trim().isNotEmpty == true
+                    ? '${user.fullName}(${user.username})'
+                    : user.username;
+                return CheckboxListTile(
+                  value: _selectedUserIds.contains(user.id),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(label),
+                  subtitle: Text(user.roleName ?? user.roleCode ?? '未分配角色'),
+                  onChanged: (selected) {
+                    setState(() {
+                      if (selected ?? false) {
+                        _selectedUserIds.add(user.id);
+                      } else {
+                        _selectedUserIds.remove(user.id);
+                      }
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

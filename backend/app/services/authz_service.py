@@ -64,6 +64,16 @@ _COMMON_ACCOUNT_SETTINGS_PERMISSION_CODES = {
     "user.sessions.overview",
 }
 
+_CAPABILITY_PACK_VISIBLE_MODULE_CODES = (
+    "user",
+    "product",
+    "craft",
+    "production",
+    "quality",
+    "equipment",
+    "message",
+)
+
 
 def _codes(*values: str | None) -> set[str]:
     return {value for value in values if isinstance(value, str) and value.strip()}
@@ -275,6 +285,10 @@ CAPABILITY_NAME_FALLBACK_ZH_BY_CODE = {
     "feature.equipment.plans.manage": "维护保养计划",
     "feature.equipment.executions.operate": "执行保养任务",
     "feature.equipment.records.view": "查看保养记录",
+    "feature.equipment.rules.view": "查看设备规则",
+    "feature.equipment.rules.manage": "管理设备规则",
+    "feature.equipment.runtime_parameters.view": "查看运行参数",
+    "feature.equipment.runtime_parameters.manage": "管理运行参数",
     "feature.craft.process_basics.view": "查看工段工序",
     "feature.craft.process_basics.manage": "维护工段工序",
     "feature.craft.process_templates.view": "查看工艺模板与系统母版",
@@ -297,6 +311,8 @@ CAPABILITY_NAME_FALLBACK_ZH_BY_CODE = {
     "feature.production.repair_orders.create_manual": "手工送修建单",
     "feature.message.center.view": "查看消息中心",
     "feature.message.read.manage": "管理消息已读状态",
+    "feature.message.detail.view": "查看消息详情",
+    "feature.message.jump.use": "使用消息来源跳转",
     "feature.message.announcement.publish": "发布站内公告",
 }
 
@@ -450,6 +466,26 @@ CAPABILITY_GROUP_META_BY_CODE = {
         "保养执行",
         "查看保养记录",
     ),
+    "feature.equipment.rules.view": (
+        "equipment.rule_parameter",
+        "规则与参数",
+        "查看设备规则列表",
+    ),
+    "feature.equipment.rules.manage": (
+        "equipment.rule_parameter",
+        "规则与参数",
+        "维护设备规则",
+    ),
+    "feature.equipment.runtime_parameters.view": (
+        "equipment.rule_parameter",
+        "规则与参数",
+        "查看运行参数列表",
+    ),
+    "feature.equipment.runtime_parameters.manage": (
+        "equipment.rule_parameter",
+        "规则与参数",
+        "维护运行参数",
+    ),
     "feature.craft.process_basics.view": (
         "craft.process",
         "工段工序",
@@ -547,6 +583,16 @@ CAPABILITY_GROUP_META_BY_CODE = {
         "message.center",
         "消息中心",
         "维护消息已读状态",
+    ),
+    "feature.message.detail.view": (
+        "message.center",
+        "消息中心",
+        "查看消息正文、投递状态与排障提示",
+    ),
+    "feature.message.jump.use": (
+        "message.center",
+        "消息中心",
+        "使用消息来源跳转到目标业务页",
     ),
     "feature.message.announcement.publish": (
         "message.center",
@@ -870,6 +916,31 @@ def _normalize_module_code(module_code: str) -> str:
     if not normalized:
         raise ValueError("module_code is required")
     return normalized
+
+
+def _capability_pack_available_module_codes(db: Session) -> list[str]:
+    available_codes = {
+        str(row.module_code).strip()
+        for row in _module_permission_catalog_rows(db)
+        if str(row.module_code).strip()
+    }
+    return [
+        module_code
+        for module_code in _CAPABILITY_PACK_VISIBLE_MODULE_CODES
+        if module_code in available_codes
+    ]
+
+
+def _normalize_capability_pack_module_code(
+    db: Session,
+    *,
+    module_code: str,
+) -> tuple[str, list[str]]:
+    normalized_module = _normalize_module_code(module_code)
+    available_module_codes = _capability_pack_available_module_codes(db)
+    if normalized_module not in available_module_codes:
+        raise ValueError(f"module_code is invalid: {normalized_module}")
+    return normalized_module, available_module_codes
 
 
 def _role_sort_key(role: Role) -> tuple[int, str]:
@@ -2273,17 +2344,11 @@ def get_capability_pack_catalog(
     *,
     module_code: str,
 ) -> dict[str, object]:
-    normalized_module = _normalize_module_code(module_code)
     ensure_authz_defaults(db)
-    available_module_codes = sorted(
-        {
-            row.module_code
-            for row in _module_permission_catalog_rows(db)
-            if row.module_code.strip()
-        }
+    normalized_module, available_module_codes = _normalize_capability_pack_module_code(
+        db,
+        module_code=module_code,
     )
-    if normalized_module not in available_module_codes:
-        raise ValueError(f"module_code is invalid: {normalized_module}")
 
     return {
         "module_code": normalized_module,
@@ -2308,10 +2373,14 @@ def get_capability_pack_role_config(
     role_code: str,
     module_code: str,
 ) -> dict[str, object]:
+    normalized_module, _ = _normalize_capability_pack_module_code(
+        db,
+        module_code=module_code,
+    )
     config = get_permission_hierarchy_role_config(
         db,
         role_code=role_code,
-        module_code=module_code,
+        module_code=normalized_module,
     )
     module_capability_codes = _visible_capability_permission_codes_for_module(
         config["module_code"]
@@ -2569,10 +2638,14 @@ def update_capability_pack_role_config(
     remark: str | None = None,
 ) -> dict[str, object]:
     ensure_authz_defaults(db)
+    normalized_module, _ = _normalize_capability_pack_module_code(
+        db,
+        module_code=module_code,
+    )
     result = _calculate_capability_pack_role_update(
         db,
         role_code=role_code,
-        module_code=module_code,
+        module_code=normalized_module,
         module_enabled=module_enabled,
         capability_codes=capability_codes,
     )
@@ -2658,7 +2731,10 @@ def apply_capability_pack_role_configs(
     rollback_of_change_log_id: int | None = None,
 ) -> dict[str, object]:
     ensure_authz_defaults(db)
-    normalized_module = _normalize_module_code(module_code)
+    normalized_module, _ = _normalize_capability_pack_module_code(
+        db,
+        module_code=module_code,
+    )
     current_revision = get_authz_module_revision(db, module_code=normalized_module)
     if expected_revision is not None and expected_revision != current_revision:
         raise AuthzRevisionConflictError(
@@ -2764,8 +2840,11 @@ def get_capability_pack_effective_explain(
     role_code: str,
     module_code: str,
 ) -> dict[str, object]:
-    normalized_module = _normalize_module_code(module_code)
     ensure_authz_defaults(db)
+    normalized_module, _ = _normalize_capability_pack_module_code(
+        db,
+        module_code=module_code,
+    )
     role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
     if role_row is None:
         raise ValueError(f"Role not found: {role_code}")

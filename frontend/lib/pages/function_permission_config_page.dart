@@ -8,7 +8,6 @@ import '../services/authz_service.dart';
 import '../services/user_service.dart';
 
 const Map<String, String> _moduleNameFallbackZh = {
-  'system': '系统管理',
   'user': '用户管理',
   'product': '产品管理',
   'equipment': '设备管理',
@@ -17,6 +16,16 @@ const Map<String, String> _moduleNameFallbackZh = {
   'production': '生产管理',
   'message': '消息中心',
 };
+
+const List<String> _allowedModuleCodes = [
+  'user',
+  'product',
+  'craft',
+  'production',
+  'quality',
+  'equipment',
+  'message',
+];
 
 const String _systemModuleCode = 'system';
 const String _systemAdminRoleCode = 'system_admin';
@@ -176,6 +185,13 @@ class _FunctionPermissionConfigPageState
     return !_draftEquals(origin, draft);
   }
 
+  List<String> _filterAllowedModuleCodes(List<String> moduleCodes) {
+    final moduleCodeSet = moduleCodes.toSet();
+    return _allowedModuleCodes
+        .where((moduleCode) => moduleCodeSet.contains(moduleCode))
+        .toList();
+  }
+
   bool get _hasDirty {
     for (final role in _roles) {
       if (_hasDirtyRole(role.code)) {
@@ -211,7 +227,7 @@ class _FunctionPermissionConfigPageState
         moduleCode: _selectedModuleCode ?? 'production',
       );
       _catalogByModule[bootstrap.moduleCode] = bootstrap;
-      final modules = bootstrap.moduleCodes.toList()..sort();
+      final modules = _filterAllowedModuleCodes(bootstrap.moduleCodes);
       if (modules.isEmpty) {
         throw StateError('未查询到可配置模块');
       }
@@ -267,8 +283,9 @@ class _FunctionPermissionConfigPageState
       moduleCode: moduleCode,
     );
     _catalogByModule[catalog.moduleCode] = catalog;
-    final effectiveModuleCodes = (moduleCodes ?? catalog.moduleCodes).toList()
-      ..sort();
+    final effectiveModuleCodes = _filterAllowedModuleCodes(
+      (moduleCodes ?? catalog.moduleCodes).toList(),
+    );
     if (effectiveModuleCodes.isEmpty) {
       if (!mounted) {
         return;

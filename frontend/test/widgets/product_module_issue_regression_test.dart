@@ -5,6 +5,7 @@ import 'package:mes_client/models/authz_models.dart';
 import 'package:mes_client/models/product_models.dart';
 import 'package:mes_client/pages/product_management_page.dart';
 import 'package:mes_client/pages/product_parameter_management_page.dart';
+import 'package:mes_client/pages/product_parameter_query_page.dart';
 import 'package:mes_client/pages/product_page.dart';
 import 'package:mes_client/pages/product_version_management_page.dart';
 import 'package:mes_client/services/api_exception.dart';
@@ -31,7 +32,11 @@ ProductItem _buildProduct({
     remark: remark,
     lifecycleStatus: lifecycleStatus,
     currentVersion: currentVersion,
+    currentVersionLabel: 'V1.${currentVersion - 1}',
     effectiveVersion: effectiveVersion,
+    effectiveVersionLabel: effectiveVersion > 0
+        ? 'V1.${effectiveVersion - 1}'
+        : null,
     effectiveAt: _fixedDate,
     inactiveReason: inactiveReason,
     lastParameterSummary: null,
@@ -81,7 +86,11 @@ ProductParameterVersionListItem _buildParameterVersionRow({
     isEffectiveVersion: isEffectiveVersion,
     createdAt: _fixedDate,
     parameterSummary: parameterSummary,
+    parameterCount: 8,
+    matchedParameterName: '产品芯片',
+    matchedParameterCategory: '基础参数',
     lastModifiedParameter: '产品芯片',
+    lastModifiedParameterCategory: '基础参数',
     updatedAt: _fixedDate,
   );
 }
@@ -333,6 +342,8 @@ class _ParameterManagementContractService extends ProductService {
     String? keyword,
     String? category,
     String? versionKeyword,
+    String? paramNameKeyword,
+    String? paramCategoryKeyword,
     String? lifecycleStatus,
     DateTime? updatedAfter,
     DateTime? updatedBefore,
@@ -467,6 +478,126 @@ class _ParameterQueryRoutingService extends ProductService {
   }
 }
 
+class _ProductDetailDrawerService extends _ProductListOnlyService {
+  _ProductDetailDrawerService(super.products);
+
+  @override
+  Future<ProductDetailResult> getProductDetail({required int productId}) async {
+    return ProductDetailResult(
+      product: products.single,
+      detailParameters: ProductParameterListResult(
+        productId: productId,
+        productName: products.single.name,
+        parameterScope: 'version',
+        version: 2,
+        versionLabel: 'V1.1',
+        lifecycleStatus: 'draft',
+        total: 1,
+        items: [
+          ProductParameterItem(
+            name: '产品芯片',
+            category: '基础参数',
+            type: 'Text',
+            value: 'CHIP-X',
+            description: '详情聚合',
+            sortOrder: 1,
+            isPreset: false,
+          ),
+        ],
+      ),
+      detailParameterMessage: '当前无生效版本，详情已回退展示当前版本参数快照。',
+      latestVersionChangedAt: _fixedDate,
+      versionTotal: 1,
+      versions: [
+        _buildVersion(
+          version: 2,
+          versionLabel: 'V1.1',
+          lifecycleStatus: 'draft',
+        ),
+      ],
+      historyTotal: 1,
+      historyItems: [
+        ProductParameterHistoryItem(
+          id: 1,
+          productName: products.single.name,
+          productCategory: '贴片',
+          version: 2,
+          versionLabel: 'V1.1',
+          remark: '参数调整',
+          changeReason: '参数调整',
+          changeType: 'edit',
+          parameterName: '产品芯片',
+          changedKeys: const ['产品芯片'],
+          operatorUsername: 'admin',
+          beforeSummary: null,
+          afterSummary: null,
+          beforeSnapshot: '{}',
+          afterSnapshot: '{}',
+          createdAt: _fixedDate,
+        ),
+      ],
+      relatedInfoSections: [
+        ProductRelatedInfoSection(
+          code: 'process_templates',
+          title: '关联工艺路线',
+          total: 1,
+          items: [
+            ProductRelatedInfoItem(
+              label: '贴片主线工艺',
+              value: '版本 2 | 默认 | published',
+            ),
+          ],
+        ),
+        ProductRelatedInfoSection(
+          code: 'equipment',
+          title: '关联设备',
+          total: 0,
+          emptyMessage: '当前仓库尚未沉淀产品-设备关联数据。',
+        ),
+      ],
+    );
+  }
+}
+
+class _ParameterQueryPageService extends ProductService {
+  _ParameterQueryPageService(this.products) : super(_session());
+
+  final List<ProductItem> products;
+  int parameterQueryCalls = 0;
+  int legacyListCalls = 0;
+
+  @override
+  Future<ProductListResult> listProducts({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
+  }) async {
+    legacyListCalls += 1;
+    throw ApiException('参数查询页不应依赖产品管理列表权限接口', 500);
+  }
+
+  @override
+  Future<ProductListResult> listProductsForParameterQuery({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    String? effectiveVersionKeyword,
+  }) async {
+    parameterQueryCalls += 1;
+    return ProductListResult(total: products.length, items: products);
+  }
+}
+
 Widget _host(Widget child) {
   return MaterialApp(
     home: Scaffold(body: SizedBox(width: 1600, height: 1200, child: child)),
@@ -547,7 +678,7 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('复制版本'));
+      await tester.tap(find.text('复制版本').last);
       await tester.pumpAndSettle();
 
       expect(find.text('确认停用'), findsNothing, reason: '复制操作不应触发停用分支。');
@@ -597,6 +728,50 @@ void main() {
       );
     });
 
+    testWidgets('产品详情应以页内侧栏展示聚合详情', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _ProductDetailDrawerService([
+        _buildProduct(id: 21, currentVersion: 2, effectiveVersion: 0),
+      ]);
+
+      await tester.pumpWidget(
+        _host(
+          ProductManagementPage(
+            session: _session(),
+            onLogout: () {},
+            canCreateProduct: false,
+            canDeleteProduct: false,
+            canUpdateLifecycle: false,
+            canViewVersions: false,
+            canCompareVersions: false,
+            canRollbackVersion: false,
+            canViewImpactAnalysis: false,
+            canViewParameters: false,
+            canEditParameters: false,
+            onViewParameters: (_) {},
+            onEditParameters: (_) {},
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await _openPopupMenu(tester, _popupMenuButtonFinder().first);
+      await tester.tap(find.text('查看详情').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('产品详情 - 产品21'), findsOneWidget);
+      expect(find.text('页内侧边栏展示完整详情快照'), findsOneWidget);
+      expect(find.text('当前版本参数快照（V1.1）'), findsOneWidget);
+      expect(find.text('当前无生效版本，详情已回退展示当前版本参数快照。'), findsOneWidget);
+      expect(find.text('关联信息'), findsOneWidget);
+      expect(find.textContaining('贴片主线工艺'), findsOneWidget);
+      expect(find.text('当前仓库尚未沉淀产品-设备关联数据。'), findsOneWidget);
+      expect(find.textContaining('参数调整'), findsOneWidget);
+    });
+
     testWidgets('版本激活影响分析应使用 lifecycle 操作码', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1800, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -614,6 +789,8 @@ void main() {
             canViewVersions: true,
             canCompareVersions: false,
             canRollbackVersion: false,
+            canManageVersions: true,
+            canActivateVersions: true,
             canViewImpactAnalysis: true,
             canViewParameters: false,
             canEditParameters: false,
@@ -740,6 +917,95 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('当前无生效版本，请前往版本管理生效版本后恢复启用'), findsOneWidget);
+    });
+
+    testWidgets('产品管理页停用产品应提供独立启用入口', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _ProductListOnlyService([
+        _buildProduct(
+          id: 32,
+          currentVersion: 2,
+          effectiveVersion: 1,
+          lifecycleStatus: 'inactive',
+          inactiveReason: '人工停用',
+        ),
+      ]);
+
+      await tester.pumpWidget(
+        _host(
+          ProductManagementPage(
+            session: _session(),
+            onLogout: () {},
+            canCreateProduct: false,
+            canDeleteProduct: false,
+            canUpdateLifecycle: true,
+            canViewVersions: true,
+            canCompareVersions: false,
+            canRollbackVersion: false,
+            canViewImpactAnalysis: false,
+            canViewParameters: false,
+            canEditParameters: false,
+            onViewParameters: (_) {},
+            onEditParameters: (_) {},
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('操作').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('启用'), findsOneWidget);
+      expect(find.text('去版本管理生效'), findsNothing);
+    });
+
+    testWidgets('版本管理页顶部应显式展示复制版本和导出参数入口', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _VersionListService(
+        products: [
+          _buildProduct(id: 61, currentVersion: 2, effectiveVersion: 1),
+        ],
+        versions: [
+          _buildVersion(
+            version: 2,
+            versionLabel: 'V1.1',
+            lifecycleStatus: 'draft',
+          ),
+          _buildVersion(
+            version: 1,
+            versionLabel: 'V1.0',
+            lifecycleStatus: 'effective',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _host(
+          ProductVersionManagementPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: productVersionManagementTabCode,
+            canManageVersions: true,
+            canActivateVersions: true,
+            canExportVersionParameters: true,
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('产品61'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(OutlinedButton, '复制版本'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, '导出参数'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, '编辑版本说明'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, '立即生效'), findsOneWidget);
     });
 
     testWidgets('产品表单应拦截未选分类 空白名称和超长备注', (tester) async {
@@ -879,12 +1145,13 @@ void main() {
       expect(find.text('版本参数列表'), findsOneWidget);
       expect(find.text('产品分类'), findsOneWidget);
       expect(find.text('创建时间'), findsOneWidget);
-      expect(find.text('最后修改参数'), findsOneWidget);
+      expect(find.text('命中参数名称'), findsOneWidget);
+      expect(find.text('命中参数分组'), findsOneWidget);
+      expect(find.text('最近变更参数'), findsOneWidget);
       expect(find.text('V1.0 / #1'), findsOneWidget);
       expect(find.text('V1.1 / #2'), findsOneWidget);
-      expect(find.text('历史版本参数'), findsOneWidget);
-      expect(find.text('当前草稿参数'), findsOneWidget);
       expect(find.text('产品芯片'), findsWidgets);
+      expect(find.text('基础参数'), findsWidgets);
       expect(service.legacyListCalls, 0, reason: '首屏列表不应回退旧产品参数接口。');
 
       await _openPopupMenu(tester, _popupMenuButtonFinder().first);
@@ -982,6 +1249,32 @@ void main() {
         reason: 'effectiveOnly=true 应显式走生效参数接口。',
       );
       expect(service.versionCalls, 0, reason: '生效参数查询不应混用版本参数接口。');
+    });
+
+    testWidgets('参数查询页应使用只读查询接口而非产品列表接口', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _ParameterQueryPageService([
+        _buildProduct(id: 51, currentVersion: 2, effectiveVersion: 1),
+      ]);
+
+      await tester.pumpWidget(
+        _host(
+          ProductParameterQueryPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: productParameterQueryTabCode,
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(service.parameterQueryCalls, 1);
+      expect(service.legacyListCalls, 0);
+      expect(find.text('产品51'), findsOneWidget);
     });
   });
 }

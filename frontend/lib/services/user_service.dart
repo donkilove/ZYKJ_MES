@@ -365,7 +365,6 @@ class UserService {
   Future<void> updateUser({
     required int userId,
     String? account,
-    String? password,
     String? roleCode,
     String? remark,
     int? stageId,
@@ -376,9 +375,6 @@ class UserService {
     if (account != null && account.trim().isNotEmpty) {
       payload['username'] = account.trim();
       payload['full_name'] = account.trim();
-    }
-    if (password != null && password.isNotEmpty) {
-      payload['password'] = password;
     }
     if (roleCode != null && roleCode.trim().isNotEmpty) {
       payload['role_code'] = roleCode.trim();

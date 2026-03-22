@@ -128,6 +128,10 @@ class _FakeEquipmentService extends EquipmentService {
 Future<void> _pumpPage(
   WidgetTester tester, {
   required EquipmentService service,
+  bool canViewRules = true,
+  bool canManageRules = true,
+  bool canViewParameters = true,
+  bool canManageParameters = true,
 }) async {
   tester.view.physicalSize = const Size(1600, 1000);
   tester.view.devicePixelRatio = 1.0;
@@ -142,10 +146,10 @@ Future<void> _pumpPage(
         body: EquipmentRuleParameterPage(
           session: AppSession(baseUrl: '', accessToken: 'token'),
           onLogout: () {},
-          canViewRules: true,
-          canManageRules: true,
-          canViewParameters: true,
-          canManageParameters: true,
+          canViewRules: canViewRules,
+          canManageRules: canManageRules,
+          canViewParameters: canViewParameters,
+          canManageParameters: canManageParameters,
           service: service,
         ),
       ),
@@ -179,5 +183,23 @@ void main() {
     expect(service.runtimeParameterRequests.last.equipmentId, 101);
     expect(service.runtimeParameterRequests.last.equipmentType, '冲压机');
     expect(service.runtimeParameterRequests.last.isEnabled, isTrue);
+  });
+
+  testWidgets('只读规则权限不会展示新增编辑入口', (tester) async {
+    final service = _FakeEquipmentService();
+
+    await _pumpPage(
+      tester,
+      service: service,
+      canViewRules: true,
+      canManageRules: false,
+      canViewParameters: false,
+      canManageParameters: false,
+    );
+
+    expect(find.text('设备规则'), findsOneWidget);
+    expect(find.text('新增规则'), findsNothing);
+    expect(find.text('编辑'), findsNothing);
+    expect(find.text('删除'), findsNothing);
   });
 }

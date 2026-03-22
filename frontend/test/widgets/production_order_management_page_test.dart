@@ -133,8 +133,12 @@ class _FakeCraftService extends CraftService {
     int pageSize = 500,
     int? productId,
     String? keyword,
+    String? productCategory,
+    bool? isDefault,
     bool? enabled = true,
     String? lifecycleStatus,
+    DateTime? updatedFrom,
+    DateTime? updatedTo,
   }) async {
     return CraftTemplateListResult(total: 0, items: const []);
   }

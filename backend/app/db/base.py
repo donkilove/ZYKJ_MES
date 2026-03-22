@@ -8,6 +8,8 @@ from app.models.maintenance_item import MaintenanceItem
 from app.models.maintenance_plan import MaintenancePlan
 from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_work_order import MaintenanceWorkOrder
+from app.models.message import Message
+from app.models.message_recipient import MessageRecipient
 from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
 from app.models.order_event_log import OrderEventLog
 from app.models.permission_catalog import PermissionCatalog
@@ -62,6 +64,8 @@ __all__ = [
     "MaintenancePlan",
     "MaintenanceRecord",
     "MaintenanceWorkOrder",
+    "Message",
+    "MessageRecipient",
     "OrderSubOrderPipelineInstance",
     "Product",
     "ProductRevision",

@@ -118,9 +118,6 @@ class ProductProcessTemplateCreate(BaseModel):
     product_id: int = Field(gt=0)
     template_name: str = Field(min_length=1, max_length=128)
     is_default: bool = False
-    lifecycle_status: str = Field(
-        default=TEMPLATE_LIFECYCLE_DRAFT, min_length=1, max_length=32
-    )
     remark: str = Field(default="", max_length=500)
     steps: list[TemplateStepPayload] = Field(default_factory=list, min_length=1)
 
@@ -133,15 +130,6 @@ class ProductProcessTemplateCreate(BaseModel):
         if len(step_orders) != len(set(step_orders)):
             raise ValueError("step_order cannot be duplicated")
         return value
-
-    @field_validator("lifecycle_status")
-    @classmethod
-    def validate_lifecycle_status(cls, value: str) -> str:
-        normalized = value.strip().lower()
-        if normalized not in TEMPLATE_LIFECYCLE_OPTIONS:
-            raise ValueError("Invalid lifecycle_status")
-        return normalized
-
 
 class ProductProcessTemplateUpdate(BaseModel):
     template_name: str = Field(min_length=1, max_length=128)
@@ -282,6 +270,19 @@ class TemplateImpactOrderItem(BaseModel):
     reason: str | None = None
 
 
+class TemplateImpactReferenceItem(BaseModel):
+    ref_type: str
+    ref_id: int
+    ref_code: str | None = None
+    ref_name: str
+    detail: str | None = None
+    ref_status: str | None = None
+    jump_module: str | None = None
+    jump_target: str | None = None
+    risk_level: str | None = None
+    risk_note: str | None = None
+
+
 class TemplateImpactAnalysisResult(BaseModel):
     target_version: int
     total_orders: int
@@ -289,7 +290,11 @@ class TemplateImpactAnalysisResult(BaseModel):
     in_progress_orders: int
     syncable_orders: int
     blocked_orders: int
+    total_references: int = 0
+    user_stage_reference_count: int = 0
+    template_reuse_reference_count: int = 0
     items: list[TemplateImpactOrderItem]
+    reference_items: list[TemplateImpactReferenceItem] = Field(default_factory=list)
 
 
 class TemplatePublishRequest(BaseModel):
@@ -302,6 +307,9 @@ class TemplatePublishRequest(BaseModel):
 class TemplateVersionItem(BaseModel):
     version: int
     action: str
+    record_type: str
+    record_title: str
+    record_summary: str
     note: str | None = None
     source_version: int | None = None
     created_by_user_id: int | None = None
@@ -387,6 +395,10 @@ class TemplateBatchExportItem(BaseModel):
     is_default: bool
     is_enabled: bool
     lifecycle_status: str
+    source_type: str = "manual"
+    source_template_name: str | None = None
+    source_template_version: int | None = None
+    source_system_master_version: int | None = None
     steps: list[TemplateStepPayload]
 
 
@@ -405,6 +417,10 @@ class TemplateBatchImportItem(BaseModel):
     lifecycle_status: str = Field(
         default=TEMPLATE_LIFECYCLE_DRAFT, min_length=1, max_length=32
     )
+    source_type: str = Field(default="manual", min_length=1, max_length=32)
+    source_template_name: str | None = Field(default=None, max_length=128)
+    source_template_version: int | None = Field(default=None, ge=1)
+    source_system_master_version: int | None = Field(default=None, ge=1)
     steps: list[TemplateStepPayload] = Field(default_factory=list, min_length=1)
 
     @field_validator("steps")
@@ -428,7 +444,6 @@ class TemplateBatchImportItem(BaseModel):
 
 class TemplateBatchImportRequest(BaseModel):
     overwrite_existing: bool = False
-    publish_after_import: bool = False
     items: list[TemplateBatchImportItem] = Field(default_factory=list, min_length=1)
 
 
@@ -508,6 +523,7 @@ class TemplateReferenceItem(BaseModel):
     jump_target: str | None = None
     risk_level: str | None = None
     risk_note: str | None = None
+    is_blocking: bool = False
 
 
 class TemplateReferenceResult(BaseModel):
@@ -516,6 +532,11 @@ class TemplateReferenceResult(BaseModel):
     product_id: int
     product_name: str
     total: int
+    order_reference_count: int = 0
+    user_stage_reference_count: int = 0
+    template_reuse_reference_count: int = 0
+    blocking_reference_count: int = 0
+    has_blocking_references: bool = False
     items: list[TemplateReferenceItem]
 
 

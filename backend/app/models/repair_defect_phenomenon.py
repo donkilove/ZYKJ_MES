@@ -18,6 +18,11 @@ class RepairDefectPhenomenon(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
+    production_record_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_production_record.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     order_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
     order_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     product_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
@@ -37,3 +42,4 @@ class RepairDefectPhenomenon(Base, TimestampMixin):
 
     repair_order = relationship("RepairOrder", back_populates="defect_rows")
     operator_user = relationship("User")
+    production_record = relationship("ProductionRecord")
