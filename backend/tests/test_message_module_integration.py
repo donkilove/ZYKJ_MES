@@ -1,11 +1,12 @@
 import sys
 import time
 import unittest
+import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import select
 
@@ -24,10 +25,19 @@ from app.models.registration_request import RegistrationRequest  # noqa: E402
 from app.models.role import Role  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
+from app.api.v1.endpoints.craft import (  # noqa: E402
+    _notify_craft_template_published,
+)
+from app.api.v1.endpoints.products import (  # noqa: E402
+    _notify_product_version_activated,
+)
 from app.services.assist_authorization_service import (  # noqa: E402
     review_assist_authorization,
 )
-from app.services.message_service import create_message_for_users  # noqa: E402
+from app.services.message_service import (  # noqa: E402
+    _push_message_created_for_recipient,
+    create_message_for_users,
+)
 
 
 class MessageModuleIntegrationTest(unittest.TestCase):
@@ -456,7 +466,7 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         self,
     ) -> None:
         account = f"u{time.time_ns()}"[:10]
-        password = f"Pwd!{time.time_ns()}"
+        password = f"Pwd!{'!'.join(account)}!Z9"
 
         register_response = self.client.post(
             "/api/v1/auth/register",
@@ -523,6 +533,101 @@ class MessageModuleIntegrationTest(unittest.TestCase):
             message.target_route_payload_json,
             '{"action": "change_password"}',
         )
+
+    def test_product_and_craft_source_messages_include_jump_targets(self) -> None:
+        product_id = int(time.time_ns() % 1_000_000_000)
+        template_id = product_id + 1
+        db = SessionLocal()
+        try:
+            _notify_product_version_activated(
+                db=db,
+                product=SimpleNamespace(id=product_id, name=f"{self.case_token}-产品A"),
+                revision=SimpleNamespace(version=3, version_label="V1.2"),
+                operator=SimpleNamespace(id=1, username="admin"),
+            )
+            _notify_craft_template_published(
+                db=db,
+                template=SimpleNamespace(
+                    id=template_id,
+                    version=5,
+                    template_name=f"{self.case_token}-模板A",
+                    product=SimpleNamespace(name=f"{self.case_token}-产品A"),
+                ),
+                operator=SimpleNamespace(id=1, username="admin"),
+            )
+            rows = (
+                db.execute(
+                    select(Message).where(
+                        Message.dedupe_key.in_(
+                            [
+                                f"product_version_activated_{product_id}_3",
+                                f"craft_template_published_{template_id}_5",
+                            ]
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            self.message_ids.extend(row.id for row in rows)
+        finally:
+            db.close()
+
+        messages = {row.source_module: row for row in rows}
+        self.assertEqual(messages["product"].target_page_code, "product")
+        self.assertEqual(
+            messages["product"].target_tab_code,
+            "product_version_management",
+        )
+        self.assertIn(
+            f'"product_id": {product_id}',
+            messages["product"].target_route_payload_json,
+        )
+        self.assertEqual(messages["craft"].target_page_code, "craft")
+        self.assertEqual(
+            messages["craft"].target_tab_code,
+            "production_process_config",
+        )
+        self.assertIn(
+            f'"template_id": {template_id}',
+            messages["craft"].target_route_payload_json,
+        )
+        self.assertIn('"version": 5', messages["craft"].target_route_payload_json)
+
+    def test_push_failure_marks_recipient_failed_with_timestamp(self) -> None:
+        message_id = self._create_message(
+            message_type="notice",
+            priority="normal",
+            title="推送失败留痕",
+        )
+
+        async def _run_push_failure() -> None:
+            with patch(
+                "app.services.message_push_service.message_connection_manager.push_to_user",
+                new=AsyncMock(return_value=(False, "no_active_connection")),
+            ):
+                await _push_message_created_for_recipient(message_id, 1)
+
+        asyncio.run(_run_push_failure())
+
+        db = SessionLocal()
+        try:
+            recipient = (
+                db.execute(
+                    select(MessageRecipient).where(
+                        MessageRecipient.message_id == message_id,
+                        MessageRecipient.recipient_user_id == 1,
+                    )
+                )
+                .scalars()
+                .one()
+            )
+        finally:
+            db.close()
+
+        self.assertEqual(recipient.delivery_status, "failed")
+        self.assertIsNone(recipient.delivered_at)
+        self.assertIsNotNone(recipient.last_push_at)
 
 
 if __name__ == "__main__":

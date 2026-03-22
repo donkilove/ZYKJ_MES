@@ -12,11 +12,13 @@ class LoginSessionPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canManage,
+    this.userService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canManage;
+  final UserService? userService;
 
   @override
   State<LoginSessionPage> createState() => _LoginSessionPageState();
@@ -65,7 +67,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   @override
   void initState() {
     super.initState();
-    _userService = UserService(widget.session);
+    _userService = widget.userService ?? UserService(widget.session);
     _loadAll();
   }
 

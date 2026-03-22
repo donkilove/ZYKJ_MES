@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/message_models.dart';
 import 'package:mes_client/services/message_service.dart';
+import 'package:mes_client/services/message_ws_service.dart';
 
 import '../support/http_test_server.dart';
 
@@ -108,6 +112,47 @@ void main() {
       expect(updated, 2);
       expect(publishResult.messageId, 9);
       expect(publishResult.recipientCount, 3);
+    });
+  });
+
+  group('MessageWsService', () {
+    test('receives unread event through websocket channel', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+      });
+
+      unawaited(() async {
+        await for (final request in server) {
+          if (!WebSocketTransformer.isUpgradeRequest(request)) {
+            request.response.statusCode = HttpStatus.badRequest;
+            await request.response.close();
+            continue;
+          }
+          final socket = await WebSocketTransformer.upgrade(request);
+          socket.add(
+            '{"event":"message_created","user_id":1,"message_id":9,"unread_count":4}',
+          );
+        }
+      }());
+
+      final events = <WsEvent>[];
+      final service = MessageWsService(
+        baseUrl: 'http://${server.address.address}:${server.port}',
+        accessToken: 'ws-token',
+        onEvent: events.add,
+        onDisconnected: () {},
+      );
+
+      service.connect();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(events, hasLength(1));
+      expect(events.single.event, 'message_created');
+      expect(events.single.unreadCount, 4);
+      expect(events.single.messageId, 9);
+
+      service.disconnect();
     });
   });
 }

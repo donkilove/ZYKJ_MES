@@ -98,7 +98,9 @@ void main() {
           200,
           body: {
             'data': {
-              'content_base64': base64Encode(utf8.encode('{"type":"template"}')),
+              'content_base64': base64Encode(
+                utf8.encode('{"type":"template"}'),
+              ),
             },
           },
         ),
@@ -153,6 +155,59 @@ void main() {
               .having((e) => e.message, 'message', '模板当前已是草稿版本'),
         ),
       );
+    });
+
+    test('supports stage/process detail queries by id and code', () async {
+      final server = await TestHttpServer.start({
+        'GET /craft/stages/detail': (request) {
+          expect(request.uri.queryParameters['stage_id'], '1');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'id': 1,
+                'code': 'ST-01',
+                'name': '切割段',
+                'sort_order': 0,
+                'is_enabled': true,
+                'process_count': 2,
+                'created_at': '2026-03-19T00:00:00Z',
+                'updated_at': '2026-03-19T00:00:00Z',
+              },
+            },
+          );
+        },
+        'GET /craft/processes/detail': (request) {
+          expect(request.uri.queryParameters['process_code'], 'ST-01-01');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'id': 11,
+                'code': 'ST-01-01',
+                'name': '切割',
+                'stage_id': 1,
+                'stage_code': 'ST-01',
+                'stage_name': '切割段',
+                'is_enabled': true,
+                'created_at': '2026-03-19T00:00:00Z',
+                'updated_at': '2026-03-19T00:00:00Z',
+              },
+            },
+          );
+        },
+      });
+      addTearDown(server.close);
+
+      final service = CraftService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-craft'),
+      );
+
+      final stage = await service.getStageDetail(stageId: 1);
+      final process = await service.getProcessDetail(processCode: 'ST-01-01');
+
+      expect(stage.processCount, 2);
+      expect(process.stageCode, 'ST-01');
     });
   });
 }

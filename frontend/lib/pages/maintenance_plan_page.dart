@@ -18,11 +18,15 @@ class MaintenancePlanPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canWrite,
+    this.equipmentService,
+    this.craftService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canWrite;
+  final EquipmentService? equipmentService;
+  final CraftService? craftService;
 
   @override
   State<MaintenancePlanPage> createState() => _MaintenancePlanPageState();
@@ -50,8 +54,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   @override
   void initState() {
     super.initState();
-    _equipmentService = EquipmentService(widget.session);
-    _craftService = CraftService(widget.session);
+    _equipmentService =
+        widget.equipmentService ?? EquipmentService(widget.session);
+    _craftService = widget.craftService ?? CraftService(widget.session);
     _loadAll(reloadOptions: true);
   }
 
@@ -847,12 +852,12 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                       child: DataTable(
                         columns: const [
                           DataColumn(label: Text('设备')),
-                          DataColumn(label: Text('项目')),
-                          DataColumn(label: Text('执行工序')),
-                          DataColumn(label: Text('周期(天)')),
-                          DataColumn(label: Text('起始日期')),
-                          DataColumn(label: Text('下次到期')),
-                          DataColumn(label: Text('执行人')),
+                          DataColumn(label: Text('保养项目')),
+                          DataColumn(label: Text('执行工段')),
+                          DataColumn(label: Text('周期天数')),
+                          DataColumn(label: Text('开始日期')),
+                          DataColumn(label: Text('下次到期日')),
+                          DataColumn(label: Text('默认执行人')),
                           DataColumn(label: Text('预计时长')),
                           DataColumn(label: Text('创建时间')),
                           DataColumn(label: Text('更新时间')),

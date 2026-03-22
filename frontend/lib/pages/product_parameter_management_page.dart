@@ -58,6 +58,10 @@ class _ProductParameterManagementPageState
   static const double _rowActionColumnWidth =
       (_rowActionButtonSize * 2) + _rowActionGap + 8;
   static const double _editorMinContentWidth = 1180.0;
+  static final RegExp _linkValuePattern = RegExp(
+    r'^(https?://|\\\\|[A-Za-z]:[/\\])',
+    caseSensitive: false,
+  );
 
   late final ProductService _productService;
   final TextEditingController _keywordController = TextEditingController();
@@ -192,6 +196,24 @@ class _ProductParameterManagementPageState
       default:
         return value.isEmpty ? '-' : value;
     }
+  }
+
+  String? _validateLinkValue(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    if (_linkValuePattern.hasMatch(trimmed)) {
+      return null;
+    }
+    return 'Link 参数仅支持 http://、https://、\\\\、盘符绝对路径';
+  }
+
+  void _handleEditorValueChanged(_ParameterEditorRow row, String value) {
+    if (row.parameterType == 'Link') {
+      setState(() {});
+    }
+    _markDirty();
   }
 
   List<PopupMenuEntry<_ProductParameterManagementListAction>>
@@ -410,7 +432,7 @@ class _ProductParameterManagementPageState
       builder: (context) {
         return AlertDialog(
           title: Text(
-            '历史修改备注 - ${row.productName}（${dialogHistory.versionLabel ?? row.versionLabel}）',
+            '参数变更历史 - ${row.productName} / ${row.productCategory} / ${dialogHistory.versionLabel ?? row.versionLabel}',
           ),
           content: SizedBox(
             width: 760,
@@ -430,13 +452,19 @@ class _ProductParameterManagementPageState
                         item.changeType,
                       );
                       return ListTile(
-                        title: Text(item.remark),
+                        title: Text(
+                          '$changeTypeLabel / ${item.parameterName ?? '未指定参数'}',
+                        ),
                         subtitle: Text(
+                          '产品：${item.productName}   分类：${item.productCategory.isEmpty ? '-' : item.productCategory}\n'
                           '时间：${_formatTime(item.createdAt)}\n'
                           '版本：${item.versionLabel ?? '-'}   操作人：${item.operatorUsername}   类型：$changeTypeLabel\n'
-                          '参数：$keySummary',
+                          '参数：$keySummary\n'
+                          '变更原因：${item.changeReason}\n'
+                          '变更前：${item.beforeSummary ?? '-'}\n'
+                          '变更后：${item.afterSummary ?? '-'}',
                         ),
-                        isThreeLine: true,
+                        isThreeLine: false,
                         trailing:
                             item.beforeSnapshot != '{}' ||
                                 item.afterSnapshot != '{}'
@@ -768,6 +796,13 @@ class _ProductParameterManagementPageState
         _showSnackBar('参数类型必须是 Text 或 Link');
         return;
       }
+      if (parameterType == 'Link') {
+        final linkError = _validateLinkValue(value);
+        if (linkError != null) {
+          _showSnackBar(linkError);
+          return;
+        }
+      }
       if (nameSet.contains(name)) {
         _showSnackBar('参数名称重复：$name');
         return;
@@ -946,6 +981,9 @@ class _ProductParameterManagementPageState
     required _ParameterEditorRow row,
   }) {
     final isProductNameRow = _isProductNameRow(row);
+    final linkError = row.parameterType == 'Link'
+        ? _validateLinkValue(row.valueController.text)
+        : null;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1002,10 +1040,14 @@ class _ProductParameterManagementPageState
                       child: TextField(
                         controller: row.valueController,
                         readOnly: _editorReadOnly,
-                        onChanged: _editorReadOnly ? null : (_) => _markDirty(),
-                        decoration: const InputDecoration(
+                        onChanged: _editorReadOnly
+                            ? null
+                            : (value) => _handleEditorValueChanged(row, value),
+                        decoration: InputDecoration(
                           border: OutlineInputBorder(),
                           isDense: true,
+                          hintText: '支持 http://、https://、\\\\、C:\\',
+                          errorText: linkError,
                         ),
                       ),
                     ),
@@ -1022,7 +1064,9 @@ class _ProductParameterManagementPageState
               : TextField(
                   controller: row.valueController,
                   readOnly: _editorReadOnly,
-                  onChanged: _editorReadOnly ? null : (_) => _markDirty(),
+                  onChanged: _editorReadOnly
+                      ? null
+                      : (value) => _handleEditorValueChanged(row, value),
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     isDense: true,
@@ -1557,13 +1601,16 @@ class _ProductParameterManagementPageState
                       child: DataTable(
                         columns: [
                           UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                          UnifiedListTableHeaderStyle.column(context, '产品分类'),
                           UnifiedListTableHeaderStyle.column(
                             context,
                             '版本标签/版本号',
                           ),
+                          UnifiedListTableHeaderStyle.column(context, '创建时间'),
                           UnifiedListTableHeaderStyle.column(context, '版本状态'),
                           UnifiedListTableHeaderStyle.column(context, '参数摘要'),
-                          UnifiedListTableHeaderStyle.column(context, '更新时间'),
+                          UnifiedListTableHeaderStyle.column(context, '最后修改参数'),
+                          UnifiedListTableHeaderStyle.column(context, '最后修改时间'),
                           UnifiedListTableHeaderStyle.column(
                             context,
                             '操作',
@@ -1573,16 +1620,18 @@ class _ProductParameterManagementPageState
                         rows: rows.map((row) {
                           return DataRow(
                             cells: [
+                              DataCell(Text(row.productName)),
                               DataCell(
                                 Text(
                                   row.productCategory.isEmpty
-                                      ? row.productName
-                                      : '${row.productName} / ${row.productCategory}',
+                                      ? '-'
+                                      : row.productCategory,
                                 ),
                               ),
                               DataCell(
                                 Text('${row.versionLabel} / #${row.version}'),
                               ),
+                              DataCell(Text(_formatTime(row.createdAt))),
                               DataCell(
                                 Text(
                                   [
@@ -1593,6 +1642,7 @@ class _ProductParameterManagementPageState
                                 ),
                               ),
                               DataCell(Text(row.parameterSummary ?? '-')),
+                              DataCell(Text(row.lastModifiedParameter ?? '-')),
                               DataCell(Text(_formatTime(row.updatedAt))),
                               DataCell(
                                 UnifiedListTableHeaderStyle.actionMenuButton<

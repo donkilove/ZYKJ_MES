@@ -180,6 +180,17 @@ class CraftTemplateStepPayload {
   final bool isKeyProcess;
   final String stepRemark;
 
+  factory CraftTemplateStepPayload.fromJson(Map<String, dynamic> json) {
+    return CraftTemplateStepPayload(
+      stepOrder: (json['step_order'] as int?) ?? 0,
+      stageId: (json['stage_id'] as int?) ?? 0,
+      processId: (json['process_id'] as int?) ?? 0,
+      standardMinutes: (json['standard_minutes'] as int?) ?? 0,
+      isKeyProcess: (json['is_key_process'] as bool?) ?? false,
+      stepRemark: (json['step_remark'] as String?) ?? '',
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'step_order': stepOrder,
@@ -923,14 +934,13 @@ class CraftTemplateBatchExportItem {
       isDefault: (json['is_default'] as bool?) ?? false,
       isEnabled: (json['is_enabled'] as bool?) ?? true,
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
-      steps: (json['steps'] as List<dynamic>? ?? const []).map((entry) {
-        final map = entry as Map<String, dynamic>;
-        return CraftTemplateStepPayload(
-          stepOrder: (map['step_order'] as int?) ?? 0,
-          stageId: (map['stage_id'] as int?) ?? 0,
-          processId: (map['process_id'] as int?) ?? 0,
-        );
-      }).toList(),
+      steps: (json['steps'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => CraftTemplateStepPayload.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -1081,6 +1091,7 @@ class CraftReferenceItem {
   CraftReferenceItem({
     required this.refType,
     required this.refId,
+    required this.refCode,
     required this.refName,
     required this.detail,
     this.refStatus,
@@ -1092,6 +1103,7 @@ class CraftReferenceItem {
 
   final String refType;
   final int refId;
+  final String? refCode;
   final String refName;
   final String? detail;
   final String? refStatus;
@@ -1104,6 +1116,7 @@ class CraftReferenceItem {
     return CraftReferenceItem(
       refType: (json['ref_type'] as String?) ?? '',
       refId: (json['ref_id'] as int?) ?? 0,
+      refCode: json['ref_code'] as String?,
       refName: (json['ref_name'] as String?) ?? '',
       detail: json['detail'] as String?,
       refStatus: json['ref_status'] as String?,
@@ -1209,6 +1222,7 @@ class CraftProductTemplateReferenceRow {
     required this.lifecycleStatus,
     required this.refType,
     required this.refId,
+    required this.refCode,
     required this.refName,
     required this.detail,
     required this.refStatus,
@@ -1223,6 +1237,7 @@ class CraftProductTemplateReferenceRow {
   final String lifecycleStatus;
   final String refType;
   final int refId;
+  final String? refCode;
   final String refName;
   final String? detail;
   final String? refStatus;
@@ -1238,6 +1253,7 @@ class CraftProductTemplateReferenceRow {
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
       refType: (json['ref_type'] as String?) ?? '',
       refId: (json['ref_id'] as int?) ?? 0,
+      refCode: json['ref_code'] as String?,
       refName: (json['ref_name'] as String?) ?? '',
       detail: json['detail'] as String?,
       refStatus: json['ref_status'] as String?,

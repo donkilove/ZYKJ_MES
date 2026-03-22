@@ -3,6 +3,7 @@ from datetime import datetime
 import csv
 import io
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -17,6 +18,7 @@ from app.models.product_parameter_history import ProductParameterHistory
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
+from app.services.message_service import create_message_for_users
 from app.schemas.product import (
     ProductImpactAnalysisQuery,
     ProductImpactAnalysisResult,
@@ -81,6 +83,7 @@ from app.services.product_service import (
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def to_product_item(
@@ -107,6 +110,89 @@ def to_product_item(
         last_parameter_summary=last_parameter_summary,
         created_at=product.created_at,
         updated_at=product.updated_at,
+    )
+
+
+def _load_snapshot_payload(snapshot: str | None) -> dict[str, object]:
+    if not snapshot:
+        return {}
+    try:
+        payload = json.loads(snapshot)
+    except (TypeError, ValueError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _format_parameter_snapshot_item(item: dict[str, object]) -> str:
+    return (
+        f"分类={str(item.get('category') or '-')}; "
+        f"类型={str(item.get('type') or '-')}; "
+        f"值={str(item.get('value') or '-')}; "
+        f"说明={str(item.get('description') or '-')}"
+    )
+
+
+def _build_parameter_snapshot_map(snapshot: str | None) -> dict[str, str]:
+    payload = _load_snapshot_payload(snapshot)
+    parameters = payload.get("parameters")
+    if not isinstance(parameters, list):
+        return {}
+    result: dict[str, str] = {}
+    for raw_item in parameters:
+        if not isinstance(raw_item, dict):
+            continue
+        name = str(raw_item.get("name") or "").strip()
+        if not name:
+            continue
+        result[name] = _format_parameter_snapshot_item(raw_item)
+    return result
+
+
+def _build_history_display_fields(
+    row: ProductParameterHistory,
+) -> tuple[str | None, str | None, str | None]:
+    changed_keys = [
+        str(value) for value in (row.changed_keys or []) if str(value).strip()
+    ]
+    before_map = _build_parameter_snapshot_map(row.before_snapshot)
+    after_map = _build_parameter_snapshot_map(row.after_snapshot)
+    display_keys = (
+        changed_keys or list(dict.fromkeys([*before_map.keys(), *after_map.keys()]))[:3]
+    )
+    if not display_keys:
+        return None, None, None
+
+    before_parts = [f"{key}: {before_map.get(key, '无')}" for key in display_keys]
+    after_parts = [f"{key}: {after_map.get(key, '无')}" for key in display_keys]
+    parameter_name = "、".join(display_keys)
+    return parameter_name, "；".join(before_parts), "；".join(after_parts)
+
+
+def _to_history_item(
+    *,
+    product: Product,
+    row: ProductParameterHistory,
+) -> ProductParameterHistoryItem:
+    parameter_name, before_summary, after_summary = _build_history_display_fields(row)
+    return ProductParameterHistoryItem(
+        id=row.id,
+        product_name=product.name,
+        product_category=product.category or "",
+        version=row.version,
+        version_label=row.revision.version_label
+        if row.revision is not None
+        else (f"V1.{row.version - 1}" if row.version is not None else None),
+        remark=row.remark,
+        change_reason=row.remark,
+        change_type=row.change_type or "edit",
+        parameter_name=parameter_name,
+        changed_keys=[str(value) for value in (row.changed_keys or [])],
+        operator_username=row.operator_username,
+        before_summary=before_summary,
+        after_summary=after_summary,
+        before_snapshot=row.before_snapshot or "{}",
+        after_snapshot=row.after_snapshot or "{}",
+        created_at=row.created_at,
     )
 
 
@@ -140,6 +226,44 @@ def _to_parameter_list_result(
         lifecycle_status=lifecycle_status,
         total=len(items),
         items=items,
+    )
+
+
+def _notify_product_version_activated(
+    *,
+    db: Session,
+    product: Product,
+    revision: ProductVersionItem,
+    operator: User,
+) -> None:
+    payload = {
+        "action": "view_version",
+        "product_id": product.id,
+        "product_name": product.name,
+        "target_version": revision.version,
+        "target_version_label": revision.version_label,
+        "target_tab_code": "product_version_management",
+    }
+    create_message_for_users(
+        db,
+        message_type="notice",
+        priority="important",
+        title=f"产品版本已发布：{product.name} {revision.version_label}",
+        summary=f"{operator.username} 已发布产品 {product.name} 的 {revision.version_label}",
+        content=(
+            f"产品 {product.name} 已生效到 {revision.version_label}，"
+            "可从消息直接跳转到版本管理查看目标版本。"
+        ),
+        source_module="product",
+        source_type="product_version",
+        source_id=str(product.id),
+        source_code=f"{product.name}/{revision.version_label}",
+        target_page_code="product",
+        target_tab_code="product_version_management",
+        target_route_payload_json=json.dumps(payload),
+        recipient_user_ids=[operator.id],
+        dedupe_key=f"product_version_activated_{product.id}_{revision.version}",
+        created_by_user_id=operator.id,
     )
 
 
@@ -226,7 +350,9 @@ def get_product_parameter_versions(
                     == row.revision.version,
                     is_effective_version=row.product.effective_version
                     == row.revision.version,
+                    created_at=row.revision.created_at,
                     parameter_summary=row.parameter_summary,
+                    last_modified_parameter=row.last_modified_parameter,
                     updated_at=row.revision.updated_at,
                 )
                 for row in rows
@@ -973,6 +1099,19 @@ def activate_product_version_api(
         .first()
         or revision
     )
+    try:
+        _notify_product_version_activated(
+            db=db,
+            product=product,
+            revision=_to_version_item(revision),
+            operator=current_user,
+        )
+    except Exception:
+        logger.exception(
+            "[MSG] 产品版本发布消息创建失败: product_id=%s version=%s",
+            product.id,
+            version,
+        )
     return success_response(_to_version_item(revision), message="activated")
 
 
@@ -1213,23 +1352,7 @@ def get_parameter_history(
         page=page,
         page_size=page_size,
     )
-    items = [
-        ProductParameterHistoryItem(
-            id=row.id,
-            version=row.version,
-            version_label=row.revision.version_label
-            if row.revision is not None
-            else (f"V1.{row.version - 1}" if row.version is not None else None),
-            remark=row.remark,
-            change_type=row.change_type or "edit",
-            changed_keys=[str(value) for value in (row.changed_keys or [])],
-            operator_username=row.operator_username,
-            before_snapshot=row.before_snapshot or "{}",
-            after_snapshot=row.after_snapshot or "{}",
-            created_at=row.created_at,
-        )
-        for row in rows
-    ]
+    items = [_to_history_item(product=product, row=row) for row in rows]
     return success_response(ProductParameterHistoryListResult(total=total, items=items))
 
 
@@ -1263,23 +1386,7 @@ def get_version_parameter_history(
         page=page,
         page_size=page_size,
     )
-    items = [
-        ProductParameterHistoryItem(
-            id=row.id,
-            version=row.version,
-            version_label=row.revision.version_label
-            if row.revision is not None
-            else (f"V1.{row.version - 1}" if row.version is not None else None),
-            remark=row.remark,
-            change_type=row.change_type or "edit",
-            changed_keys=[str(value) for value in (row.changed_keys or [])],
-            operator_username=row.operator_username,
-            before_snapshot=row.before_snapshot or "{}",
-            after_snapshot=row.after_snapshot or "{}",
-            created_at=row.created_at,
-        )
-        for row in rows
-    ]
+    items = [_to_history_item(product=product, row=row) for row in rows]
     return success_response(
         ProductParameterHistoryListResult(
             version=revision.version,

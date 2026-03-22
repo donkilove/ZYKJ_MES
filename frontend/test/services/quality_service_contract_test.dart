@@ -265,6 +265,146 @@ void main() {
       expect(defectResult.byDate.single.date, '2026-03-01');
     });
 
+    test('quality scrap and repair contracts use quality namespace', () async {
+      final server = await TestHttpServer.start({
+        'GET /quality/scrap-statistics': (request) {
+          expect(request.uri.queryParameters['keyword'], '报废');
+          expect(request.uri.queryParameters['page'], '2');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'total': 1,
+                'items': [
+                  {
+                    'id': 21,
+                    'order_code': 'PO-21',
+                    'product_name': '产品Q',
+                    'process_name': '检验',
+                    'scrap_reason': '破损',
+                    'scrap_quantity': 3,
+                    'progress': 'pending_apply',
+                    'created_at': '2026-03-05T08:00:00Z',
+                    'updated_at': '2026-03-05T08:10:00Z',
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'GET /quality/scrap-statistics/21': (_) {
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'id': 21,
+                'order_code': 'PO-21',
+                'product_name': '产品Q',
+                'process_name': '检验',
+                'scrap_reason': '破损',
+                'scrap_quantity': 3,
+                'progress': 'pending_apply',
+                'created_at': '2026-03-05T08:00:00Z',
+                'updated_at': '2026-03-05T08:10:00Z',
+                'related_repair_orders': [
+                  {
+                    'id': 7,
+                    'repair_order_code': 'RW-7',
+                    'status': 'completed',
+                    'repair_quantity': 3,
+                    'repaired_quantity': 2,
+                    'scrap_quantity': 1,
+                    'repair_time': '2026-03-05T09:00:00Z',
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'GET /quality/repair-orders': (request) {
+          expect(request.uri.queryParameters['status'], 'completed');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'total': 1,
+                'items': [
+                  {
+                    'id': 7,
+                    'repair_order_code': 'RW-7',
+                    'source_order_code': 'PO-21',
+                    'product_name': '产品Q',
+                    'source_process_code': 'QA-01',
+                    'source_process_name': '检验',
+                    'production_quantity': 10,
+                    'repair_quantity': 3,
+                    'repaired_quantity': 2,
+                    'scrap_quantity': 1,
+                    'scrap_replenished': false,
+                    'repair_time': '2026-03-05T09:00:00Z',
+                    'status': 'completed',
+                    'created_at': '2026-03-05T09:00:00Z',
+                    'updated_at': '2026-03-05T10:00:00Z',
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'GET /quality/repair-orders/7/detail': (_) {
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'id': 7,
+                'repair_order_code': 'RW-7',
+                'source_order_code': 'PO-21',
+                'product_name': '产品Q',
+                'source_process_code': 'QA-01',
+                'source_process_name': '检验',
+                'production_quantity': 10,
+                'repair_quantity': 3,
+                'repaired_quantity': 2,
+                'scrap_quantity': 1,
+                'scrap_replenished': false,
+                'repair_time': '2026-03-05T09:00:00Z',
+                'status': 'completed',
+                'created_at': '2026-03-05T09:00:00Z',
+                'updated_at': '2026-03-05T10:00:00Z',
+                'defect_rows': [
+                  {'id': 1, 'phenomenon': '虚焊', 'quantity': 3},
+                ],
+              },
+            },
+          );
+        },
+      });
+      addTearDown(server.close);
+
+      final service = QualityService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'quality-token'),
+      );
+
+      final scrapList = await service.listQualityScrapStatistics(
+        keyword: '报废',
+        page: 2,
+      );
+      final scrapDetail = await service.getQualityScrapStatisticsDetail(
+        scrapId: 21,
+      );
+      final repairList = await service.listQualityRepairOrders(
+        status: 'completed',
+      );
+      final repairDetail = await service.getQualityRepairOrderDetail(
+        repairOrderId: 7,
+      );
+
+      expect(scrapList.total, 1);
+      expect(scrapDetail.relatedRepairOrders.single.repairOrderCode, 'RW-7');
+      expect(repairList.items.single.repairOrderCode, 'RW-7');
+      expect(repairDetail.defectRows.single.phenomenon, '虚焊');
+    });
+
     test('trend and defect exports keep backend filename fields', () async {
       final server = await TestHttpServer.start({
         'POST /quality/trend/export': (_) {

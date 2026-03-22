@@ -33,6 +33,7 @@ class RegistrationApprovalPage extends StatefulWidget {
 class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   static const String _operatorRoleCode = 'operator';
   static const int _requestPageSize = 100;
+  static const int _accountMaxLength = 10;
 
   late final UserService _userService;
   late final CraftService _craftService;
@@ -371,6 +372,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                         const SizedBox(height: 10),
                         TextFormField(
                           controller: accountController,
+                          maxLength: _accountMaxLength,
                           decoration: const InputDecoration(
                             labelText: '入库账号',
                             border: OutlineInputBorder(),
@@ -381,6 +383,9 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                             }
                             if (value.trim().length < 2) {
                               return '账号至少 2 个字符';
+                            }
+                            if (value.trim().length > _accountMaxLength) {
+                              return '账号最多 $_accountMaxLength 个字符';
                             }
                             return null;
                           },

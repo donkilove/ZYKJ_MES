@@ -28,6 +28,7 @@ from app.models.message import Message  # noqa: E402
 from app.models.message_recipient import MessageRecipient  # noqa: E402
 from app.models.process import Process  # noqa: E402
 from app.models.process_stage import ProcessStage  # noqa: E402
+from app.models.production_scrap_statistics import ProductionScrapStatistics  # noqa: E402
 from app.models.product import Product  # noqa: E402
 from app.models.production_order import ProductionOrder  # noqa: E402
 from app.models.production_order_process import ProductionOrderProcess  # noqa: E402
@@ -56,6 +57,7 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.order_process_ids: list[int] = []
         self.record_ids: list[int] = []
         self.repair_order_ids: list[int] = []
+        self.scrap_statistics_ids: list[int] = []
         self.repair_defect_ids: list[int] = []
         self.repair_cause_ids: list[int] = []
         self.message_ids: list[int] = []
@@ -89,6 +91,11 @@ class QualityModuleIntegrationTest(unittest.TestCase):
                     self.db.commit()
             for repair_order_id in reversed(self.repair_order_ids):
                 row = self.db.get(RepairOrder, repair_order_id)
+                if row is not None:
+                    self.db.delete(row)
+                    self.db.commit()
+            for scrap_statistics_id in reversed(self.scrap_statistics_ids):
+                row = self.db.get(ProductionScrapStatistics, scrap_statistics_id)
                 if row is not None:
                     self.db.delete(row)
                     self.db.commit()
@@ -333,6 +340,37 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.repair_defect_ids.append(int(row.id))
         return row
 
+    def _create_scrap_statistics(
+        self,
+        *,
+        record: FirstArticleRecord,
+        scrap_reason: str,
+        scrap_quantity: int,
+    ) -> ProductionScrapStatistics:
+        order = self.db.get(ProductionOrder, record.order_id)
+        order_process = self.db.get(ProductionOrderProcess, record.order_process_id)
+        self.assertIsNotNone(order)
+        self.assertIsNotNone(order_process)
+        row = ProductionScrapStatistics(
+            order_id=order.id,
+            order_code=order.order_code,
+            product_id=order.product_id,
+            product_name=order.product.name,
+            process_id=order_process.id,
+            process_code=order_process.process_code,
+            process_name=order_process.process_name,
+            operator_username=self.admin_user.username,
+            scrap_reason=scrap_reason,
+            scrap_quantity=scrap_quantity,
+            last_scrap_time=datetime(2026, 3, 2, 9, 30, tzinfo=UTC),
+            progress="pending_apply",
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        self.scrap_statistics_ids.append(int(row.id))
+        return row
+
     def _create_repair_cause(
         self,
         *,
@@ -555,6 +593,76 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             payload["product_quality_comparison"][0]["repair_order_count"],
             1,
         )
+
+    def test_quality_scrap_and_repair_contracts_are_available(self) -> None:
+        record = self._create_first_article_record(result="failed")
+        repair_order = self._create_repair_order(record=record)
+        scrap = self._create_scrap_statistics(
+            record=record,
+            scrap_reason="焊点脱落",
+            scrap_quantity=2,
+        )
+        self._create_repair_defect(
+            repair_order=repair_order,
+            phenomenon="虚焊",
+            quantity=2,
+        )
+
+        scrap_list_response = self.client.get(
+            "/api/v1/quality/scrap-statistics",
+            headers=self._headers(),
+            params={"keyword": record.order.order_code},
+        )
+        self.assertEqual(scrap_list_response.status_code, 200, scrap_list_response.text)
+        scrap_list_payload = scrap_list_response.json()["data"]
+        self.assertEqual(scrap_list_payload["total"], 1)
+        self.assertEqual(scrap_list_payload["items"][0]["id"], scrap.id)
+
+        scrap_detail_response = self.client.get(
+            f"/api/v1/quality/scrap-statistics/{scrap.id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            scrap_detail_response.status_code,
+            200,
+            scrap_detail_response.text,
+        )
+        scrap_detail_payload = scrap_detail_response.json()["data"]
+        self.assertEqual(scrap_detail_payload["scrap_reason"], "焊点脱落")
+        self.assertEqual(
+            scrap_detail_payload["related_repair_orders"][0]["repair_order_code"],
+            repair_order.repair_order_code,
+        )
+
+        repair_list_response = self.client.get(
+            "/api/v1/quality/repair-orders",
+            headers=self._headers(),
+            params={"keyword": repair_order.repair_order_code},
+        )
+        self.assertEqual(
+            repair_list_response.status_code, 200, repair_list_response.text
+        )
+        repair_list_payload = repair_list_response.json()["data"]
+        self.assertEqual(repair_list_payload["total"], 1)
+        self.assertEqual(
+            repair_list_payload["items"][0]["repair_order_code"],
+            repair_order.repair_order_code,
+        )
+
+        repair_detail_response = self.client.get(
+            f"/api/v1/quality/repair-orders/{repair_order.id}/detail",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            repair_detail_response.status_code,
+            200,
+            repair_detail_response.text,
+        )
+        repair_detail_payload = repair_detail_response.json()["data"]
+        self.assertEqual(
+            repair_detail_payload["repair_order_code"], repair_order.repair_order_code
+        )
+        self.assertEqual(repair_detail_payload["defect_rows"][0]["phenomenon"], "虚焊")
 
 
 if __name__ == "__main__":

@@ -303,6 +303,9 @@ void main() {
           expect(request.uri.queryParameters['keyword'], '设备');
           expect(request.uri.queryParameters['status'], 'pending');
           expect(request.uri.queryParameters['mine'], 'true');
+          expect(request.uri.queryParameters['due_date_start'], '2026-03-01');
+          expect(request.uri.queryParameters['due_date_end'], '2026-03-31');
+          expect(request.uri.queryParameters['stage_code'], '01-01');
           return TestResponse.json(
             200,
             body: {
@@ -463,6 +466,9 @@ void main() {
         keyword: '  设备 ',
         status: 'pending',
         mineOnly: true,
+        dueDateStart: DateTime(2026, 3, 1),
+        dueDateEnd: DateTime(2026, 3, 31),
+        stageCode: '01-01',
       );
       final workOrderDetail = await service.getWorkOrderDetail(workOrderId: 4);
       await service.startExecution(workOrderId: 4);

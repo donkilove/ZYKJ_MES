@@ -21,17 +21,29 @@ class MessageRecipient(Base, TimestampMixin):
         ForeignKey("sys_user.id", ondelete="CASCADE"), nullable=False, index=True
     )
     # 投递状态：pending=待投递 / delivered=已投递 / failed=投递失败
-    delivery_status: Mapped[str] = mapped_column(String(16), nullable=False, default="delivered")
-    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
-    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivery_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending"
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_read: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    last_push_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_push_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     message: Mapped["Message"] = relationship("Message", back_populates="recipients")
 
     __table_args__ = (
-        UniqueConstraint("message_id", "recipient_user_id", name="uq_msg_recipient_message_user"),
+        UniqueConstraint(
+            "message_id", "recipient_user_id", name="uq_msg_recipient_message_user"
+        ),
         Index(
             "ix_msg_recipient_user_unread",
             "recipient_user_id",

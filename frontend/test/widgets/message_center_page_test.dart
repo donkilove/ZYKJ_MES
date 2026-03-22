@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/message_models.dart';
+import 'package:mes_client/pages/craft_page.dart';
 import 'package:mes_client/models/user_models.dart';
 import 'package:mes_client/pages/message_center_page.dart';
+import 'package:mes_client/pages/product_page.dart';
 import 'package:mes_client/services/message_service.dart';
 import 'package:mes_client/services/user_service.dart';
 
@@ -13,6 +15,7 @@ class _FakeMessageService extends MessageService {
   bool lastTodoOnly = false;
   int batchReadCount = 0;
   int publishCount = 0;
+  int unreadCount = 4;
 
   List<MessageItem> _items = <MessageItem>[
     MessageItem.fromJson({
@@ -66,15 +69,59 @@ class _FakeMessageService extends MessageService {
       'published_at': '2026-03-19T10:00:00Z',
       'is_read': false,
     }),
+    MessageItem.fromJson({
+      'id': 4,
+      'message_type': 'notice',
+      'priority': 'important',
+      'title': '产品版本已发布',
+      'summary': '查看产品版本',
+      'content': '已发布到 V1.2',
+      'source_module': 'product',
+      'source_type': 'product_version',
+      'source_code': '产品A/V1.2',
+      'target_page_code': 'product',
+      'target_tab_code': 'product_version_management',
+      'target_route_payload_json':
+          '{"action":"view_version","product_id":66,"product_name":"产品A","target_version":3}',
+      'status': 'active',
+      'published_at': '2026-03-19T11:00:00Z',
+      'is_read': false,
+    }),
+    MessageItem.fromJson({
+      'id': 5,
+      'message_type': 'notice',
+      'priority': 'important',
+      'title': '工艺模板已发布',
+      'summary': '查看模板版本',
+      'content': '模板已发布到 V5',
+      'source_module': 'craft',
+      'source_type': 'product_process_template',
+      'source_code': '模板A/V5',
+      'target_page_code': 'craft',
+      'target_tab_code': 'production_process_config',
+      'target_route_payload_json':
+          '{"action":"view_template_version","template_id":88,"version":5}',
+      'status': 'active',
+      'published_at': '2026-03-19T12:00:00Z',
+      'is_read': false,
+    }),
   ];
 
   @override
   Future<MessageSummaryResult> getSummary() async {
-    return const MessageSummaryResult(
-      totalCount: 2,
-      unreadCount: 2,
-      todoUnreadCount: 1,
-      urgentUnreadCount: 1,
+    final unreadItems = _items.where((item) => !item.isRead).length;
+    final todoUnreadItems = _items
+        .where((item) => item.messageType == 'todo' && !item.isRead)
+        .length;
+    final urgentUnreadItems = _items
+        .where((item) => item.priority == 'urgent' && !item.isRead)
+        .length;
+    unreadCount = unreadItems;
+    return MessageSummaryResult(
+      totalCount: _items.length,
+      unreadCount: unreadItems,
+      todoUnreadCount: todoUnreadItems,
+      urgentUnreadCount: urgentUnreadItems,
     );
   }
 
@@ -105,14 +152,86 @@ class _FakeMessageService extends MessageService {
   }
 
   @override
-  Future<void> markRead(int messageId) async {}
+  Future<void> markRead(int messageId) async {
+    _items = _items
+        .map(
+          (item) => item.id == messageId
+              ? MessageItem.fromJson({
+                  'id': item.id,
+                  'message_type': item.messageType,
+                  'priority': item.priority,
+                  'title': item.title,
+                  'summary': item.summary,
+                  'content': item.content,
+                  'source_module': item.sourceModule,
+                  'source_type': item.sourceType,
+                  'source_code': item.sourceCode,
+                  'target_page_code': item.targetPageCode,
+                  'target_tab_code': item.targetTabCode,
+                  'target_route_payload_json': item.targetRoutePayloadJson,
+                  'status': item.status,
+                  'inactive_reason': item.inactiveReason,
+                  'published_at': item.publishedAt?.toUtc().toIso8601String(),
+                  'is_read': true,
+                })
+              : item,
+        )
+        .toList();
+  }
 
   @override
-  Future<void> markAllRead() async {}
+  Future<void> markAllRead() async {
+    _items = _items
+        .map(
+          (item) => MessageItem.fromJson({
+            'id': item.id,
+            'message_type': item.messageType,
+            'priority': item.priority,
+            'title': item.title,
+            'summary': item.summary,
+            'content': item.content,
+            'source_module': item.sourceModule,
+            'source_type': item.sourceType,
+            'source_code': item.sourceCode,
+            'target_page_code': item.targetPageCode,
+            'target_tab_code': item.targetTabCode,
+            'target_route_payload_json': item.targetRoutePayloadJson,
+            'status': item.status,
+            'inactive_reason': item.inactiveReason,
+            'published_at': item.publishedAt?.toUtc().toIso8601String(),
+            'is_read': true,
+          }),
+        )
+        .toList();
+  }
 
   @override
   Future<int> markBatchRead(List<int> messageIds) async {
     batchReadCount = messageIds.length;
+    _items = _items
+        .map(
+          (item) => messageIds.contains(item.id)
+              ? MessageItem.fromJson({
+                  'id': item.id,
+                  'message_type': item.messageType,
+                  'priority': item.priority,
+                  'title': item.title,
+                  'summary': item.summary,
+                  'content': item.content,
+                  'source_module': item.sourceModule,
+                  'source_type': item.sourceType,
+                  'source_code': item.sourceCode,
+                  'target_page_code': item.targetPageCode,
+                  'target_tab_code': item.targetTabCode,
+                  'target_route_payload_json': item.targetRoutePayloadJson,
+                  'status': item.status,
+                  'inactive_reason': item.inactiveReason,
+                  'published_at': item.publishedAt?.toUtc().toIso8601String(),
+                  'is_read': true,
+                })
+              : item,
+        )
+        .toList();
     return batchReadCount;
   }
 
@@ -253,6 +372,7 @@ void main() {
     String? navigatedPage;
     String? navigatedTab;
     String? navigatedRoutePayloadJson;
+    int? unreadCountFromPage;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -265,6 +385,9 @@ void main() {
               canPublishAnnouncement: true,
               service: service,
               userService: userService,
+              onUnreadCountChanged: (count) {
+                unreadCountFromPage = count;
+              },
               onNavigateToPage: (pageCode, {tabCode, routePayloadJson}) {
                 navigatedPage = pageCode;
                 navigatedTab = tabCode;
@@ -280,6 +403,7 @@ void main() {
 
     expect(find.text('消息详情预览'), findsOneWidget);
     expect(find.text('暂无目标页面访问权限'), findsOneWidget);
+    expect(unreadCountFromPage, 5);
 
     await tester.tap(find.text('待办消息').first);
     await tester.pumpAndSettle();
@@ -294,6 +418,7 @@ void main() {
     await tester.tap(find.textContaining('批量已读'));
     await tester.pumpAndSettle();
     expect(service.batchReadCount, 1);
+    expect(unreadCountFromPage, 4);
 
     await tester.tap(find.text('发布公告'));
     await tester.pumpAndSettle();
@@ -323,10 +448,64 @@ void main() {
 
     await tester.tap(find.text('注册审批通过').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('跳转').last);
+    final userRow = find.ancestor(
+      of: find.text('注册审批通过').first,
+      matching: find.byType(InkWell),
+    );
+    await tester.tap(find.descendant(of: userRow, matching: find.text('跳转')));
     await tester.pumpAndSettle();
     expect(navigatedPage, 'user');
     expect(navigatedTab, 'account_settings');
     expect(navigatedRoutePayloadJson, '{"action":"change_password"}');
+
+    await tester.tap(find.text('产品版本已发布').first);
+    await tester.pumpAndSettle();
+    final productRow = find.ancestor(
+      of: find.text('产品版本已发布').first,
+      matching: find.byType(InkWell),
+    );
+    await tester.tap(
+      find.descendant(of: productRow, matching: find.text('跳转')),
+    );
+    await tester.pumpAndSettle();
+    expect(navigatedPage, 'product');
+    expect(navigatedTab, 'product_version_management');
+    expect(
+      navigatedRoutePayloadJson,
+      '{"action":"view_version","product_id":66,"product_name":"产品A","target_version":3}',
+    );
+
+    await tester.tap(find.text('工艺模板已发布').first);
+    await tester.pumpAndSettle();
+    final craftRow = find.ancestor(
+      of: find.text('工艺模板已发布').first,
+      matching: find.byType(InkWell),
+    );
+    await tester.tap(find.descendant(of: craftRow, matching: find.text('跳转')));
+    await tester.pumpAndSettle();
+    expect(navigatedPage, 'craft');
+    expect(navigatedTab, 'production_process_config');
+    expect(
+      navigatedRoutePayloadJson,
+      '{"action":"view_template_version","template_id":88,"version":5}',
+    );
+  });
+
+  test('parses product and craft message jump payloads', () {
+    final productPayload = parseProductMessageJumpPayload(
+      '{"action":"view_version","product_id":66,"product_name":"产品A","target_version":3,"target_tab_code":"product_version_management"}',
+    );
+    final craftPayload = parseCraftMessageJumpPayload(
+      '{"template_id":88,"version":5,"target_tab_code":"production_process_config"}',
+    );
+
+    expect(productPayload, isNotNull);
+    expect(productPayload!.productId, 66);
+    expect(productPayload.targetTabCode, 'product_version_management');
+    expect(productPayload.targetVersion, 3);
+    expect(craftPayload, isNotNull);
+    expect(craftPayload!.templateId, 88);
+    expect(craftPayload.version, 5);
+    expect(craftPayload.targetTabCode, 'production_process_config');
   });
 }

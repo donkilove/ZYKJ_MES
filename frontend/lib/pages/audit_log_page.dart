@@ -11,10 +11,12 @@ class AuditLogPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    this.userService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final UserService? userService;
 
   @override
   State<AuditLogPage> createState() => _AuditLogPageState();
@@ -47,7 +49,7 @@ class _AuditLogPageState extends State<AuditLogPage> {
   @override
   void initState() {
     super.initState();
-    _userService = UserService(widget.session);
+    _userService = widget.userService ?? UserService(widget.session);
     _loadAuditLogs();
   }
 

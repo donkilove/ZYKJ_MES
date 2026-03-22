@@ -12,11 +12,13 @@ class RoleManagementPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canManage,
+    this.userService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canManage;
+  final UserService? userService;
 
   @override
   State<RoleManagementPage> createState() => _RoleManagementPageState();
@@ -46,7 +48,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
   @override
   void initState() {
     super.initState();
-    _userService = UserService(widget.session);
+    _userService = widget.userService ?? UserService(widget.session);
     _loadRoles();
   }
 
@@ -446,33 +448,40 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                                 DataColumn(label: Text('操作')),
                               ],
                               rows: _items.map((role) {
-                                final canToggle = widget.canManage && !role.isBuiltin;
-                                final canDelete = widget.canManage && !role.isBuiltin;
+                                final canToggle =
+                                    widget.canManage && !role.isBuiltin;
+                                final canDelete =
+                                    widget.canManage && !role.isBuiltin;
                                 return DataRow(
                                   cells: [
                                     DataCell(
                                       Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(role.name),
                                           Text(
                                             role.code,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodySmall,
                                           ),
                                         ],
                                       ),
                                     ),
                                     DataCell(
                                       Text(
-                                        role.description?.trim().isNotEmpty == true
+                                        role.description?.trim().isNotEmpty ==
+                                                true
                                             ? role.description!
                                             : '-',
                                       ),
                                     ),
-                                    DataCell(Text(_roleTypeLabel(role.roleType))),
+                                    DataCell(
+                                      Text(_roleTypeLabel(role.roleType)),
+                                    ),
                                     DataCell(Text('${role.userCount}')),
                                     DataCell(
                                       Text(
@@ -493,7 +502,9 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                                         children: [
                                           OutlinedButton(
                                             onPressed: widget.canManage
-                                                ? () => _showRoleDialog(role: role)
+                                                ? () => _showRoleDialog(
+                                                    role: role,
+                                                  )
                                                 : null,
                                             child: const Text('编辑'),
                                           ),

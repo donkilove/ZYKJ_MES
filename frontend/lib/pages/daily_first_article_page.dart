@@ -484,6 +484,9 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                                   const DataColumn(label: Text('操作')),
                               ],
                               rows: _items.map((item) {
+                                final canDisposeItem =
+                                    widget.canDispose &&
+                                    item.result != 'passed';
                                 return DataRow(
                                   cells: [
                                     DataCell(
@@ -506,8 +509,7 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                                       Text(_formatDate(item.verificationDate)),
                                     ),
                                     DataCell(Text(item.remark ?? '-')),
-                                    if (widget.canViewDetail ||
-                                        widget.canDispose)
+                                    if (widget.canViewDetail || canDisposeItem)
                                       DataCell(
                                         Wrap(
                                           spacing: 8,
@@ -521,7 +523,7 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                                                     ),
                                                 child: const Text('详情'),
                                               ),
-                                            if (widget.canDispose)
+                                            if (canDisposeItem)
                                               TextButton(
                                                 onPressed: () =>
                                                     _openDetailPage(

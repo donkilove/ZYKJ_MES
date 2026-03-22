@@ -79,7 +79,9 @@ ProductParameterVersionListItem _buildParameterVersionRow({
     lifecycleStatus: lifecycleStatus,
     isCurrentVersion: isCurrentVersion,
     isEffectiveVersion: isEffectiveVersion,
+    createdAt: _fixedDate,
     parameterSummary: parameterSummary,
+    lastModifiedParameter: '产品芯片',
     updatedAt: _fixedDate,
   );
 }
@@ -181,7 +183,7 @@ class _ProductFormService extends _ProductListOnlyService {
   @override
   Future<void> createProduct({
     required String name,
-    String category = '',
+    required String category,
     String remark = '',
   }) async {
     createdName = name;
@@ -193,7 +195,7 @@ class _ProductFormService extends _ProductListOnlyService {
   Future<ProductItem> updateProduct({
     required int productId,
     required String name,
-    String category = '',
+    required String category,
     String remark = '',
   }) async {
     updatedProductId = productId;
@@ -398,8 +400,27 @@ class _ParameterManagementContractService extends ProductService {
       version: version,
       versionLabel: version == null ? null : 'V1.${version - 1}',
       lifecycleStatus: 'draft',
-      total: 0,
-      items: const [],
+      total: 1,
+      items: [
+        ProductParameterHistoryItem(
+          id: 900,
+          productName: '产品$productId',
+          productCategory: '贴片',
+          version: version,
+          versionLabel: version == null ? null : 'V1.${version - 1}',
+          remark: '调整芯片参数',
+          changeReason: '调整芯片参数',
+          changeType: 'edit',
+          parameterName: '产品芯片',
+          changedKeys: const ['产品芯片'],
+          operatorUsername: 'admin',
+          beforeSummary: '产品芯片: 分类=基础参数; 类型=Text; 值=旧值; 说明=-',
+          afterSummary: '产品芯片: 分类=基础参数; 类型=Text; 值=新值; 说明=-',
+          beforeSnapshot: '{"before":true}',
+          afterSnapshot: '{"after":true}',
+          createdAt: _fixedDate,
+        ),
+      ],
     );
   }
 }
@@ -450,6 +471,18 @@ Widget _host(Widget child) {
   return MaterialApp(
     home: Scaffold(body: SizedBox(width: 1600, height: 1200, child: child)),
   );
+}
+
+Finder _popupMenuButtonFinder() {
+  return find.byWidgetPredicate(
+    (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
+  );
+}
+
+Future<void> _openPopupMenu(WidgetTester tester, Finder finder) async {
+  final dynamic state = tester.state(finder);
+  state.showButtonMenu();
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -611,7 +644,7 @@ void main() {
       );
     });
 
-    testWidgets('新建产品弹窗应显示待生效状态并在提交时 trim', (tester) async {
+    testWidgets('新建产品弹窗应显示默认启用并在提交时 trim', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1800, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -643,7 +676,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('默认状态'), findsOneWidget);
-      expect(find.text('停用（待生效版本）'), findsOneWidget);
+      expect(find.text('启用'), findsWidgets);
 
       await tester.enterText(
         find.widgetWithText(TextFormField, '产品名称'),
@@ -653,12 +686,17 @@ void main() {
         find.widgetWithText(TextFormField, '备注'),
         '  需要 trim  ',
       );
+      await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('贴片').last);
+      await tester.pumpAndSettle();
       await tester.pump();
 
       await tester.tap(find.widgetWithText(FilledButton, '保存'));
       await tester.pumpAndSettle();
 
       expect(service.createdName, '新产品');
+      expect(service.createdCategory, '贴片');
       expect(service.createdRemark, '需要 trim');
     });
 
@@ -704,7 +742,7 @@ void main() {
       expect(find.text('当前无生效版本，请前往版本管理生效版本后恢复启用'), findsOneWidget);
     });
 
-    testWidgets('产品表单应拦截空白名称和超长备注', (tester) async {
+    testWidgets('产品表单应拦截未选分类 空白名称和超长备注', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1800, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -740,8 +778,10 @@ void main() {
         find.widgetWithText(TextFormField, '备注'),
         overlongRemark,
       );
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
       await tester.pump();
 
+      expect(find.text('请选择产品分类'), findsWidgets);
       expect(find.text('产品名称不能为空'), findsOneWidget);
       expect(find.text('备注不能超过 500 个字符'), findsOneWidget);
 
@@ -837,25 +877,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('版本参数列表'), findsOneWidget);
+      expect(find.text('产品分类'), findsOneWidget);
+      expect(find.text('创建时间'), findsOneWidget);
+      expect(find.text('最后修改参数'), findsOneWidget);
       expect(find.text('V1.0 / #1'), findsOneWidget);
       expect(find.text('V1.1 / #2'), findsOneWidget);
       expect(find.text('历史版本参数'), findsOneWidget);
       expect(find.text('当前草稿参数'), findsOneWidget);
+      expect(find.text('产品芯片'), findsWidgets);
       expect(service.legacyListCalls, 0, reason: '首屏列表不应回退旧产品参数接口。');
 
-      await tester.tap(find.text('操作').at(1));
-      await tester.pumpAndSettle();
+      await _openPopupMenu(tester, _popupMenuButtonFinder().first);
       await tester.tap(find.text('查看历史'));
       await tester.pumpAndSettle();
 
       expect(service.historyCalls, [1], reason: '历史查询应绑定所选版本行。');
-      expect(find.text('暂无历史记录'), findsOneWidget);
+      expect(find.textContaining('参数变更历史 - 产品41 / 贴片 / V1.0'), findsOneWidget);
+      expect(find.textContaining('变更原因：调整芯片参数'), findsOneWidget);
+      expect(find.textContaining('变更前：产品芯片:'), findsOneWidget);
+      expect(find.textContaining('变更后：产品芯片:'), findsOneWidget);
 
       await tester.tap(find.widgetWithText(FilledButton, '关闭'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('操作').at(2));
-      await tester.pumpAndSettle();
+      await _openPopupMenu(tester, _popupMenuButtonFinder().at(1));
       await tester.tap(find.text('编辑参数'));
       await tester.pumpAndSettle();
 
@@ -872,6 +917,42 @@ void main() {
 
       expect(service.versionUpdateCalls, [2], reason: '保存入口应显式提交当前编辑版本。');
       expect(service.legacyListCalls, 0, reason: '保存链路不应触发旧参数读取兜底。');
+    });
+
+    testWidgets('参数编辑应即时提示 Link 格式错误', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _ParameterManagementContractService();
+
+      await tester.pumpWidget(
+        _host(
+          ProductParameterManagementPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: 'product-parameter-management',
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await _openPopupMenu(tester, _popupMenuButtonFinder().at(1));
+      await tester.tap(find.text('编辑参数'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Link').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).at(1), 'ftp://invalid');
+      await tester.pump();
+
+      expect(
+        find.text('Link 参数仅支持 http://、https://、\\\\、盘符绝对路径'),
+        findsOneWidget,
+      );
     });
 
     test('服务层参数查询缺少显式口径时不再回退旧接口', () async {

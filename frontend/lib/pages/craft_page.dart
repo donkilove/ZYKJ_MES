@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -52,6 +54,7 @@ class CraftPage extends StatefulWidget {
     required this.visibleTabCodes,
     required this.capabilityCodes,
     this.preferredTabCode,
+    this.routePayloadJson,
     this.onNavigateToPage,
   });
 
@@ -60,6 +63,7 @@ class CraftPage extends StatefulWidget {
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
   final String? preferredTabCode;
+  final String? routePayloadJson;
   final void Function(String pageCode)? onNavigateToPage;
 
   @override
@@ -72,12 +76,16 @@ class _CraftPageState extends State<CraftPage>
   TabController? _tabController;
   _ProcessManagementJumpTarget? _processManagementJumpTarget;
   _ProcessConfigurationJumpTarget? _processConfigurationJumpTarget;
+  String? _lastHandledRoutePayloadJson;
 
   @override
   void initState() {
     super.initState();
     _orderedVisibleTabCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
     _rebuildTabController(preferredCode: widget.preferredTabCode);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    });
   }
 
   @override
@@ -90,6 +98,9 @@ class _CraftPageState extends State<CraftPage>
       _rebuildTabController(preferredCode: selectedCode);
     } else if (widget.preferredTabCode != oldWidget.preferredTabCode) {
       _rebuildTabController(preferredCode: widget.preferredTabCode);
+    }
+    if (widget.routePayloadJson != oldWidget.routePayloadJson) {
+      _consumeRoutePayload(widget.routePayloadJson);
     }
   }
 
@@ -178,6 +189,36 @@ class _CraftPageState extends State<CraftPage>
     if (index >= 0 && _tabController != null) {
       _tabController!.animateTo(index);
     }
+  }
+
+  void _consumeRoutePayload(String? rawJson) {
+    if (rawJson == null || rawJson == _lastHandledRoutePayloadJson) {
+      return;
+    }
+    _lastHandledRoutePayloadJson = rawJson;
+    final payload = parseCraftMessageJumpPayload(rawJson);
+    if (payload == null) {
+      return;
+    }
+    setState(() {
+      if (payload.targetTabCode == processManagementTabCode &&
+          payload.processId != null &&
+          payload.processId! > 0) {
+        _processManagementJumpTarget = _ProcessManagementJumpTarget(
+          processId: payload.processId!,
+          requestId: (_processManagementJumpTarget?.requestId ?? 0) + 1,
+        );
+      }
+      if (payload.targetTabCode == productionProcessConfigTabCode) {
+        _processConfigurationJumpTarget = _ProcessConfigurationJumpTarget(
+          requestId: (_processConfigurationJumpTarget?.requestId ?? 0) + 1,
+          templateId: payload.templateId,
+          version: payload.version,
+          systemMasterVersions: payload.systemMasterVersions,
+        );
+      }
+    });
+    _selectCraftTab(payload.targetTabCode);
   }
 
   int? _parsePositiveInt(String? rawValue) {
@@ -322,5 +363,45 @@ class _CraftPageState extends State<CraftPage>
         ),
       ],
     );
+  }
+}
+
+class CraftMessageJumpPayload {
+  const CraftMessageJumpPayload({
+    required this.targetTabCode,
+    this.templateId,
+    this.version,
+    this.processId,
+    this.systemMasterVersions = false,
+  });
+
+  final String targetTabCode;
+  final int? templateId;
+  final int? version;
+  final int? processId;
+  final bool systemMasterVersions;
+}
+
+CraftMessageJumpPayload? parseCraftMessageJumpPayload(String? rawJson) {
+  final normalized = (rawJson ?? '').trim();
+  if (normalized.isEmpty) {
+    return null;
+  }
+  try {
+    final payload = jsonDecode(normalized);
+    if (payload is! Map<String, dynamic>) {
+      return null;
+    }
+    return CraftMessageJumpPayload(
+      targetTabCode:
+          payload['target_tab_code'] as String? ??
+          productionProcessConfigTabCode,
+      templateId: payload['template_id'] as int?,
+      version: payload['version'] as int?,
+      processId: payload['process_id'] as int?,
+      systemMasterVersions: payload['system_master_versions'] as bool? ?? false,
+    );
+  } catch (_) {
+    return null;
   }
 }

@@ -56,6 +56,8 @@ class ProductionOrderQueryPage extends StatefulWidget {
     required this.canCreateManualRepairOrder,
     required this.canCreateAssistAuthorization,
     required this.canProxyView,
+    this.service,
+    this.pollInterval = const Duration(seconds: 12),
   });
 
   final AppSession session;
@@ -65,6 +67,8 @@ class ProductionOrderQueryPage extends StatefulWidget {
   final bool canCreateManualRepairOrder;
   final bool canCreateAssistAuthorization;
   final bool canProxyView;
+  final ProductionService? service;
+  final Duration pollInterval;
 
   @override
   State<ProductionOrderQueryPage> createState() =>
@@ -72,8 +76,6 @@ class ProductionOrderQueryPage extends StatefulWidget {
 }
 
 class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
-  static const Duration _pollInterval = Duration(seconds: 12);
-
   late final ProductionService _service;
   final TextEditingController _keywordController = TextEditingController();
   Timer? _pollTimer;
@@ -92,7 +94,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   @override
   void initState() {
     super.initState();
-    _service = ProductionService(widget.session);
+    _service = widget.service ?? ProductionService(widget.session);
     if (widget.canProxyView) {
       _loadProxyOperators();
     }
@@ -163,8 +165,11 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
 
   void _startPolling() {
     _pollTimer?.cancel();
+    if (widget.pollInterval <= Duration.zero) {
+      return;
+    }
     _pollTimer = Timer.periodic(
-      _pollInterval,
+      widget.pollInterval,
       (_) => _loadOrders(silent: true),
     );
   }
@@ -906,7 +911,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
               ),
               const Spacer(),
               Text(
-                '每 ${_pollInterval.inSeconds} 秒自动刷新',
+                '每 ${widget.pollInterval.inSeconds} 秒自动刷新',
                 style: theme.textTheme.bodySmall,
               ),
               IconButton(

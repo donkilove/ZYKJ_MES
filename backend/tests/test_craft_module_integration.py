@@ -249,6 +249,96 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(version_payload["steps"][0]["standard_minutes"], 15)
 
+        export_batch = self.client.get(
+            "/api/v1/craft/templates/export",
+            headers=self._headers(),
+        )
+        self.assertEqual(export_batch.status_code, 200, export_batch.text)
+        exported_step = export_batch.json()["data"]["items"][0]["steps"][0]
+        self.assertEqual(exported_step["standard_minutes"], 15)
+        self.assertTrue(exported_step["is_key_process"])
+        self.assertEqual(exported_step["step_remark"], "关键首工序")
+
+    def test_detail_queries_and_reference_code_fields(self) -> None:
+        stage = self._create_stage("D01")
+        process = self._create_process(
+            stage_id=stage["id"],
+            stage_code=stage["code"],
+            suffix="01",
+        )
+        product = self._create_product("详情")
+        detail = self._create_template(
+            product_id=product["id"],
+            template_name="模板详情",
+            stage_id=stage["id"],
+            process_id=process["id"],
+        )
+        template_id = int(detail["template"]["id"])
+
+        stage_by_id = self.client.get(
+            f"/api/v1/craft/stages/detail?stage_id={stage['id']}",
+            headers=self._headers(),
+        )
+        self.assertEqual(stage_by_id.status_code, 200, stage_by_id.text)
+        self.assertEqual(stage_by_id.json()["data"]["code"], stage["code"])
+
+        stage_by_code = self.client.get(
+            f"/api/v1/craft/stages/detail?stage_code={stage['code']}",
+            headers=self._headers(),
+        )
+        self.assertEqual(stage_by_code.status_code, 200, stage_by_code.text)
+        self.assertEqual(stage_by_code.json()["data"]["id"], stage["id"])
+
+        process_by_id = self.client.get(
+            f"/api/v1/craft/processes/detail?process_id={process['id']}",
+            headers=self._headers(),
+        )
+        self.assertEqual(process_by_id.status_code, 200, process_by_id.text)
+        self.assertEqual(process_by_id.json()["data"]["code"], process["code"])
+
+        process_by_code = self.client.get(
+            f"/api/v1/craft/processes/detail?process_code={process['code']}",
+            headers=self._headers(),
+        )
+        self.assertEqual(process_by_code.status_code, 200, process_by_code.text)
+        self.assertEqual(process_by_code.json()["data"]["id"], process["id"])
+
+        stage_refs = self.client.get(
+            f"/api/v1/craft/stages/{stage['id']}/references",
+            headers=self._headers(),
+        )
+        self.assertEqual(stage_refs.status_code, 200, stage_refs.text)
+        process_ref = next(
+            item
+            for item in stage_refs.json()["data"]["items"]
+            if item["ref_type"] == "process"
+        )
+        self.assertEqual(process_ref["ref_code"], process["code"])
+
+        process_refs = self.client.get(
+            f"/api/v1/craft/processes/{process['id']}/references",
+            headers=self._headers(),
+        )
+        self.assertEqual(process_refs.status_code, 200, process_refs.text)
+        template_ref = next(
+            item
+            for item in process_refs.json()["data"]["items"]
+            if item["ref_type"] == "template"
+        )
+        self.assertEqual(template_ref["ref_code"], "模板详情")
+
+        template_refs = self.client.get(
+            f"/api/v1/craft/templates/{template_id}/references",
+            headers=self._headers(),
+        )
+        self.assertEqual(template_refs.status_code, 200, template_refs.text)
+        product_ref = next(
+            item
+            for item in template_refs.json()["data"]["items"]
+            if item["ref_type"] == "product"
+        )
+        self.assertEqual(product_ref["ref_code"], product["name"])
+
     def test_published_template_requires_draft_and_history_blocks_process_delete(
         self,
     ) -> None:

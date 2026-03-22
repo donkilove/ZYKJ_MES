@@ -21,6 +21,7 @@ const List<String> _defaultTabOrder = [
 ];
 
 const String _functionPermissionConfigTabCode = 'function_permission_config';
+const String _accountSettingsTabCode = 'account_settings';
 
 class UserPage extends StatefulWidget {
   const UserPage({
@@ -82,12 +83,9 @@ class _UserPageState extends State<UserPage> {
       _hasPermission(UserFeaturePermissionCodes.roleManagementLifecycle) ||
       _hasPermission(UserFeaturePermissionCodes.roleManagementDelete);
 
-  bool get _canChangeMyPassword =>
-      _hasPermission(UserFeaturePermissionCodes.accountSettingsPasswordUpdate);
+  bool get _canChangeMyPassword => true;
 
-  bool get _canViewMySession =>
-      _hasPermission(UserFeaturePermissionCodes.accountSettingsProfileView) ||
-      _hasPermission(UserFeaturePermissionCodes.accountSettingsSessionView);
+  bool get _canViewMySession => true;
 
   bool get _canManageSessions =>
       widget.visibleTabCodes.contains(_functionPermissionConfigTabCode) &&
@@ -95,6 +93,7 @@ class _UserPageState extends State<UserPage> {
 
   List<String> _sortedVisibleTabCodes() {
     final visibleSet = widget.visibleTabCodes.toSet();
+    visibleSet.add(_accountSettingsTabCode);
     final ordered = <String>[];
 
     for (final code in _defaultTabOrder) {

@@ -6,6 +6,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/message_models.dart';
 
 typedef WsEventCallback = void Function(WsEvent event);
+typedef MessageWebSocketChannelFactory = WebSocketChannel Function(Uri uri);
 
 class MessageWsService {
   MessageWsService({
@@ -13,12 +14,14 @@ class MessageWsService {
     required this.accessToken,
     required this.onEvent,
     required this.onDisconnected,
+    this.channelFactory,
   });
 
   final String baseUrl;
   final String accessToken;
   final WsEventCallback onEvent;
   final VoidCallback onDisconnected;
+  final MessageWebSocketChannelFactory? channelFactory;
 
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _sub;
@@ -38,7 +41,7 @@ class MessageWsService {
     try {
       final wsBase = baseUrl.replaceFirst(RegExp(r'^http'), 'ws');
       final uri = Uri.parse('$wsBase/messages/ws?token=$accessToken');
-      _channel = WebSocketChannel.connect(uri);
+      _channel = (channelFactory ?? WebSocketChannel.connect)(uri);
       _sub = _channel!.stream.listen(
         _onData,
         onError: _onError,

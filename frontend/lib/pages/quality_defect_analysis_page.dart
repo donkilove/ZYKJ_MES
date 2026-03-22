@@ -16,11 +16,17 @@ class QualityDefectAnalysisPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canExport,
+    this.service,
+    this.initialStartDate,
+    this.initialEndDate,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canExport;
+  final QualityService? service;
+  final DateTime? initialStartDate;
+  final DateTime? initialEndDate;
 
   @override
   State<QualityDefectAnalysisPage> createState() =>
@@ -46,7 +52,10 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
   @override
   void initState() {
     super.initState();
-    _service = QualityService(widget.session);
+    _service = widget.service ?? QualityService(widget.session);
+    _startDate = widget.initialStartDate;
+    _endDate = widget.initialEndDate;
+    _syncDateRangeMessage();
     _load();
   }
 
@@ -68,10 +77,26 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
     return '${d.year}-$mm-$dd';
   }
 
+  void _syncDateRangeMessage() {
+    final hasInvalidRange =
+        _startDate != null &&
+        _endDate != null &&
+        _startDate!.isAfter(_endDate!);
+    _message = hasInvalidRange ? '开始日期不能晚于结束日期' : '';
+  }
+
   Future<void> _load() async {
+    if (_startDate != null &&
+        _endDate != null &&
+        _startDate!.isAfter(_endDate!)) {
+      setState(() {
+        _syncDateRangeMessage();
+      });
+      return;
+    }
     setState(() {
       _loading = true;
-      _message = '';
+      _syncDateRangeMessage();
     });
     try {
       final result = await _service.getDefectAnalysis(
@@ -121,13 +146,22 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
       } else {
         _endDate = picked;
       }
+      _syncDateRangeMessage();
     });
   }
 
   Future<void> _export() async {
+    if (_startDate != null &&
+        _endDate != null &&
+        _startDate!.isAfter(_endDate!)) {
+      setState(() {
+        _syncDateRangeMessage();
+      });
+      return;
+    }
     setState(() {
       _exporting = true;
-      _message = '';
+      _syncDateRangeMessage();
     });
     try {
       final exportFile = await _service.exportDefectAnalysis(
@@ -224,6 +258,7 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
             onPressed: () => setState(() {
               _startDate = null;
               _endDate = null;
+              _syncDateRangeMessage();
             }),
             child: const Text('清除日期'),
           ),

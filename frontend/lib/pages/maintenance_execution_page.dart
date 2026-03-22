@@ -20,12 +20,16 @@ class MaintenanceExecutionPage extends StatefulWidget {
     required this.onLogout,
     required this.canExecute,
     this.jumpPayloadJson,
+    this.equipmentService,
+    this.craftService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canExecute;
   final String? jumpPayloadJson;
+  final EquipmentService? equipmentService;
+  final CraftService? craftService;
 
   @override
   State<MaintenanceExecutionPage> createState() =>
@@ -53,8 +57,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   @override
   void initState() {
     super.initState();
-    _equipmentService = EquipmentService(widget.session);
-    _craftService = CraftService(widget.session);
+    _equipmentService =
+        widget.equipmentService ?? EquipmentService(widget.session);
+    _craftService = widget.craftService ?? CraftService(widget.session);
     _loadStages();
     _loadItems();
     WidgetsBinding.instance.addPostFrameCallback((_) {

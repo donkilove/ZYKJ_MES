@@ -62,7 +62,7 @@ void main() {
         'POST /products': (request) {
           expect(jsonDecode(request.bodyText), {
             'name': 'Product B',
-            'category': '',
+            'category': '贴片',
             'remark': '',
           });
           return TestResponse.json(201, body: {'data': {}});
@@ -127,6 +127,12 @@ void main() {
                     'remark': 'Changed',
                     'changed_keys': ['Param 1'],
                     'operator_username': 'admin',
+                    'product_name': 'Product A',
+                    'product_category': 'fixture',
+                    'change_reason': 'Changed',
+                    'parameter_name': 'Param 1',
+                    'before_summary': 'Param 1: old',
+                    'after_summary': 'Param 1: new',
                     'created_at': '2026-03-01T00:00:00Z',
                   },
                 ],
@@ -202,9 +208,12 @@ void main() {
                   'created_by_user_id': 1,
                   'created_by_username': 'admin',
                   'created_at': '2026-03-02T00:00:00Z',
+                  'last_modified_parameter': 'Param 2',
+                  'updated_at': '2026-03-02T01:00:00Z',
                 },
                 {
                   'version': 1,
+                  'version_label': 'V1.0',
                   'lifecycle_status': 'draft',
                   'action': 'create',
                   'note': 'n1',
@@ -212,6 +221,8 @@ void main() {
                   'created_by_user_id': 1,
                   'created_by_username': 'admin',
                   'created_at': '2026-03-01T00:00:00Z',
+                  'last_modified_parameter': 'Param 1',
+                  'updated_at': '2026-03-01T01:00:00Z',
                 },
               ],
             },
@@ -280,7 +291,7 @@ void main() {
         pageSize: 20,
         keyword: '  abc ',
       );
-      await service.createProduct(name: 'Product B');
+      await service.createProduct(name: 'Product B', category: '贴片');
       await service.deleteProduct(productId: 8, password: 'pwd123');
       final parameters = await service.listProductParameters(
         productId: 8,
@@ -337,6 +348,7 @@ void main() {
       expect(parameters.versionLabel, 'V1.3');
       expect(updateResult.updatedCount, 1);
       expect(history.items.single.remark, 'Changed');
+      expect(history.items.single.parameterName, 'Param 1');
       expect(history.versionLabel, 'V1.3');
       expect(lifecycleUpdated.lifecycleStatus, 'inactive');
       expect(impact.requiresConfirmation, isTrue);
@@ -359,7 +371,7 @@ void main() {
       );
 
       await expectLater(
-        () => service.createProduct(name: 'bad'),
+        () => service.createProduct(name: 'bad', category: '贴片'),
         throwsA(
           isA<ApiException>()
               .having((e) => e.statusCode, 'statusCode', 400)

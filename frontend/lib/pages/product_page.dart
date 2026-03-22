@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -30,6 +32,7 @@ class ProductPage extends StatefulWidget {
     required this.visibleTabCodes,
     required this.capabilityCodes,
     this.preferredTabCode,
+    this.routePayloadJson,
     this.productVersionService,
   });
 
@@ -38,6 +41,7 @@ class ProductPage extends StatefulWidget {
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
   final String? preferredTabCode;
+  final String? routePayloadJson;
   final ProductService? productVersionService;
 
   @override
@@ -51,12 +55,16 @@ class _ProductPageState extends State<ProductPage>
 
   ProductJumpCommand? _jumpCommand;
   int _jumpSeq = 0;
+  String? _lastHandledRoutePayloadJson;
 
   @override
   void initState() {
     super.initState();
     _orderedVisibleTabCodes = _sortedVisibleTabCodes(widget.visibleTabCodes);
     _rebuildTabController(preferredCode: widget.preferredTabCode);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    });
   }
 
   @override
@@ -69,6 +77,9 @@ class _ProductPageState extends State<ProductPage>
       _rebuildTabController(preferredCode: selectedCode);
     } else if (widget.preferredTabCode != oldWidget.preferredTabCode) {
       _rebuildTabController(preferredCode: widget.preferredTabCode);
+    }
+    if (widget.routePayloadJson != oldWidget.routePayloadJson) {
+      _consumeRoutePayload(widget.routePayloadJson);
     }
   }
 
@@ -122,6 +133,34 @@ class _ProductPageState extends State<ProductPage>
       vsync: this,
       initialIndex: initialIndex,
     );
+  }
+
+  void _consumeRoutePayload(String? rawJson) {
+    if (rawJson == null || rawJson == _lastHandledRoutePayloadJson) {
+      return;
+    }
+    _lastHandledRoutePayloadJson = rawJson;
+    final payload = parseProductMessageJumpPayload(rawJson);
+    if (payload == null) {
+      return;
+    }
+    final targetIndex = _orderedVisibleTabCodes.indexOf(payload.targetTabCode);
+    if (targetIndex < 0) {
+      return;
+    }
+    setState(() {
+      _jumpSeq += 1;
+      _jumpCommand = ProductJumpCommand(
+        seq: _jumpSeq,
+        targetTabCode: payload.targetTabCode,
+        action: payload.action,
+        productId: payload.productId,
+        productName: payload.productName,
+        targetVersion: payload.targetVersion,
+        targetVersionLabel: payload.targetVersionLabel,
+      );
+    });
+    _tabController?.animateTo(targetIndex);
   }
 
   void _dispatchJump({
@@ -292,5 +331,52 @@ class _ProductPageState extends State<ProductPage>
         ),
       ],
     );
+  }
+}
+
+class ProductMessageJumpPayload {
+  const ProductMessageJumpPayload({
+    required this.targetTabCode,
+    required this.action,
+    required this.productId,
+    required this.productName,
+    this.targetVersion,
+    this.targetVersionLabel,
+  });
+
+  final String targetTabCode;
+  final String action;
+  final int productId;
+  final String productName;
+  final int? targetVersion;
+  final String? targetVersionLabel;
+}
+
+ProductMessageJumpPayload? parseProductMessageJumpPayload(String? rawJson) {
+  final normalized = (rawJson ?? '').trim();
+  if (normalized.isEmpty) {
+    return null;
+  }
+  try {
+    final payload = jsonDecode(normalized);
+    if (payload is! Map<String, dynamic>) {
+      return null;
+    }
+    final productId = payload['product_id'] as int?;
+    if (productId == null || productId <= 0) {
+      return null;
+    }
+    return ProductMessageJumpPayload(
+      targetTabCode:
+          payload['target_tab_code'] as String? ??
+          productVersionManagementTabCode,
+      action: payload['action'] as String? ?? 'view_version',
+      productId: productId,
+      productName: payload['product_name'] as String? ?? '',
+      targetVersion: payload['target_version'] as int?,
+      targetVersionLabel: payload['target_version_label'] as String?,
+    );
+  } catch (_) {
+    return null;
   }
 }

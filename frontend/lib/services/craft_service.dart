@@ -156,6 +156,31 @@ class CraftService {
     }
   }
 
+  Future<CraftStageItem> getStageDetail({
+    int? stageId,
+    String? stageCode,
+  }) async {
+    final query = <String, String>{};
+    if (stageId != null) {
+      query['stage_id'] = '$stageId';
+    }
+    if (stageCode != null && stageCode.trim().isNotEmpty) {
+      query['stage_code'] = stageCode.trim();
+    }
+    final uri = Uri.parse(
+      '$_basePath/stages/detail',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftStageItem.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
   Future<CraftProcessListResult> listProcesses({
     int page = 1,
     int pageSize = 500,
@@ -302,6 +327,31 @@ class CraftService {
         response.statusCode,
       );
     }
+  }
+
+  Future<CraftProcessItem> getProcessDetail({
+    int? processId,
+    String? processCode,
+  }) async {
+    final query = <String, String>{};
+    if (processId != null) {
+      query['process_id'] = '$processId';
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      query['process_code'] = processCode.trim();
+    }
+    final uri = Uri.parse(
+      '$_basePath/processes/detail',
+    ).replace(queryParameters: query.isEmpty ? null : query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return CraftProcessItem.fromJson(body['data'] as Map<String, dynamic>);
   }
 
   Future<CraftTemplateListResult> listTemplates({

@@ -8,6 +8,7 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.authz_catalog import PAGE_PERMISSION_BY_PAGE_CODE
+from app.db.session import SessionLocal
 from app.models.message import Message
 from app.models.message_recipient import MessageRecipient
 from app.models.role import Role
@@ -21,6 +22,33 @@ from app.schemas.message import (
 from app.services.authz_service import get_user_permission_codes
 
 logger = logging.getLogger(__name__)
+
+
+def _mark_recipient_delivery_result(
+    *,
+    message_id: int,
+    user_id: int,
+    delivered: bool,
+    pushed_at: datetime,
+) -> None:
+    with SessionLocal() as db:
+        recipient = db.execute(
+            select(MessageRecipient).where(
+                MessageRecipient.message_id == message_id,
+                MessageRecipient.recipient_user_id == user_id,
+                MessageRecipient.is_deleted.is_(False),
+            )
+        ).scalar_one_or_none()
+        if recipient is None:
+            return
+        recipient.last_push_at = pushed_at
+        if delivered:
+            recipient.delivery_status = "delivered"
+            recipient.delivered_at = pushed_at
+        else:
+            recipient.delivery_status = "failed"
+            recipient.delivered_at = None
+        db.commit()
 
 
 def _resolve_message_status(
@@ -315,10 +343,10 @@ def create_message(db: Session, *, req: MessageCreateRequest) -> Message:
         recipient = MessageRecipient(
             message_id=msg.id,
             recipient_user_id=uid,
-            delivery_status="delivered",
-            delivered_at=now,
+            delivery_status="pending",
+            delivered_at=None,
             is_read=False,
-            last_push_at=now,
+            last_push_at=None,
         )
         db.add(recipient)
 
@@ -331,15 +359,30 @@ def create_message(db: Session, *, req: MessageCreateRequest) -> Message:
     return msg
 
 
+async def _push_message_created_for_recipient(message_id: int, user_id: int) -> None:
+    from app.services.message_push_service import push_message_created
+
+    with SessionLocal() as db:
+        unread = get_unread_count(db, user_id=user_id)
+    delivered, _failure_reason, pushed_at = await push_message_created(
+        user_id,
+        message_id,
+        unread,
+    )
+    _mark_recipient_delivery_result(
+        message_id=message_id,
+        user_id=user_id,
+        delivered=delivered,
+        pushed_at=pushed_at,
+    )
+
+
 def _push_message_created_async(db: Session, msg: Message) -> None:
     """在同步上下文中调度异步 WebSocket 推送（fire-and-forget）"""
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return  # 无事件循环（如单元测试），跳过推送
-
-    from app.services.message_push_service import push_message_created
-    from app.services.message_service import get_unread_count
 
     stmt = select(MessageRecipient.recipient_user_id).where(
         MessageRecipient.message_id == msg.id,
@@ -348,8 +391,7 @@ def _push_message_created_async(db: Session, msg: Message) -> None:
     recipient_ids: list[int] = list(db.execute(stmt).scalars().all())
 
     for uid in recipient_ids:
-        unread = get_unread_count(db, user_id=uid)
-        loop.create_task(push_message_created(uid, msg.id, unread))
+        loop.create_task(_push_message_created_for_recipient(msg.id, uid))
 
 
 def create_message_for_users(

@@ -50,11 +50,15 @@ class FunctionPermissionConfigPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     this.onPermissionsChanged,
+    this.authzService,
+    this.userService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final Future<void> Function()? onPermissionsChanged;
+  final AuthzService? authzService;
+  final UserService? userService;
 
   @override
   State<FunctionPermissionConfigPage> createState() =>
@@ -83,8 +87,8 @@ class _FunctionPermissionConfigPageState
   @override
   void initState() {
     super.initState();
-    _authzService = AuthzService(widget.session);
-    _userService = UserService(widget.session);
+    _authzService = widget.authzService ?? AuthzService(widget.session);
+    _userService = widget.userService ?? UserService(widget.session);
     _loadInitialData();
   }
 

@@ -507,6 +507,20 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         no_items = no_response.json()["data"]["items"]
         self.assertEqual(len(no_items), 1)
         self.assertEqual(no_items[0]["pipeline_sub_order_no"], instance_no)
+        sub_order_id = items[0]["sub_order_id"]
+
+        sub_order_response = self.client.get(
+            "/api/v1/production/pipeline-instances",
+            headers=self._headers(),
+            params={
+                "order_id": order["id"],
+                "sub_order_id": sub_order_id,
+            },
+        )
+        self.assertEqual(sub_order_response.status_code, 200, sub_order_response.text)
+        sub_order_items = sub_order_response.json()["data"]["items"]
+        self.assertEqual(len(sub_order_items), 1)
+        self.assertEqual(sub_order_items[0]["sub_order_id"], sub_order_id)
 
     def test_scrap_statistics_support_exact_product_and_process_filters(self) -> None:
         stage_a = self._create_stage("E1")

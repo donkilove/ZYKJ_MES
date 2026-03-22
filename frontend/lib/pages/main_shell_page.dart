@@ -592,6 +592,9 @@ class _MainShellPageState extends State<MainShellPage>
           preferredTabCode: _selectedPageCode == _productPageCode
               ? _preferredTabCode
               : null,
+          routePayloadJson: _selectedPageCode == _productPageCode
+              ? _preferredRoutePayloadJson
+              : null,
         );
 
       case _equipmentPageCode:
@@ -659,6 +662,9 @@ class _MainShellPageState extends State<MainShellPage>
           capabilityCodes: _capabilityCodesForModule('craft'),
           preferredTabCode: _selectedPageCode == _craftPageCode
               ? _preferredTabCode
+              : null,
+          routePayloadJson: _selectedPageCode == _craftPageCode
+              ? _preferredRoutePayloadJson
               : null,
           onNavigateToPage: (pageCode) {
             setState(() {

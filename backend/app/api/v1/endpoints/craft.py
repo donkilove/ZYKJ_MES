@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -17,6 +19,7 @@ from app.models.product_process_template import ProductProcessTemplate
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
+from app.services.message_service import create_message_for_users
 from app.schemas.craft import (
     CraftKanbanProcessItem,
     CraftKanbanProcessMetricsResult,
@@ -103,9 +106,12 @@ from app.services.craft_service import (
     delete_template,
     get_system_master_template,
     get_stage_by_id,
+    get_stage_by_code,
     get_product_template_references,
     get_template_by_id,
     get_stage_references,
+    get_process_by_id,
+    get_process_by_code,
     get_process_references,
     get_template_references,
     list_craft_processes,
@@ -127,6 +133,7 @@ from app.services.craft_service import (
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _to_stage_item(row: ProcessStage) -> ProcessStageItem:
@@ -321,6 +328,42 @@ def _to_impact_result_item(
     )
 
 
+def _notify_craft_template_published(
+    *,
+    db: Session,
+    template: ProductProcessTemplate,
+    operator: User,
+) -> None:
+    payload = {
+        "action": "view_template_version",
+        "template_id": template.id,
+        "version": template.version,
+        "target_tab_code": "production_process_config",
+    }
+    create_message_for_users(
+        db,
+        message_type="notice",
+        priority="important",
+        title=f"工艺模板已发布：{template.template_name} V{template.version}",
+        summary=f"{operator.username} 已发布模板 {template.template_name} V{template.version}",
+        content=(
+            f"产品 {template.product.name if template.product else '-'} 的工艺模板"
+            f" {template.template_name} 已发布到 V{template.version}。"
+            "可从消息直接跳转到生产工序配置查看版本详情。"
+        ),
+        source_module="craft",
+        source_type="product_process_template",
+        source_id=str(template.id),
+        source_code=f"{template.template_name}/V{template.version}",
+        target_page_code="craft",
+        target_tab_code="production_process_config",
+        target_route_payload_json=json.dumps(payload),
+        recipient_user_ids=[operator.id],
+        dedupe_key=f"craft_template_published_{template.id}_{template.version}",
+        created_by_user_id=operator.id,
+    )
+
+
 def _to_template_update_result(
     row: ProductProcessTemplate,
 ) -> ProductProcessTemplateUpdateResult:
@@ -340,6 +383,7 @@ def _to_stage_reference_result(result) -> StageReferenceResult:
             StageReferenceItem(
                 ref_type=item.ref_type,
                 ref_id=item.ref_id,
+                ref_code=item.ref_code,
                 ref_name=item.ref_name,
                 detail=item.detail,
                 ref_status=item.ref_status,
@@ -363,6 +407,7 @@ def _to_process_reference_result(result) -> ProcessReferenceResult:
             ProcessReferenceItem(
                 ref_type=item.ref_type,
                 ref_id=item.ref_id,
+                ref_code=item.ref_code,
                 ref_name=item.ref_name,
                 detail=item.detail,
                 ref_status=item.ref_status,
@@ -430,6 +475,7 @@ def _to_product_template_reference_result(result) -> ProductTemplateReferenceRes
                 lifecycle_status=item.lifecycle_status,
                 ref_type=item.ref_type,
                 ref_id=item.ref_id,
+                ref_code=item.ref_code,
                 ref_name=item.ref_name,
                 detail=item.detail,
                 ref_status=item.ref_status,
@@ -509,6 +555,40 @@ def create_stage_api(
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     return success_response(_to_stage_item(row), message="created")
+
+
+@router.get("/stages/detail", response_model=ApiResponse[ProcessStageItem])
+def get_stage_detail_api(
+    stage_id: int | None = Query(default=None, ge=1),
+    stage_code: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.stages.list")),
+) -> ApiResponse[ProcessStageItem]:
+    if stage_id is None and not (stage_code or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="stage_id or stage_code is required",
+        )
+    row = None
+    if stage_id is not None:
+        row = get_stage_by_id(db, stage_id)
+    elif stage_code is not None:
+        row = get_stage_by_code(db, stage_code.strip())
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Stage not found"
+        )
+    row = (
+        db.execute(
+            select(ProcessStage)
+            .where(ProcessStage.id == row.id)
+            .options(selectinload(ProcessStage.processes))
+        )
+        .scalars()
+        .first()
+        or row
+    )
+    return success_response(_to_stage_item(row))
 
 
 @router.put("/stages/{stage_id}", response_model=ApiResponse[ProcessStageItem])
@@ -653,6 +733,30 @@ def create_process_api(
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     return success_response(_to_process_item(row), message="created")
+
+
+@router.get("/processes/detail", response_model=ApiResponse[CraftProcessItem])
+def get_process_detail_api(
+    process_id: int | None = Query(default=None, ge=1),
+    process_code: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("craft.processes.list")),
+) -> ApiResponse[CraftProcessItem]:
+    if process_id is None and not (process_code or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="process_id or process_code is required",
+        )
+    row = None
+    if process_id is not None:
+        row = get_process_by_id(db, process_id)
+    elif process_code is not None:
+        row = get_process_by_code(db, process_code.strip())
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Process not found"
+        )
+    return success_response(_to_process_item(row))
 
 
 @router.put("/processes/{process_id}", response_model=ApiResponse[CraftProcessItem])
@@ -993,6 +1097,9 @@ def export_templates_api(
                         step_order=step.step_order,
                         stage_id=step.stage_id,
                         process_id=step.process_id,
+                        standard_minutes=step.standard_minutes,
+                        is_key_process=step.is_key_process,
+                        step_remark=step.step_remark,
                     )
                     for step in steps
                 ],
@@ -1144,6 +1251,18 @@ def publish_template_api(
         after_data={"version": updated.version, "note": payload.note},
     )
     db.commit()
+    try:
+        _notify_craft_template_published(
+            db=db,
+            template=updated,
+            operator=current_user,
+        )
+    except Exception:
+        logger.exception(
+            "[MSG] 工艺模板发布消息创建失败: template_id=%s version=%s",
+            row.id,
+            updated.version,
+        )
     return success_response(
         ProductProcessTemplateUpdateResult(
             detail=_to_template_detail(updated),
@@ -1739,6 +1858,7 @@ def get_template_references_api(
                 TemplateReferenceItem(
                     ref_type=item.ref_type,
                     ref_id=item.ref_id,
+                    ref_code=item.ref_code,
                     ref_name=item.ref_name,
                     detail=item.detail,
                     ref_status=item.ref_status,

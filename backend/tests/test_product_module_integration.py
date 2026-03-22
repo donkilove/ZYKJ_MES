@@ -254,6 +254,9 @@ class ProductModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(version_rows[0]["lifecycle_status"], "draft")
         self.assertTrue(version_rows[0]["is_current_version"])
         self.assertFalse(version_rows[0]["is_effective_version"])
+        self.assertEqual(version_rows[0]["product_category"], "贴片")
+        self.assertEqual(version_rows[0]["last_modified_parameter"], "产品芯片")
+        self.assertIn("created_at", version_rows[0])
         self.assertEqual(version_rows[1]["version_label"], "V1.0")
         self.assertEqual(version_rows[1]["lifecycle_status"], "effective")
         self.assertFalse(version_rows[1]["is_current_version"])
@@ -292,6 +295,12 @@ class ProductModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(version_history.status_code, 200, version_history.text)
         self.assertEqual(version_history.json()["data"]["version_label"], "V1.1")
+        history_item = general_items[0]
+        self.assertEqual(history_item["product_name"], product["name"])
+        self.assertEqual(history_item["product_category"], "贴片")
+        self.assertIn("change_reason", history_item)
+        self.assertIn("before_summary", history_item)
+        self.assertIn("after_summary", history_item)
 
         export_list = self.client.get(
             f"/api/v1/products/export/list?keyword={urllib.parse.quote(str(product['name']))}",
@@ -310,14 +319,36 @@ class ProductModuleIntegrationTest(unittest.TestCase):
         self.assertIn("生效版本", export_effective_text)
         self.assertIn("V1.1", export_effective_text)
 
-    def test_product_lifecycle_follows_effective_version(self) -> None:
+    def test_new_product_defaults_to_active_and_requires_category(self) -> None:
         product = self._create_product(suffix="状态联动")
         v1 = int(product["current_version"])
 
         created_detail = self._get_product_detail()
-        self.assertEqual(created_detail["lifecycle_status"], "inactive")
+        self.assertEqual(created_detail["lifecycle_status"], "active")
         self.assertEqual(created_detail["effective_version"], 0)
-        self.assertIn("当前无生效版本", created_detail["inactive_reason"])
+        self.assertIsNone(created_detail["inactive_reason"])
+
+        missing_category_response = self.client.post(
+            "/api/v1/products",
+            headers=self._headers(),
+            json={
+                "name": f"缺少分类{int(time.time() * 1000)}",
+                "category": "",
+                "remark": "分类必填校验",
+            },
+        )
+        self.assertEqual(missing_category_response.status_code, 422)
+
+        invalid_category_response = self.client.post(
+            "/api/v1/products",
+            headers=self._headers(),
+            json={
+                "name": f"非法分类{int(time.time() * 1000)}",
+                "category": "非法分类",
+                "remark": "分类枚举校验",
+            },
+        )
+        self.assertEqual(invalid_category_response.status_code, 422)
 
         activate_response = self._activate_version(
             version=v1,

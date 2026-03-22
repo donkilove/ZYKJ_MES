@@ -439,10 +439,11 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                         columns: const [
                           DataColumn(label: Text('记录编号')),
                           DataColumn(label: Text('工单编号')),
-                          DataColumn(label: Text('完成时间')),
                           DataColumn(label: Text('设备')),
                           DataColumn(label: Text('项目')),
+                          DataColumn(label: Text('到期日期')),
                           DataColumn(label: Text('执行人')),
+                          DataColumn(label: Text('完成时间')),
                           DataColumn(label: Text('结果摘要')),
                           DataColumn(label: Text('备注')),
                           DataColumn(label: Text('附件')),
@@ -453,10 +454,11 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                             cells: [
                               DataCell(Text('#${item.id}')),
                               DataCell(Text('#${item.workOrderId}')),
-                              DataCell(Text(_formatDateTime(item.completedAt))),
                               DataCell(Text(item.equipmentName)),
                               DataCell(Text(item.itemName)),
+                              DataCell(Text(_formatDate(item.dueDate))),
                               DataCell(Text(item.executorUsername ?? '-')),
+                              DataCell(Text(_formatDateTime(item.completedAt))),
                               DataCell(Text(item.resultSummary)),
                               DataCell(Text(item.resultRemark ?? '-')),
                               DataCell(

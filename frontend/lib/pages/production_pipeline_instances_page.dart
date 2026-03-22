@@ -40,6 +40,7 @@ class _ProductionPipelineInstancesPageState
   int _total = 0;
   bool? _isActiveFilter;
   final _orderCodeController = TextEditingController();
+  final _subOrderIdController = TextEditingController();
   final _processKeywordController = TextEditingController();
   final _pipelineSubOrderNoController = TextEditingController();
   List<PipelineInstanceItem> _items = const [];
@@ -60,6 +61,7 @@ class _ProductionPipelineInstancesPageState
   @override
   void dispose() {
     _orderCodeController.dispose();
+    _subOrderIdController.dispose();
     _processKeywordController.dispose();
     _pipelineSubOrderNoController.dispose();
     super.dispose();
@@ -104,6 +106,18 @@ class _ProductionPipelineInstancesPageState
   }
 
   Future<void> _load() async {
+    final rawSubOrderId = _subOrderIdController.text.trim();
+    int? subOrderId;
+    if (rawSubOrderId.isNotEmpty) {
+      subOrderId = int.tryParse(rawSubOrderId);
+      if (subOrderId == null || subOrderId <= 0) {
+        setState(() {
+          _loading = false;
+          _message = '子订单ID必须为大于 0 的数字';
+        });
+        return;
+      }
+    }
     setState(() {
       _loading = true;
       _message = '';
@@ -112,6 +126,7 @@ class _ProductionPipelineInstancesPageState
       final result = await _service.listPipelineInstances(
         orderId: widget.orderId,
         orderCode: _standaloneMode ? _orderCodeController.text : null,
+        subOrderId: subOrderId,
         processKeyword: _processKeywordController.text,
         pipelineSubOrderNo: _pipelineSubOrderNoController.text,
         isActive: _isActiveFilter,
@@ -161,6 +176,20 @@ class _ProductionPipelineInstancesPageState
             ),
           ),
         ],
+        SizedBox(
+          width: 180,
+          child: TextField(
+            controller: _subOrderIdController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '子订单ID',
+              hintText: '精确匹配',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _load(),
+          ),
+        ),
         SizedBox(
           width: 220,
           child: TextField(
@@ -255,6 +284,7 @@ class _ProductionPipelineInstancesPageState
                       child: DataTable(
                         columns: [
                           const DataColumn(label: Text('ID')),
+                          const DataColumn(label: Text('子订单ID')),
                           if (_standaloneMode)
                             const DataColumn(label: Text('订单号')),
                           const DataColumn(label: Text('工序')),
@@ -272,6 +302,7 @@ class _ProductionPipelineInstancesPageState
                           return DataRow(
                             cells: [
                               DataCell(Text('${item.id}')),
+                              DataCell(Text('${item.subOrderId}')),
                               if (_standaloneMode)
                                 DataCell(Text(item.orderCode)),
                               DataCell(Text(item.processDisplayText)),

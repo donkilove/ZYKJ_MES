@@ -215,9 +215,16 @@ void main() {
     expect(equipment.code, 'EQ-01');
     expect(plan.executionProcessName, '切割');
     expect(generate.workOrderId, 5);
+    expect(
+      maintenanceItem.createdAt.toUtc().toIso8601String(),
+      '2026-03-01T00:00:00.000Z',
+    );
     expect(workOrder.startedAt, isNull);
     expect(workOrder.sourceEquipmentCode, 'EQ-01');
     expect(workOrderDetail.sourcePlanSummary, '计划#2 / 周期30天 / 起始2026-03-01');
+    expect(record.dueDate.year, 2026);
+    expect(record.dueDate.month, 3);
+    expect(record.dueDate.day, 8);
     expect(record.resultSummary, '完成');
     expect(recordDetail.sourceEquipmentName, '机台1');
     expect(recordDetail.sourceExecutionProcessCode, '01-01');

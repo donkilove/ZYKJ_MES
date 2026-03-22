@@ -20,12 +20,14 @@ class CraftReferenceAnalysisPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.onNavigate,
+    this.craftService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final void Function({required String moduleCode, String? jumpTarget})
   onNavigate;
+  final CraftService? craftService;
 
   @override
   State<CraftReferenceAnalysisPage> createState() =>
@@ -69,7 +71,7 @@ class _CraftReferenceAnalysisPageState
   @override
   void initState() {
     super.initState();
-    _service = CraftService(widget.session);
+    _service = widget.craftService ?? CraftService(widget.session);
     _loadBaseData();
   }
 
@@ -451,6 +453,11 @@ class _CraftReferenceAnalysisPageState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (item.detail != null) Text(item.detail!),
+              if ((item.refCode ?? '').trim().isNotEmpty)
+                Text(
+                  '编码/编号：${item.refCode}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               if (item.jumpTarget != null && item.jumpTarget!.trim().isNotEmpty)
                 Text(
                   '来源：${item.jumpTarget}',
@@ -645,6 +652,8 @@ class _CraftReferenceAnalysisPageState
                                   [
                                     if ((row.detail ?? '').trim().isNotEmpty)
                                       row.detail!.trim(),
+                                    if ((row.refCode ?? '').trim().isNotEmpty)
+                                      '编码/编号：${row.refCode!.trim()}',
                                     if ((row.jumpTarget ?? '')
                                         .trim()
                                         .isNotEmpty)

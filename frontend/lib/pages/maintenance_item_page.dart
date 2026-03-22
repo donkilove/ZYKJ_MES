@@ -16,11 +16,13 @@ class MaintenanceItemPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canWrite,
+    this.equipmentService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canWrite;
+  final EquipmentService? equipmentService;
 
   @override
   State<MaintenanceItemPage> createState() => _MaintenanceItemPageState();
@@ -41,7 +43,8 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
   @override
   void initState() {
     super.initState();
-    _equipmentService = EquipmentService(widget.session);
+    _equipmentService =
+        widget.equipmentService ?? EquipmentService(widget.session);
     _loadItems();
   }
 
@@ -586,12 +589,12 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                       child: DataTable(
                         columns: const [
                           DataColumn(label: Text('项目名称')),
-                          DataColumn(label: Text('类别')),
-                          DataColumn(label: Text('执行日期')),
-                          DataColumn(label: Text('周期(天)')),
-                          DataColumn(label: Text('时长(分钟)')),
+                          DataColumn(label: Text('项目分类')),
+                          DataColumn(label: Text('默认周期天数')),
+                          DataColumn(label: Text('默认预计时长')),
                           DataColumn(label: Text('状态')),
-                          DataColumn(label: Text('最后修改时间')),
+                          DataColumn(label: Text('创建时间')),
+                          DataColumn(label: Text('更新时间')),
                           DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
@@ -603,16 +606,16 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                                   item.category.isEmpty ? '-' : item.category,
                                 ),
                               ),
-                              DataCell(Text(item.executionDateLabel)),
                               DataCell(Text('${item.defaultCycleDays}')),
                               DataCell(
                                 Text(
                                   item.defaultDurationMinutes > 0
-                                      ? '${item.defaultDurationMinutes}'
+                                      ? '${item.defaultDurationMinutes} 分钟'
                                       : '-',
                                 ),
                               ),
                               DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                              DataCell(Text(_formatDateTime(item.createdAt))),
                               DataCell(Text(_formatDateTime(item.updatedAt))),
                               DataCell(
                                 Wrap(

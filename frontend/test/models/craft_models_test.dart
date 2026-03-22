@@ -193,4 +193,37 @@ void main() {
     expect(result.errors, hasLength(1));
     expect(result.errors.single, contains('第2条'));
   });
+
+  test('引用分析与批量导出扩展字段解析完整', () {
+    final ref = CraftReferenceItem.fromJson({
+      'ref_type': 'template',
+      'ref_id': 12,
+      'ref_code': 'TPL-12',
+      'ref_name': '模板A',
+      'detail': 'published',
+    });
+    final export = CraftTemplateBatchExportItem.fromJson({
+      'product_id': 1,
+      'product_name': '产品A',
+      'template_name': '模板A',
+      'is_default': true,
+      'is_enabled': true,
+      'lifecycle_status': 'published',
+      'steps': [
+        {
+          'step_order': 1,
+          'stage_id': 10,
+          'process_id': 20,
+          'standard_minutes': 18,
+          'is_key_process': true,
+          'step_remark': '扩展字段',
+        },
+      ],
+    });
+
+    expect(ref.refCode, 'TPL-12');
+    expect(export.steps.single.standardMinutes, 18);
+    expect(export.steps.single.isKeyProcess, isTrue);
+    expect(export.steps.single.stepRemark, '扩展字段');
+  });
 }

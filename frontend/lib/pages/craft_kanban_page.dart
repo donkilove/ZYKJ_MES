@@ -15,10 +15,14 @@ class CraftKanbanPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    this.craftService,
+    this.productionService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
+  final CraftService? craftService;
+  final ProductionService? productionService;
 
   @override
   State<CraftKanbanPage> createState() => _CraftKanbanPageState();
@@ -46,8 +50,9 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
   @override
   void initState() {
     super.initState();
-    _craftService = CraftService(widget.session);
-    _productionService = ProductionService(widget.session);
+    _craftService = widget.craftService ?? CraftService(widget.session);
+    _productionService =
+        widget.productionService ?? ProductionService(widget.session);
     _loadProducts();
   }
 
@@ -95,9 +100,8 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
             final c = a.sortOrder.compareTo(b.sortOrder);
             return c != 0 ? c : a.id.compareTo(b.id);
           });
-        _processes = [...processResult.items]..sort(
-          (a, b) => a.id.compareTo(b.id),
-        );
+        _processes = [...processResult.items]
+          ..sort((a, b) => a.id.compareTo(b.id));
         _selectedProductId = selected;
       });
       if (selected != null) {
@@ -442,9 +446,9 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     final averageMinutes = samples.isEmpty
         ? 0.0
         : samples
-                .map((item) => item.workMinutes)
-                .fold<int>(0, (sum, value) => sum + value) /
-            samples.length;
+                  .map((item) => item.workMinutes)
+                  .fold<int>(0, (sum, value) => sum + value) /
+              samples.length;
     final anomalyThreshold = averageMinutes <= 0 ? 0 : averageMinutes * 1.3;
     final maxY = samples.fold<double>(
       1,
@@ -498,7 +502,8 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
         ),
         barGroups: List.generate(samples.length, (index) {
           final sample = samples[index];
-          final isAnomaly = anomalyThreshold > 0 &&
+          final isAnomaly =
+              anomalyThreshold > 0 &&
               sample.workMinutes.toDouble() > anomalyThreshold;
           return BarChartGroupData(
             x: index,
@@ -620,10 +625,7 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 4),
-            Text(
-              rangeLabel,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(rangeLabel, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 8),
             SizedBox(height: 220, child: _buildWorkMinutesChart(samples)),
             const SizedBox(height: 10),
@@ -635,27 +637,19 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
   }
 
   Widget _buildTrendComparison(List<CraftKanbanProcessItem> items) {
-    final rows = items
-        .where((item) => item.samples.isNotEmpty)
-        .map((item) {
-          final totalMinutes = item.samples.fold<int>(
-            0,
-            (sum, sample) => sum + sample.workMinutes,
-          );
-          final totalCapacity = item.samples.fold<double>(
-            0,
-            (sum, sample) => sum + sample.capacityPerHour,
-          );
-          final avgMinutes = totalMinutes / item.samples.length;
-          final avgCapacity = totalCapacity / item.samples.length;
-          return (
-            process: item,
-            avgMinutes: avgMinutes,
-            avgCapacity: avgCapacity,
-          );
-        })
-        .toList()
-      ..sort((a, b) => b.avgMinutes.compareTo(a.avgMinutes));
+    final rows = items.where((item) => item.samples.isNotEmpty).map((item) {
+      final totalMinutes = item.samples.fold<int>(
+        0,
+        (sum, sample) => sum + sample.workMinutes,
+      );
+      final totalCapacity = item.samples.fold<double>(
+        0,
+        (sum, sample) => sum + sample.capacityPerHour,
+      );
+      final avgMinutes = totalMinutes / item.samples.length;
+      final avgCapacity = totalCapacity / item.samples.length;
+      return (process: item, avgMinutes: avgMinutes, avgCapacity: avgCapacity);
+    }).toList()..sort((a, b) => b.avgMinutes.compareTo(a.avgMinutes));
 
     if (rows.isEmpty) {
       return const SizedBox.shrink();

@@ -17,11 +17,13 @@ class EquipmentLedgerPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canWrite,
+    this.equipmentService,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canWrite;
+  final EquipmentService? equipmentService;
 
   @override
   State<EquipmentLedgerPage> createState() => _EquipmentLedgerPageState();
@@ -30,7 +32,8 @@ class EquipmentLedgerPage extends StatefulWidget {
 class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
-  final TextEditingController _locationFilterController = TextEditingController();
+  final TextEditingController _locationFilterController =
+      TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -44,7 +47,8 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   @override
   void initState() {
     super.initState();
-    _equipmentService = EquipmentService(widget.session);
+    _equipmentService =
+        widget.equipmentService ?? EquipmentService(widget.session);
     _loadItems(reloadOwners: true);
   }
 
@@ -134,7 +138,9 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     final codeController = TextEditingController(text: item?.code ?? '');
     final nameController = TextEditingController(text: item?.name ?? '');
     final modelController = TextEditingController(text: item?.model ?? '');
-    final locationController = TextEditingController(text: item?.location ?? '');
+    final locationController = TextEditingController(
+      text: item?.location ?? '',
+    );
     final remarkController = TextEditingController(text: item?.remark ?? '');
     final formKey = GlobalKey<FormState>();
     var selectedOwner = (item?.ownerName ?? '').trim();
@@ -422,7 +428,10 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   }
 
   Future<void> _exportCsv() async {
-    setState(() { _exporting = true; _message = ''; });
+    setState(() {
+      _exporting = true;
+      _message = '';
+    });
     try {
       final csvBase64 = await _equipmentService.exportEquipmentLedger(
         keyword: _keywordController.text.trim(),
@@ -455,12 +464,15 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成功：${location.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
     } catch (error) {
       if (!mounted) return;
-      if (_isUnauthorized(error)) { widget.onLogout(); return; }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
       setState(() => _message = '导出失败：${_errorMessage(error)}');
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -619,7 +631,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                           DataColumn(label: Text('负责人')),
                           DataColumn(label: Text('状态')),
                           DataColumn(label: Text('创建时间')),
-                          DataColumn(label: Text('最后修改时间')),
+                          DataColumn(label: Text('更新时间')),
                           DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {

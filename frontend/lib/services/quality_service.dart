@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/app_session.dart';
+import '../models/production_models.dart';
 import '../models/quality_models.dart';
 import 'api_exception.dart';
 
@@ -477,6 +478,134 @@ class QualityService {
               QualityOperatorStatItem.fromJson(entry as Map<String, dynamic>),
         )
         .toList();
+  }
+
+  Future<ScrapStatisticsListResult> listQualityScrapStatistics({
+    String? keyword,
+    String? progress,
+    String? productName,
+    String? processCode,
+    DateTime? startDate,
+    DateTime? endDate,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final query = <String, String>{
+      'page': '$page',
+      'page_size': '${pageSize.clamp(1, 200)}',
+    };
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (progress != null && progress.trim().isNotEmpty) {
+      query['progress'] = progress.trim();
+    }
+    if (productName != null && productName.trim().isNotEmpty) {
+      query['product_name'] = productName.trim();
+    }
+    if (processCode != null && processCode.trim().isNotEmpty) {
+      query['process_code'] = processCode.trim();
+    }
+    if (startDate != null) {
+      query['start_date'] = _formatDate(startDate);
+    }
+    if (endDate != null) {
+      query['end_date'] = _formatDate(endDate);
+    }
+    final uri = Uri.parse(
+      '$_basePath/scrap-statistics',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return ScrapStatisticsListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: (data['items'] as List<dynamic>? ?? const [])
+          .map((e) => ScrapStatisticsItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<ScrapStatisticsItem> getQualityScrapStatisticsDetail({
+    required int scrapId,
+  }) async {
+    final uri = Uri.parse('$_basePath/scrap-statistics/$scrapId');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return ScrapStatisticsItem.fromJson(data);
+  }
+
+  Future<RepairOrderListResult> listQualityRepairOrders({
+    String? keyword,
+    String? status,
+    DateTime? startDate,
+    DateTime? endDate,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final query = <String, String>{
+      'page': '$page',
+      'page_size': '${pageSize.clamp(1, 200)}',
+    };
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
+    if (status != null && status.trim().isNotEmpty) {
+      query['status'] = status.trim();
+    }
+    if (startDate != null) {
+      query['start_date'] = _formatDate(startDate);
+    }
+    if (endDate != null) {
+      query['end_date'] = _formatDate(endDate);
+    }
+    final uri = Uri.parse(
+      '$_basePath/repair-orders',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return RepairOrderListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: (data['items'] as List<dynamic>? ?? const [])
+          .map((e) => RepairOrderItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<RepairOrderDetailItem> getQualityRepairOrderDetail({
+    required int repairOrderId,
+  }) async {
+    final uri = Uri.parse('$_basePath/repair-orders/$repairOrderId/detail');
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return RepairOrderDetailItem.fromJson(data);
   }
 
   Map<String, dynamic> _decodeBody(http.Response response) {

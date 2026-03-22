@@ -458,6 +458,7 @@ class TemplateArchiveRequest(BaseModel):
 class StageReferenceItem(BaseModel):
     ref_type: str
     ref_id: int
+    ref_code: str | None = None
     ref_name: str
     detail: str | None = None
     ref_status: str | None = None
@@ -478,6 +479,7 @@ class StageReferenceResult(BaseModel):
 class ProcessReferenceItem(BaseModel):
     ref_type: str
     ref_id: int
+    ref_code: str | None = None
     ref_name: str
     detail: str | None = None
     ref_status: str | None = None
@@ -498,6 +500,7 @@ class ProcessReferenceResult(BaseModel):
 class TemplateReferenceItem(BaseModel):
     ref_type: str
     ref_id: int
+    ref_code: str | None = None
     ref_name: str
     detail: str | None = None
     ref_status: str | None = None
@@ -522,6 +525,7 @@ class ProductTemplateReferenceRow(BaseModel):
     lifecycle_status: str
     ref_type: str
     ref_id: int
+    ref_code: str | None = None
     ref_name: str
     detail: str | None = None
     ref_status: str | None = None

@@ -211,6 +211,30 @@ def get_stage_by_id(db: Session, stage_id: int) -> ProcessStage | None:
     return _get_stage_by_id(db, stage_id)
 
 
+def get_process_by_id(db: Session, process_id: int) -> Process | None:
+    return (
+        db.execute(
+            select(Process)
+            .where(Process.id == process_id)
+            .options(selectinload(Process.stage))
+        )
+        .scalars()
+        .first()
+    )
+
+
+def get_process_by_code(db: Session, process_code: str) -> Process | None:
+    return (
+        db.execute(
+            select(Process)
+            .where(Process.code == process_code)
+            .options(selectinload(Process.stage))
+        )
+        .scalars()
+        .first()
+    )
+
+
 def list_stages(
     db: Session,
     *,
@@ -2509,6 +2533,7 @@ def resolve_user_stage_codes(db: Session, *, process_codes: list[str]) -> set[st
 class ReferenceItem:
     ref_type: str
     ref_id: int
+    ref_code: str | None
     ref_name: str
     detail: str | None = None
     ref_status: str | None = None
@@ -2543,6 +2568,7 @@ class ProductTemplateReferenceRow:
     lifecycle_status: str
     ref_type: str
     ref_id: int
+    ref_code: str | None
     ref_name: str
     detail: str | None = None
     ref_status: str | None = None
@@ -2567,6 +2593,16 @@ class SystemMasterTemplateVersionResult:
     items: list[CraftSystemMasterTemplateRevision]
 
 
+def _reference_code(*candidates: object, fallback_id: int | None = None) -> str | None:
+    for candidate in candidates:
+        value = str(candidate or "").strip()
+        if value:
+            return value
+    if fallback_id is not None:
+        return str(fallback_id)
+    return None
+
+
 def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceResult:
     items: list[ReferenceItem] = []
 
@@ -2585,6 +2621,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
             ReferenceItem(
                 ref_type="process",
                 ref_id=p.id,
+                ref_code=_reference_code(p.code, fallback_id=p.id),
                 ref_name=p.name,
                 detail=p.code,
                 ref_status="正在使用" if p.is_enabled else "历史引用",
@@ -2607,6 +2644,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
             ReferenceItem(
                 ref_type="user",
                 ref_id=u.id,
+                ref_code=_reference_code(u.username, fallback_id=u.id),
                 ref_name=u.username,
                 detail=u.full_name,
                 ref_status="正在使用",
@@ -2639,6 +2677,9 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 ReferenceItem(
                     ref_type="system_master_template",
                     ref_id=template.id,
+                    ref_code=_reference_code(
+                        f"MASTER-{template.id}", fallback_id=template.id
+                    ),
                     ref_name=template.name
                     if hasattr(template, "name") and template.name
                     else "系统母版",
@@ -2674,6 +2715,9 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
             ReferenceItem(
                 ref_type="system_master_revision",
                 ref_id=revision.id,
+                ref_code=_reference_code(
+                    f"MASTER-V{revision.version}", fallback_id=revision.id
+                ),
                 ref_name=f"系统母版历史版本 v{revision.version}",
                 detail=revision.action,
                 ref_status="历史引用",
@@ -2714,6 +2758,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 ReferenceItem(
                     ref_type="template",
                     ref_id=t.id,
+                    ref_code=_reference_code(t.template_name, fallback_id=t.id),
                     ref_name=t.template_name,
                     detail=t.lifecycle_status,
                     ref_status="正在使用"
@@ -2753,6 +2798,10 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
             ReferenceItem(
                 ref_type="template_revision",
                 ref_id=revision.id,
+                ref_code=_reference_code(
+                    f"{revision.template_id}-v{revision.version}",
+                    fallback_id=revision.id,
+                ),
                 ref_name=f"{revision.template.template_name} 历史版本 v{revision.version}",
                 detail=revision.action,
                 ref_status="历史引用",
@@ -2788,6 +2837,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 ReferenceItem(
                     ref_type="order",
                     ref_id=o.id,
+                    ref_code=_reference_code(o.order_code, fallback_id=o.id),
                     ref_name=o.order_code,
                     detail=o.status,
                     ref_status="正在使用" if active else "历史引用",
@@ -2815,6 +2865,10 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 ReferenceItem(
                     ref_type="maintenance_plan",
                     ref_id=plan.id,
+                    ref_code=_reference_code(
+                        plan.plan_code if hasattr(plan, "plan_code") else None,
+                        fallback_id=plan.id,
+                    ),
                     ref_name=f"保养计划#{plan.id}",
                     detail=plan.execution_process_code,
                     ref_status="正在使用" if plan.is_enabled else "历史引用",
@@ -2843,6 +2897,12 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 ReferenceItem(
                     ref_type="maintenance_order",
                     ref_id=work_order.id,
+                    ref_code=_reference_code(
+                        work_order.work_order_code
+                        if hasattr(work_order, "work_order_code")
+                        else None,
+                        fallback_id=work_order.id,
+                    ),
                     ref_name=f"保养工单#{work_order.id}",
                     detail=work_order.status,
                     ref_status="正在使用" if active else "历史引用",
@@ -2874,6 +2934,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 ReferenceItem(
                     ref_type="scrap_stat",
                     ref_id=row.id,
+                    ref_code=_reference_code(fallback_id=row.id),
                     ref_name=f"报废统计#{row.id}",
                     detail=row.progress,
                     ref_status="历史引用" if row.progress == "applied" else "正在使用",
@@ -2904,6 +2965,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 ReferenceItem(
                     ref_type="quality_defect",
                     ref_id=row.id,
+                    ref_code=_reference_code(row.process_code, fallback_id=row.id),
                     ref_name=row.phenomenon,
                     detail=row.process_code,
                     ref_status="历史引用",
@@ -2949,6 +3011,9 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                 ReferenceItem(
                     ref_type="system_master_template",
                     ref_id=template.id,
+                    ref_code=_reference_code(
+                        f"MASTER-{template.id}", fallback_id=template.id
+                    ),
                     ref_name=template.name
                     if hasattr(template, "name") and template.name
                     else "系统母版",
@@ -2984,6 +3049,9 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
             ReferenceItem(
                 ref_type="system_master_revision",
                 ref_id=revision.id,
+                ref_code=_reference_code(
+                    f"MASTER-V{revision.version}", fallback_id=revision.id
+                ),
                 ref_name=f"系统母版历史版本 v{revision.version}",
                 detail=revision.action,
                 ref_status="历史引用",
@@ -3024,6 +3092,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                 ReferenceItem(
                     ref_type="template",
                     ref_id=t.id,
+                    ref_code=_reference_code(t.template_name, fallback_id=t.id),
                     ref_name=t.template_name,
                     detail=t.lifecycle_status,
                     ref_status="正在使用"
@@ -3063,6 +3132,10 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
             ReferenceItem(
                 ref_type="template_revision",
                 ref_id=revision.id,
+                ref_code=_reference_code(
+                    f"{revision.template_id}-v{revision.version}",
+                    fallback_id=revision.id,
+                ),
                 ref_name=f"{revision.template.template_name} 历史版本 v{revision.version}",
                 detail=revision.action,
                 ref_status="历史引用",
@@ -3098,6 +3171,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                 ReferenceItem(
                     ref_type="order",
                     ref_id=o.id,
+                    ref_code=_reference_code(o.order_code, fallback_id=o.id),
                     ref_name=o.order_code,
                     detail=o.status,
                     ref_status="正在使用" if active else "历史引用",
@@ -3124,6 +3198,10 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
             ReferenceItem(
                 ref_type="maintenance_plan",
                 ref_id=plan.id,
+                ref_code=_reference_code(
+                    plan.plan_code if hasattr(plan, "plan_code") else None,
+                    fallback_id=plan.id,
+                ),
                 ref_name=f"保养计划#{plan.id}",
                 detail=plan.execution_process_code,
                 ref_status="正在使用" if plan.is_enabled else "历史引用",
@@ -3148,6 +3226,12 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
             ReferenceItem(
                 ref_type="maintenance_order",
                 ref_id=work_order.id,
+                ref_code=_reference_code(
+                    work_order.work_order_code
+                    if hasattr(work_order, "work_order_code")
+                    else None,
+                    fallback_id=work_order.id,
+                ),
                 ref_name=f"保养工单#{work_order.id}",
                 detail=work_order.status,
                 ref_status="正在使用" if active else "历史引用",
@@ -3177,6 +3261,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
             ReferenceItem(
                 ref_type="scrap_stat",
                 ref_id=row.id,
+                ref_code=_reference_code(fallback_id=row.id),
                 ref_name=f"报废统计#{row.id}",
                 detail=row.progress,
                 ref_status="历史引用" if row.progress == "applied" else "正在使用",
@@ -3205,6 +3290,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
             ReferenceItem(
                 ref_type="quality_defect",
                 ref_id=row.id,
+                ref_code=_reference_code(row.process_code, fallback_id=row.id),
                 ref_name=row.phenomenon,
                 detail=row.process_code,
                 ref_status="历史引用",
@@ -3233,6 +3319,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
             ReferenceItem(
                 ref_type="quality_cause",
                 ref_id=row.id,
+                ref_code=_reference_code(row.process_code, fallback_id=row.id),
                 ref_name=row.reason,
                 detail=row.process_code,
                 ref_status="历史引用",
@@ -3263,6 +3350,11 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
             ReferenceItem(
                 ref_type="quality_return_route",
                 ref_id=row.id,
+                ref_code=_reference_code(
+                    row.source_process_code,
+                    row.target_process_code,
+                    fallback_id=row.id,
+                ),
                 ref_name=f"{row.source_process_code}->{row.target_process_code}",
                 detail=f"数量{row.return_quantity}",
                 ref_status="历史引用",
@@ -3285,6 +3377,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
 class TemplateReferenceItem:
     ref_type: str
     ref_id: int
+    ref_code: str | None
     ref_name: str
     detail: str | None = None
     ref_status: str | None = None
@@ -3316,6 +3409,7 @@ def get_template_references(
         TemplateReferenceItem(
             ref_type="product",
             ref_id=template.product_id,
+            ref_code=_reference_code(product_name, fallback_id=template.product_id),
             ref_name=product_name or f"产品#{template.product_id}",
             detail=template.lifecycle_status,
             ref_status="正在使用" if template.is_enabled else "历史引用",
@@ -3341,6 +3435,7 @@ def get_template_references(
             TemplateReferenceItem(
                 ref_type="order",
                 ref_id=order_id,
+                ref_code=_reference_code(order_code, fallback_id=order_id),
                 ref_name=order_code,
                 detail=order_status,
                 ref_status=ref_status,
@@ -3395,6 +3490,9 @@ def get_product_template_references(
                     lifecycle_status=template.lifecycle_status,
                     ref_type="template",
                     ref_id=template.id,
+                    ref_code=_reference_code(
+                        template.template_name, fallback_id=template.id
+                    ),
                     ref_name=template.template_name,
                     detail="无下游引用",
                     ref_status="可同步",
@@ -3412,6 +3510,7 @@ def get_product_template_references(
                     lifecycle_status=template.lifecycle_status,
                     ref_type=item.ref_type,
                     ref_id=item.ref_id,
+                    ref_code=item.ref_code,
                     ref_name=item.ref_name,
                     detail=item.detail,
                     ref_status=item.ref_status,

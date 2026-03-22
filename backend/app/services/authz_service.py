@@ -52,9 +52,29 @@ _SYSTEM_ADMIN_GUARDRAIL_PERMISSION_CODES = {
     PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
 }
 
+_COMMON_ACCOUNT_SETTINGS_PERMISSION_CODES = {
+    module_permission_code("user"),
+    PAGE_PERMISSION_BY_PAGE_CODE["user"],
+    PAGE_PERMISSION_BY_PAGE_CODE["account_settings"],
+    "feature.user.account_settings.profile_view",
+    "feature.user.account_settings.password_update",
+    "feature.user.account_settings.session_view",
+    "user.profile.view",
+    "user.profile.password.update",
+    "user.sessions.overview",
+}
+
 
 def _codes(*values: str | None) -> set[str]:
     return {value for value in values if isinstance(value, str) and value.strip()}
+
+
+def _baseline_permission_codes_for_role(role_code: str) -> set[str]:
+    if not role_code.strip():
+        return set()
+    if role_code == ROLE_SYSTEM_ADMIN:
+        return set()
+    return set(_COMMON_ACCOUNT_SETTINGS_PERMISSION_CODES)
 
 
 _SYSTEM_MODULE_PERMISSION_CODE = MODULE_PERMISSION_BY_MODULE_CODE.get(
@@ -116,6 +136,7 @@ def _guard_role_permission_codes(
     hierarchy_only: bool = False,
 ) -> set[str]:
     effective_codes = set(permission_codes)
+    effective_codes.update(_baseline_permission_codes_for_role(role_code))
     if allowed_codes is not None:
         effective_codes.intersection_update(allowed_codes)
     # 非系统管理员不得持有 system 模块功能权限及权限配置相关 action/page 权限
@@ -602,8 +623,10 @@ def ensure_permission_catalog_defaults(db: Session) -> bool:
 
 def ensure_role_permission_defaults(db: Session) -> bool:
     _ensure_role_rows(db)
-    role_codes = [code for code in db.execute(select(Role.code)).scalars().all()]
-    permission_codes = [item.permission_code for item in PERMISSION_CATALOG]
+    role_codes = sorted(
+        {str(code) for code in db.execute(select(Role.code)).scalars().all()}
+    )
+    permission_codes = sorted({item.permission_code for item in PERMISSION_CATALOG})
 
     existing_rows = db.execute(select(RolePermissionGrant)).scalars().all()
     existing_keys = {(row.role_code, row.permission_code) for row in existing_rows}
@@ -621,6 +644,7 @@ def ensure_role_permission_defaults(db: Session) -> bool:
                     granted=default_permission_granted(role_code, permission_code),
                 )
             )
+            existing_keys.add(key)
             changed = True
 
     if changed:

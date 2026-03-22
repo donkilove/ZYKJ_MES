@@ -13,11 +13,17 @@ class QualityDataPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     this.canExport = false,
+    this.service,
+    this.initialStartDate,
+    this.initialEndDate,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final bool canExport;
+  final QualityService? service;
+  final DateTime? initialStartDate;
+  final DateTime? initialEndDate;
 
   @override
   State<QualityDataPage> createState() => _QualityDataPageState();
@@ -28,7 +34,8 @@ class _QualityDataPageState extends State<QualityDataPage> {
   final ExportFileService _exportFileService = const ExportFileService();
   final TextEditingController _productNameController = TextEditingController();
   final TextEditingController _processCodeController = TextEditingController();
-  final TextEditingController _operatorUsernameController = TextEditingController();
+  final TextEditingController _operatorUsernameController =
+      TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -54,7 +61,13 @@ class _QualityDataPageState extends State<QualityDataPage> {
   @override
   void initState() {
     super.initState();
-    _service = QualityService(widget.session);
+    _service = widget.service ?? QualityService(widget.session);
+    if (widget.initialStartDate != null) {
+      _startDate = widget.initialStartDate!;
+    }
+    if (widget.initialEndDate != null) {
+      _endDate = widget.initialEndDate!;
+    }
     _loadStats();
   }
 
@@ -288,15 +301,17 @@ class _QualityDataPageState extends State<QualityDataPage> {
             DataColumn(label: Text('维修数')),
           ],
           rows: _trendItems.map((item) {
-            return DataRow(cells: [
-              DataCell(Text(item.date)),
-              DataCell(Text('${item.firstArticleTotal}')),
-              DataCell(Text('${item.passedTotal}')),
-              DataCell(Text('${item.failedTotal}')),
-              DataCell(Text(_formatRate(item.passRatePercent))),
-              DataCell(Text('${item.scrapTotal}')),
-              DataCell(Text('${item.repairTotal}')),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text(item.date)),
+                DataCell(Text('${item.firstArticleTotal}')),
+                DataCell(Text('${item.passedTotal}')),
+                DataCell(Text('${item.failedTotal}')),
+                DataCell(Text(_formatRate(item.passRatePercent))),
+                DataCell(Text('${item.scrapTotal}')),
+                DataCell(Text('${item.repairTotal}')),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -634,14 +649,36 @@ class _QualityDataPageState extends State<QualityDataPage> {
                                           rows: _productItems.map((item) {
                                             return DataRow(
                                               cells: [
-                                                DataCell(Text(item.productCode)),
-                                                DataCell(Text(item.productName)),
-                                                DataCell(Text('${item.firstArticleTotal}')),
-                                                DataCell(Text('${item.passedTotal}')),
-                                                DataCell(Text('${item.failedTotal}')),
-                                                DataCell(Text(_formatRate(item.passRatePercent))),
-                                                DataCell(Text('${item.scrapTotal}')),
-                                                DataCell(Text('${item.repairTotal}')),
+                                                DataCell(
+                                                  Text(item.productCode),
+                                                ),
+                                                DataCell(
+                                                  Text(item.productName),
+                                                ),
+                                                DataCell(
+                                                  Text(
+                                                    '${item.firstArticleTotal}',
+                                                  ),
+                                                ),
+                                                DataCell(
+                                                  Text('${item.passedTotal}'),
+                                                ),
+                                                DataCell(
+                                                  Text('${item.failedTotal}'),
+                                                ),
+                                                DataCell(
+                                                  Text(
+                                                    _formatRate(
+                                                      item.passRatePercent,
+                                                    ),
+                                                  ),
+                                                ),
+                                                DataCell(
+                                                  Text('${item.scrapTotal}'),
+                                                ),
+                                                DataCell(
+                                                  Text('${item.repairTotal}'),
+                                                ),
                                               ],
                                             );
                                           }).toList(),

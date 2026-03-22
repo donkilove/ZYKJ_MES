@@ -162,7 +162,9 @@ class ProductParameterVersionListItem {
     required this.lifecycleStatus,
     required this.isCurrentVersion,
     required this.isEffectiveVersion,
+    required this.createdAt,
     required this.parameterSummary,
+    required this.lastModifiedParameter,
     required this.updatedAt,
   });
 
@@ -174,7 +176,9 @@ class ProductParameterVersionListItem {
   final String lifecycleStatus;
   final bool isCurrentVersion;
   final bool isEffectiveVersion;
+  final DateTime createdAt;
   final String? parameterSummary;
+  final String? lastModifiedParameter;
   final DateTime updatedAt;
 
   factory ProductParameterVersionListItem.fromJson(Map<String, dynamic> json) {
@@ -187,7 +191,9 @@ class ProductParameterVersionListItem {
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
       isCurrentVersion: (json['is_current_version'] as bool?) ?? false,
       isEffectiveVersion: (json['is_effective_version'] as bool?) ?? false,
+      createdAt: DateTime.parse(json['created_at'] as String),
       parameterSummary: json['parameter_summary'] as String?,
+      lastModifiedParameter: json['last_modified_parameter'] as String?,
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
   }
@@ -203,24 +209,36 @@ class ProductParameterVersionListResult {
 class ProductParameterHistoryItem {
   ProductParameterHistoryItem({
     required this.id,
+    required this.productName,
+    required this.productCategory,
     required this.version,
     required this.versionLabel,
     required this.remark,
+    required this.changeReason,
     required this.changeType,
+    required this.parameterName,
     required this.changedKeys,
     required this.operatorUsername,
+    required this.beforeSummary,
+    required this.afterSummary,
     required this.beforeSnapshot,
     required this.afterSnapshot,
     required this.createdAt,
   });
 
   final int id;
+  final String productName;
+  final String productCategory;
   final int? version;
   final String? versionLabel;
   final String remark;
+  final String changeReason;
   final String changeType;
+  final String? parameterName;
   final List<String> changedKeys;
   final String operatorUsername;
+  final String? beforeSummary;
+  final String? afterSummary;
   final String beforeSnapshot;
   final String afterSnapshot;
   final DateTime createdAt;
@@ -228,13 +246,19 @@ class ProductParameterHistoryItem {
   factory ProductParameterHistoryItem.fromJson(Map<String, dynamic> json) {
     return ProductParameterHistoryItem(
       id: json['id'] as int,
+      productName: (json['product_name'] as String?) ?? '',
+      productCategory: (json['product_category'] as String?) ?? '',
       version: json['version'] as int?,
       versionLabel: json['version_label'] as String?,
       remark: json['remark'] as String,
+      changeReason: (json['change_reason'] as String?) ?? '',
       changeType: (json['change_type'] as String?) ?? 'edit',
+      parameterName: json['parameter_name'] as String?,
       changedKeys: (json['changed_keys'] as List<dynamic>? ?? const [])
           .cast<String>(),
       operatorUsername: json['operator_username'] as String? ?? '-',
+      beforeSummary: json['before_summary'] as String?,
+      afterSummary: json['after_summary'] as String?,
       beforeSnapshot: (json['before_snapshot'] as String?) ?? '{}',
       afterSnapshot: (json['after_snapshot'] as String?) ?? '{}',
       createdAt: DateTime.parse(json['created_at'] as String),

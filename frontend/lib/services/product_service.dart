@@ -84,7 +84,7 @@ class ProductService {
 
   Future<void> createProduct({
     required String name,
-    String category = '',
+    required String category,
     String remark = '',
   }) async {
     final uri = Uri.parse('${session.baseUrl}/products');
@@ -123,7 +123,7 @@ class ProductService {
   Future<ProductItem> updateProduct({
     required int productId,
     required String name,
-    String category = '',
+    required String category,
     String remark = '',
   }) async {
     final uri = Uri.parse('${session.baseUrl}/products/$productId');

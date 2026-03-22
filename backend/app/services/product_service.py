@@ -99,12 +99,20 @@ class ProductParameterVersionListRow:
     product: Product
     revision: ProductRevision
     parameter_summary: str | None
+    last_modified_parameter: str | None
 
 
 def _normalize_product_name(name: str) -> str:
     normalized = name.strip()
     if not normalized:
         raise ValueError("Product name is required")
+    return normalized
+
+
+def _normalize_product_category(category: str) -> str:
+    normalized = category.strip()
+    if not normalized:
+        raise ValueError("Product category is required")
     return normalized
 
 
@@ -520,6 +528,11 @@ def list_product_parameter_versions(
                 product=product,
                 revision=revision,
                 parameter_summary=summary,
+                last_modified_parameter=(
+                    str(latest_history.changed_keys[0])
+                    if latest_history is not None and latest_history.changed_keys
+                    else None
+                ),
             )
         )
     return total, items
@@ -728,16 +741,17 @@ def create_product(
     operator: User,
 ) -> Product:
     normalized_name = _normalize_product_name(name)
+    normalized_category = _normalize_product_category(category)
     product = Product(
         name=normalized_name,
-        category=category,
+        category=normalized_category,
         remark=(remark or "").strip(),
         parameter_template_initialized=True,
-        lifecycle_status=PRODUCT_LIFECYCLE_INACTIVE,
+        lifecycle_status=PRODUCT_LIFECYCLE_ACTIVE,
         current_version=1,
         effective_version=0,
         effective_at=None,
-        inactive_reason=NO_EFFECTIVE_VERSION_INACTIVE_REASON,
+        inactive_reason=None,
     )
     db.add(product)
     db.flush()

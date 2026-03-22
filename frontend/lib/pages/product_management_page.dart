@@ -171,6 +171,17 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     return null;
   }
 
+  String? _validateProductCategory(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return '请选择产品分类';
+    }
+    if (!_productCategoryOptions.contains(trimmed)) {
+      return '产品分类仅允许使用固定枚举';
+    }
+    return null;
+  }
+
   Widget _buildReadonlyStatusField({
     required String label,
     required String value,
@@ -1333,9 +1344,10 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     final nameController = TextEditingController(text: product.name);
     final remarkController = TextEditingController(text: product.remark);
     final formKey = GlobalKey<FormState>();
-    var selectedCategory = _productCategoryOptions.contains(product.category)
+    String? selectedCategory =
+        _productCategoryOptions.contains(product.category)
         ? product.category
-        : _productCategoryOptions.first;
+        : null;
 
     final updated = await showLockedFormDialog<bool>(
       context: context,
@@ -1376,6 +1388,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                             labelText: '产品分类',
                             border: OutlineInputBorder(),
                           ),
+                          validator: _validateProductCategory,
                           items: _productCategoryOptions
                               .map(
                                 (category) => DropdownMenuItem<String>(
@@ -1421,7 +1434,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                       await _productService.updateProduct(
                         productId: product.id,
                         name: nameController.text.trim(),
-                        category: selectedCategory,
+                        category: selectedCategory!,
                         remark: remarkController.text.trim(),
                       );
                       if (context.mounted) {
@@ -1464,7 +1477,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     final nameController = TextEditingController();
     final remarkController = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    var selectedCategory = _productCategoryOptions.first;
+    String? selectedCategory;
 
     final created = await showLockedFormDialog<bool>(
       context: context,
@@ -1482,10 +1495,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildReadonlyStatusField(
-                          label: '默认状态',
-                          value: '停用（待生效版本）',
-                        ),
+                        _buildReadonlyStatusField(label: '默认状态', value: '启用'),
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: nameController,
@@ -1505,6 +1515,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                             labelText: '产品分类',
                             border: OutlineInputBorder(),
                           ),
+                          validator: _validateProductCategory,
+                          hint: const Text('请选择产品分类'),
                           items: _productCategoryOptions
                               .map(
                                 (category) => DropdownMenuItem<String>(
@@ -1553,7 +1565,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                     try {
                       await _productService.createProduct(
                         name: nameController.text.trim(),
-                        category: selectedCategory,
+                        category: selectedCategory!,
                         remark: remarkController.text.trim(),
                       );
                       if (context.mounted) {

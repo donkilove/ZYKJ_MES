@@ -19,6 +19,7 @@ class ProcessManagementPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canWrite,
+    this.craftService,
     this.processId,
     this.jumpRequestId = 0,
   });
@@ -26,6 +27,7 @@ class ProcessManagementPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final bool canWrite;
+  final CraftService? craftService;
   final int? processId;
   final int jumpRequestId;
 
@@ -57,7 +59,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   @override
   void initState() {
     super.initState();
-    _service = CraftService(widget.session);
+    _service = widget.craftService ?? CraftService(widget.session);
     _loadData();
   }
 
@@ -775,7 +777,12 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           final result = await _service.getStageReferences(stageId: item.id);
           refs = result.items
               .map(
-                (e) => _RefEntry(e.refType, e.refName, '#${e.refId}', e.detail),
+                (e) => _RefEntry(
+                  e.refType,
+                  e.refName,
+                  e.refCode ?? '#${e.refId}',
+                  e.detail,
+                ),
               )
               .toList();
         } catch (error) {
@@ -913,7 +920,12 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           );
           processRefs = result.items
               .map(
-                (e) => _RefEntry(e.refType, e.refName, '#${e.refId}', e.detail),
+                (e) => _RefEntry(
+                  e.refType,
+                  e.refName,
+                  e.refCode ?? '#${e.refId}',
+                  e.detail,
+                ),
               )
               .toList();
         } catch (error) {
@@ -1009,7 +1021,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                     (e) => _RefEntry(
                       e.refType,
                       e.refName,
-                      '#${e.refId}',
+                      e.refCode ?? '#${e.refId}',
                       e.detail,
                     ),
                   )
@@ -1032,7 +1044,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                     (e) => _RefEntry(
                       e.refType,
                       e.refName,
-                      '#${e.refId}',
+                      e.refCode ?? '#${e.refId}',
                       e.detail,
                     ),
                   )
@@ -1770,7 +1782,13 @@ class _ReferenceDialogState extends State<_ReferenceDialog> {
                       visualDensity: VisualDensity.compact,
                     ),
                     title: Text(e.refName),
-                    subtitle: e.detail != null ? Text(e.detail!) : null,
+                    subtitle: Text(
+                      [
+                        '编码/编号：${e.refId}',
+                        if (e.detail != null && e.detail!.trim().isNotEmpty)
+                          e.detail!,
+                      ].join('\n'),
+                    ),
                     trailing: Text(
                       e.refId,
                       style: Theme.of(context).textTheme.bodySmall,

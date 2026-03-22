@@ -18,32 +18,38 @@ VALID_PRODUCT_CATEGORIES = {"贴片", "DTU", "套件"}
 
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
-    category: str = Field(default="", max_length=32)
+    category: str = Field(min_length=1, max_length=32)
     remark: str = Field(default="", max_length=500)
 
     @field_validator("category")
     @classmethod
     def validate_category(cls, value: str) -> str:
-        if value and value not in VALID_PRODUCT_CATEGORIES:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("产品分类不能为空")
+        if normalized not in VALID_PRODUCT_CATEGORIES:
             raise ValueError(
                 f"产品分类必须为以下之一：{', '.join(sorted(VALID_PRODUCT_CATEGORIES))}"
             )
-        return value
+        return normalized
 
 
 class ProductUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
-    category: str = Field(default="", max_length=32)
+    category: str = Field(min_length=1, max_length=32)
     remark: str = Field(default="", max_length=500)
 
     @field_validator("category")
     @classmethod
     def validate_category(cls, value: str) -> str:
-        if value and value not in VALID_PRODUCT_CATEGORIES:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("产品分类不能为空")
+        if normalized not in VALID_PRODUCT_CATEGORIES:
             raise ValueError(
                 f"产品分类必须为以下之一：{', '.join(sorted(VALID_PRODUCT_CATEGORIES))}"
             )
-        return value
+        return normalized
 
 
 class ProductDeleteRequest(BaseModel):
@@ -129,7 +135,9 @@ class ProductParameterVersionListItem(BaseModel):
     lifecycle_status: str = PRODUCT_LIFECYCLE_DRAFT
     is_current_version: bool = False
     is_effective_version: bool = False
+    created_at: datetime
     parameter_summary: str | None = None
+    last_modified_parameter: str | None = None
     updated_at: datetime
 
 
@@ -140,12 +148,18 @@ class ProductParameterVersionListResult(BaseModel):
 
 class ProductParameterHistoryItem(BaseModel):
     id: int
+    product_name: str = ""
+    product_category: str = ""
     version: int | None = None
     version_label: str | None = None
     remark: str
+    change_reason: str = ""
     change_type: str = "edit"
+    parameter_name: str | None = None
     changed_keys: list[str]
     operator_username: str
+    before_summary: str | None = None
+    after_summary: str | None = None
     before_snapshot: str = "{}"
     after_snapshot: str = "{}"
     created_at: datetime

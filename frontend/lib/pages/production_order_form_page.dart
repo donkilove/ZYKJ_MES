@@ -733,6 +733,34 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
             padding: EdgeInsets.only(top: 8),
             child: LinearProgressIndicator(minHeight: 2),
           ),
+        if (_selectedTemplateId != null) ...[
+          const SizedBox(height: 8),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '已选择模板，下面的工序路线仍可继续手工调整；提交时以当前页面中的工序路线为准，手工调整优先，不再视为与原模板完全匹配。',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         TextFormField(
           controller: _quantityController,

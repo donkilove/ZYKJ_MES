@@ -11,6 +11,7 @@ class _FakeProductionPipelineInstancesService extends ProductionService {
 
   String? receivedProcessKeyword;
   String? receivedPipelineSubOrderNo;
+  int? receivedSubOrderId;
 
   @override
   Future<PipelineInstanceListResult> listPipelineInstances({
@@ -26,6 +27,7 @@ class _FakeProductionPipelineInstancesService extends ProductionService {
   }) async {
     receivedProcessKeyword = processKeyword;
     receivedPipelineSubOrderNo = pipelineSubOrderNo;
+    receivedSubOrderId = subOrderId;
     return PipelineInstanceListResult(
       total: 1,
       items: [
@@ -108,16 +110,20 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.widgetWithText(TextField, '工序'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '子订单ID'), findsOneWidget);
     expect(find.widgetWithText(TextField, '实例编号'), findsOneWidget);
+    expect(find.text('21'), findsOneWidget);
     expect(find.text('切割 (CUT-01)'), findsOneWidget);
     expect(find.text('查看订单'), findsOneWidget);
 
+    await tester.enterText(find.widgetWithText(TextField, '子订单ID'), '21');
     await tester.enterText(find.widgetWithText(TextField, '工序'), '切割');
     await tester.enterText(find.widgetWithText(TextField, '实例编号'), 'ABCD1234');
     await tester.tap(find.byTooltip('查询'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    expect(service.receivedSubOrderId, 21);
     expect(service.receivedProcessKeyword, '切割');
     expect(service.receivedPipelineSubOrderNo, 'ABCD1234');
 
