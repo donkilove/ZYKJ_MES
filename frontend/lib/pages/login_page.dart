@@ -26,6 +26,33 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  static const List<_NoticeSection> _noticeSections = [
+    _NoticeSection(
+      title: '生产运行提醒',
+      icon: Icons.campaign_outlined,
+      items: [
+        '今日 18:30 至 19:00 执行工单汇总任务，期间报工统计可能延迟 3 至 5 分钟刷新。',
+        '冲压一车间新增设备点检项已上线，请班组长在交接班前完成确认。',
+      ],
+    ),
+    _NoticeSection(
+      title: '质量与追溯要求',
+      icon: Icons.verified_outlined,
+      items: [
+        '3 月批次成品入库前需补录首件检验照片，未上传附件的单据将无法提交。',
+        '条码补打申请统一由工艺室审批，审批通过后请在两小时内完成复核。',
+      ],
+    ),
+    _NoticeSection(
+      title: '账号使用规范',
+      icon: Icons.manage_accounts_outlined,
+      items: [
+        '本周起启用账号审批闭环，新增账号需由部门负责人和系统管理员双重确认。',
+        '连续 90 天未登录的账号将自动停用，如需恢复请通过“去注册”重新提交申请。',
+      ],
+    ),
+  ];
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _baseUrlController;
   final TextEditingController _accountController = TextEditingController();
@@ -165,184 +192,429 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Card(
-            margin: const EdgeInsets.all(24),
-            elevation: 8,
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [colorScheme.surface, colorScheme.surfaceContainerLowest],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 980;
+              final horizontalPadding = isWide ? 32.0 : 16.0;
+              final verticalPadding = isWide ? 24.0 : 16.0;
+              final availableHeight =
+                  constraints.maxHeight - verticalPadding * 2;
+              final cardHeight = availableHeight > 0 ? availableHeight : null;
+
+              final announcementCard = _buildAnnouncementCard(
+                theme,
+                fillHeight: isWide,
+              );
+              final loginCard = _buildLoginCard(theme, fillHeight: isWide);
+
+              final desktopContent = SizedBox(
+                height: cardHeight,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'ZYKJ MES 登录',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
+                    Expanded(flex: 2, child: announcementCard),
+                    const SizedBox(width: 20),
+                    Expanded(child: loginCard),
+                  ],
+                ),
+              );
+
+              final mobileContent = SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: availableHeight > 0 ? availableHeight : 0,
+                  ),
+                  child: Column(
+                    children: [
+                      announcementCard,
+                      const SizedBox(height: 16),
+                      loginCard,
+                    ],
+                  ),
+                ),
+              );
+
+              return Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding,
+                  vertical: verticalPadding,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1360),
+                    child: isWide ? desktopContent : mobileContent,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnnouncementCard(ThemeData theme, {required bool fillHeight}) {
+    final colorScheme = theme.colorScheme;
+    final noticeList = ListView.separated(
+      physics: const BouncingScrollPhysics(),
+      shrinkWrap: !fillHeight,
+      itemCount: _noticeSections.length,
+      separatorBuilder: (_, index) => const SizedBox(height: 14),
+      itemBuilder: (context, index) {
+        final section = _noticeSections[index];
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: colorScheme.surface.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(section.icon, color: colorScheme.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      section.title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _baseUrlController,
-                            decoration: const InputDecoration(
-                              labelText: '接口地址',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return '请输入接口地址';
-                              }
-                              if (!value.startsWith('http://') &&
-                                  !value.startsWith('https://')) {
-                                return '地址必须以 http:// 或 https:// 开头';
-                              }
-                              return null;
-                            },
-                            onFieldSubmitted: (_) => _loadAccounts(),
-                          ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...section.items.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 7),
+                        child: Icon(
+                          Icons.circle,
+                          size: 8,
+                          color: colorScheme.primary,
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          tooltip: '刷新账号列表',
-                          onPressed: _loadingAccounts ? null : _loadAccounts,
-                          icon: _loadingAccounts
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.refresh),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Autocomplete<String>(
-                      optionsBuilder: (textEditingValue) {
-                        final keyword = textEditingValue.text
-                            .trim()
-                            .toLowerCase();
-                        if (keyword.isEmpty) {
-                          return _accounts;
-                        }
-                        return _accounts.where(
-                          (account) => account.toLowerCase().contains(keyword),
-                        );
-                      },
-                      onSelected: (value) {
-                        _accountController.text = value;
-                      },
-                      fieldViewBuilder:
-                          (
-                            context,
-                            textEditingController,
-                            focusNode,
-                            onFieldSubmitted,
-                          ) {
-                            if (textEditingController.text !=
-                                _accountController.text) {
-                              textEditingController.value = TextEditingValue(
-                                text: _accountController.text,
-                                selection: TextSelection.collapsed(
-                                  offset: _accountController.text.length,
-                                ),
-                              );
-                            }
-                            return TextFormField(
-                              controller: textEditingController,
-                              focusNode: focusNode,
-                              decoration: InputDecoration(
-                                labelText: '账号',
-                                border: const OutlineInputBorder(),
-                                helperText: _accounts.isEmpty
-                                    ? '可直接输入账号'
-                                    : '可输入或从下拉列表选择',
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return '请输入账号';
-                                }
-                                if (value.trim().length < 2) {
-                                  return '账号至少 2 个字符';
-                                }
-                                return null;
-                              },
-                              onChanged: (value) {
-                                _accountController.text = value;
-                              },
-                              onFieldSubmitted: (_) => onFieldSubmitted(),
-                            );
-                          },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: '密码',
-                        border: OutlineInputBorder(),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return '请输入密码';
-                        }
-                        if (value.length < 6) {
-                          return '密码至少 6 个字符';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: _loading ? null : _submitLogin,
-                            child: _loading
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text('登录'),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          item,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            height: 1.55,
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _loading ? null : _openRegisterPage,
-                            child: const Text('去注册'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_message.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _message,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: _message.startsWith('注册申请已提交')
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.error,
                         ),
                       ),
                     ],
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
+        );
+      },
+    );
+
+    return Card(
+      elevation: 6,
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              colorScheme.primaryContainer.withValues(alpha: 0.92),
+              colorScheme.surfaceContainerHigh,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '系统公告',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '欢迎使用 ZYKJ MES 制造执行系统',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '请先阅读当日运维通知与业务变更说明，确认账号状态正常后再进行登录。',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  height: 1.6,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: const [
+                  _NoticeTag(label: '最后更新 2026-03-23 08:30'),
+                  _NoticeTag(label: '发布部门 信息化推进组'),
+                  _NoticeTag(label: '状态 正常运行'),
+                ],
+              ),
+              const SizedBox(height: 24),
+              if (fillHeight) Expanded(child: noticeList) else noticeList,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoginCard(ThemeData theme, {required bool fillHeight}) {
+    final formContent = SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _baseUrlController,
+                  decoration: const InputDecoration(
+                    labelText: '接口地址',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return '请输入接口地址';
+                    }
+                    if (!value.startsWith('http://') &&
+                        !value.startsWith('https://')) {
+                      return '地址必须以 http:// 或 https:// 开头';
+                    }
+                    return null;
+                  },
+                  onFieldSubmitted: (_) => _loadAccounts(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: '刷新账号列表',
+                onPressed: _loadingAccounts ? null : _loadAccounts,
+                icon: _loadingAccounts
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Autocomplete<String>(
+            optionsBuilder: (textEditingValue) {
+              final keyword = textEditingValue.text.trim().toLowerCase();
+              if (keyword.isEmpty) {
+                return _accounts;
+              }
+              return _accounts.where(
+                (account) => account.toLowerCase().contains(keyword),
+              );
+            },
+            onSelected: (value) {
+              _accountController.text = value;
+            },
+            fieldViewBuilder:
+                (context, textEditingController, focusNode, onFieldSubmitted) {
+                  if (textEditingController.text != _accountController.text) {
+                    textEditingController.value = TextEditingValue(
+                      text: _accountController.text,
+                      selection: TextSelection.collapsed(
+                        offset: _accountController.text.length,
+                      ),
+                    );
+                  }
+                  return TextFormField(
+                    controller: textEditingController,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      labelText: '账号',
+                      border: const OutlineInputBorder(),
+                      helperText: _accounts.isEmpty ? '可直接输入账号' : '可输入或从下拉列表选择',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return '请输入账号';
+                      }
+                      if (value.trim().length < 2) {
+                        return '账号至少 2 个字符';
+                      }
+                      return null;
+                    },
+                    onChanged: (value) {
+                      _accountController.text = value;
+                    },
+                    onFieldSubmitted: (_) => onFieldSubmitted(),
+                  );
+                },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: '密码',
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return '请输入密码';
+              }
+              if (value.length < 6) {
+                return '密码至少 6 个字符';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: _loading ? null : _submitLogin,
+                  child: _loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('登录'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _loading ? null : _openRegisterPage,
+                  child: const Text('去注册'),
+                ),
+              ),
+            ],
+          ),
+          if (_message.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              _message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: _message.startsWith('注册申请已提交')
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.error,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    return Card(
+      elevation: 8,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'ZYKJ MES 登录',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '请输入接口地址、账号与密码。',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (fillHeight) Expanded(child: formContent) else formContent,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoticeSection {
+  const _NoticeSection({
+    required this.title,
+    required this.icon,
+    required this.items,
+  });
+
+  final String title;
+  final IconData icon;
+  final List<String> items;
+}
+
+class _NoticeTag extends StatelessWidget {
+  const _NoticeTag({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelMedium?.copyWith(
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
