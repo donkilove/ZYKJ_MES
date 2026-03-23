@@ -100,8 +100,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Start Flutter frontend app.")
     parser.add_argument(
         "--device",
-        default="chrome",
-        help="Flutter device id, default: chrome",
+        default="windows",
+        help="Flutter device id, default: windows",
     )
     parser.add_argument(
         "--skip-pub-get",

@@ -15,6 +15,8 @@ cd backend
 .\.venv\Scripts\python.exe .\start_frontend.py
 ```
 
+`start_frontend.py` 默认以 Windows 桌面应用方式启动；如需切换设备，可额外传入 `--device <id>`。
+
 Backend startup now performs bootstrap automatically:
 
 - ensure database exists (create if missing)
