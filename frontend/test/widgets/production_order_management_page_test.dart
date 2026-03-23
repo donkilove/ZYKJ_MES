@@ -8,10 +8,15 @@ import 'package:mes_client/models/production_models.dart';
 import 'package:mes_client/pages/production_order_management_page.dart';
 import 'package:mes_client/services/craft_service.dart';
 import 'package:mes_client/services/production_service.dart';
+import 'package:mes_client/widgets/simple_pagination_bar.dart';
 
 class _FakeProductionOrderManagementService extends ProductionService {
-  _FakeProductionOrderManagementService()
+  _FakeProductionOrderManagementService({this.total = 1})
     : super(AppSession(baseUrl: '', accessToken: ''));
+
+  final int total;
+  final List<int> requestedPages = <int>[];
+  final List<int> requestedPageSizes = <int>[];
 
   @override
   Future<ProductionOrderListResult> listOrders({
@@ -26,12 +31,14 @@ class _FakeProductionOrderManagementService extends ProductionService {
     DateTime? dueDateFrom,
     DateTime? dueDateTo,
   }) async {
+    requestedPages.add(page);
+    requestedPageSizes.add(pageSize);
     return ProductionOrderListResult(
-      total: 1,
+      total: total,
       items: [
         ProductionOrderItem(
-          id: 1,
-          orderCode: 'PO-1',
+          id: page,
+          orderCode: 'PO-$page',
           productId: 1,
           productName: '产品A',
           productVersion: null,
@@ -49,8 +56,8 @@ class _FakeProductionOrderManagementService extends ProductionService {
           pipelineProcessCodes: const [],
           createdByUserId: 1,
           createdByUsername: 'admin',
-          createdAt: DateTime(2026, 3, 1),
-          updatedAt: DateTime(2026, 3, 1, 12),
+          createdAt: DateTime(2026, 3, page),
+          updatedAt: DateTime(2026, 3, page, 12),
         ),
       ],
     );
@@ -148,6 +155,8 @@ void main() {
   testWidgets('production order management export action does not crash', (
     tester,
   ) async {
+    final service = _FakeProductionOrderManagementService();
+
     tester.view.physicalSize = const Size(1920, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -166,7 +175,7 @@ void main() {
             canDeleteOrder: true,
             canCompleteOrder: true,
             canUpdatePipelineMode: true,
-            service: _FakeProductionOrderManagementService(),
+            service: service,
             craftService: _FakeCraftService(),
           ),
         ),
@@ -176,18 +185,26 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
+    expect(find.byType(SimplePaginationBar), findsOneWidget);
+    expect(find.text('第 1 / 1 页'), findsOneWidget);
+    expect(find.text('每页 50 条'), findsOneWidget);
     expect(find.text('总数：1'), findsOneWidget);
+    expect(service.requestedPages, [1]);
+    expect(service.requestedPageSizes, [50]);
 
     await tester.tap(find.widgetWithText(OutlinedButton, '导出'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('总数：1'), findsOneWidget);
+    expect(find.text('第 1 / 1 页'), findsOneWidget);
+    expect(find.text('每页 50 条'), findsOneWidget);
   });
 
   testWidgets('production order management can query deleted order trace', (
     tester,
   ) async {
+    final service = _FakeProductionOrderManagementService();
+
     tester.view.physicalSize = const Size(1920, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -206,7 +223,7 @@ void main() {
             canDeleteOrder: true,
             canCompleteOrder: true,
             canUpdatePipelineMode: true,
-            service: _FakeProductionOrderManagementService(),
+            service: service,
             craftService: _FakeCraftService(),
           ),
         ),
@@ -221,5 +238,110 @@ void main() {
 
     expect(find.text('删除追溯 - PO-1'), findsOneWidget);
     expect(find.textContaining('订单已删除'), findsOneWidget);
+    expect(service.requestedPages, [1]);
+  });
+
+  testWidgets(
+    'production order management desktop layout keeps pagination stable',
+    (tester) async {
+      final service = _FakeProductionOrderManagementService(total: 120);
+
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ProductionOrderManagementPage(
+              session: AppSession(baseUrl: '', accessToken: ''),
+              onLogout: () {},
+              canCreateOrder: true,
+              canEditOrder: true,
+              canDeleteOrder: true,
+              canCompleteOrder: true,
+              canUpdatePipelineMode: true,
+              service: service,
+              craftService: _FakeCraftService(),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(SimplePaginationBar), findsOneWidget);
+      expect(find.text('第 1 / 3 页'), findsOneWidget);
+      expect(find.text('每页 50 条'), findsOneWidget);
+      expect(find.text('总数：120'), findsOneWidget);
+      expect(find.text('PO-1'), findsOneWidget);
+      expect(find.text('删除追溯订单号'), findsOneWidget);
+      expect(find.text('操作'), findsWidgets);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(
+        find.byKey(const Key('simple-pagination-page-selector')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('第 2 页').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(service.requestedPages, [1, 2]);
+      expect(find.text('第 2 / 3 页'), findsOneWidget);
+      expect(find.text('PO-2'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('production order management can change page size', (
+    tester,
+  ) async {
+    final service = _FakeProductionOrderManagementService(total: 120);
+
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canCreateOrder: true,
+            canEditOrder: true,
+            canDeleteOrder: true,
+            canCompleteOrder: true,
+            canUpdatePipelineMode: true,
+            service: service,
+            craftService: _FakeCraftService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(
+      find.byKey(const Key('simple-pagination-page-size-selector')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('100 条/页').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(service.requestedPages, [1, 1]);
+    expect(service.requestedPageSizes, [50, 100]);
+    expect(find.text('每页 100 条'), findsOneWidget);
+    expect(find.text('第 1 / 2 页'), findsOneWidget);
   });
 }

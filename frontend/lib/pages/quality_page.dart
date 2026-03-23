@@ -26,6 +26,53 @@ const List<String> _defaultTabOrder = [
   qualityDefectAnalysisTabCode,
 ];
 
+const double _desktopTabBarHeight = 52;
+const double _desktopTabMinWidth = 148;
+const double _desktopTabMaxWidth = 220;
+
+Widget _buildDesktopTab(String title) {
+  return Tab(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(
+        minWidth: _desktopTabMinWidth,
+        maxWidth: _desktopTabMaxWidth,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _buildDesktopTabBar({
+  required BuildContext context,
+  required TabController controller,
+  required List<Widget> tabs,
+}) {
+  return Material(
+    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: SizedBox(
+        height: _desktopTabBarHeight,
+        child: TabBar(
+          controller: controller,
+          isScrollable: true,
+          indicatorSize: TabBarIndicatorSize.tab,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+          tabs: tabs,
+        ),
+      ),
+    ),
+  );
+}
+
 class QualityPage extends StatefulWidget {
   const QualityPage({
     super.key,
@@ -181,7 +228,8 @@ class _QualityPageState extends State<QualityPage>
             'quality.scrap_statistics.export',
           ),
           service: widget.repairScrapService,
-          jumpPayloadJson: widget.preferredTabCode == qualityScrapStatisticsTabCode
+          jumpPayloadJson:
+              widget.preferredTabCode == qualityScrapStatisticsTabCode
               ? widget.routePayloadJson
               : null,
         );
@@ -227,14 +275,12 @@ class _QualityPageState extends State<QualityPage>
 
     return Column(
       children: [
-        Material(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: TabBar(
-            controller: _tabController,
-            tabs: _orderedVisibleTabCodes
-                .map((code) => Tab(text: _tabTitle(code)))
-                .toList(),
-          ),
+        _buildDesktopTabBar(
+          context: context,
+          controller: _tabController!,
+          tabs: _orderedVisibleTabCodes
+              .map((code) => _buildDesktopTab(_tabTitle(code)))
+              .toList(),
         ),
         Expanded(
           child: TabBarView(

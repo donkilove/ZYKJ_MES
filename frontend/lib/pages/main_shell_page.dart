@@ -60,6 +60,10 @@ const Duration _visibilityRefreshInterval = Duration(seconds: 15);
 
 const Duration _unreadPollInterval = Duration(seconds: 30);
 
+const double _shellSidebarWidth = 240;
+
+const double _shellContentMaxWidth = 1580;
+
 class _ShellMenuItem {
   const _ShellMenuItem({
     required this.code,
@@ -543,6 +547,98 @@ class _MainShellPageState extends State<MainShellPage>
         const <String>{};
   }
 
+  EdgeInsets _contentPaddingForWidth(double width) {
+    if (width >= 1680) {
+      return const EdgeInsets.fromLTRB(32, 24, 32, 24);
+    }
+    if (width >= 1360) {
+      return const EdgeInsets.fromLTRB(24, 20, 24, 20);
+    }
+    return const EdgeInsets.fromLTRB(16, 16, 16, 16);
+  }
+
+  Widget _buildShellNotice(ThemeData theme) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final contentPadding = _contentPaddingForWidth(constraints.maxWidth);
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            contentPadding.left,
+            contentPadding.top,
+            contentPadding.right,
+            0,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: _shellContentMaxWidth,
+              ),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainer,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
+                child: Text(_message, style: theme.textTheme.bodyMedium),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildContentViewport(ThemeData theme, Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final contentPadding = _contentPaddingForWidth(constraints.maxWidth);
+        return Padding(
+          padding: contentPadding,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: _shellContentMaxWidth,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height:
+                    constraints.maxHeight -
+                    contentPadding.top -
+                    contentPadding.bottom,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.shadow.withValues(alpha: 0.08),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: ColoredBox(
+                      color: theme.colorScheme.surface,
+                      child: child,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildContent(String pageCode) {
     switch (pageCode) {
       case _homePageCode:
@@ -853,10 +949,11 @@ class _MainShellPageState extends State<MainShellPage>
     final selectedMenuCode = _menus[safeSelectedIndex].code;
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surfaceContainerLowest,
       body: Row(
         children: [
           Container(
-            width: 240,
+            width: _shellSidebarWidth,
 
             color: theme.colorScheme.surfaceContainerHighest,
 
@@ -956,28 +1053,18 @@ class _MainShellPageState extends State<MainShellPage>
             child: SafeArea(
               child: Column(
                 children: [
-                  if (_message.isNotEmpty)
-                    Container(
-                      width: double.infinity,
-
-                      color: theme.colorScheme.surfaceContainer,
-
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-
-                        vertical: 8,
-                      ),
-
-                      child: Text(_message, style: theme.textTheme.bodyMedium),
-                    ),
+                  if (_message.isNotEmpty) _buildShellNotice(theme),
 
                   Expanded(
-                    child: IndexedStack(
-                      index: safeSelectedIndex,
+                    child: _buildContentViewport(
+                      theme,
+                      IndexedStack(
+                        index: safeSelectedIndex,
 
-                      children: _menus
-                          .map((menu) => _buildContent(menu.code))
-                          .toList(),
+                        children: _menus
+                            .map((menu) => _buildContent(menu.code))
+                            .toList(),
+                      ),
                     ),
                   ),
                 ],

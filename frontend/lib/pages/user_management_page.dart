@@ -10,8 +10,10 @@ import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/user_service.dart';
+import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
 import '../widgets/simple_pagination_bar.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 enum _UserAction { edit, disable, enable, resetPassword, delete }
 
@@ -55,7 +57,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
   late final UserService _userService;
   late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
-  final ScrollController _userListScrollController = ScrollController();
   Timer? _onlineStatusTimer;
   static const Duration _onlineRefreshInterval = Duration(seconds: 5);
   bool _onlineRefreshInFlight = false;
@@ -97,7 +98,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
   void dispose() {
     _stopOnlineStatusRefresh();
     _keywordController.dispose();
-    _userListScrollController.dispose();
     super.dispose();
   }
 
@@ -1042,6 +1042,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final toolbarButtonStyle =
+        UnifiedListTableHeaderStyle.toolbarActionButtonStyle(theme);
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -1065,176 +1067,197 @@ class _UserManagementPageState extends State<UserManagementPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '按账号搜索',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadUsers(page: 1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadUsers(page: 1),
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: (_loading || !widget.canCreateUser)
-                    ? null
-                    : _showCreateUserDialog,
-                icon: const Icon(Icons.person_add),
-                label: const Text('新建用户'),
-              ),
-              if (widget.onNavigateToRoleManagement != null) ...[
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: widget.onNavigateToRoleManagement,
-                  icon: const Icon(Icons.admin_panel_settings),
-                  label: const Text('角色管理'),
-                ),
-              ],
-              if (widget.canExport) ...[
-                const SizedBox(width: 12),
-                PopupMenuButton<String>(
-                  onSelected: _loading
-                      ? null
-                      : (value) => _exportUsers(format: value),
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'csv', child: Text('导出 CSV')),
-                    PopupMenuItem(value: 'excel', child: Text('导出 Excel')),
-                  ],
-                  child: OutlinedButton.icon(
-                    onPressed: _loading ? null : () {},
-                    icon: const Icon(Icons.download),
-                    label: const Text('导出'),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          // 高级筛选行
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              SizedBox(
-                width: 150,
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _filterRoleCode,
-                  decoration: const InputDecoration(
-                    labelText: '角色',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('全部')),
-                    ..._roles.map(
-                      (role) => DropdownMenuItem(
-                        value: role.code,
-                        child: Text(role.name, overflow: TextOverflow.ellipsis),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _filterRoleCode = value);
-                    _loadUsers(page: 1);
-                  },
-                ),
-              ),
-              SizedBox(
-                width: 150,
-                child: DropdownButtonFormField<int?>(
-                  initialValue: _filterStageId,
-                  onTap: () {
-                    unawaited(_fetchLatestStages());
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '工段',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('全部')),
-                    ..._stages.map(
-                      (stage) => DropdownMenuItem(
-                        value: stage.id,
-                        child: Text(
-                          stage.name,
-                          overflow: TextOverflow.ellipsis,
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 320,
+                        child: TextField(
+                          controller: _keywordController,
+                          decoration: const InputDecoration(
+                            labelText: '按账号搜索',
+                            border: OutlineInputBorder(),
+                          ),
+                          onSubmitted: (_) => _loadUsers(page: 1),
                         ),
                       ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _filterStageId = value);
-                    _loadUsers(page: 1);
-                  },
-                ),
-              ),
-              SizedBox(
-                width: 130,
-                child: DropdownButtonFormField<bool?>(
-                  initialValue: _filterIsOnline,
-                  decoration: const InputDecoration(
-                    labelText: '在线状态',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
+                      FilledButton.icon(
+                        onPressed: _loading ? null : () => _loadUsers(page: 1),
+                        icon: const Icon(Icons.search),
+                        label: const Text('查询'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: (_loading || !widget.canCreateUser)
+                            ? null
+                            : _showCreateUserDialog,
+                        icon: const Icon(Icons.person_add),
+                        label: const Text('新建用户'),
+                      ),
+                      if (widget.onNavigateToRoleManagement != null)
+                        OutlinedButton.icon(
+                          onPressed: widget.onNavigateToRoleManagement,
+                          style: toolbarButtonStyle,
+                          icon: const Icon(Icons.admin_panel_settings),
+                          label: const Text('角色管理'),
+                        ),
+                      if (widget.canExport)
+                        PopupMenuButton<String>(
+                          onSelected: _loading
+                              ? null
+                              : (value) => _exportUsers(format: value),
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(value: 'csv', child: Text('导出 CSV')),
+                            PopupMenuItem(
+                              value: 'excel',
+                              child: Text('导出 Excel'),
+                            ),
+                          ],
+                          child: OutlinedButton.icon(
+                            onPressed: _loading ? null : () {},
+                            style: toolbarButtonStyle,
+                            icon: const Icon(Icons.download),
+                            label: const Text('导出'),
+                          ),
+                        ),
+                    ],
                   ),
-                  isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('全部')),
-                    DropdownMenuItem(value: true, child: Text('在线')),
-                    DropdownMenuItem(value: false, child: Text('离线')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _filterIsOnline = value);
-                    _loadUsers(page: 1);
-                  },
-                ),
-              ),
-              SizedBox(
-                width: 130,
-                child: DropdownButtonFormField<bool?>(
-                  initialValue: _filterIsActive,
-                  decoration: const InputDecoration(
-                    labelText: '账号状态',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: 180,
+                        child: DropdownButtonFormField<String?>(
+                          initialValue: _filterRoleCode,
+                          decoration: const InputDecoration(
+                            labelText: '角色',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('全部'),
+                            ),
+                            ..._roles.map(
+                              (role) => DropdownMenuItem(
+                                value: role.code,
+                                child: Text(
+                                  role.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _filterRoleCode = value);
+                            _loadUsers(page: 1);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 180,
+                        child: DropdownButtonFormField<int?>(
+                          initialValue: _filterStageId,
+                          onTap: () {
+                            unawaited(_fetchLatestStages());
+                          },
+                          decoration: const InputDecoration(
+                            labelText: '工段',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('全部'),
+                            ),
+                            ..._stages.map(
+                              (stage) => DropdownMenuItem(
+                                value: stage.id,
+                                child: Text(
+                                  stage.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _filterStageId = value);
+                            _loadUsers(page: 1);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 160,
+                        child: DropdownButtonFormField<bool?>(
+                          initialValue: _filterIsOnline,
+                          decoration: const InputDecoration(
+                            labelText: '在线状态',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          isExpanded: true,
+                          items: const [
+                            DropdownMenuItem(value: null, child: Text('全部')),
+                            DropdownMenuItem(value: true, child: Text('在线')),
+                            DropdownMenuItem(value: false, child: Text('离线')),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _filterIsOnline = value);
+                            _loadUsers(page: 1);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 160,
+                        child: DropdownButtonFormField<bool?>(
+                          initialValue: _filterIsActive,
+                          decoration: const InputDecoration(
+                            labelText: '账号状态',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          isExpanded: true,
+                          items: const [
+                            DropdownMenuItem(value: null, child: Text('全部')),
+                            DropdownMenuItem(value: true, child: Text('启用')),
+                            DropdownMenuItem(value: false, child: Text('停用')),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _filterIsActive = value);
+                            _loadUsers(page: 1);
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-                  isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('全部')),
-                    DropdownMenuItem(value: true, child: Text('启用')),
-                    DropdownMenuItem(value: false, child: Text('停用')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _filterIsActive = value);
-                    _loadUsers(page: 1);
-                  },
-                ),
+                ],
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
           Text('总数：$_total', style: theme.textTheme.titleMedium),
@@ -1255,130 +1278,138 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 : _users.isEmpty
                 ? const Center(child: Text('暂无用户'))
                 : Card(
-                    child: SizedBox.expand(
-                      child: Scrollbar(
-                        controller: _userListScrollController,
-                        thumbVisibility: true,
-                        child: SingleChildScrollView(
-                          controller: _userListScrollController,
-                          child: DataTable(
-                            columnSpacing: 16,
-                            headingRowColor: WidgetStateProperty.all(
-                              theme.colorScheme.surfaceContainerHighest,
+                    child: AdaptiveTableContainer(
+                      minTableWidth: 1180,
+                      child: UnifiedListTableHeaderStyle.wrap(
+                        theme: theme,
+                        child: DataTable(
+                          dataRowMinHeight: 60,
+                          dataRowMaxHeight: 72,
+                          columns: [
+                            UnifiedListTableHeaderStyle.column(context, '账号'),
+                            UnifiedListTableHeaderStyle.column(context, '角色'),
+                            UnifiedListTableHeaderStyle.column(context, '工段'),
+                            UnifiedListTableHeaderStyle.column(context, '在线'),
+                            UnifiedListTableHeaderStyle.column(context, '状态'),
+                            UnifiedListTableHeaderStyle.column(context, '创建时间'),
+                            UnifiedListTableHeaderStyle.column(
+                              context,
+                              '操作',
+                              textAlign: TextAlign.center,
                             ),
-                            columns: const [
-                              DataColumn(label: Text('账号')),
-                              DataColumn(label: Text('角色')),
-                              DataColumn(label: Text('工段')),
-                              DataColumn(label: Text('在线')),
-                              DataColumn(label: Text('状态')),
-                              DataColumn(label: Text('创建时间')),
-                              DataColumn(label: Text('操作')),
-                            ],
-                            rows: _users.map((user) {
-                              final statusLabel = user.isOnline ? '在线' : '离线';
-                              final statusColor = user.isOnline
-                                  ? Colors.green
-                                  : theme.colorScheme.outline;
-                              final activeLabel = user.isActive ? '启用' : '停用';
-                              final activeColor = user.isActive
-                                  ? Colors.blue
-                                  : Colors.red;
-                              final createdAtStr = user.createdAt != null
-                                  ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
-                                  : '-';
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(user.username)),
-                                  DataCell(
-                                    Text(
-                                      user.roleName?.trim().isNotEmpty == true
-                                          ? user.roleName!
-                                          : '-',
+                          ],
+                          rows: _users.map((user) {
+                            final statusLabel = user.isOnline ? '在线' : '离线';
+                            final statusColor = user.isOnline
+                                ? Colors.green
+                                : theme.colorScheme.outline;
+                            final activeLabel = user.isActive ? '启用' : '停用';
+                            final activeColor = user.isActive
+                                ? Colors.blue
+                                : Colors.red;
+                            final createdAtStr = user.createdAt != null
+                                ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
+                                : '-';
+                            return DataRow(
+                              cells: [
+                                DataCell(Text(user.username)),
+                                DataCell(
+                                  Text(
+                                    user.roleName?.trim().isNotEmpty == true
+                                        ? user.roleName!
+                                        : '-',
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    user.stageName?.trim().isNotEmpty == true
+                                        ? user.stageName!
+                                        : '/',
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    statusLabel,
+                                    style: TextStyle(
+                                      color: statusColor,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  DataCell(
-                                    Text(
-                                      user.stageName?.trim().isNotEmpty == true
-                                          ? user.stageName!
-                                          : '/',
+                                ),
+                                DataCell(
+                                  Text(
+                                    activeLabel,
+                                    style: TextStyle(
+                                      color: activeColor,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  DataCell(
-                                    Text(
-                                      statusLabel,
-                                      style: TextStyle(
-                                        color: statusColor,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      activeLabel,
-                                      style: TextStyle(
-                                        color: activeColor,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(Text(createdAtStr)),
-                                  DataCell(
-                                    PopupMenuButton<_UserAction>(
-                                      enabled:
-                                          widget.canEditUser ||
+                                ),
+                                DataCell(Text(createdAtStr)),
+                                DataCell(
+                                  widget.canEditUser ||
                                           widget.canToggleUser ||
                                           widget.canResetPassword ||
-                                          widget.canDeleteUser,
-                                      onSelected: (action) =>
-                                          _handleUserAction(action, user),
-                                      itemBuilder: (context) => [
-                                        if (widget.canEditUser)
-                                          const PopupMenuItem(
-                                            value: _UserAction.edit,
-                                            child: Text('编辑'),
-                                          ),
-                                        if (widget.canToggleUser && user.isActive)
-                                          const PopupMenuItem(
-                                            value: _UserAction.disable,
-                                            child: Text('停用'),
-                                          )
-                                        else if (widget.canToggleUser)
-                                          const PopupMenuItem(
-                                            value: _UserAction.enable,
-                                            child: Text('启用'),
-                                          ),
-                                        if (widget.canResetPassword)
-                                          const PopupMenuItem(
-                                            value: _UserAction.resetPassword,
-                                            child: Text('重置密码'),
-                                          ),
-                                        if (widget.canDeleteUser)
-                                          const PopupMenuItem(
-                                            value: _UserAction.delete,
-                                            child: Text('删除'),
-                                          ),
-                                      ],
-                                      child: const Text('操作'),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
-                          ),
+                                          widget.canDeleteUser
+                                      ? UnifiedListTableHeaderStyle.actionMenuButton<
+                                          _UserAction
+                                        >(
+                                          theme: theme,
+                                          onSelected: (action) =>
+                                              _handleUserAction(action, user),
+                                          itemBuilder: (context) => [
+                                            if (widget.canEditUser)
+                                              const PopupMenuItem(
+                                                value: _UserAction.edit,
+                                                child: Text('编辑'),
+                                              ),
+                                            if (widget.canToggleUser &&
+                                                user.isActive)
+                                              const PopupMenuItem(
+                                                value: _UserAction.disable,
+                                                child: Text('停用'),
+                                              )
+                                            else if (widget.canToggleUser)
+                                              const PopupMenuItem(
+                                                value: _UserAction.enable,
+                                                child: Text('启用'),
+                                              ),
+                                            if (widget.canResetPassword)
+                                              const PopupMenuItem(
+                                                value:
+                                                    _UserAction.resetPassword,
+                                                child: Text('重置密码'),
+                                              ),
+                                            if (widget.canDeleteUser)
+                                              const PopupMenuItem(
+                                                value: _UserAction.delete,
+                                                child: Text('删除'),
+                                              ),
+                                          ],
+                                        )
+                                      : const Text('-'),
+                                ),
+                              ],
+                            );
+                          }).toList(),
                         ),
                       ),
                     ),
                   ),
           ),
           const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _userPage,
-            totalPages: _userTotalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _loadUsers(page: _userPage - 1),
-            onNext: () => _loadUsers(page: _userPage + 1),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: SimplePaginationBar(
+                page: _userPage,
+                totalPages: _userTotalPages,
+                total: _total,
+                loading: _loading,
+                onPrevious: () => _loadUsers(page: _userPage - 1),
+                onNext: () => _loadUsers(page: _userPage + 1),
+              ),
+            ),
           ),
         ],
       ),

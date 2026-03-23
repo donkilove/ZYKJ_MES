@@ -4,11 +4,26 @@ class AdaptiveTableContainer extends StatefulWidget {
   const AdaptiveTableContainer({
     super.key,
     required this.child,
-    this.padding = EdgeInsets.zero,
+    this.padding,
+    this.minTableWidth,
   });
 
   final Widget child;
-  final EdgeInsetsGeometry padding;
+  final EdgeInsetsGeometry? padding;
+  final double? minTableWidth;
+
+  static EdgeInsetsGeometry resolveDefaultPadding(double maxWidth) {
+    if (maxWidth >= 1600) {
+      return const EdgeInsets.symmetric(horizontal: 24, vertical: 12);
+    }
+    if (maxWidth >= 1280) {
+      return const EdgeInsets.symmetric(horizontal: 20, vertical: 12);
+    }
+    if (maxWidth >= 960) {
+      return const EdgeInsets.symmetric(horizontal: 16, vertical: 10);
+    }
+    return const EdgeInsets.all(8);
+  }
 
   @override
   State<AdaptiveTableContainer> createState() => _AdaptiveTableContainerState();
@@ -29,12 +44,19 @@ class _AdaptiveTableContainerState extends State<AdaptiveTableContainer> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final resolvedPadding =
+            widget.padding ??
+            AdaptiveTableContainer.resolveDefaultPadding(constraints.maxWidth);
+        final double resolvedMinWidth = widget.minTableWidth != null
+            ? widget.minTableWidth!.clamp(0, double.infinity).toDouble()
+            : constraints.maxWidth.toDouble();
+
         return Scrollbar(
           controller: _verticalController,
           thumbVisibility: true,
           child: SingleChildScrollView(
             controller: _verticalController,
-            padding: widget.padding,
+            padding: resolvedPadding,
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight),
               child: Scrollbar(
@@ -46,7 +68,11 @@ class _AdaptiveTableContainerState extends State<AdaptiveTableContainer> {
                   controller: _horizontalController,
                   scrollDirection: Axis.horizontal,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    constraints: BoxConstraints(
+                      minWidth: resolvedMinWidth > constraints.maxWidth
+                          ? resolvedMinWidth
+                          : constraints.maxWidth,
+                    ),
                     child: widget.child,
                   ),
                 ),

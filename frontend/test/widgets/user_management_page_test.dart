@@ -245,7 +245,7 @@ Future<void> _pumpPage(
   bool canDeleteUser = true,
   bool canExport = true,
 }) async {
-  tester.view.physicalSize = const Size(1920, 1200);
+  tester.view.physicalSize = const Size(1920, 1080);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
     tester.view.resetPhysicalSize();
@@ -274,6 +274,34 @@ Future<void> _pumpPage(
 }
 
 void main() {
+  testWidgets('用户管理页在 1920x1080 下无溢出且关键控件可见', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 1,
+          username: 'desktop_user',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+          stageId: 10,
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('用户管理'), findsOneWidget);
+    expect(find.text('按账号搜索'), findsOneWidget);
+    expect(find.text('导出'), findsOneWidget);
+    expect(find.text('desktop_user'), findsOneWidget);
+    expect(find.textContaining('第 1 / 1 页'), findsOneWidget);
+  });
+
   testWidgets('新建用户弹窗打开时会刷新工段列表', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
