@@ -8,8 +8,6 @@ import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
-import '../widgets/simple_pagination_bar.dart';
-import '../widgets/unified_list_table_header_style.dart';
 import 'production_order_query_detail_page.dart';
 
 class _DefectRowDraft {
@@ -48,8 +46,6 @@ class _ManualRepairSubmitPayload {
   final List<ProductionDefectItemInput> defectItems;
 }
 
-enum _OrderQueryAction { detail }
-
 class ProductionOrderQueryPage extends StatefulWidget {
   const ProductionOrderQueryPage({
     super.key,
@@ -80,8 +76,6 @@ class ProductionOrderQueryPage extends StatefulWidget {
 }
 
 class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
-  static const int _pageSize = 20;
-
   late final ProductionService _service;
   final TextEditingController _keywordController = TextEditingController();
   Timer? _pollTimer;
@@ -92,7 +86,6 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   String _orderStatusFilter = 'all';
   int? _currentProcessIdFilter;
   int? _proxyOperatorUserId;
-  int _page = 1;
   int _total = 0;
   List<MyOrderItem> _items = const [];
   List<AssistUserOptionItem> _proxyOperators = const [];
@@ -130,13 +123,6 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     final min = local.minute.toString().padLeft(2, '0');
     final sec = local.second.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd $hh:$min:$sec';
-  }
-
-  int get _totalPages {
-    if (_total <= 0) {
-      return 1;
-    }
-    return ((_total - 1) ~/ _pageSize) + 1;
   }
 
   Future<void> _loadProxyOperators() async {
@@ -188,14 +174,12 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     );
   }
 
-  Future<void> _loadOrders({bool silent = false, int? page}) async {
-    final targetPage = page ?? _page;
+  Future<void> _loadOrders({bool silent = false}) async {
     if (_viewMode == 'proxy' && _proxyOperatorUserId == null) {
       if (!silent && mounted) {
         setState(() {
           _items = const [];
           _total = 0;
-          _page = targetPage;
           _loading = false;
           _message = '';
         });
@@ -206,13 +190,12 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       setState(() {
         _loading = true;
         _message = '';
-        _page = targetPage;
       });
     }
     try {
       final result = await _service.listMyOrders(
-        page: targetPage,
-        pageSize: _pageSize,
+        page: 1,
+        pageSize: 200,
         keyword: _keywordController.text.trim(),
         viewMode: _viewMode,
         proxyOperatorUserId: _proxyOperatorUserId,
@@ -220,21 +203,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         currentProcessId: _currentProcessIdFilter,
       );
       if (!mounted) return;
-      var resolvedPage = targetPage;
-      final resolvedTotalPages = result.total <= 0
-          ? 1
-          : (((result.total - 1) ~/ _pageSize) + 1);
-      if (resolvedPage > resolvedTotalPages) {
-        resolvedPage = resolvedTotalPages;
-      }
       setState(() {
         _items = result.items;
         _total = result.total;
-        _page = resolvedPage;
       });
-      if (resolvedPage != targetPage) {
-        await _loadOrders(silent: silent, page: resolvedPage);
-      }
     } catch (error) {
       if (!mounted) return;
       if (_isUnauthorized(error)) {
@@ -898,9 +870,6 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final buttonStyle = UnifiedListTableHeaderStyle.toolbarActionButtonStyle(
-      theme,
-    );
     final processFilterOptions =
         _items
             .map(
@@ -953,205 +922,147 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 320,
-                        child: TextField(
-                          controller: _keywordController,
-                          decoration: const InputDecoration(
-                            labelText: '搜索订单号/产品',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _loadOrders(page: 1),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _viewMode,
-                          decoration: const InputDecoration(
-                            labelText: '工单视角',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: [
-                            const DropdownMenuItem(
-                              value: 'own',
-                              child: Text('我的工单'),
-                            ),
-                            const DropdownMenuItem(
-                              value: 'assist',
-                              child: Text('我的代班工单'),
-                            ),
-                            if (widget.canProxyView)
-                              const DropdownMenuItem(
-                                value: 'proxy',
-                                child: Text('代理操作员视角'),
-                              ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null || value == _viewMode) {
-                              return;
-                            }
-                            setState(() {
-                              _viewMode = value;
-                              _page = 1;
-                              if (_viewMode != 'proxy') {
-                                _proxyOperatorUserId = null;
-                              }
-                            });
-                            _loadOrders(page: 1);
-                          },
-                        ),
-                      ),
-                      if (widget.canProxyView && _viewMode == 'proxy')
-                        SizedBox(
-                          width: 260,
-                          child: DropdownButtonFormField<int>(
-                            initialValue: _proxyOperatorUserId,
-                            decoration: const InputDecoration(
-                              labelText: '选择操作员',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            items: _proxyOperators
-                                .map(
-                                  (entry) => DropdownMenuItem<int>(
-                                    value: entry.id,
-                                    child: Text(entry.displayName),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                _proxyOperatorUserId = value;
-                                _page = 1;
-                              });
-                              _loadOrders(page: 1);
-                            },
-                          ),
-                        ),
-                      SizedBox(
-                        width: 170,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _orderStatusFilter,
-                          decoration: const InputDecoration(
-                            labelText: '状态',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: 'all', child: Text('全部')),
-                            DropdownMenuItem(
-                              value: 'pending',
-                              child: Text('待生产'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'in_progress',
-                              child: Text('生产中'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'completed',
-                              child: Text('生产完成'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null || value == _orderStatusFilter) {
-                              return;
-                            }
-                            setState(() {
-                              _orderStatusFilter = value;
-                              _page = 1;
-                            });
-                            _loadOrders(page: 1);
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 280,
-                        child: DropdownButtonFormField<int?>(
-                          key: ValueKey<int?>(processDropdownValue),
-                          initialValue: processDropdownValue,
-                          decoration: const InputDecoration(
-                            labelText: '当前工序',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: [
-                            const DropdownMenuItem<int?>(
-                              value: null,
-                              child: Text('全部工序'),
-                            ),
-                            ...processFilterOptions.map(
-                              (entry) => DropdownMenuItem<int?>(
-                                value: entry.id,
-                                child: Text('${entry.name} (#${entry.id})'),
-                              ),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == _currentProcessIdFilter) {
-                              return;
-                            }
-                            setState(() {
-                              _currentProcessIdFilter = value;
-                              _page = 1;
-                            });
-                            _loadOrders(page: 1);
-                          },
-                        ),
-                      ),
-                      FilledButton.icon(
-                        onPressed: _loading ? null : () => _loadOrders(page: 1),
-                        icon: const Icon(Icons.search),
-                        label: const Text('查询'),
-                      ),
-                      OutlinedButton.icon(
-                        style: buttonStyle,
-                        onPressed: _loading
-                            ? null
-                            : () {
-                                _keywordController.clear();
-                                setState(() {
-                                  _viewMode = 'own';
-                                  _orderStatusFilter = 'all';
-                                  _currentProcessIdFilter = null;
-                                  _proxyOperatorUserId = null;
-                                  _page = 1;
-                                });
-                                _loadOrders(page: 1);
-                              },
-                        icon: const Icon(Icons.restart_alt),
-                        label: const Text('重置'),
-                      ),
-                    ],
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _keywordController,
+                  decoration: const InputDecoration(
+                    labelText: '搜索订单号/产品',
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 8,
-                    children: [
-                      Text('总数：$_total'),
-                      Text('当前页：$_page / $_totalPages'),
-                      Text('每页：$_pageSize 条'),
-                    ],
-                  ),
-                ],
+                  onSubmitted: (_) => _loadOrders(),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: _loading ? null : _loadOrders,
+                icon: const Icon(Icons.search),
+                label: const Text('查询'),
+              ),
+            ],
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              SizedBox(
+                width: 220,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _viewMode,
+                  decoration: const InputDecoration(
+                    labelText: '工单视角',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: 'own', child: Text('我的工单')),
+                    const DropdownMenuItem(
+                      value: 'assist',
+                      child: Text('我的代班工单'),
+                    ),
+                    if (widget.canProxyView)
+                      const DropdownMenuItem(
+                        value: 'proxy',
+                        child: Text('代理操作员视角'),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null || value == _viewMode) return;
+                    setState(() {
+                      _viewMode = value;
+                      if (_viewMode != 'proxy') _proxyOperatorUserId = null;
+                    });
+                    _loadOrders();
+                  },
+                ),
+              ),
+              if (widget.canProxyView && _viewMode == 'proxy') ...[
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 260,
+                  child: DropdownButtonFormField<int>(
+                    initialValue: _proxyOperatorUserId,
+                    decoration: const InputDecoration(
+                      labelText: '选择操作员',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: _proxyOperators
+                        .map(
+                          (entry) => DropdownMenuItem<int>(
+                            value: entry.id,
+                            child: Text(entry.displayName),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() => _proxyOperatorUserId = value);
+                      _loadOrders();
+                    },
+                  ),
+                ),
+              ],
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 170,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _orderStatusFilter,
+                  decoration: const InputDecoration(
+                    labelText: '状态',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('全部')),
+                    DropdownMenuItem(value: 'pending', child: Text('待生产')),
+                    DropdownMenuItem(value: 'in_progress', child: Text('生产中')),
+                    DropdownMenuItem(value: 'completed', child: Text('生产完成')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null || value == _orderStatusFilter) {
+                      return;
+                    }
+                    setState(() => _orderStatusFilter = value);
+                    _loadOrders();
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 280,
+                child: DropdownButtonFormField<int?>(
+                  key: ValueKey<int?>(processDropdownValue),
+                  initialValue: processDropdownValue,
+                  decoration: const InputDecoration(
+                    labelText: '当前工序',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('全部工序'),
+                    ),
+                    ...processFilterOptions.map(
+                      (entry) => DropdownMenuItem<int?>(
+                        value: entry.id,
+                        child: Text('${entry.name} (#${entry.id})'),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == _currentProcessIdFilter) {
+                      return;
+                    }
+                    setState(() => _currentProcessIdFilter = value);
+                    _loadOrders();
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('总数：$_total', style: theme.textTheme.titleMedium),
           if (_message.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -1167,161 +1078,72 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 : _items.isEmpty
                 ? const Center(child: Text('暂无可执行生产工单'))
                 : Card(
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: UnifiedListTableHeaderStyle.wrap(
-                            theme: theme,
-                            child: AdaptiveTableContainer(
-                              child: DataTable(
-                                columns: [
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '订单号',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '产品',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '订单状态',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '工段',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '工序',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '工序状态',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '可见数量',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '分配数量',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '完成数量',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '查看视角',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '并行实例',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '更新时间',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '操作',
-                                  ),
-                                ],
-                                rows: _items.map((item) {
-                                  final viewLabel = switch (item.workView) {
-                                    'own' => '本人',
-                                    'assist' => '代班',
-                                    'proxy' => '代理',
-                                    _ => item.workView,
-                                  };
-                                  return DataRow(
-                                    cells: [
-                                      DataCell(Text(item.orderCode)),
-                                      DataCell(Text(item.productName)),
-                                      DataCell(
-                                        Text(
-                                          productionOrderStatusLabel(
-                                            item.orderStatus,
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        Text(item.currentStageName ?? '-'),
-                                      ),
-                                      DataCell(Text(item.currentProcessName)),
-                                      DataCell(
-                                        Text(
-                                          productionProcessStatusLabel(
-                                            item.processStatus,
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(Text('${item.visibleQuantity}')),
-                                      DataCell(
-                                        Text(
-                                          item.userAssignedQuantity != null
-                                              ? '${item.userAssignedQuantity}'
-                                              : '-',
-                                        ),
-                                      ),
-                                      DataCell(
-                                        Text(
-                                          '${item.processCompletedQuantity}',
-                                        ),
-                                      ),
-                                      DataCell(Text(viewLabel)),
-                                      DataCell(
-                                        Text(item.pipelineInstanceNo ?? '-'),
-                                      ),
-                                      DataCell(
-                                        Text(_formatDateTime(item.updatedAt)),
-                                      ),
-                                      DataCell(
-                                        UnifiedListTableHeaderStyle.actionMenuButton<
-                                          _OrderQueryAction
-                                        >(
-                                          theme: theme,
-                                          onSelected: (action) {
-                                            switch (action) {
-                                              case _OrderQueryAction.detail:
-                                                _openOrderDetailPage(item);
-                                                break;
-                                            }
-                                          },
-                                          itemBuilder: (_) => const [
-                                            PopupMenuItem(
-                                              value: _OrderQueryAction.detail,
-                                              child: Text('查看详情'),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }).toList(),
+                    child: AdaptiveTableContainer(
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('订单号')),
+                          DataColumn(label: Text('产品')),
+                          DataColumn(label: Text('订单状态')),
+                          DataColumn(label: Text('工段')),
+                          DataColumn(label: Text('工序')),
+                          DataColumn(label: Text('工序状态')),
+                          DataColumn(label: Text('可见数量')),
+                          DataColumn(label: Text('分配数量')),
+                          DataColumn(label: Text('完成数量')),
+                          DataColumn(label: Text('查看视角')),
+                          DataColumn(label: Text('并行实例')),
+                          DataColumn(label: Text('更新时间')),
+                          DataColumn(label: Text('详情')),
+                        ],
+                        rows: _items.map((item) {
+                          final viewLabel = switch (item.workView) {
+                            'own' => '本人',
+                            'assist' => '代班',
+                            'proxy' => '代理',
+                            _ => item.workView,
+                          };
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(item.orderCode)),
+                              DataCell(Text(item.productName)),
+                              DataCell(
+                                Text(
+                                  productionOrderStatusLabel(item.orderStatus),
+                                ),
                               ),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                          child: SimplePaginationBar(
-                            page: _page,
-                            totalPages: _totalPages,
-                            total: _total,
-                            loading: _loading,
-                            pageSize: _pageSize,
-                            onPrevious: _page <= 1
-                                ? null
-                                : () => _loadOrders(page: _page - 1),
-                            onNext: _page >= _totalPages
-                                ? null
-                                : () => _loadOrders(page: _page + 1),
-                            onPageChanged: (value) => _loadOrders(page: value),
-                          ),
-                        ),
-                      ],
+                              DataCell(Text(item.currentStageName ?? '-')),
+                              DataCell(Text(item.currentProcessName)),
+                              DataCell(
+                                Text(
+                                  productionProcessStatusLabel(
+                                    item.processStatus,
+                                  ),
+                                ),
+                              ),
+                              DataCell(Text('${item.visibleQuantity}')),
+                              DataCell(
+                                Text(
+                                  item.userAssignedQuantity != null
+                                      ? '${item.userAssignedQuantity}'
+                                      : '-',
+                                ),
+                              ),
+                              DataCell(
+                                Text('${item.processCompletedQuantity}'),
+                              ),
+                              DataCell(Text(viewLabel)),
+                              DataCell(Text(item.pipelineInstanceNo ?? '-')),
+                              DataCell(Text(_formatDateTime(item.updatedAt))),
+                              DataCell(
+                                OutlinedButton(
+                                  onPressed: () => _openOrderDetailPage(item),
+                                  child: const Text('详情'),
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
           ),

@@ -25,18 +25,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
-  constexpr int kDefaultWindowWidth = 1920;
-  constexpr int kDefaultWindowHeight = 1080;
-  const int screen_width = ::GetSystemMetrics(SM_CXSCREEN);
-  const int screen_height = ::GetSystemMetrics(SM_CYSCREEN);
-  const int origin_x = screen_width > kDefaultWindowWidth
-                           ? (screen_width - kDefaultWindowWidth) / 2
-                           : 0;
-  const int origin_y = screen_height > kDefaultWindowHeight
-                           ? (screen_height - kDefaultWindowHeight) / 2
-                           : 0;
-  Win32Window::Point origin(origin_x, origin_y);
-  Win32Window::Size size(kDefaultWindowWidth, kDefaultWindowHeight);
+  Win32Window::Point origin(10, 10);
+  Win32Window::Size size(1280, 720);
   if (!window.Create(L"mes_client", origin, size)) {
     return EXIT_FAILURE;
   }

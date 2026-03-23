@@ -396,7 +396,7 @@ void main() {
   testWidgets('message center supports preview, publish and batch read', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -440,7 +440,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('消息详情预览'), findsOneWidget);
-    expect(find.text('消息列表'), findsOneWidget);
     expect(find.text('暂无目标页面访问权限'), findsOneWidget);
     expect(find.text('有效'), findsWidgets);
     expect(find.text('详情'), findsWidgets);
@@ -520,11 +519,47 @@ void main() {
 
     await tester.tap(find.text('注册审批通过').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('跳转业务'));
+    final userRow = find.ancestor(
+      of: find.text('注册审批通过').first,
+      matching: find.byType(InkWell),
+    );
+    await tester.tap(find.descendant(of: userRow, matching: find.text('跳转')));
     await tester.pumpAndSettle();
     expect(navigatedPage, 'user');
     expect(navigatedTab, 'account_settings');
     expect(navigatedRoutePayloadJson, '{"action":"change_password"}');
+
+    await tester.tap(find.text('产品版本已发布').first);
+    await tester.pumpAndSettle();
+    final productRow = find.ancestor(
+      of: find.text('产品版本已发布').first,
+      matching: find.byType(InkWell),
+    );
+    await tester.tap(
+      find.descendant(of: productRow, matching: find.text('跳转')),
+    );
+    await tester.pumpAndSettle();
+    expect(navigatedPage, 'product');
+    expect(navigatedTab, 'product_version_management');
+    expect(
+      navigatedRoutePayloadJson,
+      '{"action":"view_version","product_id":66,"product_name":"产品A","target_version":3}',
+    );
+
+    await tester.tap(find.text('工艺模板已发布').first);
+    await tester.pumpAndSettle();
+    final craftRow = find.ancestor(
+      of: find.text('工艺模板已发布').first,
+      matching: find.byType(InkWell),
+    );
+    await tester.tap(find.descendant(of: craftRow, matching: find.text('跳转')));
+    await tester.pumpAndSettle();
+    expect(navigatedPage, 'craft');
+    expect(navigatedTab, 'production_process_config');
+    expect(
+      navigatedRoutePayloadJson,
+      '{"action":"view_template_version","template_id":88,"version":5}',
+    );
   });
 
   test('parses product and craft message jump payloads', () {

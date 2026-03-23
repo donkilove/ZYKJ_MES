@@ -221,20 +221,10 @@ class _FakeRepairAndScrapService extends ProductionService {
 }
 
 void main() {
-  void setDesktopViewport(WidgetTester tester) {
-    tester.view.physicalSize = const Size(1920, 1080);
-    tester.view.devicePixelRatio = 1.0;
-  }
-
   testWidgets('production scrap statistics page renders list content', (
     tester,
   ) async {
     final service = _FakeRepairAndScrapService();
-    setDesktopViewport(tester);
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -257,7 +247,6 @@ void main() {
     expect(find.text('产品名称（精确）'), findsOneWidget);
     expect(find.text('关键词（订单/原因/工序名称）'), findsOneWidget);
     expect(find.text('工序编码（精确）'), findsOneWidget);
-    expect(find.text('第 1 / 1 页'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).at(0), 'PO-1');
     await tester.enterText(find.byType(TextField).at(1), '产品A');
@@ -273,11 +262,6 @@ void main() {
   testWidgets('production repair orders page renders list content', (
     tester,
   ) async {
-    setDesktopViewport(tester);
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -298,17 +282,11 @@ void main() {
     expect(find.text('维修订单'), findsOneWidget);
     expect(find.text('RW-1'), findsOneWidget);
     expect(find.text('切割'), findsOneWidget);
-    expect(find.text('第 1 / 1 页'), findsOneWidget);
   });
 
   testWidgets(
     'production repair order detail page renders defect and return routes',
     (tester) async {
-      setDesktopViewport(tester);
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
       await tester.pumpWidget(
         MaterialApp(
           home: ProductionRepairOrderDetailPage(
@@ -324,7 +302,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('维修详情 - RW-1'), findsOneWidget);
-      expect(find.text('维修基础信息'), findsOneWidget);
       expect(find.textContaining('毛刺'), findsWidgets);
       await tester.drag(find.byType(ListView), const Offset(0, -300));
       await tester.pumpAndSettle();
@@ -336,11 +313,6 @@ void main() {
   testWidgets('production scrap detail page can open related repair detail', (
     tester,
   ) async {
-    setDesktopViewport(tester);
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
     await tester.pumpWidget(
       MaterialApp(
         home: ProductionScrapStatisticsDetailPage(
@@ -357,7 +329,6 @@ void main() {
 
     expect(find.text('报废详情 - PO-1'), findsOneWidget);
     expect(find.text('刀具磨损'), findsOneWidget);
-    expect(find.text('报废基础信息'), findsOneWidget);
     expect(find.text('关联维修工单'), findsOneWidget);
     expect(find.text('RW-1'), findsOneWidget);
 

@@ -75,7 +75,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('操作'), findsNWidgets(3));
+    expect(find.text('详情'), findsNWidgets(2));
+    expect(find.text('处置'), findsOneWidget);
   });
 
   testWidgets('质量数据页在非法日期范围时直接提示', (tester) async {
@@ -240,7 +241,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('报废详情'), findsOneWidget);
-    expect(find.text('报废基础信息'), findsOneWidget);
     expect(find.text('关联维修工单'), findsOneWidget);
     expect(find.text('RW-21'), findsOneWidget);
   });
@@ -259,12 +259,11 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('维修基础信息'), findsOneWidget);
     expect(find.text('缺陷现象'), findsOneWidget);
+    expect(find.text('维修原因'), findsOneWidget);
     expect(find.textContaining('虚焊'), findsWidgets);
     await tester.drag(find.byType(ListView), const Offset(0, -300));
     await tester.pumpAndSettle();
-    expect(find.text('维修原因'), findsOneWidget);
     expect(find.textContaining('治具偏移'), findsOneWidget);
   });
 
@@ -288,7 +287,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('报废详情'), findsOneWidget);
-    expect(find.text('报废基础信息'), findsOneWidget);
     expect(find.text('关联维修工单'), findsOneWidget);
   });
 
@@ -315,7 +313,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('维修详情'), findsOneWidget);
-    expect(find.text('维修基础信息'), findsOneWidget);
     expect(find.text('缺陷现象'), findsOneWidget);
   });
 }
@@ -328,7 +325,8 @@ class _FakeQualityService extends QualityService {
     this.operatorItems,
     this.productItems,
     this.trendItems,
-  }) : super(AppSession(baseUrl: 'http://localhost', accessToken: 'token'));
+  })
+    : super(AppSession(baseUrl: 'http://localhost', accessToken: 'token'));
 
   final FirstArticleListResult? firstArticleResult;
   final QualityStatsOverview? overviewResult;
@@ -370,20 +368,19 @@ class _FakeQualityService extends QualityService {
     String? result,
   }) async {
     overviewCallCount += 1;
-    return overviewResult ??
-        QualityStatsOverview(
-          firstArticleTotal: 0,
-          passedTotal: 0,
-          failedTotal: 0,
-          passRatePercent: 0,
-          defectTotal: 0,
-          scrapTotal: 0,
-          repairTotal: 0,
-          coveredOrderCount: 0,
-          coveredProcessCount: 0,
-          coveredOperatorCount: 0,
-          latestFirstArticleAt: null,
-        );
+    return overviewResult ?? QualityStatsOverview(
+      firstArticleTotal: 0,
+      passedTotal: 0,
+      failedTotal: 0,
+      passRatePercent: 0,
+      defectTotal: 0,
+      scrapTotal: 0,
+      repairTotal: 0,
+      coveredOrderCount: 0,
+      coveredProcessCount: 0,
+      coveredOperatorCount: 0,
+      latestFirstArticleAt: null,
+    );
   }
 
   @override
@@ -549,14 +546,14 @@ class _FakeQualityRepairScrapService extends _FakeQualityService {
   }) async {
     return ScrapStatisticsListResult(
       total: 1,
-      items: [await getScrapStatisticsDetail(scrapId: 21)],
+      items: [
+        await getScrapStatisticsDetail(scrapId: 21),
+      ],
     );
   }
 
   @override
-  Future<ScrapStatisticsItem> getScrapStatisticsDetail({
-    required int scrapId,
-  }) async {
+  Future<ScrapStatisticsItem> getScrapStatisticsDetail({required int scrapId}) async {
     return ScrapStatisticsItem.fromJson({
       'id': scrapId,
       'order_code': 'PO-21',
@@ -615,9 +612,7 @@ class _FakeQualityRepairScrapService extends _FakeQualityService {
   }
 
   @override
-  Future<RepairOrderDetailItem> getRepairOrderDetail({
-    required int repairOrderId,
-  }) {
+  Future<RepairOrderDetailItem> getRepairOrderDetail({required int repairOrderId}) {
     return _FakeProductionService().getRepairOrderDetail(
       repairOrderId: repairOrderId,
     );
@@ -629,7 +624,9 @@ class _FakeQualityRepairScrapService extends _FakeQualityService {
   }) async {
     return RepairOrderPhenomenaSummaryResult(
       repairOrderId: repairOrderId,
-      items: [RepairOrderPhenomenonSummaryItem(phenomenon: '虚焊', quantity: 3)],
+      items: [
+        RepairOrderPhenomenonSummaryItem(phenomenon: '虚焊', quantity: 3),
+      ],
     );
   }
 

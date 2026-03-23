@@ -8,11 +8,7 @@ import '../services/api_exception.dart';
 import '../services/export_file_service.dart';
 import '../services/quality_service.dart';
 import '../widgets/adaptive_table_container.dart';
-import '../widgets/simple_pagination_bar.dart';
-import '../widgets/unified_list_table_header_style.dart';
 import 'first_article_disposition_page.dart';
-
-enum _FirstArticleAction { detail, dispose }
 
 class DailyFirstArticlePage extends StatefulWidget {
   const DailyFirstArticlePage({
@@ -318,9 +314,6 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final buttonStyle = UnifiedListTableHeaderStyle.toolbarActionButtonStyle(
-      theme,
-    );
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -353,144 +346,105 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
             ],
           ),
           const SizedBox(height: 12),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _pickQueryDate,
+                icon: const Icon(Icons.calendar_month),
+                label: Text('查询日期：${_formatDate(_queryDate)}'),
+              ),
+              const SizedBox(width: 12),
+              DropdownButton<String?>(
+                value: _resultFilter,
+                hint: const Text('全部结果'),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('全部结果')),
+                  DropdownMenuItem(value: 'passed', child: Text('合格')),
+                  DropdownMenuItem(value: 'failed', child: Text('不合格')),
+                ],
+                onChanged: _loading
+                    ? null
+                    : (v) {
+                        setState(() {
+                          _resultFilter = v;
+                          _page = 1;
+                        });
+                        _loadFirstArticles(page: 1);
+                      },
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _keywordController,
+                  decoration: const InputDecoration(
+                    labelText: '搜索订单号/产品/工序/操作员',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _loadFirstArticles(page: 1),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: _loading ? null : () => _loadFirstArticles(page: 1),
+                icon: const Icon(Icons.search),
+                label: const Text('查询'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _productNameController,
+                  decoration: const InputDecoration(
+                    labelText: '产品名称',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadFirstArticles(page: 1),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _processCodeController,
+                  decoration: const InputDecoration(
+                    labelText: '工序编码',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadFirstArticles(page: 1),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _operatorUsernameController,
+                  decoration: const InputDecoration(
+                    labelText: '操作员',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadFirstArticles(page: 1),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.all(12),
+              child: Wrap(
+                spacing: 16,
+                runSpacing: 8,
                 children: [
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      OutlinedButton.icon(
-                        style: buttonStyle,
-                        onPressed: _loading ? null : _pickQueryDate,
-                        icon: const Icon(Icons.calendar_month),
-                        label: Text('查询日期：${_formatDate(_queryDate)}'),
-                      ),
-                      SizedBox(
-                        width: 180,
-                        child: DropdownButtonFormField<String?>(
-                          key: ValueKey<String?>(_resultFilter),
-                          initialValue: _resultFilter,
-                          decoration: const InputDecoration(
-                            labelText: '结果',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: null, child: Text('全部结果')),
-                            DropdownMenuItem(
-                              value: 'passed',
-                              child: Text('合格'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'failed',
-                              child: Text('不合格'),
-                            ),
-                          ],
-                          onChanged: _loading
-                              ? null
-                              : (v) {
-                                  setState(() {
-                                    _resultFilter = v;
-                                    _page = 1;
-                                  });
-                                  _loadFirstArticles(page: 1);
-                                },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 320,
-                        child: TextField(
-                          controller: _keywordController,
-                          decoration: const InputDecoration(
-                            labelText: '搜索订单号/产品/工序/操作员',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _loadFirstArticles(page: 1),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: TextField(
-                          controller: _productNameController,
-                          decoration: const InputDecoration(
-                            labelText: '产品名称',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _loadFirstArticles(page: 1),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 180,
-                        child: TextField(
-                          controller: _processCodeController,
-                          decoration: const InputDecoration(
-                            labelText: '工序编码',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _loadFirstArticles(page: 1),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 180,
-                        child: TextField(
-                          controller: _operatorUsernameController,
-                          decoration: const InputDecoration(
-                            labelText: '操作员',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _loadFirstArticles(page: 1),
-                        ),
-                      ),
-                      FilledButton.icon(
-                        onPressed: _loading
-                            ? null
-                            : () => _loadFirstArticles(page: 1),
-                        icon: const Icon(Icons.search),
-                        label: const Text('查询'),
-                      ),
-                      OutlinedButton.icon(
-                        style: buttonStyle,
-                        onPressed: _loading
-                            ? null
-                            : () {
-                                _keywordController.clear();
-                                _productNameController.clear();
-                                _processCodeController.clear();
-                                _operatorUsernameController.clear();
-                                setState(() {
-                                  _resultFilter = null;
-                                  _page = 1;
-                                });
-                                _loadFirstArticles(page: 1);
-                              },
-                        icon: const Icon(Icons.restart_alt),
-                        label: const Text('重置'),
-                      ),
-                    ],
+                  Text('查询日期：${_formatDate(_queryDate)}'),
+                  Text('当日校验码：${_verificationCode ?? '-'}'),
+                  Text(
+                    '来源：${verificationCodeSourceLabel(_verificationCodeSource)}',
                   ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 8,
-                    children: [
-                      Text('查询日期：${_formatDate(_queryDate)}'),
-                      Text('当日校验码：${_verificationCode ?? '-'}'),
-                      Text(
-                        '来源：${verificationCodeSourceLabel(_verificationCodeSource)}',
-                      ),
-                      Text('总数：$_total'),
-                      Text('当前页：$_page / $_totalPages'),
-                    ],
-                  ),
+                  Text('总数：$_total'),
                 ],
               ),
             ),
@@ -515,140 +469,102 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                     children: [
                       Expanded(
                         child: Card(
-                          child: UnifiedListTableHeaderStyle.wrap(
-                            theme: theme,
-                            child: AdaptiveTableContainer(
-                              child: DataTable(
-                                columns: [
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '提交时间',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '订单号',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '产品',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '工序',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '操作员',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '结果',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '校验日期',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '备注',
-                                  ),
-                                  if (widget.canViewDetail || widget.canDispose)
-                                    UnifiedListTableHeaderStyle.column(
-                                      context,
-                                      '操作',
+                          child: AdaptiveTableContainer(
+                            child: DataTable(
+                              columns: [
+                                const DataColumn(label: Text('提交时间')),
+                                const DataColumn(label: Text('订单号')),
+                                const DataColumn(label: Text('产品')),
+                                const DataColumn(label: Text('工序')),
+                                const DataColumn(label: Text('操作员')),
+                                const DataColumn(label: Text('结果')),
+                                const DataColumn(label: Text('校验日期')),
+                                const DataColumn(label: Text('备注')),
+                                if (widget.canViewDetail || widget.canDispose)
+                                  const DataColumn(label: Text('操作')),
+                              ],
+                              rows: _items.map((item) {
+                                final canDisposeItem =
+                                    widget.canDispose &&
+                                    item.result != 'passed';
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Text(_formatDateTime(item.createdAt)),
                                     ),
-                                ],
-                                rows: _items.map((item) {
-                                  final canDisposeItem =
-                                      widget.canDispose &&
-                                      item.result != 'passed';
-                                  return DataRow(
-                                    cells: [
-                                      DataCell(
-                                        Text(_formatDateTime(item.createdAt)),
+                                    DataCell(Text(item.orderCode)),
+                                    DataCell(Text(item.productName)),
+                                    DataCell(
+                                      Text(
+                                        '${item.processName} (${item.processCode})',
                                       ),
-                                      DataCell(Text(item.orderCode)),
-                                      DataCell(Text(item.productName)),
+                                    ),
+                                    DataCell(Text(item.operatorUsername)),
+                                    DataCell(
+                                      Text(
+                                        firstArticleResultLabel(item.result),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(_formatDate(item.verificationDate)),
+                                    ),
+                                    DataCell(Text(item.remark ?? '-')),
+                                    if (widget.canViewDetail || canDisposeItem)
                                       DataCell(
-                                        Text(
-                                          '${item.processName} (${item.processCode})',
+                                        Wrap(
+                                          spacing: 8,
+                                          children: [
+                                            if (widget.canViewDetail)
+                                              TextButton(
+                                                onPressed: () =>
+                                                    _openDetailPage(
+                                                      item,
+                                                      isDispositionMode: false,
+                                                    ),
+                                                child: const Text('详情'),
+                                              ),
+                                            if (canDisposeItem)
+                                              TextButton(
+                                                onPressed: () =>
+                                                    _openDetailPage(
+                                                      item,
+                                                      isDispositionMode: true,
+                                                    ),
+                                                child: const Text('处置'),
+                                              ),
+                                          ],
                                         ),
                                       ),
-                                      DataCell(Text(item.operatorUsername)),
-                                      DataCell(
-                                        Text(
-                                          firstArticleResultLabel(item.result),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        Text(
-                                          _formatDate(item.verificationDate),
-                                        ),
-                                      ),
-                                      DataCell(Text(item.remark ?? '-')),
-                                      if (widget.canViewDetail ||
-                                          canDisposeItem)
-                                        DataCell(
-                                          UnifiedListTableHeaderStyle.actionMenuButton<
-                                            _FirstArticleAction
-                                          >(
-                                            theme: theme,
-                                            onSelected: (action) {
-                                              switch (action) {
-                                                case _FirstArticleAction.detail:
-                                                  _openDetailPage(
-                                                    item,
-                                                    isDispositionMode: false,
-                                                  );
-                                                  break;
-                                                case _FirstArticleAction
-                                                    .dispose:
-                                                  _openDetailPage(
-                                                    item,
-                                                    isDispositionMode: true,
-                                                  );
-                                                  break;
-                                              }
-                                            },
-                                            itemBuilder: (_) => [
-                                              if (widget.canViewDetail)
-                                                const PopupMenuItem(
-                                                  value: _FirstArticleAction
-                                                      .detail,
-                                                  child: Text('查看详情'),
-                                                ),
-                                              if (canDisposeItem)
-                                                const PopupMenuItem(
-                                                  value: _FirstArticleAction
-                                                      .dispose,
-                                                  child: Text('处置记录'),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  );
-                                }).toList(),
-                              ),
+                                  ],
+                                );
+                              }).toList(),
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 8),
-                      SimplePaginationBar(
-                        page: _page,
-                        totalPages: _totalPages,
-                        total: _total,
-                        loading: _loading,
-                        pageSize: _pageSize,
-                        onPrevious: _page <= 1
-                            ? null
-                            : () => _loadFirstArticles(page: _page - 1),
-                        onNext: _page >= _totalPages
-                            ? null
-                            : () => _loadFirstArticles(page: _page + 1),
-                        onPageChanged: (value) =>
-                            _loadFirstArticles(page: value),
+                      Row(
+                        children: [
+                          Text('第 $_page / $_totalPages 页'),
+                          const SizedBox(width: 12),
+                          Text('总数：$_total'),
+                          const Spacer(),
+                          OutlinedButton.icon(
+                            onPressed: _loading || _page <= 1
+                                ? null
+                                : () => _loadFirstArticles(page: _page - 1),
+                            icon: const Icon(Icons.chevron_left),
+                            label: const Text('上一页'),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: _loading || _page >= _totalPages
+                                ? null
+                                : () => _loadFirstArticles(page: _page + 1),
+                            icon: const Icon(Icons.chevron_right),
+                            label: const Text('下一页'),
+                          ),
+                        ],
                       ),
                     ],
                   ),

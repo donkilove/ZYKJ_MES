@@ -21,52 +21,6 @@ const List<String> _defaultTabOrder = [
 ];
 
 const String _accountSettingsTabCode = 'account_settings';
-const double _desktopTabBarHeight = 52;
-const double _desktopTabMinWidth = 148;
-const double _desktopTabMaxWidth = 220;
-
-Widget _buildDesktopTab(String title) {
-  return Tab(
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(
-        minWidth: _desktopTabMinWidth,
-        maxWidth: _desktopTabMaxWidth,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-        ),
-      ),
-    ),
-  );
-}
-
-Widget _buildDesktopTabBar({
-  required BuildContext context,
-  TabController? controller,
-  required List<Widget> tabs,
-}) {
-  return Material(
-    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-    child: Align(
-      alignment: Alignment.centerLeft,
-      child: SizedBox(
-        height: _desktopTabBarHeight,
-        child: TabBar(
-          controller: controller,
-          isScrollable: true,
-          indicatorSize: TabBarIndicatorSize.tab,
-          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-          tabs: tabs,
-        ),
-      ),
-    ),
-  );
-}
 
 class UserPage extends StatefulWidget {
   const UserPage({
@@ -339,11 +293,27 @@ class _UserPageState extends State<UserPage> {
                 }
                 return Column(
                   children: [
-                    _buildDesktopTabBar(
-                      context: context,
-                      tabs: tabs
-                          .map((item) => _buildDesktopTab(item.title))
-                          .toList(),
+                    Material(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      child: TabBar(
+                        isScrollable: false,
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        labelPadding: EdgeInsets.zero,
+                        tabs: tabs
+                            .map(
+                              (item) => Tab(
+                                child: Text(
+                                  item.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
                     ),
                     Expanded(
                       child: TabBarView(

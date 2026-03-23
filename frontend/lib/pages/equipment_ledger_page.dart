@@ -10,8 +10,6 @@ import '../services/api_exception.dart';
 import '../services/equipment_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
-import '../widgets/simple_pagination_bar.dart';
-import '../widgets/unified_list_table_header_style.dart';
 
 class EquipmentLedgerPage extends StatefulWidget {
   const EquipmentLedgerPage({
@@ -40,17 +38,11 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   bool _loading = false;
   bool _exporting = false;
   String _message = '';
-  int _page = 1;
-  int _pageSize = 20;
   int _total = 0;
   List<EquipmentLedgerItem> _items = const [];
   List<EquipmentOwnerOption> _ownerOptions = const [];
   bool? _enabledFilter;
   String? _ownerFilterName;
-
-  static const List<int> _pageSizeOptions = [20, 50, 100];
-
-  int get _totalPages => _total == 0 ? 1 : (_total / _pageSize).ceil();
 
   @override
   void initState() {
@@ -88,21 +80,13 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
-  Future<void> _loadItems({
-    bool reloadOwners = false,
-    int? page,
-    int? pageSize,
-  }) async {
+  Future<void> _loadItems({bool reloadOwners = false}) async {
     if (!mounted) {
       return;
     }
-    final nextPage = page ?? _page;
-    final nextPageSize = pageSize ?? _pageSize;
     setState(() {
       _loading = true;
       _message = '';
-      _page = nextPage;
-      _pageSize = nextPageSize;
     });
     try {
       if (reloadOwners || _ownerOptions.isEmpty) {
@@ -111,8 +95,8 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
         } catch (_) {}
       }
       final result = await _equipmentService.listEquipment(
-        page: nextPage,
-        pageSize: nextPageSize,
+        page: 1,
+        pageSize: 100,
         keyword: _keywordController.text.trim(),
         enabled: _enabledFilter,
         locationKeyword: _locationFilterController.text.trim(),
@@ -498,8 +482,6 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final toolbarButtonStyle =
-        UnifiedListTableHeaderStyle.toolbarActionButtonStyle(theme);
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -533,118 +515,95 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 360,
-                    child: TextField(
-                      controller: _keywordController,
-                      decoration: const InputDecoration(
-                        labelText: '搜索设备编号/名称/型号/位置/负责人',
-                        border: OutlineInputBorder(),
-                      ),
-                      onSubmitted: (_) => _loadItems(page: 1),
-                    ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _keywordController,
+                  decoration: const InputDecoration(
+                    labelText: '搜索设备编号/名称/型号/位置/负责人',
+                    border: OutlineInputBorder(),
                   ),
-                  SizedBox(
-                    width: 180,
-                    child: TextField(
-                      controller: _locationFilterController,
-                      decoration: const InputDecoration(
-                        labelText: '位置筛选',
-                        border: OutlineInputBorder(),
-                      ),
-                      onSubmitted: (_) => _loadItems(page: 1),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 200,
-                    child: DropdownButtonFormField<String?>(
-                      initialValue: _ownerFilterName,
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('全部负责人'),
-                        ),
-                        ..._ownerOptions.map(
-                          (entry) => DropdownMenuItem<String?>(
-                            value: entry.username,
-                            child: Text(entry.displayName),
-                          ),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() => _ownerFilterName = value);
-                      },
-                      decoration: const InputDecoration(
-                        labelText: '负责人',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 140,
-                    child: DropdownButtonFormField<bool?>(
-                      initialValue: _enabledFilter,
-                      items: const [
-                        DropdownMenuItem<bool?>(
-                          value: null,
-                          child: Text('全部状态'),
-                        ),
-                        DropdownMenuItem<bool?>(value: true, child: Text('启用')),
-                        DropdownMenuItem<bool?>(
-                          value: false,
-                          child: Text('停用'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() => _enabledFilter = value);
-                      },
-                      decoration: const InputDecoration(
-                        labelText: '状态',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  FilledButton.icon(
-                    onPressed: _loading ? null : () => _loadItems(page: 1),
-                    icon: const Icon(Icons.search),
-                    label: const Text('搜索'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _loading
-                        ? null
-                        : () {
-                            _keywordController.clear();
-                            _locationFilterController.clear();
-                            setState(() {
-                              _ownerFilterName = null;
-                              _enabledFilter = null;
-                            });
-                            _loadItems(page: 1, reloadOwners: widget.canWrite);
-                          },
-                    style: toolbarButtonStyle,
-                    icon: const Icon(Icons.restart_alt),
-                    label: const Text('重置筛选'),
-                  ),
-                  if (widget.canWrite)
-                    FilledButton.icon(
-                      onPressed: _loading ? null : () => _showEditDialog(),
-                      icon: const Icon(Icons.add),
-                      label: const Text('新增设备'),
-                    ),
-                ],
+                  onSubmitted: (_) => _loadItems(),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: TextField(
+                  controller: _locationFilterController,
+                  decoration: const InputDecoration(
+                    labelText: '位置筛选',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _loadItems(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 180,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _ownerFilterName,
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('全部负责人'),
+                    ),
+                    ..._ownerOptions.map(
+                      (entry) => DropdownMenuItem<String?>(
+                        value: entry.username,
+                        child: Text(entry.displayName),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _ownerFilterName = value);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '负责人',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<bool?>(
+                  initialValue: _enabledFilter,
+                  items: const [
+                    DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
+                    DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+                    DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _enabledFilter = value);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '状态',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: _loading ? null : _loadItems,
+                icon: const Icon(Icons.search),
+                label: const Text('搜索'),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: (_loading || !widget.canWrite)
+                    ? null
+                    : () => _showEditDialog(),
+                icon: const Icon(Icons.add),
+                label: const Text('新增设备'),
+              ),
+            ],
           ),
+          const SizedBox(height: 12),
+          Text('总数: $_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -656,136 +615,84 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                 ),
               ),
             ),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _items.isEmpty
                 ? const Center(child: Text('暂无设备'))
                 : Card(
-                    clipBehavior: Clip.antiAlias,
                     child: AdaptiveTableContainer(
-                      minTableWidth: 1520,
-                      child: UnifiedListTableHeaderStyle.wrap(
-                        theme: theme,
-                        child: DataTable(
-                          dataRowMinHeight: 60,
-                          dataRowMaxHeight: 80,
-                          columns: [
-                            UnifiedListTableHeaderStyle.column(context, '设备编号'),
-                            UnifiedListTableHeaderStyle.column(context, '设备名称'),
-                            UnifiedListTableHeaderStyle.column(context, '型号'),
-                            UnifiedListTableHeaderStyle.column(context, '位置'),
-                            UnifiedListTableHeaderStyle.column(context, '负责人'),
-                            UnifiedListTableHeaderStyle.column(context, '状态'),
-                            UnifiedListTableHeaderStyle.column(context, '创建时间'),
-                            UnifiedListTableHeaderStyle.column(context, '更新时间'),
-                            UnifiedListTableHeaderStyle.column(
-                              context,
-                              '操作',
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                          rows: _items.map((item) {
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(item.code)),
-                                DataCell(Text(item.name)),
-                                DataCell(
-                                  Text(item.model.isEmpty ? '-' : item.model),
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('设备编号')),
+                          DataColumn(label: Text('设备名称')),
+                          DataColumn(label: Text('型号')),
+                          DataColumn(label: Text('位置')),
+                          DataColumn(label: Text('负责人')),
+                          DataColumn(label: Text('状态')),
+                          DataColumn(label: Text('创建时间')),
+                          DataColumn(label: Text('更新时间')),
+                          DataColumn(label: Text('操作')),
+                        ],
+                        rows: _items.map((item) {
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(item.code)),
+                              DataCell(Text(item.name)),
+                              DataCell(
+                                Text(item.model.isEmpty ? '-' : item.model),
+                              ),
+                              DataCell(
+                                Text(
+                                  item.location.isEmpty ? '-' : item.location,
                                 ),
-                                DataCell(
-                                  Text(
-                                    item.location.isEmpty ? '-' : item.location,
-                                  ),
+                              ),
+                              DataCell(
+                                Text(
+                                  item.ownerName.isEmpty ? '-' : item.ownerName,
                                 ),
-                                DataCell(
-                                  Text(
-                                    item.ownerName.isEmpty
-                                        ? '-'
-                                        : item.ownerName,
-                                  ),
+                              ),
+                              DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                              DataCell(Text(_formatDateTime(item.createdAt))),
+                              DataCell(Text(_formatDateTime(item.updatedAt))),
+                              DataCell(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextButton(
+                                      onPressed: widget.canWrite
+                                          ? () => _showEditDialog(item: item)
+                                          : null,
+                                      child: const Text('编辑'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: widget.canWrite
+                                          ? () => _toggleItem(item)
+                                          : null,
+                                      child: Text(item.isEnabled ? '停用' : '启用'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: widget.canWrite
+                                          ? () => _deleteItem(item)
+                                          : null,
+                                      child: const Text('删除'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: () => _showDetailDialog(item),
+                                      child: const Text('详情'),
+                                    ),
+                                  ],
                                 ),
-                                DataCell(Text(item.isEnabled ? '启用' : '停用')),
-                                DataCell(Text(_formatDateTime(item.createdAt))),
-                                DataCell(Text(_formatDateTime(item.updatedAt))),
-                                DataCell(
-                                  UnifiedListTableHeaderStyle.actionMenuButton<
-                                    String
-                                  >(
-                                    theme: theme,
-                                    onSelected: (action) {
-                                      switch (action) {
-                                        case 'detail':
-                                          _showDetailDialog(item);
-                                          return;
-                                        case 'edit':
-                                          _showEditDialog(item: item);
-                                          return;
-                                        case 'toggle':
-                                          _toggleItem(item);
-                                          return;
-                                        case 'delete':
-                                          _deleteItem(item);
-                                          return;
-                                      }
-                                    },
-                                    itemBuilder: (context) => [
-                                      const PopupMenuItem<String>(
-                                        value: 'detail',
-                                        child: Text('详情'),
-                                      ),
-                                      if (widget.canWrite)
-                                        const PopupMenuItem<String>(
-                                          value: 'edit',
-                                          child: Text('编辑'),
-                                        ),
-                                      if (widget.canWrite)
-                                        PopupMenuItem<String>(
-                                          value: 'toggle',
-                                          child: Text(
-                                            item.isEnabled ? '停用' : '启用',
-                                          ),
-                                        ),
-                                      if (widget.canWrite)
-                                        const PopupMenuItem<String>(
-                                          value: 'delete',
-                                          child: Text('删除'),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
                       ),
                     ),
                   ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: SimplePaginationBar(
-                page: _page,
-                totalPages: _totalPages,
-                total: _total,
-                loading: _loading,
-                pageSize: _pageSize,
-                pageSizeOptions: _pageSizeOptions,
-                onPrevious: _page > 1
-                    ? () => _loadItems(page: _page - 1)
-                    : null,
-                onNext: _page < _totalPages
-                    ? () => _loadItems(page: _page + 1)
-                    : null,
-                onPageChanged: (value) => _loadItems(page: value),
-                onPageSizeChanged: (value) =>
-                    _loadItems(page: 1, pageSize: value),
-              ),
-            ),
           ),
         ],
       ),

@@ -43,13 +43,6 @@ void main() {
   testWidgets('account settings auto lands on change password section once', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1920, 1080);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
     const routePayloadJson = '{"action":"change_password"}';
 
     Future<void> pumpPage() async {
@@ -71,10 +64,6 @@ void main() {
 
     await pumpPage();
     await tester.pumpAndSettle();
-
-    expect(find.text('基础信息'), findsOneWidget);
-    expect(find.text('当前会话'), findsNothing);
-    expect(find.text('修改密码'), findsWidgets);
 
     expect(
       find.byKey(const ValueKey('account-settings-change-password-anchor')),

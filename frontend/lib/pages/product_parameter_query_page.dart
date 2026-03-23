@@ -11,7 +11,6 @@ import '../models/product_models.dart';
 import '../services/api_exception.dart';
 import '../services/product_service.dart';
 import '../widgets/adaptive_table_container.dart';
-import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
@@ -44,22 +43,17 @@ class ProductParameterQueryPage extends StatefulWidget {
 }
 
 class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
-  static const List<int> _pageSizeOptions = [20, 50, 100];
-
   late final ProductService _productService;
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
   String _message = '';
   int _total = 0;
-  int _page = 1;
-  int _pageSize = 20;
   List<ProductItem> _products = const [];
   int _handledJumpSeq = 0;
   String _selectedCategoryFilter = '';
   String _selectedStatusFilter = '';
-  final TextEditingController _versionFilterController =
-      TextEditingController();
+  final TextEditingController _versionFilterController = TextEditingController();
 
   @override
   void initState() {
@@ -162,8 +156,8 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     });
     try {
       final result = await _productService.listProductsForParameterQuery(
-        page: _page,
-        pageSize: _pageSize,
+        page: 1,
+        pageSize: 10000,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         lifecycleStatus: _selectedStatusFilter,
@@ -200,18 +194,8 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     return _products;
   }
 
-  int get _totalPages {
-    if (_total <= 0) {
-      return 1;
-    }
-    return (_total / _pageSize).ceil();
-  }
-
   Future<void> _handleJumpCommand(ProductJumpCommand command) async {
     _keywordController.text = command.productName;
-    setState(() {
-      _page = 1;
-    });
     await _loadProducts();
     if (!mounted) {
       return;
@@ -305,9 +289,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       );
       await file.saveTo(location.path);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('导出成功')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('导出成功')),
+        );
       }
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -315,9 +299,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('导出失败：${_errorMessage(error)}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败：${_errorMessage(error)}')),
+        );
       }
     }
   }
@@ -371,189 +355,42 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     await showDialog<void>(
       context: context,
       builder: (context) {
-        final theme = Theme.of(context);
-        return Dialog(
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 32,
-            vertical: 24,
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1280, maxHeight: 760),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '产品参数 - ${product.name}',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '桌面详情工作台视图，保留原只读弹窗流程。',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '关闭',
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _ParameterSummaryCard(
-                        label: '产品名称',
-                        value: product.name,
-                        icon: Icons.inventory_2_outlined,
-                      ),
-                      _ParameterSummaryCard(
-                        label: '产品分类',
-                        value: product.category.isEmpty
-                            ? '-'
-                            : product.category,
-                        icon: Icons.category_outlined,
-                      ),
-                      _ParameterSummaryCard(
-                        label: '生效版本',
-                        value: result.versionLabel,
-                        icon: Icons.layers_outlined,
-                      ),
-                      _ParameterSummaryCard(
-                        label: '参数总数',
-                        value: '${result.total}',
-                        icon: Icons.tune_outlined,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 280,
-                          child: Card(
-                            margin: EdgeInsets.zero,
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '查询摘要',
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.w700),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  _ParameterSummaryField(
-                                    label: '参数口径',
-                                    value: result.parameterScope == 'effective'
-                                        ? '生效参数'
-                                        : '版本参数',
-                                  ),
-                                  _ParameterSummaryField(
-                                    label: '生命周期',
-                                    value: _lifecycleLabel(
-                                      result.lifecycleStatus,
-                                    ),
-                                  ),
-                                  _ParameterSummaryField(
-                                    label: '当前版本',
-                                    value: result.versionLabel,
-                                  ),
-                                  _ParameterSummaryField(
-                                    label: '最近参数摘要',
-                                    value:
-                                        product.lastParameterSummary
-                                                ?.trim()
-                                                .isNotEmpty ==
-                                            true
-                                        ? product.lastParameterSummary!
-                                        : '-',
-                                  ),
-                                  _ParameterSummaryField(
-                                    label: '产品备注',
-                                    value: product.remark.trim().isEmpty
-                                        ? '-'
-                                        : product.remark,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Card(
-                            margin: EdgeInsets.zero,
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: result.items.isEmpty
-                                  ? const Center(child: Text('该产品暂无参数'))
-                                  : AdaptiveTableContainer(
-                                      minTableWidth: 980,
-                                      child: DataTable(
-                                        columns: const [
-                                          DataColumn(label: Text('参数名称')),
-                                          DataColumn(label: Text('参数分类')),
-                                          DataColumn(label: Text('参数类型')),
-                                          DataColumn(label: Text('参数值')),
-                                          DataColumn(label: Text('参数说明')),
-                                        ],
-                                        rows: result.items.map((item) {
-                                          return DataRow(
-                                            cells: [
-                                              DataCell(Text(item.name)),
-                                              DataCell(Text(item.category)),
-                                              DataCell(Text(item.type)),
-                                              DataCell(
-                                                _buildParameterValueCell(item),
-                                              ),
-                                              DataCell(
-                                                Text(
-                                                  item.description.isEmpty
-                                                      ? '-'
-                                                      : item.description,
-                                                ),
-                                              ),
-                                            ],
-                                          );
-                                        }).toList(),
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ),
+        return AlertDialog(
+          title: Text('产品参数 - ${product.name}（${result.versionLabel}）'),
+          content: SizedBox(
+            width: 1000,
+            height: 520,
+            child: result.items.isEmpty
+                ? const Center(child: Text('该产品暂无参数'))
+                : AdaptiveTableContainer(
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('参数名称')),
+                        DataColumn(label: Text('参数分类')),
+                        DataColumn(label: Text('参数类型')),
+                        DataColumn(label: Text('参数值')),
+                        DataColumn(label: Text('参数说明')),
                       ],
+                      rows: result.items.map((item) {
+                        return DataRow(
+                          cells: [
+                            DataCell(Text(item.name)),
+                            DataCell(Text(item.category)),
+                            DataCell(Text(item.type)),
+                            DataCell(_buildParameterValueCell(item)),
+                            DataCell(Text(item.description.isEmpty ? '-' : item.description)),
+                          ],
+                        );
+                      }).toList(),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('关闭'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
         );
       },
     );
@@ -607,10 +444,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                     border: OutlineInputBorder(),
                   ),
                   items: [
-                    const DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('全部'),
-                    ),
+                    const DropdownMenuItem<String>(value: '', child: Text('全部')),
                     ..._productCategoryOptions.map(
                       (c) => DropdownMenuItem<String>(value: c, child: Text(c)),
                     ),
@@ -620,7 +454,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                       : (value) {
                           setState(() {
                             _selectedCategoryFilter = value ?? '';
-                            _page = 1;
                           });
                           _loadProducts();
                         },
@@ -637,21 +470,14 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                   ),
                   items: const [
                     DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    DropdownMenuItem<String>(
-                      value: 'active',
-                      child: Text('启用'),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: 'inactive',
-                      child: Text('停用'),
-                    ),
+                    DropdownMenuItem<String>(value: 'active', child: Text('启用')),
+                    DropdownMenuItem<String>(value: 'inactive', child: Text('停用')),
                   ],
                   onChanged: _loading
                       ? null
                       : (value) {
                           setState(() {
                             _selectedStatusFilter = value ?? '';
-                            _page = 1;
                           });
                           _loadProducts();
                         },
@@ -691,73 +517,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                children: [
-                  _ParameterSummaryCard(
-                    label: '结果总数',
-                    value: '$_total',
-                    icon: Icons.format_list_numbered_outlined,
-                  ),
-                  _ParameterSummaryCard(
-                    label: '当前页',
-                    value: '$_page / $_totalPages',
-                    icon: Icons.dashboard_outlined,
-                  ),
-                  _ParameterSummaryCard(
-                    label: '每页条数',
-                    value: '$_pageSize',
-                    icon: Icons.view_stream_outlined,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            pageSize: _pageSize,
-            pageSizeOptions: _pageSizeOptions,
-            onPageChanged: (value) {
-              setState(() {
-                _page = value;
-              });
-              _loadProducts();
-            },
-            onPageSizeChanged: (value) {
-              if (value == _pageSize) {
-                return;
-              }
-              setState(() {
-                _pageSize = value;
-                _page = 1;
-              });
-              _loadProducts();
-            },
-            onPrevious: _page <= 1
-                ? null
-                : () {
-                    setState(() {
-                      _page -= 1;
-                    });
-                    _loadProducts();
-                  },
-            onNext: _page >= _totalPages
-                ? null
-                : () {
-                    setState(() {
-                      _page += 1;
-                    });
-                    _loadProducts();
-                  },
-          ),
+          Text('总数：$_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -772,11 +532,10 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _filteredProducts.isEmpty
+                : _products.isEmpty
                 ? const Center(child: Text('暂无产品'))
                 : Card(
                     child: AdaptiveTableContainer(
-                      minTableWidth: 1240,
                       child: UnifiedListTableHeaderStyle.wrap(
                         theme: theme,
                         child: DataTable(
@@ -796,13 +555,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                             return DataRow(
                               cells: [
                                 DataCell(Text(product.name)),
-                                DataCell(
-                                  Text(
-                                    product.category.isEmpty
-                                        ? '-'
-                                        : product.category,
-                                  ),
-                                ),
+                                DataCell(Text(product.category.isEmpty ? '-' : product.category)),
                                 DataCell(
                                   Text(
                                     product.effectiveVersionLabel ??
@@ -811,11 +564,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                                             : '-'),
                                   ),
                                 ),
-                                DataCell(
-                                  Text(
-                                    _lifecycleLabel(product.lifecycleStatus),
-                                  ),
-                                ),
+                                DataCell(Text(_lifecycleLabel(product.lifecycleStatus))),
                                 DataCell(Text(_formatTime(product.createdAt))),
                                 DataCell(
                                   UnifiedListTableHeaderStyle.actionMenuButton<
@@ -837,98 +586,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                     ),
                   ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ParameterSummaryCard extends StatelessWidget {
-  const _ParameterSummaryCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 180),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ParameterSummaryField extends StatelessWidget {
-  const _ParameterSummaryField({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF6B7280),
-            ),
-          ),
-          const SizedBox(height: 4),
-          SelectableText(value),
         ],
       ),
     );

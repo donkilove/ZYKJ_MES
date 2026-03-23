@@ -51,7 +51,6 @@ class ProductionOrderDetailPage extends StatefulWidget {
 
 class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
   late final ProductionService _service;
-  static const double _summaryMetricWidth = 180;
 
   bool _loading = false;
   bool _acting = false;
@@ -163,189 +162,6 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
         });
       }
     }
-  }
-
-  String _displayValue(String? value) {
-    final text = value?.trim() ?? '';
-    return text.isEmpty ? '-' : text;
-  }
-
-  Widget _buildSummaryMetric(String label, String value) {
-    return SizedBox(
-      width: _summaryMetricWidth,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          const SizedBox(height: 6),
-          SelectableText(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  TableRow _buildInfoRow(String label, String value) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(right: 16, bottom: 12),
-          child: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: SelectableText(value),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoCard(String title, String subtitle, List<TableRow> rows) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text(subtitle, style: const TextStyle(color: Colors.grey)),
-            const SizedBox(height: 16),
-            Table(
-              columnWidths: const {
-                0: IntrinsicColumnWidth(),
-                1: FlexColumnWidth(),
-              },
-              children: rows,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSummaryWorkbench(ProductionOrderDetail detail) {
-    final order = detail.order;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    minWidth: 280,
-                    maxWidth: 520,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        order.orderCode,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          Chip(
-                            label: Text(
-                              '状态 ${productionOrderStatusLabel(order.status)}',
-                            ),
-                          ),
-                          Chip(label: Text('产品 ${order.productName}')),
-                          Chip(
-                            label: Text(
-                              '并行模式 ${order.pipelineEnabled ? '开启' : '关闭'}',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                _buildSummaryMetric('数量', '${order.quantity}'),
-                _buildSummaryMetric(
-                  '当前工序',
-                  _displayValue(order.currentProcessName),
-                ),
-                _buildSummaryMetric('开始日期', _formatDate(order.startDate)),
-                _buildSummaryMetric('交期', _formatDate(order.dueDate)),
-              ],
-            ),
-            if (!widget.readOnly) ...[
-              const SizedBox(height: 20),
-              _buildActionBar(order),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailWorkbench(ProductionOrderDetail detail) {
-    final order = detail.order;
-    final cards = [
-      _buildInfoCard('订单基础信息', '收敛为桌面详情信息卡，保留原业务字段。', [
-        _buildInfoRow('订单号', order.orderCode),
-        _buildInfoRow('产品', order.productName),
-        _buildInfoRow('产品版本', _displayValue(order.productVersion?.toString())),
-        _buildInfoRow('状态', productionOrderStatusLabel(order.status)),
-        _buildInfoRow('当前工序', _displayValue(order.currentProcessName)),
-        _buildInfoRow('模板', _displayValue(order.processTemplateName)),
-        _buildInfoRow(
-          '模板版本',
-          _displayValue(order.processTemplateVersion?.toString()),
-        ),
-      ]),
-      _buildInfoCard('排产与追踪信息', '便于宽屏查看计划、创建与备注信息。', [
-        _buildInfoRow('并行模式', order.pipelineEnabled ? '开启' : '关闭'),
-        _buildInfoRow('创建人', _displayValue(order.createdByUsername)),
-        _buildInfoRow('创建时间', _formatDateTime(order.createdAt)),
-        _buildInfoRow('更新时间', _formatDateTime(order.updatedAt)),
-        _buildInfoRow('开始日期', _formatDate(order.startDate)),
-        _buildInfoRow('交期', _formatDate(order.dueDate)),
-        _buildInfoRow('备注', _displayValue(order.remark)),
-      ]),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 700;
-        if (!wide) {
-          return Column(
-            children: cards
-                .map(
-                  (card) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: card,
-                  ),
-                )
-                .toList(),
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: cards[0]),
-            const SizedBox(width: 12),
-            Expanded(child: cards[1]),
-          ],
-        );
-      },
-    );
   }
 
   Widget _buildActionBar(ProductionOrderItem order) {
@@ -638,9 +454,37 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSummaryWorkbench(detail),
+                    _buildActionBar(detail.order),
                     const SizedBox(height: 12),
-                    _buildDetailWorkbench(detail),
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
+                      children: [
+                        Text('订单号：${detail.order.orderCode}'),
+                        Text('产品：${detail.order.productName}'),
+                        Text('产品版本：${detail.order.productVersion ?? '-'}'),
+                        Text('数量：${detail.order.quantity}'),
+                        Text(
+                          '状态：${productionOrderStatusLabel(detail.order.status)}',
+                        ),
+                        Text('当前工序：${detail.order.currentProcessName ?? '-'}'),
+                        Text('模板：${detail.order.processTemplateName ?? '-'}'),
+                        Text(
+                          '模板版本：${detail.order.processTemplateVersion ?? '-'}',
+                        ),
+                        Text(
+                          '并行模式：${detail.order.pipelineEnabled ? '开启' : '关闭'}',
+                        ),
+                        Text('创建人：${detail.order.createdByUsername ?? '-'}'),
+                        Text('创建时间：${_formatDateTime(detail.order.createdAt)}'),
+                        Text('更新时间：${_formatDateTime(detail.order.updatedAt)}'),
+                        Text('开始日期：${_formatDate(detail.order.startDate)}'),
+                        Text('交期：${_formatDate(detail.order.dueDate)}'),
+                        Text(
+                          '备注：${(detail.order.remark ?? '').trim().isEmpty ? '-' : detail.order.remark}',
+                        ),
+                      ],
+                    ),
                     if (_message.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),

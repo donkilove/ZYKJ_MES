@@ -69,12 +69,6 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
 void main() {
   testWidgets('订单查询页支持筛选并展示工单列表', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
-    tester.view.physicalSize = const Size(1920, 1080);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
 
     await tester.pumpWidget(
       MaterialApp(
@@ -102,8 +96,7 @@ void main() {
     expect(find.text('产线试产件'), findsOneWidget);
     expect(find.text('切割段'), findsOneWidget);
     expect(find.text('P1-31-1-PIPE0001'), findsOneWidget);
-    expect(find.text('第 1 / 1 页'), findsOneWidget);
-    expect(find.text('操作'), findsWidgets);
+    expect(find.widgetWithText(OutlinedButton, '详情'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).first, 'PO-QUERY');
     await tester.tap(find.widgetWithText(FilledButton, '查询'));

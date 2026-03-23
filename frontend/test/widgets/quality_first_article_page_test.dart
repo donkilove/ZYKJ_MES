@@ -145,11 +145,8 @@ void main() {
     await pumpPage(tester, service);
 
     expect(find.text('每日首件'), findsOneWidget);
-    expect(find.text('第 1 / 1 页'), findsOneWidget);
 
-    await tester.tap(find.text('操作').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('查看详情').last);
+    await tester.tap(find.text('详情'));
     await tester.pumpAndSettle();
 
     expect(find.text('首件详情 #1'), findsOneWidget);
@@ -163,9 +160,7 @@ void main() {
 
     expect(service.listCalls, 1);
 
-    await tester.tap(find.text('操作').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('处置记录').last);
+    await tester.tap(find.text('处置'));
     await tester.pumpAndSettle();
 
     expect(find.text('首件处置 #1'), findsOneWidget);

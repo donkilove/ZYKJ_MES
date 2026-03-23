@@ -11,8 +11,6 @@ import '../services/craft_service.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
-import '../widgets/simple_pagination_bar.dart';
-import '../widgets/unified_list_table_header_style.dart';
 import 'production_order_detail_page.dart';
 import 'production_order_form_page.dart';
 import 'production_pipeline_instances_page.dart';
@@ -48,8 +46,6 @@ class ProductionOrderManagementPage extends StatefulWidget {
 
 class _ProductionOrderManagementPageState
     extends State<ProductionOrderManagementPage> {
-  static const List<int> _pageSizeOptions = [20, 50, 100];
-
   late final ProductionService _service;
   late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
@@ -58,8 +54,6 @@ class _ProductionOrderManagementPageState
 
   bool _loading = false;
   String _message = '';
-  int _page = 1;
-  int _pageSize = 50;
   int _total = 0;
   String? _statusFilter;
   bool? _pipelineEnabledFilter;
@@ -72,8 +66,6 @@ class _ProductionOrderManagementPageState
   List<ProductionProductOption> _products = const [];
   List<ProductionProcessOption> _processes = const [];
   List<CraftTemplateItem> _templates = const [];
-
-  int get _totalPages => _total == 0 ? 1 : ((_total - 1) ~/ _pageSize) + 1;
 
   @override
   void initState() {
@@ -294,19 +286,14 @@ class _ProductionOrderManagementPageState
   }
 
   Future<void> _loadOrders() async {
-    await _loadOrdersForPage(_page);
-  }
-
-  Future<void> _loadOrdersForPage(int page) async {
-    final targetPage = page < 1 ? 1 : page;
     setState(() {
       _loading = true;
       _message = '';
     });
     try {
       final result = await _service.listOrders(
-        page: targetPage,
-        pageSize: _pageSize,
+        page: 1,
+        pageSize: 200,
         keyword: _keywordController.text.trim(),
         status: _statusFilter,
         productName: _productNameController.text.trim().isEmpty
@@ -322,7 +309,6 @@ class _ProductionOrderManagementPageState
         return;
       }
       setState(() {
-        _page = targetPage;
         _items = result.items;
         _total = result.total;
       });
@@ -344,210 +330,6 @@ class _ProductionOrderManagementPageState
         });
       }
     }
-  }
-
-  Future<void> _reloadFromFirstPage() async {
-    await _loadOrdersForPage(1);
-  }
-
-  Widget _buildFilterSection(ThemeData theme) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _buildFilterField(
-                  width: 320,
-                  child: TextField(
-                    controller: _keywordController,
-                    decoration: const InputDecoration(
-                      labelText: '搜索订单号/产品',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _reloadFromFirstPage(),
-                  ),
-                ),
-                _buildFilterField(
-                  width: 200,
-                  child: TextField(
-                    controller: _productNameController,
-                    decoration: const InputDecoration(
-                      labelText: '产品名称',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _reloadFromFirstPage(),
-                  ),
-                ),
-                _buildFilterField(
-                  width: 180,
-                  child: DropdownButtonFormField<String?>(
-                    initialValue: _statusFilter,
-                    decoration: const InputDecoration(
-                      labelText: '状态',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem<String?>(value: null, child: Text('全部')),
-                      DropdownMenuItem<String?>(
-                        value: 'pending',
-                        child: Text('待生产'),
-                      ),
-                      DropdownMenuItem<String?>(
-                        value: 'in_progress',
-                        child: Text('生产中'),
-                      ),
-                      DropdownMenuItem<String?>(
-                        value: 'completed',
-                        child: Text('生产完成'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _statusFilter = value;
-                      });
-                      _reloadFromFirstPage();
-                    },
-                  ),
-                ),
-                _buildFilterField(
-                  width: 180,
-                  child: DropdownButtonFormField<bool?>(
-                    initialValue: _pipelineEnabledFilter,
-                    decoration: const InputDecoration(
-                      labelText: '并行模式',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem<bool?>(value: null, child: Text('全部')),
-                      DropdownMenuItem<bool?>(value: true, child: Text('开启')),
-                      DropdownMenuItem<bool?>(value: false, child: Text('关闭')),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _pipelineEnabledFilter = value;
-                      });
-                      _reloadFromFirstPage();
-                    },
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: _loading ? null : _reloadFromFirstPage,
-                  icon: const Icon(Icons.search),
-                  label: const Text('查询'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final from = await _pickDate(context, _startDateFrom);
-                    if (from == null || !mounted) return;
-                    // ignore: use_build_context_synchronously
-                    final to = await _pickDate(context, _startDateTo ?? from);
-                    if (!mounted) return;
-                    setState(() {
-                      _startDateFrom = from;
-                      _startDateTo = to;
-                    });
-                    _reloadFromFirstPage();
-                  },
-                  icon: const Icon(Icons.date_range, size: 16),
-                  label: Text(
-                    '开始日期：${_startDateFrom == null ? '不限' : _formatDate(_startDateFrom)} ~ ${_startDateTo == null ? '不限' : _formatDate(_startDateTo)}',
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final from = await _pickDate(context, _dueDateFrom);
-                    if (from == null || !mounted) return;
-                    // ignore: use_build_context_synchronously
-                    final to = await _pickDate(context, _dueDateTo ?? from);
-                    if (!mounted) return;
-                    setState(() {
-                      _dueDateFrom = from;
-                      _dueDateTo = to;
-                    });
-                    _reloadFromFirstPage();
-                  },
-                  icon: const Icon(Icons.event, size: 16),
-                  label: Text(
-                    '交期：${_dueDateFrom == null ? '不限' : _formatDate(_dueDateFrom)} ~ ${_dueDateTo == null ? '不限' : _formatDate(_dueDateTo)}',
-                  ),
-                ),
-                if (_startDateFrom != null ||
-                    _startDateTo != null ||
-                    _dueDateFrom != null ||
-                    _dueDateTo != null)
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _startDateFrom = null;
-                        _startDateTo = null;
-                        _dueDateFrom = null;
-                        _dueDateTo = null;
-                      });
-                      _reloadFromFirstPage();
-                    },
-                    icon: const Icon(Icons.clear, size: 16),
-                    label: const Text('清除日期'),
-                  ),
-                _buildFilterField(
-                  width: 220,
-                  child: TextField(
-                    controller: _deletedOrderCodeController,
-                    decoration: const InputDecoration(
-                      labelText: '删除追溯订单号',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onSubmitted: (_) => _showDeletedOrderTraceDialog(),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _loading ? null : _showDeletedOrderTraceDialog,
-                  icon: const Icon(Icons.history),
-                  label: const Text('删除追溯'),
-                  style: UnifiedListTableHeaderStyle.toolbarActionButtonStyle(
-                    theme,
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _loading ? null : _exportOrders,
-                  icon: const Icon(Icons.download),
-                  label: const Text('导出'),
-                  style: UnifiedListTableHeaderStyle.toolbarActionButtonStyle(
-                    theme,
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: _loading || !widget.canCreateOrder
-                      ? null
-                      : () => _showOrderDialog(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('创建'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterField({required double width, required Widget child}) {
-    return SizedBox(width: width, child: child);
   }
 
   Future<bool> _showOrderDialog({
@@ -934,35 +716,194 @@ class _ProductionOrderManagementPageState
               const Spacer(),
               IconButton(
                 tooltip: '刷新',
-                onPressed: _loading ? null : () => _loadOrdersForPage(_page),
+                onPressed: _loading ? null : _loadOrders,
                 icon: const Icon(Icons.refresh),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _buildFilterSection(theme),
-          const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            pageSize: _pageSize,
-            pageSizeOptions: _pageSizeOptions,
-            onPageChanged: _loadOrdersForPage,
-            onPageSizeChanged: (value) {
-              if (value == _pageSize) {
-                return;
-              }
-              setState(() {
-                _pageSize = value;
-                _page = 1;
-              });
-              _loadOrdersForPage(1);
-            },
-            onPrevious: () => _loadOrdersForPage(_page - 1),
-            onNext: () => _loadOrdersForPage(_page + 1),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _keywordController,
+                  decoration: const InputDecoration(
+                    labelText: '搜索订单号/产品',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _loadOrders(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 160,
+                child: TextField(
+                  controller: _productNameController,
+                  decoration: const InputDecoration(
+                    labelText: '产品名称',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _loadOrders(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 150,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _statusFilter,
+                  decoration: const InputDecoration(
+                    labelText: '状态',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem<String?>(value: null, child: Text('全部')),
+                    DropdownMenuItem<String?>(
+                      value: 'pending',
+                      child: Text('待生产'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'in_progress',
+                      child: Text('生产中'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'completed',
+                      child: Text('生产完成'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _statusFilter = value;
+                    });
+                    _loadOrders();
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<bool?>(
+                  initialValue: _pipelineEnabledFilter,
+                  decoration: const InputDecoration(
+                    labelText: '并行模式',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem<bool?>(value: null, child: Text('全部')),
+                    DropdownMenuItem<bool?>(value: true, child: Text('开启')),
+                    DropdownMenuItem<bool?>(value: false, child: Text('关闭')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _pipelineEnabledFilter = value;
+                    });
+                    _loadOrders();
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: _loading ? null : _loadOrders,
+                icon: const Icon(Icons.search),
+                label: const Text('查询'),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _deletedOrderCodeController,
+                  decoration: const InputDecoration(
+                    labelText: '删除追溯订单号',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _showDeletedOrderTraceDialog(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _showDeletedOrderTraceDialog,
+                icon: const Icon(Icons.history),
+                label: const Text('删除追溯'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _exportOrders,
+                icon: const Icon(Icons.download),
+                label: const Text('导出'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _loading || !widget.canCreateOrder
+                    ? null
+                    : () => _showOrderDialog(),
+                icon: const Icon(Icons.add),
+                label: const Text('创建'),
+              ),
+            ],
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                icon: const Icon(Icons.date_range, size: 16),
+                label: Text(
+                  '开始日期：${_startDateFrom == null ? '不限' : _formatDate(_startDateFrom)} ~ ${_startDateTo == null ? '不限' : _formatDate(_startDateTo)}',
+                ),
+                onPressed: () async {
+                  final from = await _pickDate(context, _startDateFrom);
+                  if (from == null || !mounted) return;
+                  // ignore: use_build_context_synchronously
+                  final to = await _pickDate(context, _startDateTo ?? from);
+                  if (!mounted) return;
+                  setState(() {
+                    _startDateFrom = from;
+                    _startDateTo = to;
+                  });
+                  _loadOrders();
+                },
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.event, size: 16),
+                label: Text(
+                  '交期：${_dueDateFrom == null ? '不限' : _formatDate(_dueDateFrom)} ~ ${_dueDateTo == null ? '不限' : _formatDate(_dueDateTo)}',
+                ),
+                onPressed: () async {
+                  final from = await _pickDate(context, _dueDateFrom);
+                  if (from == null || !mounted) return;
+                  // ignore: use_build_context_synchronously
+                  final to = await _pickDate(context, _dueDateTo ?? from);
+                  if (!mounted) return;
+                  setState(() {
+                    _dueDateFrom = from;
+                    _dueDateTo = to;
+                  });
+                  _loadOrders();
+                },
+              ),
+              if (_startDateFrom != null ||
+                  _startDateTo != null ||
+                  _dueDateFrom != null ||
+                  _dueDateTo != null) ...[
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  icon: const Icon(Icons.clear, size: 16),
+                  label: const Text('清除日期'),
+                  onPressed: () {
+                    setState(() {
+                      _startDateFrom = null;
+                      _startDateTo = null;
+                      _dueDateFrom = null;
+                      _dueDateTo = null;
+                    });
+                    _loadOrders();
+                  },
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('总数：$_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -981,142 +922,127 @@ class _ProductionOrderManagementPageState
                 ? const Center(child: Text('暂无生产订单。'))
                 : Card(
                     child: AdaptiveTableContainer(
-                      minTableWidth: 1560,
-                      child: UnifiedListTableHeaderStyle.wrap(
-                        theme: theme,
-                        child: DataTable(
-                          columns: [
-                            UnifiedListTableHeaderStyle.column(context, '订单号'),
-                            UnifiedListTableHeaderStyle.column(context, '产品'),
-                            UnifiedListTableHeaderStyle.column(context, '产品版本'),
-                            UnifiedListTableHeaderStyle.column(context, '数量'),
-                            UnifiedListTableHeaderStyle.column(context, '状态'),
-                            UnifiedListTableHeaderStyle.column(context, '当前工序'),
-                            UnifiedListTableHeaderStyle.column(
-                              context,
-                              '模板名称/版本',
-                            ),
-                            UnifiedListTableHeaderStyle.column(context, '并行模式'),
-                            UnifiedListTableHeaderStyle.column(context, '创建人'),
-                            UnifiedListTableHeaderStyle.column(context, '开始日期'),
-                            UnifiedListTableHeaderStyle.column(context, '交期'),
-                            UnifiedListTableHeaderStyle.column(context, '更新时间'),
-                            UnifiedListTableHeaderStyle.column(
-                              context,
-                              '操作',
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                          rows: _items.map((item) {
-                            final templateLabel =
-                                item.processTemplateName != null
-                                ? '${item.processTemplateName} v${item.processTemplateVersion ?? '-'}'
-                                : '-';
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(item.orderCode)),
-                                DataCell(Text(item.productName)),
-                                DataCell(
-                                  Text(
-                                    item.productVersion != null
-                                        ? 'v${item.productVersion}'
-                                        : '-',
-                                  ),
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('订单号')),
+                          DataColumn(label: Text('产品')),
+                          DataColumn(label: Text('产品版本')),
+                          DataColumn(label: Text('数量')),
+                          DataColumn(label: Text('状态')),
+                          DataColumn(label: Text('当前工序')),
+                          DataColumn(label: Text('模板名称/版本')),
+                          DataColumn(label: Text('并行模式')),
+                          DataColumn(label: Text('创建人')),
+                          DataColumn(label: Text('开始日期')),
+                          DataColumn(label: Text('交期')),
+                          DataColumn(label: Text('更新时间')),
+                          DataColumn(label: Text('操作')),
+                        ],
+                        rows: _items.map((item) {
+                          final templateLabel = item.processTemplateName != null
+                              ? '${item.processTemplateName} v${item.processTemplateVersion ?? '-'}'
+                              : '-';
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(item.orderCode)),
+                              DataCell(Text(item.productName)),
+                              DataCell(
+                                Text(
+                                  item.productVersion != null
+                                      ? 'v${item.productVersion}'
+                                      : '-',
                                 ),
-                                DataCell(Text('${item.quantity}')),
-                                DataCell(
-                                  Text(productionOrderStatusLabel(item.status)),
-                                ),
-                                DataCell(Text(item.currentProcessName ?? '-')),
-                                DataCell(Text(templateLabel)),
-                                DataCell(
-                                  Text(item.pipelineEnabled ? '开启' : '关闭'),
-                                ),
-                                DataCell(Text(item.createdByUsername ?? '-')),
-                                DataCell(Text(_formatDate(item.startDate))),
-                                DataCell(Text(_formatDate(item.dueDate))),
-                                DataCell(Text(_formatDateTime(item.updatedAt))),
-                                DataCell(
-                                  UnifiedListTableHeaderStyle.actionMenuButton<
-                                    String
-                                  >(
-                                    theme: theme,
-                                    onSelected: (action) async {
-                                      switch (action) {
-                                        case 'detail':
-                                          await _openOrderDetailPage(item);
-                                          break;
-                                        case 'edit':
-                                          await _showOrderDialog(
-                                            existing: item,
-                                          );
-                                          break;
-                                        case 'delete':
-                                          await _deleteOrder(item);
-                                          break;
-                                        case 'complete':
-                                          await _completeOrder(item);
-                                          break;
-                                        case 'pipeline':
-                                          await _showPipelineModeDialog(item);
-                                          break;
-                                        case 'pipeline_instances':
-                                          await Navigator.of(context).push(
-                                            MaterialPageRoute<void>(
-                                              builder: (_) =>
-                                                  ProductionPipelineInstancesPage(
-                                                    session: widget.session,
-                                                    onLogout: widget.onLogout,
-                                                    orderId: item.id,
-                                                    orderCode: item.orderCode,
-                                                    service: _service,
-                                                  ),
-                                            ),
-                                          );
-                                          break;
-                                      }
-                                    },
-                                    itemBuilder: (context) => [
+                              ),
+                              DataCell(Text('${item.quantity}')),
+                              DataCell(
+                                Text(productionOrderStatusLabel(item.status)),
+                              ),
+                              DataCell(Text(item.currentProcessName ?? '-')),
+                              DataCell(Text(templateLabel)),
+                              DataCell(
+                                Text(item.pipelineEnabled ? '开启' : '关闭'),
+                              ),
+                              DataCell(Text(item.createdByUsername ?? '-')),
+                              DataCell(Text(_formatDate(item.startDate))),
+                              DataCell(Text(_formatDate(item.dueDate))),
+                              DataCell(Text(_formatDateTime(item.updatedAt))),
+                              DataCell(
+                                PopupMenuButton<String>(
+                                  tooltip: '操作',
+                                  icon: const Icon(Icons.more_vert),
+                                  onSelected: (action) async {
+                                    switch (action) {
+                                      case 'detail':
+                                        await _openOrderDetailPage(item);
+                                        break;
+                                      case 'edit':
+                                        await _showOrderDialog(existing: item);
+                                        break;
+                                      case 'delete':
+                                        await _deleteOrder(item);
+                                        break;
+                                      case 'complete':
+                                        await _completeOrder(item);
+                                        break;
+                                      case 'pipeline':
+                                        await _showPipelineModeDialog(item);
+                                        break;
+                                      case 'pipeline_instances':
+                                        await Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) =>
+                                                ProductionPipelineInstancesPage(
+                                                  session: widget.session,
+                                                  onLogout: widget.onLogout,
+                                                  orderId: item.id,
+                                                  orderCode: item.orderCode,
+                                                  service: _service,
+                                                ),
+                                          ),
+                                        );
+                                        break;
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'detail',
+                                      child: Text('查看详情'),
+                                    ),
+                                    if (item.pipelineEnabled)
                                       const PopupMenuItem(
-                                        value: 'detail',
-                                        child: Text('查看详情'),
+                                        value: 'pipeline_instances',
+                                        child: Text('查看并行实例'),
                                       ),
-                                      if (item.pipelineEnabled)
-                                        const PopupMenuItem(
-                                          value: 'pipeline_instances',
-                                          child: Text('查看并行实例'),
-                                        ),
-                                      if (widget.canEditOrder &&
-                                          item.status == 'pending')
-                                        const PopupMenuItem(
-                                          value: 'edit',
-                                          child: Text('编辑订单'),
-                                        ),
-                                      if (widget.canCompleteOrder &&
-                                          item.status == 'in_progress')
-                                        const PopupMenuItem(
-                                          value: 'complete',
-                                          child: Text('手工完工'),
-                                        ),
-                                      if (widget.canUpdatePipelineMode &&
-                                          item.status != 'completed')
-                                        const PopupMenuItem(
-                                          value: 'pipeline',
-                                          child: Text('并行模式设置'),
-                                        ),
-                                      if (widget.canDeleteOrder &&
-                                          item.status == 'pending')
-                                        const PopupMenuItem(
-                                          value: 'delete',
-                                          child: Text('删除订单'),
-                                        ),
-                                    ],
-                                  ),
+                                    if (widget.canEditOrder &&
+                                        item.status == 'pending')
+                                      const PopupMenuItem(
+                                        value: 'edit',
+                                        child: Text('编辑订单'),
+                                      ),
+                                    if (widget.canCompleteOrder &&
+                                        item.status == 'in_progress')
+                                      const PopupMenuItem(
+                                        value: 'complete',
+                                        child: Text('手工完工'),
+                                      ),
+                                    if (widget.canUpdatePipelineMode &&
+                                        item.status != 'completed')
+                                      const PopupMenuItem(
+                                        value: 'pipeline',
+                                        child: Text('并行模式设置'),
+                                      ),
+                                    if (widget.canDeleteOrder &&
+                                        item.status == 'pending')
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('删除订单'),
+                                      ),
+                                  ],
                                 ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
                       ),
                     ),
                   ),

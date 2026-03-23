@@ -142,13 +142,6 @@ void main() {
     var manualRepairCalled = false;
     var applyAssistCalled = false;
 
-    tester.view.physicalSize = const Size(1600, 1200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
     await tester.pumpWidget(
       MaterialApp(
         home: ProductionOrderQueryDetailPage(
@@ -190,18 +183,17 @@ void main() {
     expect(find.text('报工'), findsOneWidget);
     expect(find.text('手工送修建单'), findsOneWidget);
     expect(find.text('发起代班'), findsOneWidget);
-    expect(find.text('工单基础信息'), findsOneWidget);
-    expect(find.text('当前视角信息'), findsOneWidget);
-    expect(find.text('PO-1'), findsAtLeastNWidgets(1));
     expect(find.text('工序'), findsOneWidget);
     expect(find.text('子订单'), findsOneWidget);
     expect(find.text('记录'), findsOneWidget);
     expect(find.text('事件'), findsOneWidget);
-    expect(find.text('标准模板 v5'), findsOneWidget);
-    expect(find.text('P1-21-1-PIPE0501'), findsAtLeastNWidgets(1));
-    expect(find.text('我的工单'), findsAtLeastNWidgets(1));
-    expect(find.text('admin'), findsAtLeastNWidgets(1));
-    expect(find.textContaining('2026-03-01'), findsAtLeastNWidgets(1));
+    expect(find.text('订单号：PO-1'), findsOneWidget);
+    expect(find.text('产品版本：3'), findsOneWidget);
+    expect(find.text('模板名称/版本：标准模板 v5'), findsOneWidget);
+    expect(find.text('并行模式：开启'), findsOneWidget);
+    expect(find.text('并行实例：P1-21-1-PIPE0501'), findsOneWidget);
+    expect(find.text('创建人：admin'), findsOneWidget);
+    expect(find.textContaining('创建时间：2026-03-01'), findsOneWidget);
 
     await tester.tap(find.text('首件'));
     await tester.pumpAndSettle();
@@ -228,13 +220,6 @@ void main() {
     'query detail page falls back to readonly when context not found',
     (tester) async {
       var firstCalled = false;
-
-      tester.view.physicalSize = const Size(1600, 1200);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
 
       await tester.pumpWidget(
         MaterialApp(

@@ -86,8 +86,6 @@ class MaintenanceRecordDetailPage extends StatefulWidget {
 
 class _MaintenanceRecordDetailPageState
     extends State<MaintenanceRecordDetailPage> {
-  static const double _desktopBreakpoint = 1200;
-
   late final EquipmentService _service;
   bool _loading = true;
   String _message = '';
@@ -147,118 +145,19 @@ class _MaintenanceRecordDetailPageState
 
   Widget _row(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF6B7280),
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label：',
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
-          const SizedBox(height: 4),
-          SelectableText(value),
+          Expanded(child: SelectableText(value)),
         ],
-      ),
-    );
-  }
-
-  Widget _metricCard(String label, String value, IconData icon) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 180),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionCard({
-    required String title,
-    required List<Widget> rows,
-    String? subtitle,
-    Widget? footer,
-  }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
-              Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-            ],
-            const SizedBox(height: 16),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth < 720) {
-                  return Column(children: rows);
-                }
-                return Wrap(
-                  spacing: 24,
-                  children: rows
-                      .map(
-                        (row) => SizedBox(
-                          width: (constraints.maxWidth - 24) / 2,
-                          child: row,
-                        ),
-                      )
-                      .toList(),
-                );
-              },
-            ),
-            if (footer != null) ...[const SizedBox(height: 16), footer],
-          ],
-        ),
       ),
     );
   }
@@ -272,135 +171,57 @@ class _MaintenanceRecordDetailPageState
           ? const Center(child: CircularProgressIndicator())
           : detail == null
           ? Center(child: Text(_message.isEmpty ? '加载失败' : _message))
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final isDesktop = constraints.maxWidth >= _desktopBreakpoint;
-                final overviewCard = Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          detail.itemName,
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            Chip(label: Text('记录 #${detail.id}')),
-                            Chip(label: Text('工单 #${detail.workOrderId}')),
-                            Chip(label: Text('设备 ${detail.equipmentName}')),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        Wrap(
-                          spacing: 16,
-                          runSpacing: 16,
-                          children: [
-                            _metricCard(
-                              '完成时间',
-                              _formatDateTime(detail.completedAt),
-                              Icons.fact_check_outlined,
-                            ),
-                            _metricCard(
-                              '到期日期',
-                              _formatDate(detail.dueDate),
-                              Icons.event_outlined,
-                            ),
-                            _metricCard(
-                              '执行人',
-                              _nonEmptyOrDash(detail.executorUsername),
-                              Icons.person_outline,
-                            ),
-                          ],
-                        ),
-                      ],
+          : Padding(
+              padding: const EdgeInsets.all(16),
+              child: ListView(
+                children: [
+                  _row('设备', detail.equipmentName),
+                  _row('来源计划', _nonEmptyOrDash(detail.sourcePlanSummary)),
+                  _row('设备快照', _nonEmptyOrDash(detail.sourceEquipmentName)),
+                  _row(
+                    '执行工段快照',
+                    _nonEmptyOrDash(detail.sourceExecutionProcessCode),
+                  ),
+                  if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty)
+                    _row('设备编号', detail.sourceEquipmentCode!),
+                  _row('项目', detail.itemName),
+                  if ((detail.sourceItemName ?? '').trim().isNotEmpty)
+                    _row('项目快照', detail.sourceItemName!),
+                  _row('工单编号', '#${detail.workOrderId}'),
+                  _row('到期日期', _formatDate(detail.dueDate)),
+                  _row('完成时间', _formatDateTime(detail.completedAt)),
+                  _row('执行人', detail.executorUsername ?? '-'),
+                  _row('结果摘要', detail.resultSummary),
+                  _row('备注', detail.resultRemark ?? '-'),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: MaintenanceAttachmentAction(
+                      attachmentLink: detail.attachmentLink,
+                      attachmentName: detail.attachmentName,
+                      onOpen: widget.onOpenAttachment,
                     ),
                   ),
-                );
-
-                final sourceCard = _sectionCard(
-                  title: '来源信息',
-                  subtitle: '保持原工单/计划来源字段，仅调整为桌面详情卡排布。',
-                  rows: [
-                    _row('设备', detail.equipmentName),
-                    _row('来源计划', _nonEmptyOrDash(detail.sourcePlanSummary)),
-                    _row('设备快照', _nonEmptyOrDash(detail.sourceEquipmentName)),
-                    _row(
-                      '执行工段快照',
-                      _nonEmptyOrDash(detail.sourceExecutionProcessCode),
-                    ),
-                    if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty)
-                      _row('设备编号', detail.sourceEquipmentCode!),
-                    _row('项目', detail.itemName),
-                    if ((detail.sourceItemName ?? '').trim().isNotEmpty)
-                      _row('项目快照', detail.sourceItemName!),
-                    _row('工单编号', '#${detail.workOrderId}'),
-                  ],
-                );
-
-                final resultCard = _sectionCard(
-                  title: '执行结果',
-                  rows: [
-                    _row('结果摘要', detail.resultSummary),
-                    _row('备注', detail.resultRemark ?? '-'),
-                  ],
-                  footer: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      MaintenanceAttachmentAction(
-                        attachmentLink: detail.attachmentLink,
-                        attachmentName: detail.attachmentName,
-                        onOpen: widget.onOpenAttachment,
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => MaintenanceExecutionDetailPage(
-                                session: widget.session,
-                                onLogout: widget.onLogout,
-                                workOrderId: detail.workOrderId,
-                              ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => MaintenanceExecutionDetailPage(
+                              session: widget.session,
+                              onLogout: widget.onLogout,
+                              workOrderId: detail.workOrderId,
                             ),
-                          );
-                        },
-                        icon: const Icon(Icons.open_in_new),
-                        label: const Text('查看来源工单'),
-                      ),
-                    ],
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.open_in_new),
+                      label: const Text('查看来源工单'),
+                    ),
                   ),
-                );
-
-                return Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: ListView(
-                    children: [
-                      overviewCard,
-                      const SizedBox(height: 16),
-                      if (isDesktop)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: sourceCard),
-                            const SizedBox(width: 16),
-                            Expanded(child: resultCard),
-                          ],
-                        )
-                      else ...[
-                        sourceCard,
-                        const SizedBox(height: 16),
-                        resultCard,
-                      ],
-                    ],
-                  ),
-                );
-              },
+                ],
+              ),
             ),
     );
   }
