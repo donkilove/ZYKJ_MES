@@ -6,6 +6,7 @@ import 'package:mes_client/models/user_models.dart';
 import 'package:mes_client/pages/user_management_page.dart';
 import 'package:mes_client/services/craft_service.dart';
 import 'package:mes_client/services/user_service.dart';
+import 'package:mes_client/widgets/crud_page_header.dart';
 import 'package:mes_client/widgets/crud_list_table_section.dart';
 
 class _FakeUserService extends UserService {
@@ -331,6 +332,20 @@ void main() {
 
     expect(find.textContaining('总数'), findsNothing);
     expect(find.text('第 1 / 1 页'), findsOneWidget);
+  });
+
+  testWidgets('用户管理页接入公共页头组件', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(find.text('用户管理'), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
   });
 
   testWidgets('角色和账号状态筛选变更后仍自动触发查询', (tester) async {

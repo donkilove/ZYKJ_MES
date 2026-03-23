@@ -4,7 +4,10 @@ import '../models/app_session.dart';
 import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/user_service.dart';
+import '../widgets/crud_page_header.dart';
+import '../widgets/crud_list_table_section.dart';
 import '../widgets/simple_pagination_bar.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 class RoleManagementPage extends StatefulWidget {
   const RoleManagementPage({
@@ -232,34 +235,34 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                             ),
                           ),
                         ),
-                       const SizedBox(height: 12),
-                       if (!editingExistingRole)
-                         DropdownButtonFormField<bool>(
-                           initialValue: selectedEnabled,
-                           decoration: const InputDecoration(labelText: '状态'),
-                           items: const [
-                             DropdownMenuItem(value: true, child: Text('启用')),
-                             DropdownMenuItem(value: false, child: Text('停用')),
-                           ],
-                           onChanged: (value) {
-                             if (value == null) {
-                               return;
-                             }
-                             setDialogState(() {
-                               selectedEnabled = value;
-                             });
-                           },
-                         )
-                       else
-                          Align(
-                            alignment: Alignment.centerLeft,
-                           child: Text(
-                              role.isBuiltin
-                                  ? '系统内置角色仅禁止改名、删除；如需变更启停，请使用列表中的启停按钮。'
-                                  : '当前状态：${_statusLabel(selectedEnabled)}，如需变更请使用列表中的启停按钮。',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
+                      const SizedBox(height: 12),
+                      if (!editingExistingRole)
+                        DropdownButtonFormField<bool>(
+                          initialValue: selectedEnabled,
+                          decoration: const InputDecoration(labelText: '状态'),
+                          items: const [
+                            DropdownMenuItem(value: true, child: Text('启用')),
+                            DropdownMenuItem(value: false, child: Text('停用')),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setDialogState(() {
+                              selectedEnabled = value;
+                            });
+                          },
+                        )
+                      else
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            role.isBuiltin
+                                ? '系统内置角色仅禁止改名、删除；如需变更启停，请使用列表中的启停按钮。'
+                                : '当前状态：${_statusLabel(selectedEnabled)}，如需变更请使用列表中的启停按钮。',
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
+                        ),
                     ],
                   ),
                 ),
@@ -391,11 +394,19 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CrudPageHeader(
+            title: '角色管理',
+            onRefresh: _loading ? null : () => _loadRoles(page: _page),
+          ),
+          const SizedBox(height: 12),
+          Row(
             children: [
               Expanded(
                 child: TextField(
@@ -421,155 +432,114 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                 ),
             ],
           ),
-        ),
-        if (_message.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(_message, style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: 12),
+          if (_message.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
             ),
-          ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text('总数：$_total'),
-          ),
-        ),
-        Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _items.isEmpty
-              ? const Center(child: Text('暂无角色数据'))
-              : Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: Scrollbar(
-                      thumbVisibility: true,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: 980),
-                          child: SingleChildScrollView(
-                            child: DataTable(
-                              columnSpacing: 20,
-                              headingRowHeight: 44,
-                              dataRowMinHeight: 60,
-                              dataRowMaxHeight: 84,
-                              columns: const [
-                                DataColumn(label: Text('角色名称')),
-                                DataColumn(label: Text('角色说明')),
-                                DataColumn(label: Text('角色类型')),
-                                DataColumn(label: Text('关联用户数')),
-                                DataColumn(label: Text('状态')),
-                                DataColumn(label: Text('操作')),
-                              ],
-                              rows: _items.map((role) {
-                                final canToggle = widget.canToggleRole;
-                                final canDelete =
-                                    widget.canDeleteRole && !role.isBuiltin;
-                                return DataRow(
-                                  cells: [
-                                    DataCell(
-                                      Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(role.name),
-                                          Text(
-                                            role.code,
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.bodySmall,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        role.description?.trim().isNotEmpty ==
-                                                true
-                                            ? role.description!
-                                            : '-',
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(_roleTypeLabel(role.roleType)),
-                                    ),
-                                    DataCell(Text('${role.userCount}')),
-                                    DataCell(
-                                      Text(
-                                        _statusLabel(role.isEnabled),
-                                        style: TextStyle(
-                                          color: _statusColor(
-                                            context,
-                                            role.isEnabled,
-                                          ),
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      (widget.canEditRole ||
-                                              canToggle ||
-                                              canDelete)
-                                          ? Wrap(
-                                              spacing: 8,
-                                              runSpacing: 8,
-                                              children: [
-                                                if (widget.canEditRole)
-                                                  OutlinedButton(
-                                                    onPressed: () =>
-                                                        _showRoleDialog(
-                                                          role: role,
-                                                        ),
-                                                    child: const Text('编辑'),
-                                                  ),
-                                                if (canToggle)
-                                                  OutlinedButton(
-                                                    onPressed: () =>
-                                                        _toggleRole(role),
-                                                    child: Text(
-                                                      role.isEnabled
-                                                          ? '停用'
-                                                          : '启用',
-                                                    ),
-                                                  ),
-                                                if (canDelete)
-                                                  OutlinedButton(
-                                                    onPressed: () =>
-                                                        _deleteRole(role),
-                                                    child: const Text('删除'),
-                                                  ),
-                                              ],
-                                            )
-                                          : const Text('-'),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
+          Expanded(
+            child: CrudListTableSection(
+              key: const ValueKey('roleListSection'),
+              cardKey: const ValueKey('roleListCard'),
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无角色数据',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columnSpacing: 20,
+                dataRowMinHeight: 60,
+                dataRowMaxHeight: 84,
+                columns: [
+                  UnifiedListTableHeaderStyle.column(context, '角色名称'),
+                  UnifiedListTableHeaderStyle.column(context, '角色说明'),
+                  UnifiedListTableHeaderStyle.column(context, '角色类型'),
+                  UnifiedListTableHeaderStyle.column(context, '关联用户数'),
+                  UnifiedListTableHeaderStyle.column(context, '状态'),
+                  UnifiedListTableHeaderStyle.column(context, '操作'),
+                ],
+                rows: _items.map((role) {
+                  final canToggle = widget.canToggleRole;
+                  final canDelete = widget.canDeleteRole && !role.isBuiltin;
+                  return DataRow(
+                    cells: [
+                      DataCell(
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(role.name),
+                            Text(role.code, style: theme.textTheme.bodySmall),
+                          ],
+                        ),
+                      ),
+                      DataCell(
+                        Text(
+                          role.description?.trim().isNotEmpty == true
+                              ? role.description!
+                              : '-',
+                        ),
+                      ),
+                      DataCell(Text(_roleTypeLabel(role.roleType))),
+                      DataCell(Text('${role.userCount}')),
+                      DataCell(
+                        Text(
+                          _statusLabel(role.isEnabled),
+                          style: TextStyle(
+                            color: _statusColor(context, role.isEnabled),
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                ),
-        ),
-        const SizedBox(height: 12),
-        SimplePaginationBar(
-          page: _page,
-          totalPages: _totalPages,
-          total: _total,
-          loading: _loading,
-          onPrevious: () => _loadRoles(page: _page - 1),
-          onNext: () => _loadRoles(page: _page + 1),
-        ),
-      ],
+                      DataCell(
+                        (widget.canEditRole || canToggle || canDelete)
+                            ? Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  if (widget.canEditRole)
+                                    OutlinedButton(
+                                      onPressed: () =>
+                                          _showRoleDialog(role: role),
+                                      child: const Text('编辑'),
+                                    ),
+                                  if (canToggle)
+                                    OutlinedButton(
+                                      onPressed: () => _toggleRole(role),
+                                      child: Text(role.isEnabled ? '停用' : '启用'),
+                                    ),
+                                  if (canDelete)
+                                    OutlinedButton(
+                                      onPressed: () => _deleteRole(role),
+                                      child: const Text('删除'),
+                                    ),
+                                ],
+                              )
+                            : const Text('-'),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            showTotal: false,
+            onPrevious: () => _loadRoles(page: _page - 1),
+            onNext: () => _loadRoles(page: _page + 1),
+          ),
+        ],
+      ),
     );
   }
 }

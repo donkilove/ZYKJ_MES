@@ -6,8 +6,11 @@ import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/user_service.dart';
+import '../widgets/crud_page_header.dart';
+import '../widgets/crud_list_table_section.dart';
 import '../widgets/locked_form_dialog.dart';
 import '../widgets/simple_pagination_bar.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 class RegistrationApprovalPage extends StatefulWidget {
   const RegistrationApprovalPage({
@@ -39,8 +42,6 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
 
   late final UserService _userService;
   late final CraftService _craftService;
-  final ScrollController _requestListScrollController = ScrollController();
-  final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
   String _message = '';
@@ -68,8 +69,6 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
 
   @override
   void dispose() {
-    _requestListScrollController.dispose();
-    _keywordController.dispose();
     super.dispose();
   }
 
@@ -184,9 +183,6 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         _userService.listRegistrationRequests(
           page: targetPage,
           pageSize: _requestPageSize,
-          keyword: _keywordController.text.trim().isEmpty
-              ? null
-              : _keywordController.text.trim(),
           status: _statusFilter,
         ),
         _userService.listAllRoles(),
@@ -248,9 +244,6 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       final result = await _userService.listRegistrationRequests(
         page: targetPage,
         pageSize: _requestPageSize,
-        keyword: _keywordController.text.trim().isEmpty
-            ? null
-            : _keywordController.text.trim(),
         status: _statusFilter,
       );
       if (!mounted) {
@@ -643,23 +636,11 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '注册审批',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading
-                    ? null
-                    : () => _loadInitialData(page: _requestPage),
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          CrudPageHeader(
+            title: '注册审批',
+            onRefresh: _loading
+                ? null
+                : () => _loadInitialData(page: _requestPage),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -667,18 +648,6 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '按用户名搜索',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadRequests(page: 1),
-                ),
-              ),
               SizedBox(
                 width: 150,
                 child: DropdownButtonFormField<String?>(
@@ -709,15 +678,8 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                   },
                 ),
               ),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadRequests(page: 1),
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text('当前列表总数：$_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -730,95 +692,71 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
               ),
             ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? Center(
-                    child: Text(
-                      _statusFilter == null ? '暂无注册申请记录' : '当前状态下暂无注册申请记录',
-                    ),
-                  )
-                : Card(
-                    child: SizedBox.expand(
-                      child: Scrollbar(
-                        controller: _requestListScrollController,
-                        thumbVisibility: true,
-                        child: SingleChildScrollView(
-                          controller: _requestListScrollController,
-                          child: DataTable(
-                            columnSpacing: 16,
-                            headingRowColor: WidgetStateProperty.all(
-                              theme.colorScheme.surfaceContainerHighest,
-                            ),
-                            columns: const [
-                              DataColumn(label: Text('用户名')),
-                              DataColumn(label: Text('申请时间')),
-                              DataColumn(label: Text('申请状态')),
-                              DataColumn(label: Text('驳回原因')),
-                              DataColumn(label: Text('操作')),
-                            ],
-                            rows: _items.map((item) {
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(item.account)),
-                                  DataCell(Text(_formatTime(item.createdAt))),
-                                  DataCell(
-                                    Text(
-                                      _statusLabel(item.status),
-                                      style: TextStyle(
-                                        color: _statusColor(item.status, theme),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(Text(item.rejectedReason ?? '-')),
-                                  DataCell(
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (item.status == 'pending') ...[
-                                          if (widget.canApprove)
-                                            TextButton(
-                                              onPressed: () =>
-                                                  _openApproveDialog(item),
-                                              child: const Text('通过'),
-                                            ),
-                                          if (widget.canReject)
-                                            TextButton(
-                                              onPressed: () =>
-                                                  _confirmReject(item),
-                                              style: TextButton.styleFrom(
-                                                foregroundColor:
-                                                    theme.colorScheme.error,
-                                              ),
-                                              child: const Text('驳回'),
-                                            ),
-                                          if (!widget.canApprove &&
-                                              !widget.canReject)
-                                            const Text(
-                                              '-',
-                                              style: TextStyle(
-                                                color: Colors.grey,
-                                              ),
-                                            ),
-                                        ] else
-                                          const Text(
-                                            '-',
-                                            style: TextStyle(
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
+            child: CrudListTableSection(
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: _statusFilter == null ? '暂无注册申请记录' : '当前状态下暂无注册申请记录',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columnSpacing: 16,
+                columns: [
+                  UnifiedListTableHeaderStyle.column(context, '用户名'),
+                  UnifiedListTableHeaderStyle.column(context, '申请时间'),
+                  UnifiedListTableHeaderStyle.column(context, '申请状态'),
+                  UnifiedListTableHeaderStyle.column(context, '驳回原因'),
+                  UnifiedListTableHeaderStyle.column(context, '操作'),
+                ],
+                rows: _items.map((item) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(item.account)),
+                      DataCell(Text(_formatTime(item.createdAt))),
+                      DataCell(
+                        Text(
+                          _statusLabel(item.status),
+                          style: TextStyle(
+                            color: _statusColor(item.status, theme),
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                      DataCell(Text(item.rejectedReason ?? '-')),
+                      DataCell(
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (item.status == 'pending') ...[
+                              if (widget.canApprove)
+                                TextButton(
+                                  onPressed: () => _openApproveDialog(item),
+                                  child: const Text('通过'),
+                                ),
+                              if (widget.canReject)
+                                TextButton(
+                                  onPressed: () => _confirmReject(item),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: theme.colorScheme.error,
+                                  ),
+                                  child: const Text('驳回'),
+                                ),
+                              if (!widget.canApprove && !widget.canReject)
+                                const Text(
+                                  '-',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                            ] else
+                              const Text(
+                                '-',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           SimplePaginationBar(

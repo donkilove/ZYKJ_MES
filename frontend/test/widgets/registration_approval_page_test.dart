@@ -6,6 +6,8 @@ import 'package:mes_client/models/user_models.dart';
 import 'package:mes_client/pages/registration_approval_page.dart';
 import 'package:mes_client/services/craft_service.dart';
 import 'package:mes_client/services/user_service.dart';
+import 'package:mes_client/widgets/crud_page_header.dart';
+import 'package:mes_client/widgets/crud_list_table_section.dart';
 
 class _FakeApprovalUserService extends UserService {
   _FakeApprovalUserService()
@@ -13,7 +15,10 @@ class _FakeApprovalUserService extends UserService {
 
   int approveCalls = 0;
   int rejectCalls = 0;
+  int listRequestCalls = 0;
   int? lastApprovedStageId;
+  String? lastStatus;
+  String? lastKeyword;
 
   @override
   Future<RegistrationRequestListResult> listRegistrationRequests({
@@ -22,6 +27,9 @@ class _FakeApprovalUserService extends UserService {
     String? keyword,
     String? status,
   }) async {
+    listRequestCalls += 1;
+    lastStatus = status;
+    lastKeyword = keyword;
     return RegistrationRequestListResult(
       total: 1,
       items: [
@@ -171,6 +179,45 @@ Future<void> _pumpApprovalPage(
 }
 
 void main() {
+  testWidgets('注册审批页工具栏已精简并接入公共表格', (tester) async {
+    final userService = _FakeApprovalUserService();
+    final craftService = _FakeApprovalCraftService();
+    await _pumpApprovalPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.text('按用户名搜索'), findsNothing);
+    expect(find.text('查询'), findsNothing);
+    expect(find.textContaining('当前列表总数'), findsNothing);
+    expect(find.text('申请状态'), findsWidgets);
+    expect(find.byType(CrudListTableSection), findsOneWidget);
+    expect(userService.lastKeyword, isNull);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String?>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('已通过').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.lastStatus, 'approved');
+    expect(userService.listRequestCalls, greaterThanOrEqualTo(2));
+  });
+
+  testWidgets('注册审批页接入公共页头组件', (tester) async {
+    final userService = _FakeApprovalUserService();
+    final craftService = _FakeApprovalCraftService();
+    await _pumpApprovalPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(find.text('注册审批'), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
+  });
+
   testWidgets('审批通过弹窗打开时会刷新工段列表', (tester) async {
     final userService = _FakeApprovalUserService();
     final craftService = _FakeApprovalCraftService();

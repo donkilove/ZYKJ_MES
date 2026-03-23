@@ -9,6 +9,8 @@ import 'package:mes_client/pages/login_session_page.dart';
 import 'package:mes_client/pages/role_management_page.dart';
 import 'package:mes_client/services/authz_service.dart';
 import 'package:mes_client/services/user_service.dart';
+import 'package:mes_client/widgets/crud_page_header.dart';
+import 'package:mes_client/widgets/crud_list_table_section.dart';
 
 final AppSession _session = AppSession(baseUrl: '', accessToken: 'token');
 
@@ -233,6 +235,10 @@ void main() {
 
     expect(find.text('品质管理员'), findsOneWidget);
     expect(find.text('系统内置'), findsOneWidget);
+    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(find.byType(CrudListTableSection), findsOneWidget);
+    expect(find.textContaining('总数'), findsNothing);
+    expect(find.text('第 1 / 1 页'), findsOneWidget);
   });
 
   testWidgets('role management page shows builtin role lifecycle action', (

@@ -11,6 +11,7 @@ import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/user_service.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/crud_list_table_section.dart';
 import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
@@ -1212,21 +1213,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '用户管理',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadInitialData,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          CrudPageHeader(
+            title: '用户管理',
+            onRefresh: _loading ? null : _loadInitialData,
           ),
           const SizedBox(height: 12),
           _buildToolbar(),
