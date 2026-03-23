@@ -23,6 +23,8 @@ class _FakeUserService extends UserService {
   int disableCalls = 0;
   int resetPasswordCalls = 0;
   int deleteCalls = 0;
+  String? lastCreateRemark;
+  String? lastUpdateRemark;
   String? lastListRoleCode;
   int? lastListStageId;
   bool? lastListIsOnline;
@@ -129,6 +131,7 @@ class _FakeUserService extends UserService {
   }) async {
     createCalls += 1;
     lastCreateStageId = stageId;
+    lastCreateRemark = remark;
   }
 
   @override
@@ -142,6 +145,7 @@ class _FakeUserService extends UserService {
   }) async {
     updateCalls += 1;
     lastUpdateStageId = stageId;
+    lastUpdateRemark = remark;
   }
 
   @override
@@ -517,6 +521,7 @@ void main() {
 
     expect(userService.createCalls, 1);
     expect(userService.lastCreateStageId, 10);
+    expect(userService.lastCreateRemark, isNull);
   });
 
   testWidgets('创建操作员允许选择无启用工序的工段', (tester) async {
@@ -598,6 +603,49 @@ void main() {
 
     expect(userService.updateCalls, 1);
     expect(userService.lastUpdateStageId, 10);
+    expect(userService.lastUpdateRemark, isNull);
+  });
+
+  testWidgets('新建与编辑弹窗不再显示账号提示文本和备注字段', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 7,
+          username: 'dialog_check',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.text('新建用户'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('账号（用户名与姓名统一）'), findsNothing);
+    expect(find.text('备注（可选）'), findsNothing);
+    expect(find.widgetWithText(TextFormField, '账号'), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('账号（用户名与姓名统一）'), findsNothing);
+    expect(find.text('备注（可选）'), findsNothing);
+    expect(find.widgetWithText(TextFormField, '账号'), findsOneWidget);
   });
 
   testWidgets('用户列表卡片为四角全直角', (tester) async {

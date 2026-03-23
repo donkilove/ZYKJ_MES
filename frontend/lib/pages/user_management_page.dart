@@ -327,7 +327,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
     final accountController = TextEditingController();
     final passwordController = TextEditingController();
-    final remarkController = TextEditingController();
     bool isActive = true;
     final formKey = GlobalKey<FormState>();
     String? selectedRoleCode;
@@ -353,9 +352,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       children: [
                         TextFormField(
                           controller: accountController,
-                          decoration: const InputDecoration(
-                            labelText: '账号（用户名与姓名统一）',
-                          ),
+                          decoration: const InputDecoration(labelText: '账号'),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return '请输入账号';
@@ -383,14 +380,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             }
                             return null;
                           },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: remarkController,
-                          decoration: const InputDecoration(
-                            labelText: '备注（可选）',
-                          ),
-                          maxLines: 2,
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -528,9 +517,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         password: passwordController.text,
                         roleCode: selectedRoleCode!,
                         stageId: selectedStageId,
-                        remark: remarkController.text.trim().isEmpty
-                            ? null
-                            : remarkController.text.trim(),
                         isActive: isActive,
                       );
                       if (context.mounted) {
@@ -581,7 +567,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
       return;
     }
     final accountController = TextEditingController(text: user.username);
-    final remarkController = TextEditingController(text: user.remark ?? '');
     final formKey = GlobalKey<FormState>();
     final canEditAccount = _isCurrentUserSystemAdmin();
     String? selectedRoleCode = user.roleCode;
@@ -609,7 +594,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           controller: accountController,
                           readOnly: !canEditAccount,
                           decoration: InputDecoration(
-                            labelText: '账号（用户名与姓名统一）',
+                            labelText: '账号',
                             helperText: canEditAccount ? null : '仅系统管理员可修改账号',
                           ),
                           validator: (value) {
@@ -624,14 +609,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             }
                             return null;
                           },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: remarkController,
-                          decoration: const InputDecoration(
-                            labelText: '备注（可选）',
-                          ),
-                          maxLines: 2,
                         ),
                         const SizedBox(height: 16),
                         const Text(
@@ -751,9 +728,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             : null,
                         roleCode: selectedRoleCode!,
                         stageId: selectedStageId,
-                        remark: remarkController.text.trim().isEmpty
-                            ? null
-                            : remarkController.text.trim(),
                       );
                       if (context.mounted) {
                         Navigator.of(context).pop(true);
