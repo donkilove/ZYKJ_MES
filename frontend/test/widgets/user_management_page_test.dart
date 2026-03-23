@@ -21,6 +21,10 @@ class _FakeUserService extends UserService {
   int disableCalls = 0;
   int resetPasswordCalls = 0;
   int deleteCalls = 0;
+  String? lastListRoleCode;
+  int? lastListStageId;
+  bool? lastListIsOnline;
+  bool? lastListIsActive;
 
   @override
   Future<RoleListResult> listRoles({
@@ -87,6 +91,10 @@ class _FakeUserService extends UserService {
     bool? isActive,
     bool includeDeleted = false,
   }) async {
+    lastListRoleCode = roleCode;
+    lastListStageId = stageId;
+    lastListIsOnline = isOnline;
+    lastListIsActive = isActive;
     return UserListResult(total: initialUsers.length, items: initialUsers);
   }
 
@@ -244,8 +252,10 @@ Future<void> _pumpPage(
   bool canResetPassword = true,
   bool canDeleteUser = true,
   bool canExport = true,
+  VoidCallback? onNavigateToRoleManagement,
+  Size surfaceSize = const Size(1920, 1200),
 }) async {
-  tester.view.physicalSize = const Size(1920, 1200);
+  tester.view.physicalSize = surfaceSize;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
     tester.view.resetPhysicalSize();
@@ -264,6 +274,7 @@ Future<void> _pumpPage(
           canResetPassword: canResetPassword,
           canDeleteUser: canDeleteUser,
           canExport: canExport,
+          onNavigateToRoleManagement: onNavigateToRoleManagement,
           userService: userService,
           craftService: craftService,
         ),
@@ -273,7 +284,135 @@ Future<void> _pumpPage(
   await tester.pumpAndSettle();
 }
 
+Rect _toolbarRect(WidgetTester tester, String key) {
+  return tester.getRect(find.byKey(ValueKey<String>(key)));
+}
+
 void main() {
+  testWidgets('用户管理工具栏仅保留搜索与角色状态筛选', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.text('工段'), findsNothing);
+    expect(find.text('在线状态'), findsNothing);
+    expect(find.text('查询用户'), findsOneWidget);
+    expect(find.text('导出用户'), findsOneWidget);
+    expect(find.text('用户角色'), findsOneWidget);
+    expect(find.text('账号状态'), findsOneWidget);
+    expect(find.text('按账号搜索'), findsOneWidget);
+
+    expect(userService.lastListStageId, isNull);
+    expect(userService.lastListIsOnline, isNull);
+  });
+
+  testWidgets('角色和账号状态筛选变更后仍自动触发查询', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('userToolbarRoleFilter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('操作员').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.lastListRoleCode, 'operator');
+
+    await tester.tap(find.byKey(const ValueKey('userToolbarStatusFilter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.lastListIsActive, isFalse);
+    expect(userService.lastListStageId, isNull);
+    expect(userService.lastListIsOnline, isNull);
+  });
+
+  testWidgets('桌面工具栏搜索框会吃满剩余宽度且与按钮保持同一行', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      onNavigateToRoleManagement: () {},
+      surfaceSize: const Size(1440, 1200),
+    );
+
+    final searchRect = _toolbarRect(tester, 'userToolbarKeywordField');
+    final roleRect = _toolbarRect(tester, 'userToolbarRoleFilter');
+    final statusRect = _toolbarRect(tester, 'userToolbarStatusFilter');
+    final queryButtonRect = tester.getRect(
+      find.widgetWithText(FilledButton, '查询用户'),
+    );
+    final createButtonRect = tester.getRect(
+      find.widgetWithText(FilledButton, '新建用户'),
+    );
+    final roleManageButtonRect = tester.getRect(
+      find.widgetWithText(OutlinedButton, '角色管理'),
+    );
+    final exportButtonRect = tester.getRect(
+      find.widgetWithText(OutlinedButton, '导出用户'),
+    );
+
+    expect(searchRect.width, greaterThan(roleRect.width));
+    expect(searchRect.width, greaterThan(statusRect.width));
+    expect(searchRect.left, lessThan(statusRect.left));
+    expect(statusRect.left, lessThan(roleRect.left));
+
+    expect(
+      (searchRect.center.dy - queryButtonRect.center.dy).abs(),
+      lessThan(1),
+    );
+    expect((roleRect.center.dy - queryButtonRect.center.dy).abs(), lessThan(1));
+    expect(
+      (statusRect.center.dy - queryButtonRect.center.dy).abs(),
+      lessThan(1),
+    );
+    expect(
+      (createButtonRect.center.dy - queryButtonRect.center.dy).abs(),
+      lessThan(1),
+    );
+    expect(
+      (roleManageButtonRect.center.dy - queryButtonRect.center.dy).abs(),
+      lessThan(1),
+    );
+    expect(
+      (exportButtonRect.center.dy - queryButtonRect.center.dy).abs(),
+      lessThan(1),
+    );
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('窄宽度工具栏仍按搜索账号状态角色顺序排列', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      surfaceSize: const Size(700, 1200),
+    );
+
+    final searchRect = _toolbarRect(tester, 'userToolbarKeywordField');
+    final statusRect = _toolbarRect(tester, 'userToolbarStatusFilter');
+    final roleRect = _toolbarRect(tester, 'userToolbarRoleFilter');
+
+    expect((searchRect.center.dy - statusRect.center.dy).abs(), lessThan(1));
+    expect((statusRect.center.dy - roleRect.center.dy).abs(), lessThan(1));
+    expect(searchRect.left, lessThan(statusRect.left));
+    expect(statusRect.left, lessThan(roleRect.left));
+  });
+
   testWidgets('新建用户弹窗打开时会刷新工段列表', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
@@ -587,6 +726,6 @@ void main() {
       canExport: false,
     );
 
-    expect(find.text('导出'), findsNothing);
+    expect(find.text('导出用户'), findsNothing);
   });
 }

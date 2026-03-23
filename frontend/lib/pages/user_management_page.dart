@@ -62,8 +62,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   // 筛选条件
   String? _filterRoleCode;
-  int? _filterStageId;
-  bool? _filterIsOnline; // null=全部, true=在线, false=离线
   bool? _filterIsActive; // null=全部, true=启用, false=停用
 
   bool _loading = false;
@@ -201,9 +199,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
           pageSize: _userPageSize,
           keyword: _keywordController.text.trim(),
           roleCode: _filterRoleCode,
-          stageId: _filterStageId,
           isActive: _filterIsActive,
-          isOnline: _filterIsOnline,
         ),
         _userService.getMyProfile(),
       ]);
@@ -269,9 +265,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
         pageSize: _userPageSize,
         keyword: _keywordController.text.trim(),
         roleCode: _filterRoleCode,
-        stageId: _filterStageId,
         isActive: _filterIsActive,
-        isOnline: _filterIsOnline,
       );
       if (!mounted) {
         return;
@@ -980,8 +974,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
             ? null
             : _keywordController.text.trim(),
         roleCode: _filterRoleCode,
-        stageId: _filterStageId,
-        isOnline: _filterIsOnline,
         isActive: _filterIsActive,
         format: format,
       );
@@ -1039,6 +1031,175 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
+  Widget _buildKeywordField() {
+    return TextField(
+      key: const ValueKey('userToolbarKeywordField'),
+      controller: _keywordController,
+      decoration: const InputDecoration(
+        labelText: '按账号搜索',
+        border: OutlineInputBorder(),
+      ),
+      onSubmitted: (_) => _loadUsers(page: 1),
+    );
+  }
+
+  Widget _buildRoleFilter() {
+    return DropdownButtonFormField<String?>(
+      key: const ValueKey('userToolbarRoleFilter'),
+      initialValue: _filterRoleCode,
+      decoration: const InputDecoration(
+        labelText: '用户角色',
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      isExpanded: true,
+      items: [
+        const DropdownMenuItem(value: null, child: Text('全部')),
+        ..._roles.map(
+          (role) => DropdownMenuItem(
+            value: role.code,
+            child: Text(role.name, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      onChanged: (value) {
+        setState(() => _filterRoleCode = value);
+        _loadUsers(page: 1);
+      },
+    );
+  }
+
+  Widget _buildStatusFilter() {
+    return DropdownButtonFormField<bool?>(
+      key: const ValueKey('userToolbarStatusFilter'),
+      initialValue: _filterIsActive,
+      decoration: const InputDecoration(
+        labelText: '账号状态',
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      isExpanded: true,
+      items: const [
+        DropdownMenuItem(value: null, child: Text('全部')),
+        DropdownMenuItem(value: true, child: Text('启用')),
+        DropdownMenuItem(value: false, child: Text('停用')),
+      ],
+      onChanged: (value) {
+        setState(() => _filterIsActive = value);
+        _loadUsers(page: 1);
+      },
+    );
+  }
+
+  List<Widget> _buildToolbarButtons() {
+    final buttons = <Widget>[
+      FilledButton.icon(
+        onPressed: _loading ? null : () => _loadUsers(page: 1),
+        icon: const Icon(Icons.search),
+        label: const Text('查询用户'),
+      ),
+      FilledButton.icon(
+        onPressed: (_loading || !widget.canCreateUser)
+            ? null
+            : _showCreateUserDialog,
+        icon: const Icon(Icons.person_add),
+        label: const Text('新建用户'),
+      ),
+    ];
+
+    if (widget.onNavigateToRoleManagement != null) {
+      buttons.add(
+        OutlinedButton.icon(
+          onPressed: widget.onNavigateToRoleManagement,
+          icon: const Icon(Icons.admin_panel_settings),
+          label: const Text('角色管理'),
+        ),
+      );
+    }
+
+    if (widget.canExport) {
+      buttons.add(
+        PopupMenuButton<String>(
+          onSelected: _loading ? null : (value) => _exportUsers(format: value),
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'csv', child: Text('导出 CSV')),
+            PopupMenuItem(value: 'excel', child: Text('导出 Excel')),
+          ],
+          child: OutlinedButton.icon(
+            onPressed: _loading ? null : () {},
+            icon: const Icon(Icons.download),
+            label: const Text('导出用户'),
+          ),
+        ),
+      );
+    }
+
+    return buttons;
+  }
+
+  Widget _buildToolbar() {
+    const spacing = 12.0;
+    const roleWidth = 150.0;
+    const statusWidth = 130.0;
+    const desktopSearchMinWidth = 320.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final buttons = _buildToolbarButtons();
+        final roleFilter = SizedBox(
+          width: roleWidth,
+          child: _buildRoleFilter(),
+        );
+        final statusFilter = SizedBox(
+          width: statusWidth,
+          child: _buildStatusFilter(),
+        );
+        final desktopToolbarMinWidth =
+            roleWidth +
+            statusWidth +
+            desktopSearchMinWidth +
+            (buttons.length * 120) +
+            ((buttons.length + 3) * spacing);
+
+        if (constraints.maxWidth >= desktopToolbarMinWidth) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: _buildKeywordField()),
+              const SizedBox(width: spacing),
+              statusFilter,
+              const SizedBox(width: spacing),
+              roleFilter,
+              const SizedBox(width: spacing),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  spacing: spacing,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: WrapAlignment.end,
+                  children: buttons,
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(width: 280, child: _buildKeywordField()),
+            statusFilter,
+            roleFilter,
+            ...buttons,
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1065,177 +1226,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '按账号搜索',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadUsers(page: 1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadUsers(page: 1),
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: (_loading || !widget.canCreateUser)
-                    ? null
-                    : _showCreateUserDialog,
-                icon: const Icon(Icons.person_add),
-                label: const Text('新建用户'),
-              ),
-              if (widget.onNavigateToRoleManagement != null) ...[
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: widget.onNavigateToRoleManagement,
-                  icon: const Icon(Icons.admin_panel_settings),
-                  label: const Text('角色管理'),
-                ),
-              ],
-              if (widget.canExport) ...[
-                const SizedBox(width: 12),
-                PopupMenuButton<String>(
-                  onSelected: _loading
-                      ? null
-                      : (value) => _exportUsers(format: value),
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'csv', child: Text('导出 CSV')),
-                    PopupMenuItem(value: 'excel', child: Text('导出 Excel')),
-                  ],
-                  child: OutlinedButton.icon(
-                    onPressed: _loading ? null : () {},
-                    icon: const Icon(Icons.download),
-                    label: const Text('导出'),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          // 高级筛选行
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              SizedBox(
-                width: 150,
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _filterRoleCode,
-                  decoration: const InputDecoration(
-                    labelText: '角色',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('全部')),
-                    ..._roles.map(
-                      (role) => DropdownMenuItem(
-                        value: role.code,
-                        child: Text(role.name, overflow: TextOverflow.ellipsis),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _filterRoleCode = value);
-                    _loadUsers(page: 1);
-                  },
-                ),
-              ),
-              SizedBox(
-                width: 150,
-                child: DropdownButtonFormField<int?>(
-                  initialValue: _filterStageId,
-                  onTap: () {
-                    unawaited(_fetchLatestStages());
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '工段',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('全部')),
-                    ..._stages.map(
-                      (stage) => DropdownMenuItem(
-                        value: stage.id,
-                        child: Text(
-                          stage.name,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _filterStageId = value);
-                    _loadUsers(page: 1);
-                  },
-                ),
-              ),
-              SizedBox(
-                width: 130,
-                child: DropdownButtonFormField<bool?>(
-                  initialValue: _filterIsOnline,
-                  decoration: const InputDecoration(
-                    labelText: '在线状态',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('全部')),
-                    DropdownMenuItem(value: true, child: Text('在线')),
-                    DropdownMenuItem(value: false, child: Text('离线')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _filterIsOnline = value);
-                    _loadUsers(page: 1);
-                  },
-                ),
-              ),
-              SizedBox(
-                width: 130,
-                child: DropdownButtonFormField<bool?>(
-                  initialValue: _filterIsActive,
-                  decoration: const InputDecoration(
-                    labelText: '账号状态',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('全部')),
-                    DropdownMenuItem(value: true, child: Text('启用')),
-                    DropdownMenuItem(value: false, child: Text('停用')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _filterIsActive = value);
-                    _loadUsers(page: 1);
-                  },
-                ),
-              ),
-            ],
-          ),
+          _buildToolbar(),
           const SizedBox(height: 12),
           Text('总数：$_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
@@ -1338,7 +1329,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                             value: _UserAction.edit,
                                             child: Text('编辑'),
                                           ),
-                                        if (widget.canToggleUser && user.isActive)
+                                        if (widget.canToggleUser &&
+                                            user.isActive)
                                           const PopupMenuItem(
                                             value: _UserAction.disable,
                                             child: Text('停用'),
