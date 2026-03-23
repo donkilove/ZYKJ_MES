@@ -538,6 +538,33 @@ void main() {
     expect(userService.lastUpdateStageId, 10);
   });
 
+  testWidgets('用户列表卡片为四角全直角', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 1,
+          username: 'shape_check',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final card = tester.widget<Card>(
+      find.byKey(const ValueKey('userListCard')),
+    );
+    final shape = card.shape as RoundedRectangleBorder;
+
+    expect(shape.borderRadius, BorderRadius.zero);
+    expect(card.clipBehavior, Clip.hardEdge);
+  });
+
   testWidgets('编辑操作员允许保留无启用工序的工段', (tester) async {
     final userService = _FakeUserService(
       initialUsers: [

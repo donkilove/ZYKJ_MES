@@ -1246,6 +1246,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 : _users.isEmpty
                 ? const Center(child: Text('暂无用户'))
                 : Card(
+                    key: const ValueKey('userListCard'),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    clipBehavior: Clip.hardEdge,
                     child: SizedBox.expand(
                       child: Scrollbar(
                         controller: _userListScrollController,
