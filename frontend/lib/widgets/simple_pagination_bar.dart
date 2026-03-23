@@ -7,6 +7,7 @@ class SimplePaginationBar extends StatelessWidget {
     required this.totalPages,
     required this.total,
     required this.loading,
+    this.showTotal = true,
     this.onPrevious,
     this.onNext,
   });
@@ -15,6 +16,7 @@ class SimplePaginationBar extends StatelessWidget {
   final int totalPages;
   final int total;
   final bool loading;
+  final bool showTotal;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
@@ -23,8 +25,7 @@ class SimplePaginationBar extends StatelessWidget {
     return Row(
       children: [
         Text('第 $page / $totalPages 页'),
-        const SizedBox(width: 12),
-        Text('总数：$total'),
+        if (showTotal) ...[const SizedBox(width: 12), Text('总数：$total')],
         const Spacer(),
         OutlinedButton.icon(
           onPressed: loading || page <= 1 ? null : onPrevious,

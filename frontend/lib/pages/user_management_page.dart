@@ -11,7 +11,9 @@ import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/user_service.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/crud_list_table_section.dart';
 import '../widgets/simple_pagination_bar.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 enum _UserAction { edit, disable, enable, resetPassword, delete }
 
@@ -55,7 +57,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
   late final UserService _userService;
   late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
-  final ScrollController _userListScrollController = ScrollController();
   Timer? _onlineStatusTimer;
   static const Duration _onlineRefreshInterval = Duration(seconds: 5);
   bool _onlineRefreshInFlight = false;
@@ -95,7 +96,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
   void dispose() {
     _stopOnlineStatusRefresh();
     _keywordController.dispose();
-    _userListScrollController.dispose();
     super.dispose();
   }
 
@@ -1120,15 +1120,18 @@ class _UserManagementPageState extends State<UserManagementPage> {
     if (widget.canExport) {
       buttons.add(
         PopupMenuButton<String>(
+          enabled: !_loading,
           onSelected: _loading ? null : (value) => _exportUsers(format: value),
           itemBuilder: (context) => const [
             PopupMenuItem(value: 'csv', child: Text('导出 CSV')),
             PopupMenuItem(value: 'excel', child: Text('导出 Excel')),
           ],
-          child: OutlinedButton.icon(
-            onPressed: _loading ? null : () {},
-            icon: const Icon(Icons.download),
-            label: const Text('导出用户'),
+          child: IgnorePointer(
+            child: OutlinedButton.icon(
+              onPressed: _loading ? null : () {},
+              icon: const Icon(Icons.download),
+              label: const Text('导出用户'),
+            ),
           ),
         ),
       );
@@ -1228,8 +1231,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
           const SizedBox(height: 12),
           _buildToolbar(),
           const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -1241,132 +1242,111 @@ class _UserManagementPageState extends State<UserManagementPage> {
               ),
             ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _users.isEmpty
-                ? const Center(child: Text('暂无用户'))
-                : Card(
-                    key: const ValueKey('userListCard'),
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                    clipBehavior: Clip.hardEdge,
-                    child: SizedBox.expand(
-                      child: Scrollbar(
-                        controller: _userListScrollController,
-                        thumbVisibility: true,
-                        child: SingleChildScrollView(
-                          controller: _userListScrollController,
-                          child: DataTable(
-                            columnSpacing: 16,
-                            headingRowColor: WidgetStateProperty.all(
-                              theme.colorScheme.surfaceContainerHighest,
-                            ),
-                            columns: const [
-                              DataColumn(label: Text('账号')),
-                              DataColumn(label: Text('角色')),
-                              DataColumn(label: Text('工段')),
-                              DataColumn(label: Text('在线')),
-                              DataColumn(label: Text('状态')),
-                              DataColumn(label: Text('创建时间')),
-                              DataColumn(label: Text('操作')),
-                            ],
-                            rows: _users.map((user) {
-                              final statusLabel = user.isOnline ? '在线' : '离线';
-                              final statusColor = user.isOnline
-                                  ? Colors.green
-                                  : theme.colorScheme.outline;
-                              final activeLabel = user.isActive ? '启用' : '停用';
-                              final activeColor = user.isActive
-                                  ? Colors.blue
-                                  : Colors.red;
-                              final createdAtStr = user.createdAt != null
-                                  ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
-                                  : '-';
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(user.username)),
-                                  DataCell(
-                                    Text(
-                                      user.roleName?.trim().isNotEmpty == true
-                                          ? user.roleName!
-                                          : '-',
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      user.stageName?.trim().isNotEmpty == true
-                                          ? user.stageName!
-                                          : '/',
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      statusLabel,
-                                      style: TextStyle(
-                                        color: statusColor,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      activeLabel,
-                                      style: TextStyle(
-                                        color: activeColor,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(Text(createdAtStr)),
-                                  DataCell(
-                                    PopupMenuButton<_UserAction>(
-                                      enabled:
-                                          widget.canEditUser ||
-                                          widget.canToggleUser ||
-                                          widget.canResetPassword ||
-                                          widget.canDeleteUser,
-                                      onSelected: (action) =>
-                                          _handleUserAction(action, user),
-                                      itemBuilder: (context) => [
-                                        if (widget.canEditUser)
-                                          const PopupMenuItem(
-                                            value: _UserAction.edit,
-                                            child: Text('编辑'),
-                                          ),
-                                        if (widget.canToggleUser &&
-                                            user.isActive)
-                                          const PopupMenuItem(
-                                            value: _UserAction.disable,
-                                            child: Text('停用'),
-                                          )
-                                        else if (widget.canToggleUser)
-                                          const PopupMenuItem(
-                                            value: _UserAction.enable,
-                                            child: Text('启用'),
-                                          ),
-                                        if (widget.canResetPassword)
-                                          const PopupMenuItem(
-                                            value: _UserAction.resetPassword,
-                                            child: Text('重置密码'),
-                                          ),
-                                        if (widget.canDeleteUser)
-                                          const PopupMenuItem(
-                                            value: _UserAction.delete,
-                                            child: Text('删除'),
-                                          ),
-                                      ],
-                                      child: const Text('操作'),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
+            child: CrudListTableSection(
+              key: const ValueKey('userListSection'),
+              cardKey: const ValueKey('userListCard'),
+              loading: _loading,
+              isEmpty: _users.isEmpty,
+              emptyText: '暂无用户',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columnSpacing: 16,
+                columns: [
+                  UnifiedListTableHeaderStyle.column(context, '账号'),
+                  UnifiedListTableHeaderStyle.column(context, '角色'),
+                  UnifiedListTableHeaderStyle.column(context, '工段'),
+                  UnifiedListTableHeaderStyle.column(context, '在线'),
+                  UnifiedListTableHeaderStyle.column(context, '状态'),
+                  UnifiedListTableHeaderStyle.column(context, '创建时间'),
+                  UnifiedListTableHeaderStyle.column(context, '操作'),
+                ],
+                rows: _users.map((user) {
+                  final statusLabel = user.isOnline ? '在线' : '离线';
+                  final statusColor = user.isOnline
+                      ? Colors.green
+                      : theme.colorScheme.outline;
+                  final activeLabel = user.isActive ? '启用' : '停用';
+                  final activeColor = user.isActive ? Colors.blue : Colors.red;
+                  final createdAtStr = user.createdAt != null
+                      ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
+                      : '-';
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(user.username)),
+                      DataCell(
+                        Text(
+                          user.roleName?.trim().isNotEmpty == true
+                              ? user.roleName!
+                              : '-',
+                        ),
+                      ),
+                      DataCell(
+                        Text(
+                          user.stageName?.trim().isNotEmpty == true
+                              ? user.stageName!
+                              : '/',
+                        ),
+                      ),
+                      DataCell(
+                        Text(
+                          statusLabel,
+                          style: TextStyle(
+                            color: statusColor,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                      DataCell(
+                        Text(
+                          activeLabel,
+                          style: TextStyle(
+                            color: activeColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      DataCell(Text(createdAtStr)),
+                      DataCell(
+                        UnifiedListTableHeaderStyle.actionMenuButton<
+                          _UserAction
+                        >(
+                          theme: theme,
+                          onSelected: (action) =>
+                              _handleUserAction(action, user),
+                          itemBuilder: (context) => [
+                            if (widget.canEditUser)
+                              const PopupMenuItem(
+                                value: _UserAction.edit,
+                                child: Text('编辑'),
+                              ),
+                            if (widget.canToggleUser && user.isActive)
+                              const PopupMenuItem(
+                                value: _UserAction.disable,
+                                child: Text('停用'),
+                              )
+                            else if (widget.canToggleUser)
+                              const PopupMenuItem(
+                                value: _UserAction.enable,
+                                child: Text('启用'),
+                              ),
+                            if (widget.canResetPassword)
+                              const PopupMenuItem(
+                                value: _UserAction.resetPassword,
+                                child: Text('重置密码'),
+                              ),
+                            if (widget.canDeleteUser)
+                              const PopupMenuItem(
+                                value: _UserAction.delete,
+                                child: Text('删除'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           SimplePaginationBar(
@@ -1374,6 +1354,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
             totalPages: _userTotalPages,
             total: _total,
             loading: _loading,
+            showTotal: false,
             onPrevious: () => _loadUsers(page: _userPage - 1),
             onNext: () => _loadUsers(page: _userPage + 1),
           ),

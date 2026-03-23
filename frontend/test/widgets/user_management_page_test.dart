@@ -6,6 +6,7 @@ import 'package:mes_client/models/user_models.dart';
 import 'package:mes_client/pages/user_management_page.dart';
 import 'package:mes_client/services/craft_service.dart';
 import 'package:mes_client/services/user_service.dart';
+import 'package:mes_client/widgets/crud_list_table_section.dart';
 
 class _FakeUserService extends UserService {
   _FakeUserService({required this.initialUsers})
@@ -310,6 +311,28 @@ void main() {
     expect(userService.lastListIsOnline, isNull);
   });
 
+  testWidgets('用户管理页不显示任何总数字样', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 1,
+          username: 'user_total_hidden',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.textContaining('总数'), findsNothing);
+    expect(find.text('第 1 / 1 页'), findsOneWidget);
+  });
+
   testWidgets('角色和账号状态筛选变更后仍自动触发查询', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
@@ -334,6 +357,30 @@ void main() {
     expect(userService.lastListIsActive, isFalse);
     expect(userService.lastListStageId, isNull);
     expect(userService.lastListIsOnline, isNull);
+  });
+
+  testWidgets('点击导出用户后会弹出导出菜单', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.text('导出 CSV'), findsNothing);
+    expect(find.text('导出 Excel'), findsNothing);
+
+    final exportMenuButton = find.ancestor(
+      of: find.text('导出用户'),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+
+    await tester.tap(exportMenuButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('导出 CSV'), findsOneWidget);
+    expect(find.text('导出 Excel'), findsOneWidget);
   });
 
   testWidgets('桌面工具栏搜索框会吃满剩余宽度且与按钮保持同一行', (tester) async {
@@ -561,6 +608,7 @@ void main() {
     );
     final shape = card.shape as RoundedRectangleBorder;
 
+    expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(shape.borderRadius, BorderRadius.zero);
     expect(card.clipBehavior, Clip.hardEdge);
   });
