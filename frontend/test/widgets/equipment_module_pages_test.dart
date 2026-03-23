@@ -10,6 +10,7 @@ import 'package:mes_client/pages/maintenance_plan_page.dart';
 import 'package:mes_client/pages/maintenance_record_page.dart';
 import 'package:mes_client/services/craft_service.dart';
 import 'package:mes_client/services/equipment_service.dart';
+import 'package:mes_client/widgets/simple_pagination_bar.dart';
 
 class _FakeEquipmentService extends EquipmentService {
   _FakeEquipmentService()
@@ -20,13 +21,7 @@ class _FakeEquipmentService extends EquipmentService {
   @override
   Future<List<EquipmentOwnerOption>> listAllOwners() async {
     ownersRequestCount += 1;
-    return [
-      EquipmentOwnerOption(
-        userId: 7,
-        username: 'm1',
-        fullName: null,
-      ),
-    ];
+    return [EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null)];
   }
 
   @override
@@ -223,7 +218,7 @@ class _FakeCraftService extends CraftService {
 }
 
 Future<void> _pumpPage(WidgetTester tester, Widget child) async {
-  tester.view.physicalSize = const Size(1920, 1200);
+  tester.view.physicalSize = const Size(1920, 1080);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
     tester.view.resetPhysicalSize();
@@ -332,5 +327,23 @@ void main() {
     expect(find.text('完成时间'), findsOneWidget);
     expect(find.text('执行人'), findsWidgets);
     expect(find.text('执行正常'), findsOneWidget);
+  });
+
+  testWidgets('1920x1080 下展示显式分页组件', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+
+    await _pumpPage(
+      tester,
+      EquipmentLedgerPage(
+        session: session,
+        onLogout: () {},
+        canWrite: true,
+        equipmentService: equipmentService,
+      ),
+    );
+
+    expect(find.byType(SimplePaginationBar), findsOneWidget);
+    expect(find.text('第 1 / 1 页'), findsOneWidget);
+    expect(find.text('每页 20 条'), findsOneWidget);
   });
 }

@@ -10,6 +10,7 @@ import 'package:mes_client/pages/product_page.dart';
 import 'package:mes_client/pages/product_version_management_page.dart';
 import 'package:mes_client/services/api_exception.dart';
 import 'package:mes_client/services/product_service.dart';
+import 'package:mes_client/widgets/simple_pagination_bar.dart';
 
 final DateTime _fixedDate = DateTime.parse('2026-03-01T00:00:00Z');
 
@@ -175,6 +176,39 @@ class _ProductListOnlyService extends ProductService {
     String? currentParamCategoryKeyword,
   }) async {
     return ProductListResult(total: products.length, items: products);
+  }
+}
+
+class _PagedProductListService extends _ProductListOnlyService {
+  _PagedProductListService(super.products);
+
+  final List<int> requestedPages = [];
+  final List<int> requestedPageSizes = [];
+
+  @override
+  Future<ProductListResult> listProducts({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
+  }) async {
+    requestedPages.add(page);
+    requestedPageSizes.add(pageSize);
+    final start = (page - 1) * pageSize;
+    final end = (start + pageSize) > products.length
+        ? products.length
+        : start + pageSize;
+    final items = start >= products.length
+        ? <ProductItem>[]
+        : products.sublist(start, end);
+    return ProductListResult(total: products.length, items: items);
   }
 }
 
@@ -436,6 +470,73 @@ class _ParameterManagementContractService extends ProductService {
   }
 }
 
+class _PagedParameterManagementService
+    extends _ParameterManagementContractService {
+  final List<int> requestedPages = [];
+  final List<int> requestedPageSizes = [];
+
+  @override
+  Future<ProductParameterVersionListResult> listProductParameterVersions({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? versionKeyword,
+    String? paramNameKeyword,
+    String? paramCategoryKeyword,
+    String? lifecycleStatus,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+  }) async {
+    requestedPages.add(page);
+    requestedPageSizes.add(pageSize);
+    final start = (page - 1) * pageSize;
+    final end = (start + pageSize) > parameterVersionRows.length
+        ? parameterVersionRows.length
+        : start + pageSize;
+    final items = start >= parameterVersionRows.length
+        ? <ProductParameterVersionListItem>[]
+        : parameterVersionRows.sublist(start, end);
+    return ProductParameterVersionListResult(
+      total: parameterVersionRows.length,
+      items: items,
+    );
+  }
+}
+
+class _PagedVersionListService extends _VersionListService {
+  _PagedVersionListService({required super.products, required super.versions});
+
+  final List<int> requestedPages = [];
+  final List<int> requestedPageSizes = [];
+
+  @override
+  Future<ProductListResult> listProducts({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
+  }) async {
+    requestedPages.add(page);
+    requestedPageSizes.add(pageSize);
+    final start = (page - 1) * pageSize;
+    final end = (start + pageSize) > products.length
+        ? products.length
+        : start + pageSize;
+    final items = start >= products.length
+        ? <ProductItem>[]
+        : products.sublist(start, end);
+    return ProductListResult(total: products.length, items: items);
+  }
+}
+
 class _ParameterQueryRoutingService extends ProductService {
   _ParameterQueryRoutingService() : super(_session());
 
@@ -676,8 +777,7 @@ void main() {
       await tester.tap(find.text('产品1'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
+      await _openPopupMenu(tester, _popupMenuButtonFinder().first);
       await tester.tap(find.text('复制版本').last);
       await tester.pumpAndSettle();
 
@@ -1061,6 +1161,68 @@ void main() {
       expect(service.createdName, isNull);
     });
 
+    testWidgets('产品管理页应展示显式分页并按页大小重新加载', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1920, 1080));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _PagedProductListService(
+        List.generate(
+          75,
+          (index) => _buildProduct(
+            id: index + 1,
+            currentVersion: 1,
+            effectiveVersion: 1,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        _host(
+          ProductManagementPage(
+            session: _session(),
+            onLogout: () {},
+            canCreateProduct: false,
+            canDeleteProduct: false,
+            canUpdateLifecycle: false,
+            canViewVersions: false,
+            canCompareVersions: false,
+            canRollbackVersion: false,
+            canViewImpactAnalysis: false,
+            canViewParameters: false,
+            canEditParameters: false,
+            onViewParameters: (_) {},
+            onEditParameters: (_) {},
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SimplePaginationBar), findsOneWidget);
+      expect(find.text('产品1'), findsOneWidget);
+      expect(find.text('产品51'), findsNothing);
+
+      await tester.tap(
+        find.byKey(const Key('simple-pagination-page-size-selector')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('20 条/页').last);
+      await tester.pumpAndSettle();
+
+      expect(service.requestedPageSizes, contains(20));
+
+      await tester.tap(
+        find.byKey(const Key('simple-pagination-page-selector')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('第 2 页').last);
+      await tester.pumpAndSettle();
+
+      expect(service.requestedPages.last, 2);
+      expect(find.text('产品21'), findsOneWidget);
+    });
+
     testWidgets('编辑产品弹窗应显示当前状态并在提交时 trim', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1800, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1186,6 +1348,54 @@ void main() {
       expect(service.legacyListCalls, 0, reason: '保存链路不应触发旧参数读取兜底。');
     });
 
+    testWidgets('参数管理页应展示显式分页并切换版本页数据', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1920, 1080));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _PagedParameterManagementService();
+      service.parameterVersionRows
+        ..clear()
+        ..addAll(
+          List.generate(
+            55,
+            (index) => _buildParameterVersionRow(
+              productId: index + 1,
+              productName: '参数产品${index + 1}',
+              version: index + 1,
+              versionLabel: 'V1.$index',
+              lifecycleStatus: index.isEven ? 'draft' : 'effective',
+            ),
+          ),
+        );
+
+      await tester.pumpWidget(
+        _host(
+          ProductParameterManagementPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: 'product-parameter-management',
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SimplePaginationBar), findsOneWidget);
+      expect(find.text('参数产品1'), findsOneWidget);
+      expect(find.text('参数产品51'), findsNothing);
+
+      await tester.tap(
+        find.byKey(const Key('simple-pagination-page-selector')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('第 2 页').last);
+      await tester.pumpAndSettle();
+
+      expect(service.requestedPages, contains(2));
+      expect(find.text('参数产品51'), findsOneWidget);
+    });
+
     testWidgets('参数编辑应即时提示 Link 格式错误', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1800, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1220,6 +1430,57 @@ void main() {
         find.text('Link 参数仅支持 http://、https://、\\\\、盘符绝对路径'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('版本管理页产品侧栏应使用统一分页并切换列表页', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1920, 1080));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _PagedVersionListService(
+        products: List.generate(
+          55,
+          (index) => _buildProduct(
+            id: index + 1,
+            currentVersion: 1,
+            effectiveVersion: 1,
+          ),
+        ),
+        versions: [
+          _buildVersion(
+            version: 1,
+            versionLabel: 'V1.0',
+            lifecycleStatus: 'draft',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _host(
+          ProductVersionManagementPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: productVersionManagementTabCode,
+            canManageVersions: true,
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SimplePaginationBar), findsOneWidget);
+      expect(find.text('产品1'), findsOneWidget);
+      expect(find.text('产品51'), findsNothing);
+
+      await tester.tap(
+        find.byKey(const Key('simple-pagination-page-selector')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('第 2 页').last);
+      await tester.pumpAndSettle();
+
+      expect(service.requestedPages, contains(2));
+      expect(find.text('产品51'), findsOneWidget);
     });
 
     test('服务层参数查询缺少显式口径时不再回退旧接口', () async {

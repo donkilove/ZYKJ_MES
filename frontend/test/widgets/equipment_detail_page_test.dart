@@ -109,7 +109,7 @@ EquipmentDetailResult _buildDetail() {
 }
 
 Future<void> _pumpPage(WidgetTester tester) async {
-  tester.view.physicalSize = const Size(800, 520);
+  tester.view.physicalSize = const Size(1600, 900);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
     tester.view.resetPhysicalSize();
@@ -135,9 +135,13 @@ void main() {
     await _pumpPage(tester);
 
     expect(find.text('设备风险提示'), findsOneWidget);
+    expect(find.text('基础信息'), findsOneWidget);
+    expect(find.text('保留原业务字段，只调整为桌面详情卡布局。'), findsOneWidget);
     expect(find.text('当前详情仅展示你在计划、执行与记录范围内可见的数据，不能替代全量排程复核。'), findsOneWidget);
     expect(find.text('待执行工单 3'), findsOneWidget);
     expect(find.text('活跃计划 2'), findsOneWidget);
+    expect(find.text('最近保养时间'), findsOneWidget);
+    expect(find.text('设备状态 启用'), findsOneWidget);
     expect(find.text('当前有3个待执行工单未收口，调整设备前请先核对到期任务与现场状态。'), findsOneWidget);
     expect(find.text('最近一次记录为2026-03-24的“月度润滑检查”，结果：润滑正常。'), findsOneWidget);
     expect(

@@ -133,7 +133,7 @@ Future<void> _pumpPage(
   bool canViewParameters = true,
   bool canManageParameters = true,
 }) async {
-  tester.view.physicalSize = const Size(1600, 1000);
+  tester.view.physicalSize = const Size(1920, 1080);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
     tester.view.resetPhysicalSize();

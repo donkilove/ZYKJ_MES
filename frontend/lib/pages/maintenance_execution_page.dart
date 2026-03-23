@@ -12,6 +12,8 @@ import '../services/craft_service.dart';
 import '../services/equipment_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 class MaintenanceExecutionPage extends StatefulWidget {
   const MaintenanceExecutionPage({
@@ -44,6 +46,8 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   bool _loading = false;
   bool _exporting = false;
   String _message = '';
+  int _page = 1;
+  int _pageSize = 20;
   int _total = 0;
   List<MaintenanceWorkOrderItem> _items = const [];
   String? _statusFilter;
@@ -53,6 +57,10 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   String? _stageCodeFilter;
   List<CraftStageItem> _stages = const [];
   String? _lastHandledJumpPayloadJson;
+
+  static const List<int> _pageSizeOptions = [20, 50, 100];
+
+  int get _totalPages => _total == 0 ? 1 : (_total / _pageSize).ceil();
 
   @override
   void initState() {
@@ -137,18 +145,22 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     );
   }
 
-  Future<void> _loadItems() async {
+  Future<void> _loadItems({int? page, int? pageSize}) async {
     if (!mounted) {
       return;
     }
+    final nextPage = page ?? _page;
+    final nextPageSize = pageSize ?? _pageSize;
     setState(() {
       _loading = true;
       _message = '';
+      _page = nextPage;
+      _pageSize = nextPageSize;
     });
     try {
       final result = await _equipmentService.listExecutions(
-        page: 1,
-        pageSize: 200,
+        page: nextPage,
+        pageSize: nextPageSize,
         keyword: _keywordController.text.trim(),
         status: _statusFilter,
         mineOnly: _mineOnly,
@@ -496,6 +508,8 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final toolbarButtonStyle =
+        UnifiedListTableHeaderStyle.toolbarActionButtonStyle(theme);
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -526,150 +540,167 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '搜索设备/项目/结果',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadItems(),
-                ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await _pickDate(
-                    initialDate: _dueDateStart ?? DateTime.now(),
-                  );
-                  if (!mounted) return;
-                  if (picked != null) setState(() => _dueDateStart = picked);
-                },
-                icon: const Icon(Icons.event),
-                label: Text(
-                  _dueDateStart == null ? '到期开始' : _formatDate(_dueDateStart!),
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await _pickDate(
-                    initialDate: _dueDateEnd ?? DateTime.now(),
-                  );
-                  if (!mounted) return;
-                  if (picked != null) setState(() => _dueDateEnd = picked);
-                },
-                icon: const Icon(Icons.event_available),
-                label: Text(
-                  _dueDateEnd == null ? '到期结束' : _formatDate(_dueDateEnd!),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _loading ? null : _loadItems,
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              SizedBox(
-                width: 160,
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _statusFilter,
-                  items: const [
-                    DropdownMenuItem<String?>(value: null, child: Text('全部状态')),
-                    DropdownMenuItem<String?>(
-                      value: 'pending',
-                      child: Text('待执行'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'in_progress',
-                      child: Text('执行中'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'overdue',
-                      child: Text('已逾期'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'done',
-                      child: Text('已完成'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'cancelled',
-                      child: Text('已取消'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _statusFilter = value);
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '状态',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              if (_stages.isNotEmpty)
-                SizedBox(
-                  width: 180,
-                  child: DropdownButtonFormField<String?>(
-                    initialValue: _stageCodeFilter,
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('全部工段'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 360,
+                    child: TextField(
+                      controller: _keywordController,
+                      decoration: const InputDecoration(
+                        labelText: '搜索设备/项目/结果',
+                        border: OutlineInputBorder(),
                       ),
-                      ..._stages.map(
-                        (s) => DropdownMenuItem<String?>(
-                          value: s.code,
-                          child: Text(s.name),
+                      onSubmitted: (_) => _loadItems(page: 1),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final picked = await _pickDate(
+                        initialDate: _dueDateStart ?? DateTime.now(),
+                      );
+                      if (!mounted) {
+                        return;
+                      }
+                      if (picked != null) {
+                        setState(() => _dueDateStart = picked);
+                      }
+                    },
+                    icon: const Icon(Icons.event),
+                    label: Text(
+                      _dueDateStart == null
+                          ? '到期开始'
+                          : _formatDate(_dueDateStart!),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final picked = await _pickDate(
+                        initialDate: _dueDateEnd ?? DateTime.now(),
+                      );
+                      if (!mounted) {
+                        return;
+                      }
+                      if (picked != null) {
+                        setState(() => _dueDateEnd = picked);
+                      }
+                    },
+                    icon: const Icon(Icons.event_available),
+                    label: Text(
+                      _dueDateEnd == null ? '到期结束' : _formatDate(_dueDateEnd!),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 160,
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: _statusFilter,
+                      items: const [
+                        DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('全部状态'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'pending',
+                          child: Text('待执行'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'in_progress',
+                          child: Text('执行中'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'overdue',
+                          child: Text('已逾期'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'done',
+                          child: Text('已完成'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'cancelled',
+                          child: Text('已取消'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _statusFilter = value);
+                      },
+                      decoration: const InputDecoration(
+                        labelText: '状态',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  if (_stages.isNotEmpty)
+                    SizedBox(
+                      width: 180,
+                      child: DropdownButtonFormField<String?>(
+                        initialValue: _stageCodeFilter,
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('全部工段'),
+                          ),
+                          ..._stages.map(
+                            (s) => DropdownMenuItem<String?>(
+                              value: s.code,
+                              child: Text(s.name),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          setState(() => _stageCodeFilter = value);
+                        },
+                        decoration: const InputDecoration(
+                          labelText: '工段',
+                          border: OutlineInputBorder(),
+                          isDense: true,
                         ),
                       ),
-                    ],
-                    onChanged: (value) {
-                      setState(() => _stageCodeFilter = value);
-                    },
-                    decoration: const InputDecoration(
-                      labelText: '工段',
-                      border: OutlineInputBorder(),
-                      isDense: true,
+                    ),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 140),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('仅看我的任务'),
+                        Switch(
+                          value: _mineOnly,
+                          onChanged: (v) => setState(() => _mineOnly = v),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              const SizedBox(width: 12),
-              Row(
-                children: [
-                  const Text('仅看我的任务'),
-                  Switch(
-                    value: _mineOnly,
-                    onChanged: (v) => setState(() => _mineOnly = v),
+                  FilledButton.icon(
+                    onPressed: _loading ? null : () => _loadItems(page: 1),
+                    icon: const Icon(Icons.search),
+                    label: const Text('查询'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _loading
+                        ? null
+                        : () {
+                            _keywordController.clear();
+                            setState(() {
+                              _statusFilter = null;
+                              _mineOnly = false;
+                              _dueDateStart = null;
+                              _dueDateEnd = null;
+                              _stageCodeFilter = null;
+                            });
+                            _loadItems(page: 1);
+                          },
+                    style: toolbarButtonStyle,
+                    icon: const Icon(Icons.restart_alt),
+                    label: const Text('清空筛选'),
                   ),
                 ],
               ),
-              const SizedBox(width: 12),
-              if (_dueDateStart != null ||
-                  _dueDateEnd != null ||
-                  _stageCodeFilter != null)
-                TextButton(
-                  onPressed: _loading
-                      ? null
-                      : () {
-                          setState(() {
-                            _dueDateStart = null;
-                            _dueDateEnd = null;
-                            _stageCodeFilter = null;
-                          });
-                          _loadItems();
-                        },
-                  child: const Text('清空筛选'),
-                ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
           Text('总数：$_total', style: theme.textTheme.titleMedium),
@@ -690,93 +721,140 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                 : _items.isEmpty
                 ? const Center(child: Text('暂无执行单'))
                 : Card(
+                    clipBehavior: Clip.antiAlias,
                     child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('工单编号')),
-                          DataColumn(label: Text('设备')),
-                          DataColumn(label: Text('项目')),
-                          DataColumn(label: Text('到期日期')),
-                          DataColumn(label: Text('状态')),
-                          DataColumn(label: Text('执行人')),
-                          DataColumn(label: Text('开始时间')),
-                          DataColumn(label: Text('完成时间')),
-                          DataColumn(label: Text('结果摘要')),
-                          DataColumn(label: Text('操作')),
-                        ],
-                        rows: _items.map((item) {
-                          final canStart =
-                              widget.canExecute &&
-                              (item.status == 'pending' ||
-                                  item.status == 'overdue');
-                          final canComplete =
-                              widget.canExecute && item.status == 'in_progress';
-                          final canCancel =
-                              widget.canExecute &&
-                              (item.status == 'pending' ||
-                                  item.status == 'overdue' ||
-                                  item.status == 'in_progress');
-                          return DataRow(
-                            cells: [
-                              DataCell(Text('#${item.id}')),
-                              DataCell(Text(item.equipmentName)),
-                              DataCell(Text(item.itemName)),
-                              DataCell(Text(_formatDate(item.dueDate))),
-                              DataCell(Text(_statusLabel(item.status))),
-                              DataCell(Text(item.executorUsername ?? '-')),
-                              DataCell(
-                                Text(
-                                  item.startedAt != null
-                                      ? _formatDateTime(item.startedAt!)
-                                      : '-',
+                      minTableWidth: 1540,
+                      child: UnifiedListTableHeaderStyle.wrap(
+                        theme: theme,
+                        child: DataTable(
+                          dataRowMinHeight: 60,
+                          dataRowMaxHeight: 80,
+                          columns: [
+                            UnifiedListTableHeaderStyle.column(context, '工单编号'),
+                            UnifiedListTableHeaderStyle.column(context, '设备'),
+                            UnifiedListTableHeaderStyle.column(context, '项目'),
+                            UnifiedListTableHeaderStyle.column(context, '到期日期'),
+                            UnifiedListTableHeaderStyle.column(context, '状态'),
+                            UnifiedListTableHeaderStyle.column(context, '执行人'),
+                            UnifiedListTableHeaderStyle.column(context, '开始时间'),
+                            UnifiedListTableHeaderStyle.column(context, '完成时间'),
+                            UnifiedListTableHeaderStyle.column(context, '结果摘要'),
+                            UnifiedListTableHeaderStyle.column(
+                              context,
+                              '操作',
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                          rows: _items.map((item) {
+                            final canStart =
+                                widget.canExecute &&
+                                (item.status == 'pending' ||
+                                    item.status == 'overdue');
+                            final canComplete =
+                                widget.canExecute &&
+                                item.status == 'in_progress';
+                            final canCancel =
+                                widget.canExecute &&
+                                (item.status == 'pending' ||
+                                    item.status == 'overdue' ||
+                                    item.status == 'in_progress');
+                            return DataRow(
+                              cells: [
+                                DataCell(Text('#${item.id}')),
+                                DataCell(Text(item.equipmentName)),
+                                DataCell(Text(item.itemName)),
+                                DataCell(Text(_formatDate(item.dueDate))),
+                                DataCell(Text(_statusLabel(item.status))),
+                                DataCell(Text(item.executorUsername ?? '-')),
+                                DataCell(
+                                  Text(
+                                    item.startedAt != null
+                                        ? _formatDateTime(item.startedAt!)
+                                        : '-',
+                                  ),
                                 ),
-                              ),
-                              DataCell(
-                                Text(
-                                  item.completedAt != null
-                                      ? _formatDateTime(item.completedAt!)
-                                      : '-',
+                                DataCell(
+                                  Text(
+                                    item.completedAt != null
+                                        ? _formatDateTime(item.completedAt!)
+                                        : '-',
+                                  ),
                                 ),
-                              ),
-                              DataCell(Text(item.resultSummary ?? '-')),
-                              DataCell(
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    TextButton(
-                                      onPressed: canStart
-                                          ? () => _startExecution(item)
-                                          : null,
-                                      child: const Text('开始执行'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      onPressed: canComplete
-                                          ? () => _completeExecution(item)
-                                          : null,
-                                      child: const Text('完成执行'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      onPressed: canCancel
-                                          ? () => _cancelExecution(item)
-                                          : null,
-                                      child: const Text('取消'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      onPressed: () => _showDetail(item),
-                                      child: const Text('详情'),
-                                    ),
-                                  ],
+                                DataCell(Text(item.resultSummary ?? '-')),
+                                DataCell(
+                                  UnifiedListTableHeaderStyle.actionMenuButton<
+                                    String
+                                  >(
+                                    theme: theme,
+                                    onSelected: (action) {
+                                      switch (action) {
+                                        case 'start':
+                                          _startExecution(item);
+                                          return;
+                                        case 'complete':
+                                          _completeExecution(item);
+                                          return;
+                                        case 'cancel':
+                                          _cancelExecution(item);
+                                          return;
+                                        case 'detail':
+                                          _showDetail(item);
+                                          return;
+                                      }
+                                    },
+                                    itemBuilder: (context) => [
+                                      if (canStart)
+                                        const PopupMenuItem<String>(
+                                          value: 'start',
+                                          child: Text('开始执行'),
+                                        ),
+                                      if (canComplete)
+                                        const PopupMenuItem<String>(
+                                          value: 'complete',
+                                          child: Text('完成执行'),
+                                        ),
+                                      if (canCancel)
+                                        const PopupMenuItem<String>(
+                                          value: 'cancel',
+                                          child: Text('取消'),
+                                        ),
+                                      const PopupMenuItem<String>(
+                                        value: 'detail',
+                                        child: Text('详情'),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+                              ],
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ),
                   ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: SimplePaginationBar(
+                page: _page,
+                totalPages: _totalPages,
+                total: _total,
+                loading: _loading,
+                pageSize: _pageSize,
+                pageSizeOptions: _pageSizeOptions,
+                onPrevious: _page > 1
+                    ? () => _loadItems(page: _page - 1)
+                    : null,
+                onNext: _page < _totalPages
+                    ? () => _loadItems(page: _page + 1)
+                    : null,
+                onPageChanged: (value) => _loadItems(page: value),
+                onPageSizeChanged: (value) =>
+                    _loadItems(page: 1, pageSize: value),
+              ),
+            ),
           ),
         ],
       ),

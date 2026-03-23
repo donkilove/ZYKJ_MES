@@ -328,8 +328,18 @@ void main() {
       ),
     );
 
-    expect(find.text('登录日志'), findsOneWidget);
-    expect(find.text('在线会话'), findsOneWidget);
+    expect(
+      find.byKey(const Key('login-session-tab-login-logs')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('login-session-tab-online-sessions')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('login-session-section-title-login-logs')),
+      findsOneWidget,
+    );
     expect(find.text('tester'), findsOneWidget);
   });
 
@@ -349,7 +359,10 @@ void main() {
       ),
     );
 
-    expect(find.text('登录日志'), findsOneWidget);
+    expect(
+      find.byKey(const Key('login-session-tab-login-logs')),
+      findsOneWidget,
+    );
     expect(find.text('在线会话'), findsNothing);
     expect(userService.listLoginLogsCalls, 1);
     expect(userService.listOnlineSessionsCalls, 0);

@@ -4,7 +4,9 @@ import '../models/app_session.dart';
 import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/user_service.dart';
+import '../widgets/adaptive_table_container.dart';
 import '../widgets/simple_pagination_bar.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 class AuditLogPage extends StatefulWidget {
   const AuditLogPage({
@@ -201,160 +203,267 @@ class _AuditLogPageState extends State<AuditLogPage> {
     _ColDef('终端信息', 160),
   ];
 
+  double get _tableWidth => _columns.fold(0, (sum, col) => sum + col.width);
+
+  int get _successCount =>
+      _items.where((item) => item.result.toLowerCase() == 'success').length;
+
+  int get _failureCount => _items.length - _successCount;
+
+  Widget _buildMetricChip(
+    ThemeData theme,
+    String label,
+    String value, {
+    Color? color,
+  }) {
+    final resolvedColor = color ?? theme.colorScheme.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: resolvedColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: resolvedColor.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: resolvedColor,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(label, style: theme.textTheme.labelMedium),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterPanel(ThemeData theme) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '筛选条件',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 180,
+                  child: TextField(
+                    controller: _operatorController,
+                    decoration: const InputDecoration(
+                      labelText: '操作人账号',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) => _loadAuditLogs(page: 1),
+                  ),
+                ),
+                SizedBox(
+                  width: 180,
+                  child: TextField(
+                    controller: _actionController,
+                    decoration: const InputDecoration(
+                      labelText: '操作编码',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) => _loadAuditLogs(page: 1),
+                  ),
+                ),
+                SizedBox(
+                  width: 180,
+                  child: TextField(
+                    controller: _targetController,
+                    decoration: const InputDecoration(
+                      labelText: '目标类型',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) => _loadAuditLogs(page: 1),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _pickDateRange,
+                  icon: const Icon(Icons.date_range, size: 16),
+                  label: Text(
+                    _startTime != null && _endTime != null
+                        ? '${_formatDate(_startTime)} ~ ${_formatDate(_endTime)}'
+                        : '选择时间范围',
+                  ),
+                ),
+                if (_startTime != null)
+                  TextButton.icon(
+                    onPressed: _clearDateRange,
+                    icon: const Icon(Icons.clear, size: 16),
+                    label: const Text('清除时间'),
+                  ),
+                FilledButton.icon(
+                  onPressed: () => _loadAuditLogs(page: 1),
+                  icon: const Icon(Icons.search, size: 16),
+                  label: const Text('查询'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableCard(ThemeData theme) {
+    final table = UnifiedListTableHeaderStyle.wrap(
+      theme: theme,
+      child: DataTable(
+        dataRowMinHeight: 58,
+        dataRowMaxHeight: 76,
+        columns: _columns
+            .map(
+              (col) => UnifiedListTableHeaderStyle.column(context, col.label),
+            )
+            .toList(),
+        rows: _items.map((item) {
+          final cells = [
+            formatDataCell(_formatDateTime(item.occurredAt)),
+            formatDataCell(item.operatorUsername ?? '-'),
+            formatDataCell(
+              '${item.targetType}: ${item.targetName ?? item.targetId ?? '-'}',
+            ),
+            formatDataCell(
+              item.actionName.isNotEmpty ? item.actionName : item.actionCode,
+            ),
+            DataCell(
+              Text(
+                _resultLabel(item.result),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: item.result.toLowerCase() == 'success'
+                      ? Colors.green
+                      : theme.colorScheme.error,
+                ),
+              ),
+            ),
+            formatDataCell(_formatMapData(item.beforeData)),
+            formatDataCell(_formatMapData(item.afterData)),
+            formatDataCell(item.ipAddress ?? '-'),
+            formatDataCell(item.terminalInfo ?? '-'),
+          ];
+          return DataRow(cells: cells);
+        }).toList(),
+      ),
+    );
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  '审计日志列表',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                _buildMetricChip(theme, '总记录', '$_total'),
+                _buildMetricChip(
+                  theme,
+                  '本页成功',
+                  '$_successCount',
+                  color: Colors.green,
+                ),
+                _buildMetricChip(
+                  theme,
+                  '本页失败',
+                  '$_failureCount',
+                  color: theme.colorScheme.error,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _items.isEmpty
+                ? const Center(child: Text('暂无数据'))
+                : AdaptiveTableContainer(
+                    minTableWidth: _tableWidth,
+                    padding: const EdgeInsets.all(12),
+                    child: table,
+                  ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+            child: SimplePaginationBar(
+              page: _page,
+              totalPages: _totalPages,
+              total: _total,
+              loading: _loading,
+              onPrevious: () => _loadAuditLogs(page: _page - 1),
+              onNext: () => _loadAuditLogs(page: _page + 1),
+              onPageChanged: (page) => _loadAuditLogs(page: page),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  DataCell formatDataCell(String value) {
+    return DataCell(
+      Tooltip(
+        message: value,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 180),
+          child: Text(value, maxLines: 2, overflow: TextOverflow.ellipsis),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      children: [
-        // 查询条件区
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _operatorController,
-                  decoration: const InputDecoration(
-                    labelText: '操作人账号',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadAuditLogs(page: 1),
-                ),
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildFilterPanel(theme),
+          if (_message.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
+              child: Text(
+                _message,
+                style: TextStyle(color: theme.colorScheme.error),
               ),
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _actionController,
-                  decoration: const InputDecoration(
-                    labelText: '操作编码',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadAuditLogs(page: 1),
-                ),
-              ),
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _targetController,
-                  decoration: const InputDecoration(
-                    labelText: '目标类型',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadAuditLogs(page: 1),
-                ),
-              ),
-              // 时间范围选择
-              OutlinedButton.icon(
-                onPressed: _pickDateRange,
-                icon: const Icon(Icons.date_range, size: 16),
-                label: Text(
-                  _startTime != null && _endTime != null
-                      ? '${_formatDate(_startTime)} ~ ${_formatDate(_endTime)}'
-                      : '选择时间范围',
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-              if (_startTime != null)
-                IconButton(
-                  onPressed: _clearDateRange,
-                  icon: const Icon(Icons.clear, size: 16),
-                  tooltip: '清除时间范围',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
-                  ),
-                ),
-              FilledButton(
-                onPressed: () => _loadAuditLogs(page: 1),
-                child: const Text('查询'),
-              ),
-            ],
-          ),
-        ),
-        if (_message.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(_message, style: const TextStyle(color: Colors.red)),
             ),
-          ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text('共 $_total 条'),
-          ),
-        ),
-        // 表头
-        Container(
-          color: theme.colorScheme.surfaceContainerHighest,
-          child: Row(
-            children: _columns
-                .map(
-                  (col) => SizedBox(
-                    width: col.width,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 8,
-                      ),
-                      child: Text(
-                        col.label,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-        const Divider(height: 1),
-        // 列表区
-        Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _items.isEmpty
-              ? const Center(child: Text('暂无数据'))
-              : ListView.separated(
-                  itemCount: _items.length,
-                  separatorBuilder: (_, _) =>
-                      const Divider(height: 1, indent: 8, endIndent: 8),
-                  itemBuilder: (context, index) {
-                    final item = _items[index];
-                    return _AuditLogRow(
-                      item: item,
-                      columns: _columns,
-                      formatDateTime: _formatDateTime,
-                      formatMapData: _formatMapData,
-                      resultLabel: _resultLabel,
-                    );
-                  },
-                ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: SimplePaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _loadAuditLogs(page: _page - 1),
-            onNext: () => _loadAuditLogs(page: _page + 1),
-          ),
-        ),
-      ],
+          const SizedBox(height: 12),
+          Expanded(child: _buildTableCard(theme)),
+        ],
+      ),
     );
   }
 }
@@ -363,55 +472,4 @@ class _ColDef {
   const _ColDef(this.label, this.width);
   final String label;
   final double width;
-}
-
-class _AuditLogRow extends StatelessWidget {
-  const _AuditLogRow({
-    required this.item,
-    required this.columns,
-    required this.formatDateTime,
-    required this.formatMapData,
-    required this.resultLabel,
-  });
-
-  final AuditLogItem item;
-  final List<_ColDef> columns;
-  final String Function(DateTime?) formatDateTime;
-  final String Function(Map<String, dynamic>?) formatMapData;
-  final String Function(String) resultLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final cells = [
-      formatDateTime(item.occurredAt),
-      item.operatorUsername ?? '-',
-      '${item.targetType}: ${item.targetName ?? item.targetId ?? '-'}',
-      item.actionName.isNotEmpty ? item.actionName : item.actionCode,
-      resultLabel(item.result),
-      formatMapData(item.beforeData),
-      formatMapData(item.afterData),
-      item.ipAddress ?? '-',
-      item.terminalInfo ?? '-',
-    ];
-
-    return Row(
-      children: List.generate(columns.length, (i) {
-        return SizedBox(
-          width: columns[i].width,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Tooltip(
-              message: cells[i],
-              child: Text(
-                cells[i],
-                style: const TextStyle(fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
-              ),
-            ),
-          ),
-        );
-      }),
-    );
-  }
 }

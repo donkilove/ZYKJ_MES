@@ -26,6 +26,8 @@ class EquipmentDetailPage extends StatefulWidget {
 }
 
 class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
+  static const double _desktopBreakpoint = 1200;
+
   late final EquipmentService _service;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _plansSectionKey = GlobalKey();
@@ -83,20 +85,364 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
 
   Widget _row(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              '$label：',
-              style: const TextStyle(fontWeight: FontWeight.w600),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF6B7280),
             ),
           ),
-          Expanded(child: SelectableText(value)),
+          const SizedBox(height: 4),
+          SelectableText(value),
         ],
       ),
+    );
+  }
+
+  Widget _metricTile(String label, String value, IconData icon) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 180),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF6B7280),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionCard({
+    required String title,
+    required Widget child,
+    Key? sectionKey,
+    String? subtitle,
+  }) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          key: sectionKey,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(subtitle, style: theme.textTheme.bodySmall),
+            ],
+            const SizedBox(height: 16),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryWorkbench(EquipmentDetailResult detail) {
+    final latestRecord = detail.recentRecords.isEmpty
+        ? null
+        : detail.recentRecords.first;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: 320,
+                    maxWidth: 520,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        detail.name,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          Chip(label: Text('编号 ${detail.code}')),
+                          Chip(
+                            label: Text(
+                              detail.isEnabled ? '设备状态 启用' : '设备状态 停用',
+                            ),
+                          ),
+                          Chip(
+                            label: Text(
+                              '位置 ${detail.location.isEmpty ? '-' : detail.location}',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                _metricTile(
+                  '启用计划数',
+                  '${detail.activePlanCount}',
+                  Icons.event_note_outlined,
+                ),
+                _metricTile(
+                  '待执行工单数',
+                  '${detail.pendingWorkOrderCount}',
+                  Icons.assignment_late_outlined,
+                ),
+                _metricTile(
+                  '最近保养时间',
+                  latestRecord == null
+                      ? '暂无'
+                      : _formatDate(latestRecord.completedAt),
+                  Icons.fact_check_outlined,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('equipment-detail-shortcut-work-orders'),
+                  onPressed: () => _scrollToSection(_workOrdersSectionKey),
+                  icon: const Icon(Icons.assignment_late_outlined),
+                  label: const Text('查看工单'),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('equipment-detail-shortcut-records'),
+                  onPressed: () => _scrollToSection(_recordsSectionKey),
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: const Text('查看记录'),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('equipment-detail-shortcut-plans'),
+                  onPressed: () => _scrollToSection(_plansSectionKey),
+                  icon: const Icon(Icons.event_note_outlined),
+                  label: const Text('查看计划'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBasicInfoCard(EquipmentDetailResult detail) {
+    final rows = [
+      _row('设备编号', detail.code),
+      _row('设备名称', detail.name),
+      _row('型号', detail.model.isEmpty ? '-' : detail.model),
+      _row('位置', detail.location.isEmpty ? '-' : detail.location),
+      _row('负责人', detail.ownerName.isEmpty ? '-' : detail.ownerName),
+      _row('状态', detail.isEnabled ? '启用' : '停用'),
+      _row('创建时间', _formatDate(detail.createdAt)),
+      _row('更新时间', _formatDate(detail.updatedAt)),
+      _row('备注', detail.remark.isEmpty ? '-' : detail.remark),
+    ];
+    return _sectionCard(
+      title: '基础信息',
+      subtitle: '保留原业务字段，只调整为桌面详情卡布局。',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 720;
+          if (!wide) {
+            return Column(children: rows);
+          }
+          return Wrap(
+            spacing: 24,
+            runSpacing: 0,
+            children: rows
+                .map(
+                  (row) => SizedBox(
+                    width: (constraints.maxWidth - 24) / 2,
+                    child: row,
+                  ),
+                )
+                .toList(),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPlanList(EquipmentDetailResult detail) {
+    if (detail.activePlans.isEmpty) {
+      return Text(
+        detail.activePlansScopeLimited ? '当前权限范围内暂无可见启用保养计划' : '暂无启用保养计划',
+      );
+    }
+    return Column(
+      children: detail.activePlans
+          .map(
+            (plan) => Card(
+              elevation: 0,
+              margin: const EdgeInsets.only(bottom: 12),
+              color: const Color(0xFFF8FAFC),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              child: ListTile(
+                title: Text('${plan.itemName} / ${plan.executionProcessName}'),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '下次到期：${_formatDate(plan.nextDueDate)}｜默认执行人：${plan.defaultExecutorUsername ?? '-'}',
+                  ),
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildWorkOrderList(EquipmentDetailResult detail) {
+    if (detail.pendingWorkOrders.isEmpty) {
+      return Text(
+        detail.pendingWorkOrdersScopeLimited ? '当前权限范围内暂无可见未完成工单' : '暂无未完成工单',
+      );
+    }
+    return Column(
+      children: detail.pendingWorkOrders
+          .map(
+            (order) => Card(
+              elevation: 0,
+              margin: const EdgeInsets.only(bottom: 12),
+              color: const Color(0xFFF8FAFC),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              child: ListTile(
+                title: Text('#${order.id} ${order.itemName}'),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '工段：${order.sourceExecutionProcessCode ?? '-'}｜到期：${_formatDate(order.dueDate)}｜状态：${order.status}',
+                  ),
+                ),
+                trailing: TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => MaintenanceExecutionDetailPage(
+                          session: widget.session,
+                          onLogout: widget.onLogout,
+                          workOrderId: order.id,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('查看'),
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildRecordList(EquipmentDetailResult detail) {
+    if (detail.recentRecords.isEmpty) {
+      return Text(
+        detail.recentRecordsScopeLimited ? '当前权限范围内暂无可见保养记录' : '暂无保养记录',
+      );
+    }
+    return Column(
+      children: detail.recentRecords
+          .map(
+            (record) => Card(
+              elevation: 0,
+              margin: const EdgeInsets.only(bottom: 12),
+              color: const Color(0xFFF8FAFC),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              child: ListTile(
+                title: Text(record.itemName),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '完成：${_formatDate(record.completedAt)}｜结果：${record.resultSummary}｜执行人：${record.executorUsername ?? '-'}',
+                  ),
+                ),
+                trailing: TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => MaintenanceRecordDetailPage(
+                          session: widget.session,
+                          onLogout: widget.onLogout,
+                          recordId: record.id,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('查看'),
+                ),
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -201,9 +547,7 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
                   color: const Color(0xFFFFEDD5),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text(
-                  '当前详情仅展示你在计划、执行与记录范围内可见的数据，不能替代全量排程复核。',
-                ),
+                child: const Text('当前详情仅展示你在计划、执行与记录范围内可见的数据，不能替代全量排程复核。'),
               ),
             Wrap(
               spacing: 8,
@@ -237,31 +581,6 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                OutlinedButton.icon(
-                  key: const Key('equipment-detail-shortcut-work-orders'),
-                  onPressed: () => _scrollToSection(_workOrdersSectionKey),
-                  icon: const Icon(Icons.assignment_late_outlined),
-                  label: const Text('查看工单'),
-                ),
-                OutlinedButton.icon(
-                  key: const Key('equipment-detail-shortcut-records'),
-                  onPressed: () => _scrollToSection(_recordsSectionKey),
-                  icon: const Icon(Icons.fact_check_outlined),
-                  label: const Text('查看记录'),
-                ),
-                OutlinedButton.icon(
-                  key: const Key('equipment-detail-shortcut-plans'),
-                  onPressed: () => _scrollToSection(_plansSectionKey),
-                  icon: const Icon(Icons.event_note_outlined),
-                  label: const Text('查看计划'),
-                ),
-              ],
-            ),
           ],
         ),
       ),
@@ -277,126 +596,59 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
           ? const Center(child: CircularProgressIndicator())
           : detail == null
           ? Center(child: Text(_message.isEmpty ? '加载失败' : _message))
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListView(
-                controller: _scrollController,
-                children: [
-                  _buildRiskOverview(detail),
-                  const SizedBox(height: 16),
-                  _row('设备编号', detail.code),
-                  _row('设备名称', detail.name),
-                  _row('型号', detail.model.isEmpty ? '-' : detail.model),
-                  _row('位置', detail.location.isEmpty ? '-' : detail.location),
-                  _row(
-                    '负责人',
-                    detail.ownerName.isEmpty ? '-' : detail.ownerName,
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final isDesktop = constraints.maxWidth >= _desktopBreakpoint;
+                final riskCard = _buildRiskOverview(detail);
+                final basicInfoCard = _buildBasicInfoCard(detail);
+                final plansCard = _sectionCard(
+                  title: '关联计划',
+                  sectionKey: _plansSectionKey,
+                  subtitle: '保留原有查看口径，强化桌面场景的摘要式浏览。',
+                  child: _buildPlanList(detail),
+                );
+                final workOrdersCard = _sectionCard(
+                  title: '未完成工单',
+                  sectionKey: _workOrdersSectionKey,
+                  child: _buildWorkOrderList(detail),
+                );
+                final recordsCard = _sectionCard(
+                  title: '最近保养记录',
+                  sectionKey: _recordsSectionKey,
+                  child: _buildRecordList(detail),
+                );
+
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: ListView(
+                    controller: _scrollController,
+                    children: [
+                      _buildSummaryWorkbench(detail),
+                      const SizedBox(height: 16),
+                      if (isDesktop)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(flex: 7, child: basicInfoCard),
+                            const SizedBox(width: 16),
+                            Expanded(flex: 5, child: riskCard),
+                          ],
+                        )
+                      else ...[
+                        basicInfoCard,
+                        const SizedBox(height: 16),
+                        riskCard,
+                      ],
+                      const SizedBox(height: 16),
+                      plansCard,
+                      const SizedBox(height: 16),
+                      workOrdersCard,
+                      const SizedBox(height: 16),
+                      recordsCard,
+                    ],
                   ),
-                  _row('状态', detail.isEnabled ? '启用' : '停用'),
-                  _row('备注', detail.remark.isEmpty ? '-' : detail.remark),
-                  _row('启用计划数', '${detail.activePlanCount}'),
-                  _row('待执行工单数', '${detail.pendingWorkOrderCount}'),
-                  const Divider(height: 24),
-                  Text(
-                    '关联计划',
-                    key: _plansSectionKey,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  if (detail.activePlans.isEmpty)
-                    Text(
-                      detail.activePlansScopeLimited
-                          ? '当前权限范围内暂无可见启用保养计划'
-                          : '暂无启用保养计划',
-                    )
-                  else
-                    ...detail.activePlans.map(
-                      (plan) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          '${plan.itemName} / ${plan.executionProcessName}',
-                        ),
-                        subtitle: Text(
-                          '下次到期：${_formatDate(plan.nextDueDate)}｜默认执行人：${plan.defaultExecutorUsername ?? '-'}',
-                        ),
-                      ),
-                    ),
-                  const Divider(height: 24),
-                  Text(
-                    '未完成工单',
-                    key: _workOrdersSectionKey,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  if (detail.pendingWorkOrders.isEmpty)
-                    Text(
-                      detail.pendingWorkOrdersScopeLimited
-                          ? '当前权限范围内暂无可见未完成工单'
-                          : '暂无未完成工单',
-                    )
-                  else
-                    ...detail.pendingWorkOrders.map(
-                      (order) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text('#${order.id} ${order.itemName}'),
-                        subtitle: Text(
-                          '工段：${order.sourceExecutionProcessCode ?? '-'}｜到期：${_formatDate(order.dueDate)}｜状态：${order.status}',
-                        ),
-                        trailing: TextButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => MaintenanceExecutionDetailPage(
-                                  session: widget.session,
-                                  onLogout: widget.onLogout,
-                                  workOrderId: order.id,
-                                ),
-                              ),
-                            );
-                          },
-                          child: const Text('查看'),
-                        ),
-                      ),
-                    ),
-                  const Divider(height: 24),
-                  Text(
-                    '最近保养记录',
-                    key: _recordsSectionKey,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  if (detail.recentRecords.isEmpty)
-                    Text(
-                      detail.recentRecordsScopeLimited
-                          ? '当前权限范围内暂无可见保养记录'
-                          : '暂无保养记录',
-                    )
-                  else
-                    ...detail.recentRecords.map(
-                      (record) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(record.itemName),
-                        subtitle: Text(
-                          '完成：${_formatDate(record.completedAt)}｜结果：${record.resultSummary}｜执行人：${record.executorUsername ?? '-'}',
-                        ),
-                        trailing: TextButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => MaintenanceRecordDetailPage(
-                                  session: widget.session,
-                                  onLogout: widget.onLogout,
-                                  recordId: record.id,
-                                ),
-                              ),
-                            );
-                          },
-                          child: const Text('查看'),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+                );
+              },
             ),
     );
   }

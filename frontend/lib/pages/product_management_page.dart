@@ -8,6 +8,7 @@ import '../services/api_exception.dart';
 import '../services/product_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
@@ -70,6 +71,8 @@ class ProductManagementPage extends StatefulWidget {
 }
 
 class _ProductManagementPageState extends State<ProductManagementPage> {
+  static const List<int> _pageSizeOptions = [20, 50, 100];
+
   late final ProductService _productService;
   final TextEditingController _keywordController = TextEditingController();
 
@@ -80,8 +83,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   String _selectedEffectiveVersionFilter = '';
   DateTime? _updatedAfter;
   DateTime? _updatedBefore;
+  int _page = 1;
+  int _pageSize = 50;
   int _total = 0;
   List<ProductItem> _products = const [];
+
+  int get _totalPages => _total == 0 ? 1 : ((_total - 1) ~/ _pageSize) + 1;
 
   @override
   void initState() {
@@ -1235,16 +1242,18 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     dialogClosed = true;
   }
 
-  Future<void> _loadProducts() async {
+  Future<void> _loadProducts({int? page}) async {
+    final targetPage = page ?? _page;
     setState(() {
+      _page = targetPage;
       _loading = true;
       _message = '';
     });
 
     try {
       final result = await _productService.listProducts(
-        page: 1,
-        pageSize: 100,
+        page: targetPage,
+        pageSize: _pageSize,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         lifecycleStatus: _selectedStatusFilter,
@@ -1262,6 +1271,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       setState(() {
         _products = result.items;
         _total = result.total;
+        final resolvedTotalPages = result.total == 0
+            ? 1
+            : ((result.total - 1) ~/ _pageSize) + 1;
+        if (_page > resolvedTotalPages) {
+          _page = resolvedTotalPages;
+        }
       });
     } catch (error) {
       if (!mounted) {
@@ -2277,207 +2292,245 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '搜索产品名称',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadProducts(),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedCategoryFilter,
-                  decoration: const InputDecoration(
-                    labelText: '分类筛选',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    ..._productCategoryOptions.map(
-                      (category) => DropdownMenuItem<String>(
-                        value: category,
-                        child: Text(category),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 320,
+                        child: TextField(
+                          controller: _keywordController,
+                          decoration: const InputDecoration(
+                            labelText: '搜索产品名称',
+                            border: OutlineInputBorder(),
+                          ),
+                          onSubmitted: (_) => _loadProducts(page: 1),
+                        ),
                       ),
-                    ),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _selectedCategoryFilter = value ?? '';
-                          });
-                          _loadProducts();
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedStatusFilter,
-                  decoration: const InputDecoration(
-                    labelText: '状态筛选',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    DropdownMenuItem<String>(
-                      value: 'active',
-                      child: Text('启用'),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: 'inactive',
-                      child: Text('停用'),
-                    ),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _selectedStatusFilter = value ?? '';
-                          });
-                          _loadProducts();
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedEffectiveVersionFilter,
-                  decoration: const InputDecoration(
-                    labelText: '生效版本',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    DropdownMenuItem<String>(
-                      value: 'yes',
-                      child: Text('有生效版本'),
-                    ),
-                    DropdownMenuItem<String>(value: 'no', child: Text('无生效版本')),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _selectedEffectiveVersionFilter = value ?? '';
-                          });
-                          _loadProducts();
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading ? null : _loadProducts,
-                icon: const Icon(Icons.search),
-                label: const Text('搜索'),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: _loading || !widget.canExportProducts
-                    ? null
-                    : _exportProducts,
-                icon: const Icon(Icons.download),
-                label: const Text('导出'),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading || !widget.canCreateProduct
-                    ? null
-                    : _showCreateProductDialog,
-                icon: const Icon(Icons.add),
-                label: const Text('添加产品'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate:
-                              _updatedAfter ??
-                              DateTime.now().subtract(const Duration(days: 30)),
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                          helpText: '选择更新起始日期',
-                        );
-                        if (picked != null) {
-                          setState(() => _updatedAfter = picked);
-                          _loadProducts();
-                        }
-                      },
-                icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(
-                  _updatedAfter != null
-                      ? '起始：${_formatTime(_updatedAfter!).substring(0, 10)}'
-                      : '更新起始日期',
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: _updatedBefore ?? DateTime.now(),
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now().add(const Duration(days: 1)),
-                          helpText: '选择更新截止日期',
-                        );
-                        if (picked != null) {
-                          setState(
-                            () => _updatedBefore = DateTime(
-                              picked.year,
-                              picked.month,
-                              picked.day,
-                              23,
-                              59,
-                              59,
+                      SizedBox(
+                        width: 180,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selectedCategoryFilter,
+                          decoration: const InputDecoration(
+                            labelText: '分类筛选',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            DropdownMenuItem<String>(
+                              value: '',
+                              child: Text('全部'),
                             ),
-                          );
-                          _loadProducts();
-                        }
-                      },
-                icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(
-                  _updatedBefore != null
-                      ? '截止：${_formatTime(_updatedBefore!).substring(0, 10)}'
-                      : '更新截止日期',
-                ),
+                            ..._productCategoryOptions.map(
+                              (category) => DropdownMenuItem<String>(
+                                value: category,
+                                child: Text(category),
+                              ),
+                            ),
+                          ],
+                          onChanged: _loading
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    _selectedCategoryFilter = value ?? '';
+                                  });
+                                  _loadProducts(page: 1);
+                                },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 140,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selectedStatusFilter,
+                          decoration: const InputDecoration(
+                            labelText: '状态筛选',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem<String>(
+                              value: '',
+                              child: Text('全部'),
+                            ),
+                            DropdownMenuItem<String>(
+                              value: 'active',
+                              child: Text('启用'),
+                            ),
+                            DropdownMenuItem<String>(
+                              value: 'inactive',
+                              child: Text('停用'),
+                            ),
+                          ],
+                          onChanged: _loading
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    _selectedStatusFilter = value ?? '';
+                                  });
+                                  _loadProducts(page: 1);
+                                },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 160,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selectedEffectiveVersionFilter,
+                          decoration: const InputDecoration(
+                            labelText: '生效版本',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem<String>(
+                              value: '',
+                              child: Text('全部'),
+                            ),
+                            DropdownMenuItem<String>(
+                              value: 'yes',
+                              child: Text('有生效版本'),
+                            ),
+                            DropdownMenuItem<String>(
+                              value: 'no',
+                              child: Text('无生效版本'),
+                            ),
+                          ],
+                          onChanged: _loading
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    _selectedEffectiveVersionFilter =
+                                        value ?? '';
+                                  });
+                                  _loadProducts(page: 1);
+                                },
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _loading
+                            ? null
+                            : () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate:
+                                      _updatedAfter ??
+                                      DateTime.now().subtract(
+                                        const Duration(days: 30),
+                                      ),
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime.now(),
+                                  helpText: '选择更新起始日期',
+                                );
+                                if (picked != null) {
+                                  setState(() => _updatedAfter = picked);
+                                  _loadProducts(page: 1);
+                                }
+                              },
+                        icon: const Icon(Icons.calendar_today, size: 16),
+                        label: Text(
+                          _updatedAfter != null
+                              ? '起始：${_formatTime(_updatedAfter!).substring(0, 10)}'
+                              : '更新起始日期',
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _loading
+                            ? null
+                            : () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: _updatedBefore ?? DateTime.now(),
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 1),
+                                  ),
+                                  helpText: '选择更新截止日期',
+                                );
+                                if (picked != null) {
+                                  setState(
+                                    () => _updatedBefore = DateTime(
+                                      picked.year,
+                                      picked.month,
+                                      picked.day,
+                                      23,
+                                      59,
+                                      59,
+                                    ),
+                                  );
+                                  _loadProducts(page: 1);
+                                }
+                              },
+                        icon: const Icon(Icons.calendar_today, size: 16),
+                        label: Text(
+                          _updatedBefore != null
+                              ? '截止：${_formatTime(_updatedBefore!).substring(0, 10)}'
+                              : '更新截止日期',
+                        ),
+                      ),
+                      if (_updatedAfter != null || _updatedBefore != null)
+                        TextButton(
+                          onPressed: _loading
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _updatedAfter = null;
+                                    _updatedBefore = null;
+                                  });
+                                  _loadProducts(page: 1);
+                                },
+                          child: const Text('清除日期'),
+                        ),
+                      FilledButton.icon(
+                        onPressed: _loading
+                            ? null
+                            : () => _loadProducts(page: 1),
+                        icon: const Icon(Icons.search),
+                        label: const Text('搜索'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _loading || !widget.canExportProducts
+                            ? null
+                            : _exportProducts,
+                        icon: const Icon(Icons.download),
+                        label: const Text('导出'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: _loading || !widget.canCreateProduct
+                            ? null
+                            : _showCreateProductDialog,
+                        icon: const Icon(Icons.add),
+                        label: const Text('添加产品'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              if (_updatedAfter != null || _updatedBefore != null) ...[
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: _loading
-                      ? null
-                      : () {
-                          setState(() {
-                            _updatedAfter = null;
-                            _updatedBefore = null;
-                          });
-                          _loadProducts();
-                        },
-                  child: const Text('清除日期'),
-                ),
-              ],
-            ],
+            ),
           ),
           const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            pageSize: _pageSize,
+            pageSizeOptions: _pageSizeOptions,
+            onPageChanged: (value) => _loadProducts(page: value),
+            onPageSizeChanged: (value) {
+              if (value == _pageSize) {
+                return;
+              }
+              setState(() {
+                _pageSize = value;
+                _page = 1;
+              });
+              _loadProducts(page: 1);
+            },
+            onPrevious: () => _loadProducts(page: _page - 1),
+            onNext: () => _loadProducts(page: _page + 1),
+          ),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -2496,6 +2549,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                 ? const Center(child: Text('暂无产品'))
                 : Card(
                     child: AdaptiveTableContainer(
+                      minTableWidth: 1440,
                       child: UnifiedListTableHeaderStyle.wrap(
                         theme: theme,
                         child: DataTable(

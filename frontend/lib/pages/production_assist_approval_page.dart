@@ -7,6 +7,10 @@ import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/simple_pagination_bar.dart';
+import '../widgets/unified_list_table_header_style.dart';
+
+enum _AssistApprovalAction { detail, approve, reject }
 
 class ProductionAssistApprovalPage extends StatefulWidget {
   const ProductionAssistApprovalPage({
@@ -31,11 +35,14 @@ class ProductionAssistApprovalPage extends StatefulWidget {
 
 class _ProductionAssistApprovalPageState
     extends State<ProductionAssistApprovalPage> {
+  static const int _pageSize = 20;
+
   late final ProductionService _service;
 
   bool _loading = false;
   String _message = '';
   String? _statusFilter = 'pending';
+  int _page = 1;
   int _total = 0;
   List<AssistAuthorizationItem> _items = const [];
   String? _lastHandledRoutePayloadJson;
@@ -111,36 +118,85 @@ class _ProductionAssistApprovalPageState
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
+  int get _totalPages {
+    if (_total <= 0) {
+      return 1;
+    }
+    return ((_total - 1) ~/ _pageSize) + 1;
+  }
+
   void _showDetail(BuildContext context, AssistAuthorizationItem item) {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('代班申请详情'),
         content: SizedBox(
-          width: 400,
-          child: Table(
-            columnWidths: const {
-              0: IntrinsicColumnWidth(),
-              1: FlexColumnWidth(),
-            },
-            children: [
-              _detailRow('订单号', item.orderCode),
-              _detailRow('工序', item.processName),
-              _detailRow('目标操作员', item.targetOperatorUsername),
-              _detailRow('发起人', item.requesterUsername),
-              _detailRow('代班人', item.helperUsername),
-              _detailRow('状态', assistAuthorizationStatusLabel(item.status)),
-              _detailRow('申请原因', item.reason ?? '-'),
-              _detailRow('审批人', item.reviewerUsername ?? '-'),
-              _detailRow(
-                '审批时间',
-                item.reviewedAt != null
-                    ? _formatDateTime(item.reviewedAt!)
-                    : '-',
-              ),
-              _detailRow('审批备注', item.reviewRemark ?? '-'),
-              _detailRow('创建时间', _formatDateTime(item.createdAt)),
-            ],
+          width: 720,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Wrap(
+                      spacing: 24,
+                      runSpacing: 12,
+                      children: [
+                        _detailValue('订单号', item.orderCode),
+                        _detailValue('工序', item.processName),
+                        _detailValue(
+                          '状态',
+                          assistAuthorizationStatusLabel(item.status),
+                        ),
+                        _detailValue('创建时间', _formatDateTime(item.createdAt)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Table(
+                      columnWidths: const {
+                        0: IntrinsicColumnWidth(),
+                        1: FlexColumnWidth(),
+                      },
+                      children: [
+                        _detailRow('目标操作员', item.targetOperatorUsername),
+                        _detailRow('发起人', item.requesterUsername),
+                        _detailRow('代班人', item.helperUsername),
+                        _detailRow('申请原因', item.reason ?? '-'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Table(
+                      columnWidths: const {
+                        0: IntrinsicColumnWidth(),
+                        1: FlexColumnWidth(),
+                      },
+                      children: [
+                        _detailRow('审批人', item.reviewerUsername ?? '-'),
+                        _detailRow(
+                          '审批时间',
+                          item.reviewedAt != null
+                              ? _formatDateTime(item.reviewedAt!)
+                              : '-',
+                        ),
+                        _detailRow('审批备注', item.reviewRemark ?? '-'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -165,6 +221,21 @@ class _ProductionAssistApprovalPageState
           child: Text(value),
         ),
       ],
+    );
+  }
+
+  Widget _detailValue(String label, String value) {
+    return SizedBox(
+      width: 148,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey)),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
+      ),
     );
   }
 
@@ -283,15 +354,17 @@ class _ProductionAssistApprovalPageState
     }
   }
 
-  Future<void> _loadRows() async {
+  Future<void> _loadRows({int? page}) async {
+    final targetPage = page ?? _page;
     setState(() {
       _loading = true;
       _message = '';
+      _page = targetPage;
     });
     try {
       final result = await _service.listAssistAuthorizations(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         status: _statusFilter,
         orderCode: _orderCodeController.text.trim().isEmpty
             ? null
@@ -311,11 +384,22 @@ class _ProductionAssistApprovalPageState
       if (!mounted) {
         return;
       }
+      var resolvedPage = targetPage;
+      final resolvedTotalPages = result.total <= 0
+          ? 1
+          : (((result.total - 1) ~/ _pageSize) + 1);
+      if (resolvedPage > resolvedTotalPages) {
+        resolvedPage = resolvedTotalPages;
+      }
       setState(() {
         _items = result.items;
         _total = result.total;
+        _page = resolvedPage;
       });
       _tryAutoOpenDetail();
+      if (resolvedPage != targetPage) {
+        await _loadRows(page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -339,6 +423,9 @@ class _ProductionAssistApprovalPageState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final buttonStyle = UnifiedListTableHeaderStyle.toolbarActionButtonStyle(
+      theme,
+    );
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -353,49 +440,6 @@ class _ProductionAssistApprovalPageState
                 ),
               ),
               const Spacer(),
-              SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<String?>(
-                  key: ValueKey<String?>(_statusFilter),
-                  initialValue: _statusFilter,
-                  decoration: const InputDecoration(
-                    labelText: '状态筛选',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: const [
-                    DropdownMenuItem<String?>(value: null, child: Text('全部')),
-                    DropdownMenuItem<String?>(
-                      value: 'pending',
-                      child: Text('待审批'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'approved',
-                      child: Text('已审批'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'rejected',
-                      child: Text('已拒绝'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'consumed',
-                      child: Text('已消耗'),
-                    ),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          if (value == _statusFilter) {
-                            return;
-                          }
-                          setState(() {
-                            _statusFilter = value;
-                          });
-                          _loadRows();
-                        },
-                ),
-              ),
-              const SizedBox(width: 8),
               IconButton(
                 tooltip: '刷新',
                 onPressed: _loading ? null : _loadRows,
@@ -403,104 +447,177 @@ class _ProductionAssistApprovalPageState
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _orderCodeController,
-                  decoration: const InputDecoration(
-                    labelText: '订单号',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadRows(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _processNameController,
-                  decoration: const InputDecoration(
-                    labelText: '工序名称',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadRows(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 140,
-                child: TextField(
-                  controller: _requesterController,
-                  decoration: const InputDecoration(
-                    labelText: '发起人',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadRows(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 140,
-                child: TextField(
-                  controller: _helperController,
-                  decoration: const InputDecoration(
-                    labelText: '代班人',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadRows(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.date_range, size: 16),
-                label: Text(
-                  '创建时间：${_createdAtFrom == null ? '不限' : _formatDate(_createdAtFrom!)} ~ ${_createdAtTo == null ? '不限' : _formatDate(_createdAtTo!)}',
-                ),
-                onPressed: () async {
-                  final ctx = context;
-                  final from = await _pickDate(ctx, _createdAtFrom);
-                  if (from == null || !mounted) return;
-                  // ignore: use_build_context_synchronously
-                  final to = await _pickDate(ctx, _createdAtTo ?? from);
-                  if (!mounted) return;
-                  setState(() {
-                    _createdAtFrom = from;
-                    _createdAtTo = to;
-                  });
-                  _loadRows();
-                },
-              ),
-              if (_createdAtFrom != null || _createdAtTo != null) ...[
-                const SizedBox(width: 4),
-                TextButton.icon(
-                  icon: const Icon(Icons.clear, size: 16),
-                  label: const Text('清除'),
-                  onPressed: () {
-                    setState(() {
-                      _createdAtFrom = null;
-                      _createdAtTo = null;
-                    });
-                    _loadRows();
-                  },
-                ),
-              ],
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _loading ? null : _loadRows,
-                icon: const Icon(Icons.search, size: 16),
-                label: const Text('查询'),
-              ),
-            ],
-          ),
           const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: 180,
+                        child: DropdownButtonFormField<String?>(
+                          key: ValueKey<String?>(_statusFilter),
+                          initialValue: _statusFilter,
+                          decoration: const InputDecoration(
+                            labelText: '状态筛选',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: const [
+                            DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('全部'),
+                            ),
+                            DropdownMenuItem<String?>(
+                              value: 'pending',
+                              child: Text('待审批'),
+                            ),
+                            DropdownMenuItem<String?>(
+                              value: 'approved',
+                              child: Text('已审批'),
+                            ),
+                            DropdownMenuItem<String?>(
+                              value: 'rejected',
+                              child: Text('已拒绝'),
+                            ),
+                            DropdownMenuItem<String?>(
+                              value: 'consumed',
+                              child: Text('已消耗'),
+                            ),
+                          ],
+                          onChanged: _loading
+                              ? null
+                              : (value) {
+                                  if (value == _statusFilter) {
+                                    return;
+                                  }
+                                  setState(() {
+                                    _statusFilter = value;
+                                    _page = 1;
+                                  });
+                                  _loadRows(page: 1);
+                                },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 160,
+                        child: TextField(
+                          controller: _orderCodeController,
+                          decoration: const InputDecoration(
+                            labelText: '订单号',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onSubmitted: (_) => _loadRows(page: 1),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 160,
+                        child: TextField(
+                          controller: _processNameController,
+                          decoration: const InputDecoration(
+                            labelText: '工序名称',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onSubmitted: (_) => _loadRows(page: 1),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 140,
+                        child: TextField(
+                          controller: _requesterController,
+                          decoration: const InputDecoration(
+                            labelText: '发起人',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onSubmitted: (_) => _loadRows(page: 1),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 140,
+                        child: TextField(
+                          controller: _helperController,
+                          decoration: const InputDecoration(
+                            labelText: '代班人',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onSubmitted: (_) => _loadRows(page: 1),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        style: buttonStyle,
+                        icon: const Icon(Icons.date_range, size: 16),
+                        label: Text(
+                          '创建时间：${_createdAtFrom == null ? '不限' : _formatDate(_createdAtFrom!)} ~ ${_createdAtTo == null ? '不限' : _formatDate(_createdAtTo!)}',
+                        ),
+                        onPressed: () async {
+                          final ctx = context;
+                          final from = await _pickDate(ctx, _createdAtFrom);
+                          if (from == null || !mounted) {
+                            return;
+                          }
+                          // ignore: use_build_context_synchronously
+                          final to = await _pickDate(ctx, _createdAtTo ?? from);
+                          if (!mounted) {
+                            return;
+                          }
+                          setState(() {
+                            _createdAtFrom = from;
+                            _createdAtTo = to;
+                            _page = 1;
+                          });
+                          _loadRows(page: 1);
+                        },
+                      ),
+                      FilledButton.icon(
+                        onPressed: _loading ? null : () => _loadRows(page: 1),
+                        icon: const Icon(Icons.search, size: 16),
+                        label: const Text('查询'),
+                      ),
+                      OutlinedButton.icon(
+                        style: buttonStyle,
+                        icon: const Icon(Icons.restart_alt, size: 16),
+                        label: const Text('重置'),
+                        onPressed: _loading
+                            ? null
+                            : () {
+                                _orderCodeController.clear();
+                                _processNameController.clear();
+                                _requesterController.clear();
+                                _helperController.clear();
+                                setState(() {
+                                  _statusFilter = 'pending';
+                                  _createdAtFrom = null;
+                                  _createdAtTo = null;
+                                  _page = 1;
+                                });
+                                _loadRows(page: 1);
+                              },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      Text('总数：$_total'),
+                      Text('当前页：$_page / $_totalPages'),
+                      Text('每页：$_pageSize 条'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -528,77 +645,155 @@ class _ProductionAssistApprovalPageState
                 : _items.isEmpty
                 ? const Center(child: Text('暂无代班记录'))
                 : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('订单号')),
-                          DataColumn(label: Text('工序')),
-                          DataColumn(label: Text('目标操作员')),
-                          DataColumn(label: Text('发起人')),
-                          DataColumn(label: Text('代班人')),
-                          DataColumn(label: Text('状态')),
-                          DataColumn(label: Text('审批人')),
-                          DataColumn(label: Text('审批时间')),
-                          DataColumn(label: Text('创建时间')),
-                          DataColumn(label: Text('操作')),
-                        ],
-                        rows: _items.map((item) {
-                          final isPending = item.status == 'pending';
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(item.orderCode)),
-                              DataCell(Text(item.processName)),
-                              DataCell(Text(item.targetOperatorUsername)),
-                              DataCell(Text(item.requesterUsername)),
-                              DataCell(Text(item.helperUsername)),
-                              DataCell(
-                                Text(
-                                  assistAuthorizationStatusLabel(item.status),
-                                ),
-                              ),
-                              DataCell(Text(item.reviewerUsername ?? '-')),
-                              DataCell(
-                                Text(
-                                  item.reviewedAt != null
-                                      ? _formatDateTime(item.reviewedAt!)
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(Text(_formatDateTime(item.createdAt))),
-                              DataCell(
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          _showDetail(context, item),
-                                      child: const Text('详情'),
-                                    ),
-                                    if (isPending && widget.canReview) ...[
-                                      const SizedBox(width: 4),
-                                      TextButton(
-                                        onPressed: () => _reviewRow(item, true),
-                                        child: const Text('通过'),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: UnifiedListTableHeaderStyle.wrap(
+                            theme: theme,
+                            child: AdaptiveTableContainer(
+                              child: DataTable(
+                                columns: [
+                                  UnifiedListTableHeaderStyle.column(
+                                    context,
+                                    '订单号',
+                                  ),
+                                  UnifiedListTableHeaderStyle.column(
+                                    context,
+                                    '工序',
+                                  ),
+                                  UnifiedListTableHeaderStyle.column(
+                                    context,
+                                    '目标操作员',
+                                  ),
+                                  UnifiedListTableHeaderStyle.column(
+                                    context,
+                                    '发起人',
+                                  ),
+                                  UnifiedListTableHeaderStyle.column(
+                                    context,
+                                    '代班人',
+                                  ),
+                                  UnifiedListTableHeaderStyle.column(
+                                    context,
+                                    '状态',
+                                  ),
+                                  UnifiedListTableHeaderStyle.column(
+                                    context,
+                                    '审批人',
+                                  ),
+                                  UnifiedListTableHeaderStyle.column(
+                                    context,
+                                    '审批时间',
+                                  ),
+                                  UnifiedListTableHeaderStyle.column(
+                                    context,
+                                    '创建时间',
+                                  ),
+                                  UnifiedListTableHeaderStyle.column(
+                                    context,
+                                    '操作',
+                                  ),
+                                ],
+                                rows: _items.map((item) {
+                                  final isPending = item.status == 'pending';
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(Text(item.orderCode)),
+                                      DataCell(Text(item.processName)),
+                                      DataCell(
+                                        Text(item.targetOperatorUsername),
                                       ),
-                                      const SizedBox(width: 4),
-                                      TextButton(
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: Theme.of(
-                                            context,
-                                          ).colorScheme.error,
+                                      DataCell(Text(item.requesterUsername)),
+                                      DataCell(Text(item.helperUsername)),
+                                      DataCell(
+                                        Text(
+                                          assistAuthorizationStatusLabel(
+                                            item.status,
+                                          ),
                                         ),
-                                        onPressed: () =>
-                                            _reviewRow(item, false),
-                                        child: const Text('拒绝'),
+                                      ),
+                                      DataCell(
+                                        Text(item.reviewerUsername ?? '-'),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          item.reviewedAt != null
+                                              ? _formatDateTime(
+                                                  item.reviewedAt!,
+                                                )
+                                              : '-',
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(_formatDateTime(item.createdAt)),
+                                      ),
+                                      DataCell(
+                                        UnifiedListTableHeaderStyle.actionMenuButton<
+                                          _AssistApprovalAction
+                                        >(
+                                          theme: theme,
+                                          onSelected: (action) {
+                                            switch (action) {
+                                              case _AssistApprovalAction.detail:
+                                                _showDetail(context, item);
+                                                break;
+                                              case _AssistApprovalAction
+                                                  .approve:
+                                                _reviewRow(item, true);
+                                                break;
+                                              case _AssistApprovalAction.reject:
+                                                _reviewRow(item, false);
+                                                break;
+                                            }
+                                          },
+                                          itemBuilder: (_) => [
+                                            const PopupMenuItem(
+                                              value:
+                                                  _AssistApprovalAction.detail,
+                                              child: Text('查看详情'),
+                                            ),
+                                            PopupMenuItem(
+                                              value:
+                                                  _AssistApprovalAction.approve,
+                                              enabled:
+                                                  isPending && widget.canReview,
+                                              child: const Text('审批通过'),
+                                            ),
+                                            PopupMenuItem(
+                                              value:
+                                                  _AssistApprovalAction.reject,
+                                              enabled:
+                                                  isPending && widget.canReview,
+                                              child: const Text('审批拒绝'),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
-                                  ],
-                                ),
+                                  );
+                                }).toList(),
                               ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          child: SimplePaginationBar(
+                            page: _page,
+                            totalPages: _totalPages,
+                            total: _total,
+                            loading: _loading,
+                            pageSize: _pageSize,
+                            onPrevious: _page <= 1
+                                ? null
+                                : () => _loadRows(page: _page - 1),
+                            onNext: _page >= _totalPages
+                                ? null
+                                : () => _loadRows(page: _page + 1),
+                            onPageChanged: (value) => _loadRows(page: value),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
           ),

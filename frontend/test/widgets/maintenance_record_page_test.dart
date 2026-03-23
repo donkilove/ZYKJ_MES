@@ -26,11 +26,7 @@ class _FakeEquipmentService extends EquipmentService {
   @override
   Future<List<EquipmentOwnerOption>> listAllOwners() async {
     return [
-      EquipmentOwnerOption(
-        userId: 8,
-        username: 'worker',
-        fullName: null,
-      ),
+      EquipmentOwnerOption(userId: 8, username: 'worker', fullName: null),
     ];
   }
 
@@ -73,7 +69,7 @@ Future<void> _pumpPage(
   required _FakeEquipmentService equipmentService,
   Future<void> Function(String urlText)? onOpenAttachment,
 }) async {
-  tester.view.physicalSize = const Size(1920, 1200);
+  tester.view.physicalSize = const Size(1920, 1080);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
     tester.view.resetPhysicalSize();

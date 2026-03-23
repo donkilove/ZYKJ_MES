@@ -102,6 +102,13 @@ void main() {
     var editCalled = false;
     var pipelineCalled = false;
 
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
     await tester.pumpWidget(
       MaterialApp(
         home: ProductionOrderDetailPage(
@@ -135,6 +142,9 @@ void main() {
     expect(find.text('删除订单'), findsOneWidget);
     expect(find.text('结束订单'), findsOneWidget);
     expect(find.text('并行模式设置'), findsOneWidget);
+    expect(find.text('订单基础信息'), findsOneWidget);
+    expect(find.text('排产与追踪信息'), findsOneWidget);
+    expect(find.text('PO-1'), findsAtLeastNWidgets(1));
     expect(find.text('工序'), findsOneWidget);
     expect(find.text('子订单'), findsOneWidget);
     expect(find.text('记录'), findsOneWidget);

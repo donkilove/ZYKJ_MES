@@ -188,9 +188,9 @@ void main() {
 
     expect(find.text('PO-ASSIST-1'), findsOneWidget);
 
-    final approveButton = find.widgetWithText(TextButton, '通过').first;
-    await tester.ensureVisible(approveButton);
-    await tester.tap(approveButton);
+    await tester.tap(find.text('操作').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('审批通过').last);
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField).last, '  请尽快处理  ');

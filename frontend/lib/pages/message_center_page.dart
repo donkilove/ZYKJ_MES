@@ -483,236 +483,303 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildToolbar(theme),
-        const Divider(height: 1),
-        _buildOverview(theme),
-        const Divider(height: 1),
-        _buildFilterBar(theme),
-        const Divider(height: 1),
-        Expanded(child: _buildBody(theme)),
-      ],
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildToolbar(theme),
+          const SizedBox(height: 12),
+          _buildOverview(theme),
+          const SizedBox(height: 12),
+          _buildFilterBar(theme),
+          const SizedBox(height: 12),
+          Expanded(child: _buildBody(theme)),
+        ],
+      ),
     );
   }
 
   Widget _buildToolbar(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          Text(
-            '消息中心',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 320,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '消息中心',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '统一处理待办、通知、公告与跳转消息。',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _loading ? null : _resetFilters,
+                      icon: const Icon(Icons.filter_alt_off, size: 16),
+                      label: const Text('重置'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _loading ? null : () => _load(),
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('刷新'),
+                    ),
+                    if (widget.canPublishAnnouncement)
+                      OutlinedButton.icon(
+                        onPressed: _loading ? null : _runMaintenance,
+                        icon: const Icon(Icons.build_circle_outlined, size: 16),
+                        label: const Text('执行维护'),
+                      ),
+                    if (widget.canPublishAnnouncement)
+                      FilledButton.icon(
+                        onPressed: _loading ? null : _publishAnnouncement,
+                        icon: const Icon(Icons.campaign_outlined, size: 16),
+                        label: const Text('发布公告'),
+                      ),
+                    FilledButton.icon(
+                      onPressed: _loading ? null : _markAllRead,
+                      icon: const Icon(Icons.done_all, size: 16),
+                      label: const Text('全部已读'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: _loading || _selectedIds.isEmpty
+                          ? null
+                          : _markBatchRead,
+                      icon: const Icon(Icons.playlist_add_check, size: 16),
+                      label: Text(
+                        '批量已读${_selectedIds.isEmpty ? '' : '(${_selectedIds.length})'}',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ),
-          const Spacer(),
-          if (_error.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Text(
+            if (_error.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
                 _error,
                 style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
               ),
-            ),
-          OutlinedButton.icon(
-            onPressed: _loading ? null : _resetFilters,
-            icon: const Icon(Icons.filter_alt_off, size: 16),
-            label: const Text('重置'),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: _loading ? null : () => _load(),
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('刷新'),
-          ),
-          if (widget.canPublishAnnouncement) ...[
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: _loading ? null : _runMaintenance,
-              icon: const Icon(Icons.build_circle_outlined, size: 16),
-              label: const Text('执行维护'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: _loading ? null : _publishAnnouncement,
-              icon: const Icon(Icons.campaign_outlined, size: 16),
-              label: const Text('发布公告'),
-            ),
+            ],
           ],
-          const SizedBox(width: 8),
-          FilledButton.icon(
-            onPressed: _loading ? null : _markAllRead,
-            icon: const Icon(Icons.done_all, size: 16),
-            label: const Text('全部已读'),
-          ),
-          const SizedBox(width: 8),
-          FilledButton.tonalIcon(
-            onPressed: _loading || _selectedIds.isEmpty ? null : _markBatchRead,
-            icon: const Icon(Icons.playlist_add_check, size: 16),
-            label: Text(
-              '批量已读${_selectedIds.isEmpty ? '' : '(${_selectedIds.length})'}',
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildOverview(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          _overviewCard(theme, '未读消息', _unreadCount, theme.colorScheme.primary),
-          const SizedBox(width: 12),
-          _overviewCard(theme, '待处理', _todoCount, Colors.orange),
-          const SizedBox(width: 12),
-          _overviewCard(theme, '高优先级', _urgentCount, theme.colorScheme.error),
-          const SizedBox(width: 12),
-          _overviewCard(
-            theme,
-            '全部消息',
-            _allMessageCount,
-            theme.colorScheme.outline,
-          ),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = constraints.maxWidth >= 1600
+            ? (constraints.maxWidth - 36) / 4
+            : constraints.maxWidth >= 900
+            ? (constraints.maxWidth - 12) / 2
+            : constraints.maxWidth;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: cardWidth,
+              child: _overviewCard(
+                theme,
+                '未读消息',
+                _unreadCount,
+                theme.colorScheme.primary,
+              ),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _overviewCard(theme, '待处理', _todoCount, Colors.orange),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _overviewCard(
+                theme,
+                '高优先级',
+                _urgentCount,
+                theme.colorScheme.error,
+              ),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _overviewCard(
+                theme,
+                '全部消息',
+                _allMessageCount,
+                theme.colorScheme.outline,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
   Widget _overviewCard(ThemeData theme, String label, int count, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(60)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '$count',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w700,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: color.withAlpha(24),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.mail_outline, color: color),
             ),
-          ),
-          Text(
-            label,
-            style: theme.textTheme.labelSmall?.copyWith(color: color),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$count',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(color: color),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildFilterBar(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          SizedBox(
-            width: 200,
-            height: 36,
-            child: TextField(
-              controller: _keywordCtrl,
-              decoration: const InputDecoration(
-                hintText: '搜索标题/摘要',
-                prefixIcon: Icon(Icons.search, size: 18),
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 8),
-                border: OutlineInputBorder(),
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 240,
+              child: TextField(
+                controller: _keywordCtrl,
+                decoration: const InputDecoration(
+                  hintText: '搜索标题/摘要',
+                  prefixIcon: Icon(Icons.search, size: 18),
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (_) => _load(),
               ),
-              onSubmitted: (_) => _load(),
             ),
-          ),
-          _filterDropdown(
-            '状态',
-            _statusFilter,
-            {'': '全部', 'unread': '未读', 'read': '已读'},
-            (v) => setState(() {
-              _statusFilter = v;
-              _load();
-            }),
-          ),
-          _filterDropdown(
-            '分类',
-            _typeFilter,
-            {
-              '': '全部',
-              'todo': '待处理',
-              'notice': '通知',
-              'announcement': '公告',
-              'warning': '预警',
-            },
-            (v) => setState(() {
-              _typeFilter = v;
-              _load();
-            }),
-          ),
-          _filterDropdown(
-            '优先级',
-            _priorityFilter,
-            {'': '全部', 'urgent': '紧急', 'important': '重要', 'normal': '普通'},
-            (v) => setState(() {
-              _priorityFilter = v;
-              _load();
-            }),
-          ),
-          _filterDropdown(
-            '来源模块',
-            _sourceModuleFilter,
-            {
-              '': '全部',
-              'user': '用户',
-              'production': '生产',
-              'quality': '品质',
-              'equipment': '设备',
-              'product': '产品',
-              'craft': '工艺',
-            },
-            (v) => setState(() {
-              _sourceModuleFilter = v;
-              _load();
-            }),
-          ),
-          FilterChip(
-            label: const Text('仅看待处理'),
-            selected: _todoOnly,
-            onSelected: (value) {
-              setState(() => _todoOnly = value);
-              _load();
-            },
-          ),
-          FilterChip(
-            label: const Text('包含历史消息'),
-            selected: _includeInactive,
-            onSelected: (value) {
-              setState(() => _includeInactive = value);
-              _load();
-            },
-          ),
-          _dateRangeButton(theme),
-          _filterDropdown(
-            '每页条数',
-            '$_pageSize',
-            const {'10': '10条', '20': '20条', '50': '50条', '100': '100条'},
-            (v) {
-              setState(() {
-                _pageSize = int.tryParse(v) ?? 20;
-                _page = 1;
-              });
-              _load(reset: false);
-            },
-          ),
-        ],
+            _filterDropdown(
+              '状态',
+              _statusFilter,
+              {'': '全部', 'unread': '未读', 'read': '已读'},
+              (v) => setState(() {
+                _statusFilter = v;
+                _load();
+              }),
+            ),
+            _filterDropdown(
+              '分类',
+              _typeFilter,
+              {
+                '': '全部',
+                'todo': '待处理',
+                'notice': '通知',
+                'announcement': '公告',
+                'warning': '预警',
+              },
+              (v) => setState(() {
+                _typeFilter = v;
+                _load();
+              }),
+            ),
+            _filterDropdown(
+              '优先级',
+              _priorityFilter,
+              {'': '全部', 'urgent': '紧急', 'important': '重要', 'normal': '普通'},
+              (v) => setState(() {
+                _priorityFilter = v;
+                _load();
+              }),
+            ),
+            _filterDropdown(
+              '来源模块',
+              _sourceModuleFilter,
+              {
+                '': '全部',
+                'user': '用户',
+                'production': '生产',
+                'quality': '品质',
+                'equipment': '设备',
+                'product': '产品',
+                'craft': '工艺',
+              },
+              (v) => setState(() {
+                _sourceModuleFilter = v;
+                _load();
+              }),
+            ),
+            FilterChip(
+              label: const Text('仅看待处理'),
+              selected: _todoOnly,
+              onSelected: (value) {
+                setState(() => _todoOnly = value);
+                _load();
+              },
+            ),
+            FilterChip(
+              label: const Text('包含历史消息'),
+              selected: _includeInactive,
+              onSelected: (value) {
+                setState(() => _includeInactive = value);
+                _load();
+              },
+            ),
+            _dateRangeButton(theme),
+            _filterDropdown(
+              '每页条数',
+              '$_pageSize',
+              const {'10': '10条', '20': '20条', '50': '50条', '100': '100条'},
+              (v) {
+                setState(() {
+                  _pageSize = int.tryParse(v) ?? 20;
+                  _page = 1;
+                });
+                _load(reset: false);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -723,17 +790,25 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     Map<String, String> options,
     void Function(String) onChanged,
   ) {
-    return DropdownButton<String>(
-      value: current,
-      isDense: true,
-      underline: const SizedBox(),
-      hint: Text(label),
-      items: options.entries
-          .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-          .toList(),
-      onChanged: (v) {
-        if (v != null) onChanged(v);
-      },
+    return SizedBox(
+      width: 140,
+      child: DropdownButtonFormField<String>(
+        initialValue: current,
+        isDense: true,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
+        items: options.entries
+            .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+            .toList(),
+        onChanged: (v) {
+          if (v != null) {
+            onChanged(v);
+          }
+        },
+      ),
     );
   }
 
@@ -796,27 +871,58 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final list = Column(
-          children: [
-            Expanded(
-              child: ListView.separated(
-                itemCount: _items.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) =>
-                    _buildMessageTile(_items[index], theme),
+        final list = Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                child: Row(
+                  children: [
+                    Text(
+                      '消息列表',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      '共 $_total 条',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '已勾选 ${_selectedIds.length} 条',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (_total > _pageSize) _buildPaginationBar(theme),
-          ],
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: _items.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) =>
+                      _buildMessageTile(_items[index], theme),
+                ),
+              ),
+              if (_total > _pageSize) _buildPaginationBar(theme),
+            ],
+          ),
         );
-        if (constraints.maxWidth < 1100) {
+        if (constraints.maxWidth < 1180) {
           return list;
         }
         return Row(
           children: [
-            Expanded(child: list),
-            const VerticalDivider(width: 1),
-            SizedBox(width: 360, child: _buildPreview(theme)),
+            Expanded(flex: 8, child: list),
+            const SizedBox(width: 12),
+            SizedBox(width: 420, child: _buildPreview(theme)),
           ],
         );
       },
@@ -829,97 +935,134 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         ? _selectedDetail
         : null;
     if (item == null) {
-      return Center(
-        child: Text(
-          '请选择一条消息查看详情预览',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.outline,
+      return Card(
+        child: Center(
+          child: Text(
+            '请选择一条消息查看详情预览',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
           ),
         ),
       );
     }
     final disabledReason = item.isActive ? null : item.inactiveReasonName;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '消息详情预览',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _detailRow('标题', item.title, theme),
-          _detailRow('分类', item.messageTypeName, theme),
-          _detailRow('优先级', item.priorityName, theme),
-          if (item.summary != null && item.summary!.isNotEmpty)
-            _detailRow('摘要', item.summary!, theme),
-          if (widget.canViewDetail &&
-              detail?.item.content != null &&
-              detail!.item.content!.isNotEmpty)
-            _detailRow('正文', detail.item.content!, theme),
-          if (item.sourceModuleName.isNotEmpty)
-            _detailRow('来源模块', item.sourceModuleName, theme),
-          if (detail?.sourceId != null && detail!.sourceId!.isNotEmpty)
-            _detailRow('来源ID', detail.sourceId!, theme),
-          if (item.sourceCode != null && item.sourceCode!.isNotEmpty)
-            _detailRow('来源对象', item.sourceCode!, theme),
-          if (item.publishedAt != null)
-            _detailRow('推送时间', _formatDateTime(item.publishedAt!), theme),
-          _detailRow('消息状态', item.statusName, theme),
-          _detailRow('阅读状态', item.readStatusName, theme),
-          _detailRow('投递状态', item.deliveryStatusName, theme),
-          _detailRow('投递次数', '${item.deliveryAttemptCount}', theme),
-          if (item.lastPushAt != null)
-            _detailRow('最近投递', _formatDateTime(item.lastPushAt!), theme),
-          if (item.nextRetryAt != null)
-            _detailRow('下次重试', _formatDateTime(item.nextRetryAt!), theme),
-          if (item.readAt != null)
-            _detailRow('已读时间', _formatDateTime(item.readAt!), theme),
-          if (detail?.failureReasonHint != null &&
-              detail!.failureReasonHint!.isNotEmpty)
-            _detailRow('排障提示', detail.failureReasonHint!, theme),
-          if (disabledReason != null) _detailRow('跳转状态', disabledReason, theme),
-          if (!widget.canViewDetail)
-            _detailRow('详情权限', '当前账号未开通消息详情查看权限', theme),
-          if (_detailLoading)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: LinearProgressIndicator(minHeight: 2),
-            ),
-          const Spacer(),
-          Row(
-            children: [
-              TextButton(
-                onPressed: widget.canViewDetail
-                    ? () => _showDetailDialog(item)
-                    : null,
-                child: const Text('查看详情'),
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '消息详情预览',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
-              const Spacer(),
-              if (!item.isRead)
-                TextButton(
-                  onPressed: () => _markRead(item),
-                  child: const Text('标记已读'),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              item.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _detailRow('标题', item.title, theme),
+                    _detailRow('分类', item.messageTypeName, theme),
+                    _detailRow('优先级', item.priorityName, theme),
+                    if (item.summary != null && item.summary!.isNotEmpty)
+                      _detailRow('摘要', item.summary!, theme),
+                    if (widget.canViewDetail &&
+                        detail?.item.content != null &&
+                        detail!.item.content!.isNotEmpty)
+                      _detailRow('正文', detail.item.content!, theme),
+                    if (item.sourceModuleName.isNotEmpty)
+                      _detailRow('来源模块', item.sourceModuleName, theme),
+                    if (detail?.sourceId != null &&
+                        detail!.sourceId!.isNotEmpty)
+                      _detailRow('来源ID', detail.sourceId!, theme),
+                    if (item.sourceCode != null && item.sourceCode!.isNotEmpty)
+                      _detailRow('来源对象', item.sourceCode!, theme),
+                    if (item.publishedAt != null)
+                      _detailRow(
+                        '推送时间',
+                        _formatDateTime(item.publishedAt!),
+                        theme,
+                      ),
+                    _detailRow('消息状态', item.statusName, theme),
+                    _detailRow('阅读状态', item.readStatusName, theme),
+                    _detailRow('投递状态', item.deliveryStatusName, theme),
+                    _detailRow('投递次数', '${item.deliveryAttemptCount}', theme),
+                    if (item.lastPushAt != null)
+                      _detailRow(
+                        '最近投递',
+                        _formatDateTime(item.lastPushAt!),
+                        theme,
+                      ),
+                    if (item.nextRetryAt != null)
+                      _detailRow(
+                        '下次重试',
+                        _formatDateTime(item.nextRetryAt!),
+                        theme,
+                      ),
+                    if (item.readAt != null)
+                      _detailRow('已读时间', _formatDateTime(item.readAt!), theme),
+                    if (detail?.failureReasonHint != null &&
+                        detail!.failureReasonHint!.isNotEmpty)
+                      _detailRow('排障提示', detail.failureReasonHint!, theme),
+                    if (disabledReason != null)
+                      _detailRow('跳转状态', disabledReason, theme),
+                    if (!widget.canViewDetail)
+                      _detailRow('详情权限', '当前账号未开通消息详情查看权限', theme),
+                    if (_detailLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                  ],
                 ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed:
-                    item.isActive &&
-                        widget.canUseJump &&
-                        widget.onNavigateToPage != null
-                    ? () {
-                        _markRead(item);
-                        _navigateToPage(item);
-                      }
-                    : null,
-                child: const Text('跳转业务'),
               ),
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: widget.canViewDetail
+                      ? () => _showDetailDialog(item)
+                      : null,
+                  child: const Text('查看详情'),
+                ),
+                const Spacer(),
+                if (!item.isRead)
+                  TextButton(
+                    onPressed: () => _markRead(item),
+                    child: const Text('标记已读'),
+                  ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed:
+                      item.isActive &&
+                          widget.canUseJump &&
+                          widget.onNavigateToPage != null
+                      ? () {
+                          _markRead(item);
+                          _navigateToPage(item);
+                        }
+                      : null,
+                  child: const Text('跳转业务'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -953,10 +1096,12 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         }
       },
       child: Container(
-        color: isUnread
-            ? theme.colorScheme.primaryContainer.withAlpha(38)
+        color: _selectedItem?.id == item.id
+            ? theme.colorScheme.secondaryContainer.withAlpha(44)
+            : isUnread
+            ? theme.colorScheme.primaryContainer.withAlpha(32)
             : null,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1220,7 +1365,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     final hasPrevious = _page > 1;
     final hasNext = _page < totalPages;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Text(

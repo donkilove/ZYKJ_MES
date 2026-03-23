@@ -6,7 +6,9 @@ import '../models/app_session.dart';
 import '../models/craft_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
+import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 enum _StageAction { edit, toggle, viewReference, delete }
@@ -36,6 +38,9 @@ class ProcessManagementPage extends StatefulWidget {
 }
 
 class _ProcessManagementPageState extends State<ProcessManagementPage> {
+  static const int _defaultPageSize = 10;
+  static const List<int> _pageSizeOptions = [10, 20, 50];
+
   late final CraftService _service;
 
   bool _loading = false;
@@ -55,6 +60,10 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   int? _focusedProcessId;
   String _jumpNotice = '';
   int _lastHandledJumpRequestId = -1;
+  int _stagePage = 1;
+  int _processPage = 1;
+  int _stagePageSize = _defaultPageSize;
+  int _processPageSize = _defaultPageSize;
 
   @override
   void initState() {
@@ -88,6 +97,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     return list;
   }
 
+  List<CraftStageItem> get _pagedStages =>
+      _paginate(_filteredStages, _stagePage, _stagePageSize);
+
   List<CraftProcessItem> get _filteredProcesses {
     var list = _processes;
     if (_processStageFilter != null) {
@@ -109,6 +121,19 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     }
     return list;
   }
+
+  List<CraftProcessItem> get _pagedProcesses =>
+      _paginate(_filteredProcesses, _processPage, _processPageSize);
+
+  int get _stageTotalPages => _resolveTotalPages(
+    total: _filteredStages.length,
+    pageSize: _stagePageSize,
+  );
+
+  int get _processTotalPages => _resolveTotalPages(
+    total: _filteredProcesses.length,
+    pageSize: _processPageSize,
+  );
 
   CraftProcessItem? get _focusedProcess {
     final focusedProcessId = _focusedProcessId;
@@ -132,6 +157,104 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       return error.message;
     }
     return error.toString();
+  }
+
+  int _resolveTotalPages({required int total, required int pageSize}) {
+    if (total <= 0) {
+      return 1;
+    }
+    return ((total - 1) ~/ pageSize) + 1;
+  }
+
+  List<T> _paginate<T>(List<T> items, int page, int pageSize) {
+    if (items.isEmpty) {
+      return const [];
+    }
+    final start = (page - 1) * pageSize;
+    if (start >= items.length) {
+      return const [];
+    }
+    final end = (start + pageSize).clamp(0, items.length);
+    return items.sublist(start, end);
+  }
+
+  void _clampStagePage() {
+    final totalPages = _stageTotalPages;
+    if (_stagePage > totalPages) {
+      _stagePage = totalPages;
+    }
+    if (_stagePage < 1) {
+      _stagePage = 1;
+    }
+  }
+
+  void _clampProcessPage() {
+    final totalPages = _processTotalPages;
+    if (_processPage > totalPages) {
+      _processPage = totalPages;
+    }
+    if (_processPage < 1) {
+      _processPage = 1;
+    }
+  }
+
+  void _applyStageFilters({String? keyword, bool? enabled}) {
+    setState(() {
+      _stageKeyword = keyword ?? _stageSearchController.text.trim();
+      _stageEnabledFilter = enabled;
+      _stagePage = 1;
+      _clampStagePage();
+    });
+  }
+
+  void _resetStageFilters() {
+    _stageSearchController.clear();
+    setState(() {
+      _stageKeyword = '';
+      _stageEnabledFilter = null;
+      _stagePage = 1;
+      _clampStagePage();
+    });
+  }
+
+  void _applyProcessFilters({String? keyword, bool? enabled, int? stageId}) {
+    setState(() {
+      _processKeyword = keyword ?? _processSearchController.text.trim();
+      _processEnabledFilter = enabled;
+      _processStageFilter = stageId;
+      _processPage = 1;
+      _clampProcessPage();
+    });
+  }
+
+  void _resetProcessFilters() {
+    _processSearchController.clear();
+    setState(() {
+      _processKeyword = '';
+      _processEnabledFilter = null;
+      _processStageFilter = null;
+      _focusedProcessId = null;
+      _jumpNotice = '';
+      _processPage = 1;
+      _clampProcessPage();
+    });
+  }
+
+  void _moveToFocusedProcessPage() {
+    final focusedProcessId = _focusedProcessId;
+    if (focusedProcessId == null) {
+      _clampProcessPage();
+      return;
+    }
+    final index = _filteredProcesses.indexWhere(
+      (item) => item.id == focusedProcessId,
+    );
+    if (index < 0) {
+      _clampProcessPage();
+      return;
+    }
+    _processPage = (index ~/ _processPageSize) + 1;
+    _clampProcessPage();
   }
 
   @override
@@ -176,6 +299,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       _processEnabledFilter = null;
       _focusedProcessId = matched.id;
       _jumpNotice = '已定位工序 #${matched.id} ${matched.name}';
+      _moveToFocusedProcessPage();
     });
     _lastHandledJumpRequestId = widget.jumpRequestId;
   }
@@ -287,6 +411,8 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             }
             return a.id.compareTo(b.id);
           });
+        _clampStagePage();
+        _clampProcessPage();
       });
     } catch (error) {
       if (!mounted) {
@@ -1054,72 +1180,454 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     );
   }
 
-  Widget _buildHeaderLabel(
-    ThemeData theme,
-    String text, {
-    TextAlign textAlign = TextAlign.start,
-  }) {
-    return Text(
-      text,
-      textAlign: textAlign,
-      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-    );
+  String _formatDate(DateTime value) {
+    return '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildListHeaderRow({
-    required ThemeData theme,
-    required List<Widget> children,
-  }) {
+  Widget _buildCountChip(ThemeData theme, String label, String value) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.65,
+          alpha: 0.55,
         ),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: children,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: theme.textTheme.bodySmall),
+          const SizedBox(width: 6),
+          Text(
+            value,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildStageHeaderRow(ThemeData theme) {
-    return _buildListHeaderRow(
-      theme: theme,
-      children: [
-        Expanded(flex: 1, child: _buildHeaderLabel(theme, '工段编码')),
-        Expanded(flex: 2, child: _buildHeaderLabel(theme, '工段名称')),
-        Expanded(flex: 2, child: _buildHeaderLabel(theme, '备注')),
-        Expanded(flex: 1, child: _buildHeaderLabel(theme, '排序')),
-        Expanded(flex: 1, child: _buildHeaderLabel(theme, '状态')),
-        Expanded(flex: 1, child: _buildHeaderLabel(theme, '关联工序数')),
-        Expanded(flex: 1, child: _buildHeaderLabel(theme, '创建时间')),
-        SizedBox(
-          width: 64,
-          child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
+  Widget _buildStatusTag(ThemeData theme, bool enabled) {
+    final color = enabled ? Colors.green : theme.colorScheme.error;
+    final backgroundColor = enabled
+        ? Colors.green.withValues(alpha: 0.12)
+        : theme.colorScheme.errorContainer.withValues(alpha: 0.7);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        enabled ? '启用' : '停用',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildProcessHeaderRow(ThemeData theme) {
-    return _buildListHeaderRow(
-      theme: theme,
-      children: [
-        Expanded(flex: 2, child: _buildHeaderLabel(theme, '所属工段')),
-        Expanded(flex: 1, child: _buildHeaderLabel(theme, '工序编码')),
-        Expanded(flex: 2, child: _buildHeaderLabel(theme, '工序名称')),
-        Expanded(flex: 2, child: _buildHeaderLabel(theme, '备注')),
-        Expanded(flex: 1, child: _buildHeaderLabel(theme, '状态')),
-        Expanded(flex: 1, child: _buildHeaderLabel(theme, '创建时间')),
-        SizedBox(
-          width: 64,
-          child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
+  Widget _buildTableSection({
+    required ThemeData theme,
+    required String title,
+    required String subtitle,
+    required List<Widget> metrics,
+    required Widget toolbar,
+    required Widget table,
+    required Widget pagination,
+  }) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(subtitle, style: theme.textTheme.bodySmall),
+                  ],
+                ),
+                ...metrics,
+              ],
+            ),
+            const SizedBox(height: 16),
+            toolbar,
+            const SizedBox(height: 12),
+            Expanded(child: table),
+            const SizedBox(height: 12),
+            pagination,
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildStageToolbar(ThemeData theme) {
+    final buttonStyle = UnifiedListTableHeaderStyle.toolbarActionButtonStyle(
+      theme,
+    );
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: 260,
+            child: TextField(
+              key: const Key('process-management-stage-search'),
+              controller: _stageSearchController,
+              decoration: const InputDecoration(
+                labelText: '工段关键词',
+                hintText: '按编码或名称筛选',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onSubmitted: (_) =>
+                  _applyStageFilters(enabled: _stageEnabledFilter),
+            ),
+          ),
+          SizedBox(
+            width: 160,
+            child: DropdownButtonFormField<bool?>(
+              key: ValueKey<bool?>(_stageEnabledFilter),
+              initialValue: _stageEnabledFilter,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '状态',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: const [
+                DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
+                DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+                DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+              ],
+              onChanged: (value) => _applyStageFilters(enabled: value),
+            ),
+          ),
+          FilledButton.icon(
+            key: const Key('process-management-stage-search-button'),
+            onPressed: () => _applyStageFilters(enabled: _stageEnabledFilter),
+            icon: const Icon(Icons.search),
+            label: const Text('查询'),
+          ),
+          OutlinedButton.icon(
+            key: const Key('process-management-stage-reset-button'),
+            onPressed: _resetStageFilters,
+            style: buttonStyle,
+            icon: const Icon(Icons.restart_alt),
+            label: const Text('重置'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _exporting ? null : () => _exportCsv(isStage: true),
+            style: buttonStyle,
+            icon: const Icon(Icons.download),
+            label: const Text('导出'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProcessToolbar(ThemeData theme) {
+    final buttonStyle = UnifiedListTableHeaderStyle.toolbarActionButtonStyle(
+      theme,
+    );
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: 260,
+            child: TextField(
+              key: const Key('process-management-process-search'),
+              controller: _processSearchController,
+              decoration: const InputDecoration(
+                labelText: '工序关键词',
+                hintText: '按编码、名称或工段筛选',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onSubmitted: (_) => _applyProcessFilters(
+                enabled: _processEnabledFilter,
+                stageId: _processStageFilter,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 160,
+            child: DropdownButtonFormField<bool?>(
+              key: ValueKey<bool?>(_processEnabledFilter),
+              initialValue: _processEnabledFilter,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '状态',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: const [
+                DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
+                DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+                DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+              ],
+              onChanged: (value) => _applyProcessFilters(
+                enabled: value,
+                stageId: _processStageFilter,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 180,
+            child: DropdownButtonFormField<int?>(
+              key: ValueKey<int?>(_processStageFilter),
+              initialValue: _processStageFilter,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '工段',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: [
+                const DropdownMenuItem<int?>(value: null, child: Text('全部工段')),
+                ..._stages.map(
+                  (stage) => DropdownMenuItem<int?>(
+                    value: stage.id,
+                    child: Text('${stage.name} (${stage.code})'),
+                  ),
+                ),
+              ],
+              onChanged: (value) => _applyProcessFilters(
+                enabled: _processEnabledFilter,
+                stageId: value,
+              ),
+            ),
+          ),
+          FilledButton.icon(
+            key: const Key('process-management-process-search-button'),
+            onPressed: () => _applyProcessFilters(
+              enabled: _processEnabledFilter,
+              stageId: _processStageFilter,
+            ),
+            icon: const Icon(Icons.search),
+            label: const Text('查询'),
+          ),
+          OutlinedButton.icon(
+            key: const Key('process-management-process-reset-button'),
+            onPressed: _resetProcessFilters,
+            style: buttonStyle,
+            icon: const Icon(Icons.restart_alt),
+            label: const Text('重置'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _exporting ? null : () => _exportCsv(isStage: false),
+            style: buttonStyle,
+            icon: const Icon(Icons.download),
+            label: const Text('导出'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStageTable(ThemeData theme) {
+    if (_filteredStages.isEmpty) {
+      return const Center(child: Text('暂无工段'));
+    }
+    return AdaptiveTableContainer(
+      minTableWidth: 1120,
+      child: UnifiedListTableHeaderStyle.wrap(
+        theme: theme,
+        child: DataTable(
+          dataRowMinHeight: 64,
+          dataRowMaxHeight: 84,
+          columns: [
+            UnifiedListTableHeaderStyle.column(context, '工段编码'),
+            UnifiedListTableHeaderStyle.column(context, '工段名称'),
+            UnifiedListTableHeaderStyle.column(context, '备注'),
+            UnifiedListTableHeaderStyle.column(context, '排序'),
+            UnifiedListTableHeaderStyle.column(context, '状态'),
+            UnifiedListTableHeaderStyle.column(context, '关联工序数'),
+            UnifiedListTableHeaderStyle.column(context, '创建时间'),
+            UnifiedListTableHeaderStyle.column(
+              context,
+              '操作',
+              textAlign: TextAlign.center,
+            ),
+          ],
+          rows: _pagedStages.map((item) {
+            return DataRow(
+              cells: [
+                DataCell(Text(item.code)),
+                DataCell(Text(item.name)),
+                DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
+                DataCell(Text('${item.sortOrder}')),
+                DataCell(_buildStatusTag(theme, item.isEnabled)),
+                DataCell(Text('${item.processCount}')),
+                DataCell(
+                  Text(
+                    _formatDate(item.createdAt),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                DataCell(
+                  UnifiedListTableHeaderStyle.actionMenuButton<_StageAction>(
+                    theme: theme,
+                    onSelected: (action) {
+                      _handleStageAction(action, item);
+                    },
+                    itemBuilder: (context) {
+                      final items = <PopupMenuEntry<_StageAction>>[
+                        const PopupMenuItem(
+                          value: _StageAction.viewReference,
+                          child: Text('查看引用'),
+                        ),
+                      ];
+                      if (widget.canWrite) {
+                        items.addAll(const [
+                          PopupMenuItem(
+                            value: _StageAction.edit,
+                            child: Text('编辑'),
+                          ),
+                          PopupMenuItem(
+                            value: _StageAction.toggle,
+                            child: Text('启用/停用'),
+                          ),
+                          PopupMenuItem(
+                            value: _StageAction.delete,
+                            child: Text('删除'),
+                          ),
+                        ]);
+                      }
+                      return items;
+                    },
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProcessTable(ThemeData theme) {
+    if (_filteredProcesses.isEmpty) {
+      return const Center(child: Text('暂无小工序'));
+    }
+    return AdaptiveTableContainer(
+      minTableWidth: 1100,
+      child: UnifiedListTableHeaderStyle.wrap(
+        theme: theme,
+        child: DataTable(
+          dataRowMinHeight: 64,
+          dataRowMaxHeight: 84,
+          columns: [
+            UnifiedListTableHeaderStyle.column(context, '所属工段'),
+            UnifiedListTableHeaderStyle.column(context, '工序编码'),
+            UnifiedListTableHeaderStyle.column(context, '工序名称'),
+            UnifiedListTableHeaderStyle.column(context, '备注'),
+            UnifiedListTableHeaderStyle.column(context, '状态'),
+            UnifiedListTableHeaderStyle.column(context, '创建时间'),
+            UnifiedListTableHeaderStyle.column(
+              context,
+              '操作',
+              textAlign: TextAlign.center,
+            ),
+          ],
+          rows: _pagedProcesses.map((item) {
+            final isFocused = item.id == _focusedProcessId;
+            return DataRow(
+              color: isFocused
+                  ? WidgetStatePropertyAll(
+                      theme.colorScheme.primaryContainer.withValues(
+                        alpha: 0.28,
+                      ),
+                    )
+                  : null,
+              cells: [
+                DataCell(Text(item.stageName ?? '-')),
+                DataCell(Text(item.code)),
+                DataCell(Text(item.name)),
+                DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
+                DataCell(_buildStatusTag(theme, item.isEnabled)),
+                DataCell(
+                  Text(
+                    _formatDate(item.createdAt),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                DataCell(
+                  UnifiedListTableHeaderStyle.actionMenuButton<_ProcessAction>(
+                    theme: theme,
+                    onSelected: (action) {
+                      _handleProcessAction(action, item);
+                    },
+                    itemBuilder: (context) {
+                      final items = <PopupMenuEntry<_ProcessAction>>[
+                        const PopupMenuItem(
+                          value: _ProcessAction.viewReference,
+                          child: Text('查看引用'),
+                        ),
+                      ];
+                      if (widget.canWrite) {
+                        items.addAll(const [
+                          PopupMenuItem(
+                            value: _ProcessAction.edit,
+                            child: Text('编辑'),
+                          ),
+                          PopupMenuItem(
+                            value: _ProcessAction.toggle,
+                            child: Text('启用/停用'),
+                          ),
+                          PopupMenuItem(
+                            value: _ProcessAction.delete,
+                            child: Text('删除'),
+                          ),
+                        ]);
+                      }
+                      return items;
+                    },
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
     );
   }
 
@@ -1162,6 +1670,8 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final toolbarButtonStyle =
+        UnifiedListTableHeaderStyle.toolbarActionButtonStyle(theme);
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -1193,10 +1703,11 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                 label: const Text('新增工序'),
               ),
               const SizedBox(width: 8),
-              IconButton(
-                tooltip: '刷新',
+              OutlinedButton.icon(
                 onPressed: _loading ? null : _loadData,
+                style: toolbarButtonStyle,
                 icon: const Icon(Icons.refresh),
+                label: const Text('刷新'),
               ),
             ],
           ),
@@ -1216,219 +1727,49 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : LayoutBuilder(
                     builder: (context, constraints) {
-                      final isNarrow = constraints.maxWidth < 960;
+                      final isNarrow = constraints.maxWidth < 1360;
                       return Flex(
                         direction: isNarrow ? Axis.vertical : Axis.horizontal,
                         children: [
                           Expanded(
-                            child: Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          '工段列表',
-                                          style: theme.textTheme.titleMedium,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        SizedBox(
-                                          width: 180,
-                                          child: TextField(
-                                            controller: _stageSearchController,
-                                            decoration: const InputDecoration(
-                                              hintText: '搜索工段',
-                                              prefixIcon: Icon(
-                                                Icons.search,
-                                                size: 16,
-                                              ),
-                                              isDense: true,
-                                              border: OutlineInputBorder(),
-                                              contentPadding:
-                                                  EdgeInsets.symmetric(
-                                                    vertical: 6,
-                                                    horizontal: 8,
-                                                  ),
-                                            ),
-                                            onChanged: (v) => setState(
-                                              () => _stageKeyword = v.trim(),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        DropdownButton<bool?>(
-                                          value: _stageEnabledFilter,
-                                          isDense: true,
-                                          hint: const Text('全部状态'),
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: null,
-                                              child: Text('全部状态'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: true,
-                                              child: Text('启用'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: false,
-                                              child: Text('停用'),
-                                            ),
-                                          ],
-                                          onChanged: (v) => setState(
-                                            () => _stageEnabledFilter = v,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        IconButton(
-                                          tooltip: '导出工段',
-                                          onPressed: _exporting
-                                              ? null
-                                              : () => _exportCsv(isStage: true),
-                                          icon: const Icon(
-                                            Icons.download,
-                                            size: 20,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _buildStageHeaderRow(theme),
-                                    const SizedBox(height: 8),
-                                    Expanded(
-                                      child: _filteredStages.isEmpty
-                                          ? const Center(child: Text('暂无工段'))
-                                          : ListView.separated(
-                                              itemCount: _filteredStages.length,
-                                              separatorBuilder:
-                                                  (context, index) =>
-                                                      const Divider(height: 1),
-                                              itemBuilder: (context, index) {
-                                                final item =
-                                                    _filteredStages[index];
-                                                return Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        vertical: 8,
-                                                        horizontal: 12,
-                                                      ),
-                                                  child: Row(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(item.code),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Text(item.name),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Text(
-                                                          item.remark.isEmpty
-                                                              ? '-'
-                                                              : item.remark,
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(
-                                                          '${item.sortOrder}',
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(
-                                                          item.isEnabled
-                                                              ? '启用'
-                                                              : '停用',
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(
-                                                          '${item.processCount}',
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(
-                                                          '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
-                                                          style: theme
-                                                              .textTheme
-                                                              .bodySmall,
-                                                        ),
-                                                      ),
-                                                      SizedBox(
-                                                        width: 64,
-                                                        child: UnifiedListTableHeaderStyle.actionMenuButton<_StageAction>(
-                                                          theme: theme,
-                                                          onSelected: (action) {
-                                                            _handleStageAction(
-                                                              action,
-                                                              item,
-                                                            );
-                                                          },
-                                                          itemBuilder: (context) {
-                                                            final items =
-                                                                <
-                                                                  PopupMenuEntry<
-                                                                    _StageAction
-                                                                  >
-                                                                >[
-                                                                  const PopupMenuItem(
-                                                                    value: _StageAction
-                                                                        .viewReference,
-                                                                    child: Text(
-                                                                      '查看引用',
-                                                                    ),
-                                                                  ),
-                                                                ];
-                                                            if (widget
-                                                                .canWrite) {
-                                                              items.addAll(const [
-                                                                PopupMenuItem(
-                                                                  value:
-                                                                      _StageAction
-                                                                          .edit,
-                                                                  child: Text(
-                                                                    '编辑',
-                                                                  ),
-                                                                ),
-                                                                PopupMenuItem(
-                                                                  value:
-                                                                      _StageAction
-                                                                          .toggle,
-                                                                  child: Text(
-                                                                    '启用/停用',
-                                                                  ),
-                                                                ),
-                                                                PopupMenuItem(
-                                                                  value:
-                                                                      _StageAction
-                                                                          .delete,
-                                                                  child: Text(
-                                                                    '删除',
-                                                                  ),
-                                                                ),
-                                                              ]);
-                                                            }
-                                                            return items;
-                                                          },
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                    ),
-                                  ],
+                            flex: isNarrow ? 1 : 5,
+                            child: _buildTableSection(
+                              theme: theme,
+                              title: '工段列表',
+                              subtitle: '左侧维护工段档案，右侧工序列表继续按工段联动过滤。',
+                              metrics: [
+                                _buildCountChip(
+                                  theme,
+                                  '筛选后',
+                                  '${_filteredStages.length}',
                                 ),
+                                _buildCountChip(
+                                  theme,
+                                  '当前页',
+                                  '$_stagePage/$_stageTotalPages',
+                                ),
+                              ],
+                              toolbar: _buildStageToolbar(theme),
+                              table: _buildStageTable(theme),
+                              pagination: SimplePaginationBar(
+                                page: _stagePage,
+                                totalPages: _stageTotalPages,
+                                total: _filteredStages.length,
+                                loading: _loading,
+                                pageSize: _stagePageSize,
+                                pageSizeOptions: _pageSizeOptions,
+                                onPrevious: () =>
+                                    setState(() => _stagePage -= 1),
+                                onNext: () => setState(() => _stagePage += 1),
+                                onPageChanged: (value) =>
+                                    setState(() => _stagePage = value),
+                                onPageSizeChanged: (value) {
+                                  setState(() {
+                                    _stagePageSize = value;
+                                    _stagePage = 1;
+                                    _clampStagePage();
+                                  });
+                                },
                               ),
                             ),
                           ),
@@ -1437,250 +1778,49 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                             height: isNarrow ? 12 : 0,
                           ),
                           Expanded(
-                            child: Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          '工序列表',
-                                          style: theme.textTheme.titleMedium,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        SizedBox(
-                                          width: 180,
-                                          child: TextField(
-                                            controller:
-                                                _processSearchController,
-                                            decoration: const InputDecoration(
-                                              hintText: '搜索工序',
-                                              prefixIcon: Icon(
-                                                Icons.search,
-                                                size: 16,
-                                              ),
-                                              isDense: true,
-                                              border: OutlineInputBorder(),
-                                              contentPadding:
-                                                  EdgeInsets.symmetric(
-                                                    vertical: 6,
-                                                    horizontal: 8,
-                                                  ),
-                                            ),
-                                            onChanged: (v) => setState(
-                                              () => _processKeyword = v.trim(),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        DropdownButton<bool?>(
-                                          value: _processEnabledFilter,
-                                          isDense: true,
-                                          hint: const Text('全部状态'),
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: null,
-                                              child: Text('全部状态'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: true,
-                                              child: Text('启用'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: false,
-                                              child: Text('停用'),
-                                            ),
-                                          ],
-                                          onChanged: (v) => setState(
-                                            () => _processEnabledFilter = v,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        DropdownButton<int?>(
-                                          value: _processStageFilter,
-                                          isDense: true,
-                                          hint: const Text('全部工段'),
-                                          items: [
-                                            const DropdownMenuItem<int?>(
-                                              value: null,
-                                              child: Text('全部工段'),
-                                            ),
-                                            ..._stages.map(
-                                              (s) => DropdownMenuItem<int?>(
-                                                value: s.id,
-                                                child: Text(s.name),
-                                              ),
-                                            ),
-                                          ],
-                                          onChanged: (v) => setState(
-                                            () => _processStageFilter = v,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        IconButton(
-                                          tooltip: '导出工序',
-                                          onPressed: _exporting
-                                              ? null
-                                              : () =>
-                                                    _exportCsv(isStage: false),
-                                          icon: const Icon(
-                                            Icons.download,
-                                            size: 20,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    _buildFocusedProcessBanner(theme),
-                                    const SizedBox(height: 8),
-                                    _buildProcessHeaderRow(theme),
-                                    const SizedBox(height: 8),
-                                    Expanded(
-                                      child: _filteredProcesses.isEmpty
-                                          ? const Center(child: Text('暂无小工序'))
-                                          : ListView.separated(
-                                              itemCount:
-                                                  _filteredProcesses.length,
-                                              separatorBuilder:
-                                                  (context, index) =>
-                                                      const Divider(height: 1),
-                                              itemBuilder: (context, index) {
-                                                final item =
-                                                    _filteredProcesses[index];
-                                                final isFocused =
-                                                    item.id ==
-                                                    _focusedProcessId;
-                                                return Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        vertical: 8,
-                                                        horizontal: 12,
-                                                      ),
-                                                  decoration: isFocused
-                                                      ? BoxDecoration(
-                                                          color: theme
-                                                              .colorScheme
-                                                              .primaryContainer
-                                                              .withValues(
-                                                                alpha: 0.28,
-                                                              ),
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                8,
-                                                              ),
-                                                        )
-                                                      : null,
-                                                  child: Row(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Text(
-                                                          item.stageName ?? '-',
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(item.code),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Text(item.name),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 2,
-                                                        child: Text(
-                                                          item.remark.isEmpty
-                                                              ? '-'
-                                                              : item.remark,
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(
-                                                          item.isEnabled
-                                                              ? '启用'
-                                                              : '停用',
-                                                        ),
-                                                      ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Text(
-                                                          '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
-                                                          style: theme
-                                                              .textTheme
-                                                              .bodySmall,
-                                                        ),
-                                                      ),
-                                                      SizedBox(
-                                                        width: 64,
-                                                        child: UnifiedListTableHeaderStyle.actionMenuButton<_ProcessAction>(
-                                                          theme: theme,
-                                                          onSelected: (action) {
-                                                            _handleProcessAction(
-                                                              action,
-                                                              item,
-                                                            );
-                                                          },
-                                                          itemBuilder: (context) {
-                                                            final items =
-                                                                <
-                                                                  PopupMenuEntry<
-                                                                    _ProcessAction
-                                                                  >
-                                                                >[
-                                                                  const PopupMenuItem(
-                                                                    value: _ProcessAction
-                                                                        .viewReference,
-                                                                    child: Text(
-                                                                      '查看引用',
-                                                                    ),
-                                                                  ),
-                                                                ];
-                                                            if (widget
-                                                                .canWrite) {
-                                                              items.addAll(const [
-                                                                PopupMenuItem(
-                                                                  value:
-                                                                      _ProcessAction
-                                                                          .edit,
-                                                                  child: Text(
-                                                                    '编辑',
-                                                                  ),
-                                                                ),
-                                                                PopupMenuItem(
-                                                                  value:
-                                                                      _ProcessAction
-                                                                          .toggle,
-                                                                  child: Text(
-                                                                    '启用/停用',
-                                                                  ),
-                                                                ),
-                                                                PopupMenuItem(
-                                                                  value:
-                                                                      _ProcessAction
-                                                                          .delete,
-                                                                  child: Text(
-                                                                    '删除',
-                                                                  ),
-                                                                ),
-                                                              ]);
-                                                            }
-                                                            return items;
-                                                          },
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                    ),
-                                  ],
+                            flex: isNarrow ? 1 : 7,
+                            child: _buildTableSection(
+                              theme: theme,
+                              title: '工序列表',
+                              subtitle: '保留工段-工序双区联动，支持定位结果高亮与分页浏览。',
+                              metrics: [
+                                _buildCountChip(
+                                  theme,
+                                  '筛选后',
+                                  '${_filteredProcesses.length}',
                                 ),
+                                _buildCountChip(
+                                  theme,
+                                  '当前页',
+                                  '$_processPage/$_processTotalPages',
+                                ),
+                              ],
+                              toolbar: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildProcessToolbar(theme),
+                                  _buildFocusedProcessBanner(theme),
+                                ],
+                              ),
+                              table: _buildProcessTable(theme),
+                              pagination: SimplePaginationBar(
+                                page: _processPage,
+                                totalPages: _processTotalPages,
+                                total: _filteredProcesses.length,
+                                loading: _loading,
+                                pageSize: _processPageSize,
+                                pageSizeOptions: _pageSizeOptions,
+                                onPrevious: () =>
+                                    setState(() => _processPage -= 1),
+                                onNext: () => setState(() => _processPage += 1),
+                                onPageChanged: (value) =>
+                                    setState(() => _processPage = value),
+                                onPageSizeChanged: (value) {
+                                  setState(() {
+                                    _processPageSize = value;
+                                    _moveToFocusedProcessPage();
+                                  });
+                                },
                               ),
                             ),
                           ),
