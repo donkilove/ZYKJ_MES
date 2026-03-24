@@ -6,8 +6,10 @@ import '../models/app_session.dart';
 import '../models/product_models.dart';
 import '../services/api_exception.dart';
 import '../services/product_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
@@ -70,6 +72,8 @@ class ProductManagementPage extends StatefulWidget {
 }
 
 class _ProductManagementPageState extends State<ProductManagementPage> {
+  static const int _pageSize = 50;
+
   late final ProductService _productService;
   final TextEditingController _keywordController = TextEditingController();
 
@@ -78,10 +82,16 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   String _selectedCategoryFilter = '';
   String _selectedStatusFilter = '';
   String _selectedEffectiveVersionFilter = '';
-  DateTime? _updatedAfter;
-  DateTime? _updatedBefore;
   int _total = 0;
+  int _productPage = 1;
   List<ProductItem> _products = const [];
+
+  int get _productTotalPages {
+    if (_total <= 0) {
+      return 1;
+    }
+    return ((_total - 1) ~/ _pageSize) + 1;
+  }
 
   @override
   void initState() {
@@ -1235,7 +1245,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     dialogClosed = true;
   }
 
-  Future<void> _loadProducts() async {
+  Future<void> _loadProducts({int? page}) async {
+    final targetPage = page ?? _productPage;
     setState(() {
       _loading = true;
       _message = '';
@@ -1243,8 +1254,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
 
     try {
       final result = await _productService.listProducts(
-        page: 1,
-        pageSize: 100,
+        page: targetPage,
+        pageSize: _pageSize,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         lifecycleStatus: _selectedStatusFilter,
@@ -1253,16 +1264,24 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
             : _selectedEffectiveVersionFilter == 'no'
             ? false
             : null,
-        updatedAfter: _updatedAfter,
-        updatedBefore: _updatedBefore,
       );
       if (!mounted) {
         return;
       }
+      final resolvedTotalPages = result.total <= 0
+          ? 1
+          : (((result.total - 1) ~/ _pageSize) + 1);
+      final resolvedPage = targetPage > resolvedTotalPages
+          ? resolvedTotalPages
+          : targetPage;
       setState(() {
         _products = result.items;
         _total = result.total;
+        _productPage = resolvedPage;
       });
+      if (resolvedPage != targetPage) {
+        await _loadProducts(page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -1294,8 +1313,6 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
             : _selectedEffectiveVersionFilter == 'no'
             ? false
             : null,
-        updatedAfter: _updatedAfter,
-        updatedBefore: _updatedBefore,
       );
       final location = await getSaveLocation(
         suggestedName: 'products.csv',
@@ -2260,21 +2277,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '产品管理',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadProducts,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          CrudPageHeader(
+            title: '产品管理',
+            onRefresh: _loading ? null : _loadProducts,
           ),
           const SizedBox(height: 12),
           Row(
@@ -2286,7 +2291,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                     labelText: '搜索产品名称',
                     border: OutlineInputBorder(),
                   ),
-                  onSubmitted: (_) => _loadProducts(),
+                  onSubmitted: (_) => _loadProducts(page: 1),
                 ),
               ),
               const SizedBox(width: 12),
@@ -2313,7 +2318,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                           setState(() {
                             _selectedCategoryFilter = value ?? '';
                           });
-                          _loadProducts();
+                          _loadProducts(page: 1);
                         },
                 ),
               ),
@@ -2343,7 +2348,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                           setState(() {
                             _selectedStatusFilter = value ?? '';
                           });
-                          _loadProducts();
+                          _loadProducts(page: 1);
                         },
                 ),
               ),
@@ -2370,23 +2375,15 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                           setState(() {
                             _selectedEffectiveVersionFilter = value ?? '';
                           });
-                          _loadProducts();
+                          _loadProducts(page: 1);
                         },
                 ),
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadProducts,
+                onPressed: _loading ? null : () => _loadProducts(page: 1),
                 icon: const Icon(Icons.search),
-                label: const Text('搜索'),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: _loading || !widget.canExportProducts
-                    ? null
-                    : _exportProducts,
-                icon: const Icon(Icons.download),
-                label: const Text('导出'),
+                label: const Text('搜索产品'),
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
@@ -2396,88 +2393,16 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                 icon: const Icon(Icons.add),
                 label: const Text('添加产品'),
               ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: _loading || !widget.canExportProducts
+                    ? null
+                    : _exportProducts,
+                icon: const Icon(Icons.download),
+                label: const Text('导出产品'),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate:
-                              _updatedAfter ??
-                              DateTime.now().subtract(const Duration(days: 30)),
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                          helpText: '选择更新起始日期',
-                        );
-                        if (picked != null) {
-                          setState(() => _updatedAfter = picked);
-                          _loadProducts();
-                        }
-                      },
-                icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(
-                  _updatedAfter != null
-                      ? '起始：${_formatTime(_updatedAfter!).substring(0, 10)}'
-                      : '更新起始日期',
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: _updatedBefore ?? DateTime.now(),
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now().add(const Duration(days: 1)),
-                          helpText: '选择更新截止日期',
-                        );
-                        if (picked != null) {
-                          setState(
-                            () => _updatedBefore = DateTime(
-                              picked.year,
-                              picked.month,
-                              picked.day,
-                              23,
-                              59,
-                              59,
-                            ),
-                          );
-                          _loadProducts();
-                        }
-                      },
-                icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(
-                  _updatedBefore != null
-                      ? '截止：${_formatTime(_updatedBefore!).substring(0, 10)}'
-                      : '更新截止日期',
-                ),
-              ),
-              if (_updatedAfter != null || _updatedBefore != null) ...[
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: _loading
-                      ? null
-                      : () {
-                          setState(() {
-                            _updatedAfter = null;
-                            _updatedBefore = null;
-                          });
-                          _loadProducts();
-                        },
-                  child: const Text('清除日期'),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -2490,83 +2415,73 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
               ),
             ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _products.isEmpty
-                ? const Center(child: Text('暂无产品'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: UnifiedListTableHeaderStyle.wrap(
-                        theme: theme,
-                        child: DataTable(
-                          columns: [
-                            UnifiedListTableHeaderStyle.column(context, '产品名称'),
-                            UnifiedListTableHeaderStyle.column(context, '产品分类'),
-                            UnifiedListTableHeaderStyle.column(context, '状态'),
-                            UnifiedListTableHeaderStyle.column(context, '当前版本'),
-                            UnifiedListTableHeaderStyle.column(context, '生效版本'),
-                            UnifiedListTableHeaderStyle.column(context, '创建时间'),
-                            UnifiedListTableHeaderStyle.column(context, '更新时间'),
-                            UnifiedListTableHeaderStyle.column(
-                              context,
-                              '操作',
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                          rows: _products.map((product) {
-                            final actions = _buildProductActionMenuItems(
-                              product,
-                            );
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(product.name)),
-                                DataCell(Text(product.category)),
-                                DataCell(
-                                  Text(
-                                    _lifecycleLabel(product.lifecycleStatus),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    _formatDisplayVersion(
-                                      product.currentVersion,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    product.effectiveVersion > 0
-                                        ? _formatDisplayVersion(
-                                            product.effectiveVersion,
-                                          )
-                                        : '-',
-                                  ),
-                                ),
-                                DataCell(Text(_formatTime(product.createdAt))),
-                                DataCell(Text(_formatTime(product.updatedAt))),
-                                DataCell(
-                                  actions.isEmpty
-                                      ? const Text('-')
-                                      : UnifiedListTableHeaderStyle.actionMenuButton<
-                                          _ProductTableAction
-                                        >(
-                                          theme: theme,
-                                          onSelected: (action) {
-                                            _handleProductTableAction(
-                                              action,
-                                              product,
-                                            );
-                                          },
-                                          itemBuilder: (context) => actions,
-                                        ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
+            child: CrudListTableSection(
+              loading: _loading,
+              isEmpty: _products.isEmpty,
+              emptyText: '暂无产品',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: [
+                  UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                  UnifiedListTableHeaderStyle.column(context, '产品分类'),
+                  UnifiedListTableHeaderStyle.column(context, '状态'),
+                  UnifiedListTableHeaderStyle.column(context, '当前版本'),
+                  UnifiedListTableHeaderStyle.column(context, '生效版本'),
+                  UnifiedListTableHeaderStyle.column(context, '创建时间'),
+                  UnifiedListTableHeaderStyle.column(context, '更新时间'),
+                  UnifiedListTableHeaderStyle.column(
+                    context,
+                    '操作',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                rows: _products.map((product) {
+                  final actions = _buildProductActionMenuItems(product);
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(product.name)),
+                      DataCell(Text(product.category)),
+                      DataCell(Text(_lifecycleLabel(product.lifecycleStatus))),
+                      DataCell(
+                        Text(_formatDisplayVersion(product.currentVersion)),
+                      ),
+                      DataCell(
+                        Text(
+                          product.effectiveVersion > 0
+                              ? _formatDisplayVersion(product.effectiveVersion)
+                              : '-',
                         ),
                       ),
-                    ),
-                  ),
+                      DataCell(Text(_formatTime(product.createdAt))),
+                      DataCell(Text(_formatTime(product.updatedAt))),
+                      DataCell(
+                        actions.isEmpty
+                            ? const Text('-')
+                            : UnifiedListTableHeaderStyle.actionMenuButton<
+                                _ProductTableAction
+                              >(
+                                theme: theme,
+                                onSelected: (action) {
+                                  _handleProductTableAction(action, product);
+                                },
+                                itemBuilder: (context) => actions,
+                              ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _productPage,
+            totalPages: _productTotalPages,
+            total: _total,
+            showTotal: false,
+            loading: _loading,
+            onPrevious: () => _loadProducts(page: _productPage - 1),
+            onNext: () => _loadProducts(page: _productPage + 1),
           ),
         ],
       ),

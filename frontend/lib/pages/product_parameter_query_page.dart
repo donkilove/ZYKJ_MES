@@ -11,6 +11,7 @@ import '../models/product_models.dart';
 import '../services/api_exception.dart';
 import '../services/product_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
@@ -43,17 +44,18 @@ class ProductParameterQueryPage extends StatefulWidget {
 }
 
 class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
+  static const int _listPageSize = 200;
   late final ProductService _productService;
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
   String _message = '';
-  int _total = 0;
   List<ProductItem> _products = const [];
   int _handledJumpSeq = 0;
   String _selectedCategoryFilter = '';
   String _selectedStatusFilter = '';
-  final TextEditingController _versionFilterController = TextEditingController();
+  final TextEditingController _versionFilterController =
+      TextEditingController();
 
   @override
   void initState() {
@@ -157,7 +159,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     try {
       final result = await _productService.listProductsForParameterQuery(
         page: 1,
-        pageSize: 10000,
+        pageSize: _listPageSize,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         lifecycleStatus: _selectedStatusFilter,
@@ -168,7 +170,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       }
       setState(() {
         _products = result.items;
-        _total = result.total;
       });
     } catch (error) {
       if (!mounted) {
@@ -289,9 +290,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       );
       await file.saveTo(location.path);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('导出成功')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('导出成功')));
       }
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -299,9 +300,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败：${_errorMessage(error)}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导出失败：${_errorMessage(error)}')));
       }
     }
   }
@@ -378,7 +379,13 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                             DataCell(Text(item.category)),
                             DataCell(Text(item.type)),
                             DataCell(_buildParameterValueCell(item)),
-                            DataCell(Text(item.description.isEmpty ? '-' : item.description)),
+                            DataCell(
+                              Text(
+                                item.description.isEmpty
+                                    ? '-'
+                                    : item.description,
+                              ),
+                            ),
                           ],
                         );
                       }).toList(),
@@ -405,21 +412,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '产品参数查询',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadProducts,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          CrudPageHeader(
+            title: '产品参数查询',
+            onRefresh: _loading ? null : _loadProducts,
           ),
           const SizedBox(height: 12),
           Row(
@@ -444,7 +439,10 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                     border: OutlineInputBorder(),
                   ),
                   items: [
-                    const DropdownMenuItem<String>(value: '', child: Text('全部')),
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('全部'),
+                    ),
                     ..._productCategoryOptions.map(
                       (c) => DropdownMenuItem<String>(value: c, child: Text(c)),
                     ),
@@ -470,8 +468,14 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                   ),
                   items: const [
                     DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    DropdownMenuItem<String>(value: 'active', child: Text('启用')),
-                    DropdownMenuItem<String>(value: 'inactive', child: Text('停用')),
+                    DropdownMenuItem<String>(
+                      value: 'active',
+                      child: Text('启用'),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'inactive',
+                      child: Text('停用'),
+                    ),
                   ],
                   onChanged: _loading
                       ? null
@@ -517,8 +521,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -555,7 +557,13 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                             return DataRow(
                               cells: [
                                 DataCell(Text(product.name)),
-                                DataCell(Text(product.category.isEmpty ? '-' : product.category)),
+                                DataCell(
+                                  Text(
+                                    product.category.isEmpty
+                                        ? '-'
+                                        : product.category,
+                                  ),
+                                ),
                                 DataCell(
                                   Text(
                                     product.effectiveVersionLabel ??
@@ -564,7 +572,11 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                                             : '-'),
                                   ),
                                 ),
-                                DataCell(Text(_lifecycleLabel(product.lifecycleStatus))),
+                                DataCell(
+                                  Text(
+                                    _lifecycleLabel(product.lifecycleStatus),
+                                  ),
+                                ),
                                 DataCell(Text(_formatTime(product.createdAt))),
                                 DataCell(
                                   UnifiedListTableHeaderStyle.actionMenuButton<

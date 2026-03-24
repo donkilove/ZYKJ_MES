@@ -178,6 +178,112 @@ class _ProductListOnlyService extends ProductService {
   }
 }
 
+class _ProductManagementFilterContractService extends _ProductListOnlyService {
+  _ProductManagementFilterContractService(super.products);
+
+  DateTime? lastUpdatedAfter;
+  DateTime? lastUpdatedBefore;
+
+  @override
+  Future<ProductListResult> listProducts({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
+  }) async {
+    lastUpdatedAfter = updatedAfter;
+    lastUpdatedBefore = updatedBefore;
+    return super.listProducts(
+      page: page,
+      pageSize: pageSize,
+      keyword: keyword,
+      category: category,
+      lifecycleStatus: lifecycleStatus,
+      hasEffectiveVersion: hasEffectiveVersion,
+      updatedAfter: updatedAfter,
+      updatedBefore: updatedBefore,
+      currentVersionKeyword: currentVersionKeyword,
+      currentParamNameKeyword: currentParamNameKeyword,
+      currentParamCategoryKeyword: currentParamCategoryKeyword,
+    );
+  }
+}
+
+class _PagedProductListService extends ProductService {
+  _PagedProductListService(this.products) : super(_session());
+
+  final List<ProductItem> products;
+  final List<int> pageCalls = [];
+
+  @override
+  Future<ProductListResult> listProducts({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
+  }) async {
+    pageCalls.add(page);
+    final trimmedKeyword = keyword?.trim() ?? '';
+    final filtered = products.where((product) {
+      if (trimmedKeyword.isNotEmpty && !product.name.contains(trimmedKeyword)) {
+        return false;
+      }
+      if ((category ?? '').isNotEmpty && product.category != category) {
+        return false;
+      }
+      if ((lifecycleStatus ?? '').isNotEmpty &&
+          product.lifecycleStatus != lifecycleStatus) {
+        return false;
+      }
+      if (hasEffectiveVersion != null) {
+        final matched = product.effectiveVersion > 0;
+        if (matched != hasEffectiveVersion) {
+          return false;
+        }
+      }
+      if (updatedAfter != null && product.updatedAt.isBefore(updatedAfter)) {
+        return false;
+      }
+      if (updatedBefore != null && product.updatedAt.isAfter(updatedBefore)) {
+        return false;
+      }
+      return true;
+    }).toList();
+    final start = (page - 1) * pageSize;
+    final items = start >= filtered.length
+        ? const <ProductItem>[]
+        : filtered.sublist(
+            start,
+            start + pageSize > filtered.length
+                ? filtered.length
+                : start + pageSize,
+          );
+    return ProductListResult(total: filtered.length, items: items);
+  }
+
+  @override
+  Future<void> deleteProduct({
+    required int productId,
+    required String password,
+  }) async {
+    products.removeWhere((product) => product.id == productId);
+  }
+}
+
 class _ProductFormService extends _ProductListOnlyService {
   _ProductFormService(super.products);
 
@@ -306,6 +412,7 @@ class _ParameterManagementContractService extends ProductService {
   final List<int> versionLoadCalls = [];
   final List<int> versionUpdateCalls = [];
   final List<int> historyCalls = [];
+  final List<int> listPageSizes = [];
   int legacyListCalls = 0;
 
   @override
@@ -348,6 +455,7 @@ class _ParameterManagementContractService extends ProductService {
     DateTime? updatedAfter,
     DateTime? updatedBefore,
   }) async {
+    listPageSizes.add(pageSize);
     return ProductParameterVersionListResult(
       total: parameterVersionRows.length,
       items: parameterVersionRows,
@@ -565,6 +673,7 @@ class _ParameterQueryPageService extends ProductService {
   final List<ProductItem> products;
   int parameterQueryCalls = 0;
   int legacyListCalls = 0;
+  final List<int> pageSizes = [];
 
   @override
   Future<ProductListResult> listProducts({
@@ -594,6 +703,7 @@ class _ParameterQueryPageService extends ProductService {
     String? effectiveVersionKeyword,
   }) async {
     parameterQueryCalls += 1;
+    pageSizes.add(pageSize);
     return ProductListResult(total: products.length, items: products);
   }
 }
@@ -726,6 +836,220 @@ void main() {
         findsNothing,
         reason: 'current_version=3 不应显示为 V1.3。',
       );
+    });
+
+    testWidgets('产品管理页不再显示更新时间筛选且请求不传更新时间参数', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _ProductManagementFilterContractService([
+        _buildProduct(id: 12, currentVersion: 2, effectiveVersion: 1),
+      ]);
+
+      await tester.pumpWidget(
+        _host(
+          ProductManagementPage(
+            session: _session(),
+            onLogout: () {},
+            canCreateProduct: false,
+            canDeleteProduct: false,
+            canUpdateLifecycle: false,
+            canViewVersions: false,
+            canCompareVersions: false,
+            canRollbackVersion: false,
+            canViewImpactAnalysis: false,
+            canViewParameters: false,
+            canEditParameters: false,
+            onViewParameters: (_) {},
+            onEditParameters: (_) {},
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('更新起始日期'), findsNothing);
+      expect(find.text('更新截止日期'), findsNothing);
+      expect(find.text('清除日期'), findsNothing);
+      expect(service.lastUpdatedAfter, isNull);
+      expect(service.lastUpdatedBefore, isNull);
+    });
+
+    testWidgets('产品管理页应支持分页并在搜索和结果集缩小后校正页码', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _PagedProductListService([
+        _buildProduct(
+          id: 1,
+          currentVersion: 1,
+          effectiveVersion: 1,
+          remark: '唯一',
+        ),
+        ...List.generate(
+          100,
+          (index) => _buildProduct(
+            id: index + 2,
+            currentVersion: 1,
+            effectiveVersion: 1,
+          ),
+        ),
+      ]);
+      service.products[0] = ProductItem(
+        id: service.products[0].id,
+        name: '唯一搜索产品',
+        category: service.products[0].category,
+        remark: service.products[0].remark,
+        lifecycleStatus: service.products[0].lifecycleStatus,
+        currentVersion: service.products[0].currentVersion,
+        currentVersionLabel: service.products[0].currentVersionLabel,
+        effectiveVersion: service.products[0].effectiveVersion,
+        effectiveVersionLabel: service.products[0].effectiveVersionLabel,
+        effectiveAt: service.products[0].effectiveAt,
+        inactiveReason: service.products[0].inactiveReason,
+        lastParameterSummary: service.products[0].lastParameterSummary,
+        createdAt: service.products[0].createdAt,
+        updatedAt: service.products[0].updatedAt,
+      );
+
+      await tester.pumpWidget(
+        _host(
+          ProductManagementPage(
+            session: _session(),
+            onLogout: () {},
+            canCreateProduct: false,
+            canDeleteProduct: false,
+            canUpdateLifecycle: false,
+            canViewVersions: false,
+            canCompareVersions: false,
+            canRollbackVersion: false,
+            canViewImpactAnalysis: false,
+            canViewParameters: false,
+            canEditParameters: false,
+            onViewParameters: (_) {},
+            onEditParameters: (_) {},
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('第 1 / 3 页'), findsOneWidget);
+      expect(find.text('总数：101'), findsNothing);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+      await tester.pumpAndSettle();
+      expect(find.text('第 2 / 3 页'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('刷新'));
+      await tester.pumpAndSettle();
+      expect(find.text('第 2 / 3 页'), findsOneWidget, reason: '刷新应保留当前页。');
+      expect(service.pageCalls.last, 2);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+      await tester.pumpAndSettle();
+      expect(find.text('第 3 / 3 页'), findsOneWidget);
+      expect(find.text('产品101'), findsOneWidget);
+
+      service.products.removeWhere((product) => product.id == 101);
+      await tester.tap(find.byTooltip('刷新'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('第 2 / 2 页'),
+        findsOneWidget,
+        reason: '结果集缩小后越界页码应自动回退。',
+      );
+      expect(service.pageCalls.sublist(service.pageCalls.length - 2), [3, 2]);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, '搜索产品名称'),
+        '唯一搜索产品',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, '搜索产品'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('第 1 / 1 页'), findsOneWidget, reason: '搜索后应回到第一页。');
+      expect(service.pageCalls.last, 1);
+      expect(find.text('唯一搜索产品'), findsWidgets);
+      expect(find.text('产品52'), findsNothing);
+
+      final searchButton = find.widgetWithText(FilledButton, '搜索产品');
+      final addButton = find.widgetWithText(FilledButton, '添加产品');
+      final exportButton = find.widgetWithText(OutlinedButton, '导出产品');
+
+      expect(searchButton, findsOneWidget);
+      expect(addButton, findsOneWidget);
+      expect(exportButton, findsOneWidget);
+
+      final searchLeft = tester.getTopLeft(searchButton).dx;
+      final addLeft = tester.getTopLeft(addButton).dx;
+      final exportLeft = tester.getTopLeft(exportButton).dx;
+
+      expect(searchLeft < addLeft, isTrue, reason: '搜索产品按钮应位于添加产品之前。');
+      expect(addLeft < exportLeft, isTrue, reason: '添加产品按钮应位于导出产品之前。');
+    });
+
+    testWidgets('产品管理页筛选变更后应回到第一页', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _PagedProductListService([
+        ...List.generate(
+          60,
+          (index) => _buildProduct(
+            id: index + 1,
+            currentVersion: 1,
+            effectiveVersion: 1,
+            lifecycleStatus: 'active',
+          ),
+        ),
+        ...List.generate(
+          60,
+          (index) => _buildProduct(
+            id: index + 61,
+            currentVersion: 1,
+            effectiveVersion: 1,
+            lifecycleStatus: 'inactive',
+          ),
+        ),
+      ]);
+
+      await tester.pumpWidget(
+        _host(
+          ProductManagementPage(
+            session: _session(),
+            onLogout: () {},
+            canCreateProduct: false,
+            canDeleteProduct: false,
+            canUpdateLifecycle: false,
+            canViewVersions: false,
+            canCompareVersions: false,
+            canRollbackVersion: false,
+            canViewImpactAnalysis: false,
+            canViewParameters: false,
+            canEditParameters: false,
+            onViewParameters: (_) {},
+            onEditParameters: (_) {},
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+      await tester.pumpAndSettle();
+      expect(find.text('第 2 / 3 页'), findsOneWidget);
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('停用').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('第 1 / 2 页'), findsOneWidget);
+      expect(service.pageCalls.last, 1, reason: '筛选变化后应回到第一页。');
     });
 
     testWidgets('产品详情应以页内侧栏展示聚合详情', (tester) async {
@@ -1142,17 +1466,22 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('版本参数列表'), findsOneWidget);
+      expect(find.text('版本参数管理'), findsOneWidget);
       expect(find.text('产品分类'), findsOneWidget);
       expect(find.text('创建时间'), findsOneWidget);
-      expect(find.text('命中参数名称'), findsOneWidget);
-      expect(find.text('命中参数分组'), findsOneWidget);
-      expect(find.text('最近变更参数'), findsOneWidget);
+      expect(find.text('参数总数'), findsNothing);
+      expect(find.text('命中参数名称'), findsNothing);
+      expect(find.text('命中参数分组'), findsNothing);
+      expect(find.text('最近变更参数'), findsNothing);
+      expect(find.text('最后修改时间'), findsNothing);
       expect(find.text('V1.0 / #1'), findsOneWidget);
       expect(find.text('V1.1 / #2'), findsOneWidget);
-      expect(find.text('产品芯片'), findsWidgets);
-      expect(find.text('基础参数'), findsWidgets);
+      expect(find.text('产品芯片'), findsNothing);
+      expect(find.text('基础参数'), findsNothing);
       expect(service.legacyListCalls, 0, reason: '首屏列表不应回退旧产品参数接口。');
+      expect(service.listPageSizes, [
+        200,
+      ], reason: '首屏列表查询应遵守后端 page_size<=200 限制。');
 
       await _openPopupMenu(tester, _popupMenuButtonFinder().first);
       await tester.tap(find.text('查看历史'));
@@ -1273,6 +1602,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(service.parameterQueryCalls, 1);
+      expect(service.pageSizes, [200], reason: '参数查询首屏应使用后端允许的分页大小。');
       expect(service.legacyListCalls, 0);
       expect(find.text('产品51'), findsOneWidget);
     });

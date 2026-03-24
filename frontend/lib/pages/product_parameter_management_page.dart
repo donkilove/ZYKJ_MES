@@ -9,6 +9,7 @@ import '../models/product_models.dart';
 import '../services/api_exception.dart';
 import '../services/product_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 enum _ProductParameterManagementListAction { view, edit, history, export }
@@ -40,6 +41,7 @@ class ProductParameterManagementPage extends StatefulWidget {
 
 class _ProductParameterManagementPageState
     extends State<ProductParameterManagementPage> {
+  static const int _listPageSize = 200;
   static const String _productNameParameterKey = '产品名称';
   static const List<String> _presetCategorySuggestions = [
     '基础参数',
@@ -74,7 +76,6 @@ class _ProductParameterManagementPageState
 
   bool _loading = false;
   String _message = '';
-  int _total = 0;
   List<ProductParameterVersionListItem> _versionRows = const [];
   String _selectedCategoryFilter = '';
   DateTime? _updatedAfter;
@@ -338,7 +339,7 @@ class _ProductParameterManagementPageState
     try {
       final result = await _productService.listProductParameterVersions(
         page: 1,
-        pageSize: 10000,
+        pageSize: _listPageSize,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         versionKeyword: _versionFilterController.text.trim(),
@@ -352,7 +353,6 @@ class _ProductParameterManagementPageState
       }
       setState(() {
         _versionRows = result.items;
-        _total = result.total;
       });
     } catch (error) {
       if (!mounted) {
@@ -1397,21 +1397,9 @@ class _ProductParameterManagementPageState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              '版本参数列表',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const Spacer(),
-            IconButton(
-              tooltip: '刷新',
-              onPressed: _loading ? null : _loadProducts,
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
+        CrudPageHeader(
+          title: '版本参数管理',
+          onRefresh: _loading ? null : _loadProducts,
         ),
         const SizedBox(height: 12),
         Row(
@@ -1462,42 +1450,42 @@ class _ProductParameterManagementPageState
         const SizedBox(height: 8),
         Row(
           children: [
-              SizedBox(
-                width: 200,
-                child: TextField(
-                  controller: _versionFilterController,
-                  decoration: const InputDecoration(
-                    labelText: '版本号筛选',
-                    hintText: '如 V1.2',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadProducts(),
+            SizedBox(
+              width: 200,
+              child: TextField(
+                controller: _versionFilterController,
+                decoration: const InputDecoration(
+                  labelText: '版本号筛选',
+                  hintText: '如 V1.2',
+                  border: OutlineInputBorder(),
                 ),
+                onSubmitted: (_) => _loadProducts(),
               ),
+            ),
             const SizedBox(width: 12),
-              SizedBox(
-                width: 200,
-                child: TextField(
-                  controller: _paramNameFilterController,
-                  decoration: const InputDecoration(
-                    labelText: '参数名称筛选',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadProducts(),
+            SizedBox(
+              width: 200,
+              child: TextField(
+                controller: _paramNameFilterController,
+                decoration: const InputDecoration(
+                  labelText: '参数名称筛选',
+                  border: OutlineInputBorder(),
                 ),
+                onSubmitted: (_) => _loadProducts(),
               ),
+            ),
             const SizedBox(width: 12),
-              SizedBox(
-                width: 200,
-                child: TextField(
-                  controller: _paramCategoryFilterController,
-                  decoration: const InputDecoration(
-                    labelText: '参数分组筛选',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadProducts(),
+            SizedBox(
+              width: 200,
+              child: TextField(
+                controller: _paramCategoryFilterController,
+                decoration: const InputDecoration(
+                  labelText: '参数分组筛选',
+                  border: OutlineInputBorder(),
                 ),
+                onSubmitted: (_) => _loadProducts(),
               ),
+            ),
             const SizedBox(width: 12),
             OutlinedButton.icon(
               onPressed: _loading
@@ -1569,8 +1557,6 @@ class _ProductParameterManagementPageState
             ],
           ],
         ),
-        const SizedBox(height: 12),
-        Text('总数：$_total', style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
         Text(
           '筛选条件直接命中版本参数明细；查看/编辑/历史/导出均绑定当前版本行。',
@@ -1606,11 +1592,6 @@ class _ProductParameterManagementPageState
                           ),
                           UnifiedListTableHeaderStyle.column(context, '创建时间'),
                           UnifiedListTableHeaderStyle.column(context, '版本状态'),
-                          UnifiedListTableHeaderStyle.column(context, '参数总数'),
-                          UnifiedListTableHeaderStyle.column(context, '命中参数名称'),
-                          UnifiedListTableHeaderStyle.column(context, '命中参数分组'),
-                          UnifiedListTableHeaderStyle.column(context, '最近变更参数'),
-                          UnifiedListTableHeaderStyle.column(context, '最后修改时间'),
                           UnifiedListTableHeaderStyle.column(
                             context,
                             '操作',
@@ -1641,22 +1622,6 @@ class _ProductParameterManagementPageState
                                   ].join(' / '),
                                 ),
                               ),
-                              DataCell(Text('${row.parameterCount}')),
-                              DataCell(Text(row.matchedParameterName ?? '-')),
-                              DataCell(Text(row.matchedParameterCategory ?? '-')),
-                              DataCell(
-                                Text(
-                                  row.lastModifiedParameter == null
-                                      ? '-'
-                                      : row.lastModifiedParameterCategory ==
-                                                null ||
-                                            row.lastModifiedParameterCategory!
-                                                .isEmpty
-                                      ? row.lastModifiedParameter!
-                                      : '${row.lastModifiedParameter} / ${row.lastModifiedParameterCategory}',
-                                ),
-                              ),
-                              DataCell(Text(_formatTime(row.updatedAt))),
                               DataCell(
                                 UnifiedListTableHeaderStyle.actionMenuButton<
                                   _ProductParameterManagementListAction

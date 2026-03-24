@@ -7,6 +7,7 @@ import '../models/app_session.dart';
 import '../models/product_models.dart';
 import '../services/api_exception.dart';
 import '../services/product_service.dart';
+import '../widgets/crud_page_header.dart';
 
 const Map<String, String> _statusLabels = {
   'draft': '草稿',
@@ -131,7 +132,10 @@ class _ProductVersionManagementPageState
     }
   }
 
-  Future<void> _loadVersions(ProductItem product) async {
+  Future<void> _loadVersions(
+    ProductItem product, {
+    int? preferredVersionNumber,
+  }) async {
     setState(() {
       _selectedProduct = product;
       _loadingVersions = true;
@@ -142,7 +146,18 @@ class _ProductVersionManagementPageState
       final result = await _service.listProductVersions(productId: product.id);
       setState(() {
         _versions = result.items;
-        _selectedVersionNumber = result.items.isEmpty ? null : result.items.first.version;
+        int? matchedVersionNumber;
+        if (preferredVersionNumber != null) {
+          for (final item in result.items) {
+            if (item.version == preferredVersionNumber) {
+              matchedVersionNumber = item.version;
+              break;
+            }
+          }
+        }
+        _selectedVersionNumber =
+            matchedVersionNumber ??
+            (result.items.isEmpty ? null : result.items.first.version);
       });
     } catch (e) {
       if (mounted) _showError('加载版本列表失败: $e');
@@ -439,7 +454,10 @@ class _ProductVersionManagementPageState
     try {
       final product = await _service.getProduct(productId: productId);
       if (!mounted) return null;
-      await _loadVersions(product);
+      await _loadVersions(
+        product,
+        preferredVersionNumber: _selectedVersionNumber,
+      );
       return product;
     } catch (e) {
       if (mounted) {
@@ -447,6 +465,15 @@ class _ProductVersionManagementPageState
       }
       return null;
     }
+  }
+
+  Future<void> _refreshPage() async {
+    final selectedProductId = _selectedProduct?.id;
+    await _loadProducts();
+    if (!mounted || selectedProductId == null) {
+      return;
+    }
+    await _reloadSelectedProductAndVersions(selectedProductId);
   }
 
   Future<void> _exportVersionParams(ProductVersionItem rev) async {
@@ -655,7 +682,8 @@ class _ProductVersionManagementPageState
                 FilledButton.icon(
                   icon: const Icon(Icons.task_alt, size: 16),
                   label: const Text('立即生效'),
-                  onPressed: selectedVersion == null ||
+                  onPressed:
+                      selectedVersion == null ||
                           selectedVersion.lifecycleStatus != 'draft'
                       ? null
                       : () => _activateVersion(selectedVersion),
@@ -825,9 +853,9 @@ class _ProductVersionManagementPageState
                       ),
                     if (widget.canManageVersions &&
                         (isDraft ||
-                        isEffective ||
-                        isObsolete ||
-                        rev.lifecycleStatus == 'disabled'))
+                            isEffective ||
+                            isObsolete ||
+                            rev.lifecycleStatus == 'disabled'))
                       const PopupMenuItem(value: 'copy', child: Text('复制版本')),
                     if (widget.canManageVersions)
                       const PopupMenuItem(
@@ -894,22 +922,34 @@ class _ProductVersionManagementPageState
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 240,
-          child: Card(
-            margin: const EdgeInsets.all(8),
-            child: _buildProductList(),
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CrudPageHeader(title: '版本管理', onRefresh: _refreshPage),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 240,
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: _buildProductList(),
+                  ),
+                ),
+                Expanded(
+                  child: Card(
+                    margin: const EdgeInsets.only(left: 8),
+                    child: _buildVersionList(),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          child: Card(
-            margin: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-            child: _buildVersionList(),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
