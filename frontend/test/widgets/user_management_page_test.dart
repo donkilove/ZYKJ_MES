@@ -37,7 +37,7 @@ class _FakeUserService extends UserService {
     String? keyword,
   }) async {
     return RoleListResult(
-      total: 2,
+      total: 3,
       items: [
         RoleItem(
           id: 1,
@@ -60,6 +60,18 @@ class _FakeUserService extends UserService {
           isBuiltin: true,
           isEnabled: true,
           userCount: 1,
+          createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+          updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+        ),
+        RoleItem(
+          id: 3,
+          code: 'custom_dispatcher',
+          name: '自定义调度员',
+          description: null,
+          roleType: 'custom',
+          isBuiltin: false,
+          isEnabled: true,
+          userCount: 0,
           createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
           updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
         ),
@@ -551,6 +563,33 @@ void main() {
     expect(userService.lastCreateStageId, 11);
   });
 
+  testWidgets('创建自定义角色用户时也可以携带 stageId 提交', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.text('新建用户'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'custom_u');
+    await tester.enterText(find.byType(TextFormField).at(1), 'Custom@123');
+
+    await tester.tap(find.text('自定义调度员').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('装配一段').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
+
+    expect(userService.createCalls, 1);
+    expect(userService.lastCreateStageId, 10);
+  });
+
   testWidgets('新建用户密码输入框使用掩码展示', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
@@ -604,6 +643,41 @@ void main() {
     expect(userService.updateCalls, 1);
     expect(userService.lastUpdateStageId, 10);
     expect(userService.lastUpdateRemark, isNull);
+  });
+
+  testWidgets('编辑自定义角色用户时也可以携带 stageId 提交', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 8,
+          username: 'custedit',
+          roleCode: 'custom_dispatcher',
+          roleName: '自定义调度员',
+          stageId: 10,
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(userService.updateCalls, 1);
+    expect(userService.lastUpdateStageId, 10);
   });
 
   testWidgets('新建与编辑弹窗不再显示账号提示文本和备注字段', (tester) async {

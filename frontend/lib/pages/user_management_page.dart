@@ -126,6 +126,28 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   bool _isOperator(String? roleCode) => roleCode == _roleOperator;
 
+  RoleItem? _findRoleByCode(String? roleCode) {
+    if (roleCode == null) {
+      return null;
+    }
+    for (final role in _roles) {
+      if (role.code == roleCode) {
+        return role;
+      }
+    }
+    return null;
+  }
+
+  bool _canAssignStage(String? roleCode) {
+    final role = _findRoleByCode(roleCode);
+    if (role == null) {
+      return _isOperator(roleCode);
+    }
+    return _isOperator(roleCode) ||
+        role.roleType == 'custom' ||
+        !role.isBuiltin;
+  }
+
   List<RoleItem> _assignableRoles({String? includeRoleCode}) {
     final items =
         _roles
@@ -338,6 +360,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final isOperatorSelected = _isOperator(selectedRoleCode);
+            final canAssignStage = _canAssignStage(selectedRoleCode);
 
             return AlertDialog(
               title: const Text('新建用户'),
@@ -441,14 +464,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           ),
                         const SizedBox(height: 12),
                         const Text(
-                          '工段分配（单选，仅操作员角色可选）',
+                          '工段分配（单选，操作员必选，自定义角色可选）',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
                         Opacity(
-                          opacity: isOperatorSelected ? 1 : 0.5,
+                          opacity: canAssignStage ? 1 : 0.5,
                           child: IgnorePointer(
-                            ignoring: !isOperatorSelected,
+                            ignoring: !canAssignStage,
                             child: currentStages.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
@@ -570,7 +593,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final formKey = GlobalKey<FormState>();
     final canEditAccount = _isCurrentUserSystemAdmin();
     String? selectedRoleCode = user.roleCode;
-    int? selectedStageId = _isOperator(selectedRoleCode) ? user.stageId : null;
+    int? selectedStageId = _canAssignStage(selectedRoleCode)
+        ? user.stageId
+        : null;
 
     final updated = await showLockedFormDialog<bool>(
       context: context,
@@ -578,6 +603,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final isOperatorSelected = _isOperator(selectedRoleCode);
+            final canAssignStage = _canAssignStage(selectedRoleCode);
 
             return AlertDialog(
               title: Text('编辑用户：${user.username}'),
@@ -650,14 +676,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           ),
                         const SizedBox(height: 12),
                         const Text(
-                          '工段分配（单选，仅操作员角色可选）',
+                          '工段分配（单选，操作员必选，自定义角色可选）',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
                         Opacity(
-                          opacity: isOperatorSelected ? 1 : 0.5,
+                          opacity: canAssignStage ? 1 : 0.5,
                           child: IgnorePointer(
-                            ignoring: !isOperatorSelected,
+                            ignoring: !canAssignStage,
                             child: currentStages.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),

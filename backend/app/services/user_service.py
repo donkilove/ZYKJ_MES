@@ -221,20 +221,34 @@ def _resolve_role(db: Session, role_code: str | None) -> tuple[Role | None, str 
     return role, None
 
 
+def _can_assign_stage(role: Role | None) -> bool:
+    if role is None:
+        return False
+    if role.code == ROLE_OPERATOR:
+        return True
+    if role.code == ROLE_MAINTENANCE_STAFF:
+        return False
+    return role.role_type == "custom" or not role.is_builtin
+
+
 def _resolve_stage(
     db: Session,
     *,
-    role_code: str | None,
+    role: Role | None,
     stage_id: int | None,
 ) -> tuple[ProcessStage | None, str | None]:
-    is_operator = role_code == ROLE_OPERATOR
-    if not is_operator:
+    can_assign_stage = _can_assign_stage(role)
+    is_operator = role is not None and role.code == ROLE_OPERATOR
+
+    if not can_assign_stage:
         if stage_id is not None:
-            return None, "Only operator role can be assigned stage"
+            return None, "Only operator or custom role can be assigned stage"
         return None, None
 
-    if stage_id is None:
+    if is_operator and stage_id is None:
         return None, "Operator role must be assigned a stage"
+    if stage_id is None:
+        return None, None
     stage = db.execute(select(ProcessStage).where(ProcessStage.id == stage_id)).scalars().first()
     if stage is None:
         return None, "Stage not found"
@@ -246,10 +260,10 @@ def _resolve_stage(
 def _resolve_processes(
     db: Session,
     *,
-    role_code: str | None,
+    role: Role | None,
     stage: ProcessStage | None,
 ) -> tuple[list[Process] | None, str | None]:
-    is_operator = role_code == ROLE_OPERATOR
+    is_operator = role is not None and role.code == ROLE_OPERATOR
 
     if not is_operator:
         return [], None
@@ -445,13 +459,12 @@ def create_user(db: Session, payload: UserCreate) -> tuple[User | None, str | No
     if role_error:
         return None, role_error
 
-    role_code = role.code if role else None
-    stage, stage_error = _resolve_stage(db, role_code=role_code, stage_id=payload.stage_id)
+    stage, stage_error = _resolve_stage(db, role=role, stage_id=payload.stage_id)
     if stage_error:
         return None, stage_error
     processes, processes_error = _resolve_processes(
         db,
-        role_code=role_code,
+        role=role,
         stage=stage,
     )
     if processes_error:
@@ -579,13 +592,12 @@ def approve_registration_request(
     if role_error:
         return None, role_error
 
-    resolved_role_code = role.code if role else None
-    stage, stage_error = _resolve_stage(db, role_code=resolved_role_code, stage_id=stage_id)
+    stage, stage_error = _resolve_stage(db, role=role, stage_id=stage_id)
     if stage_error:
         return None, stage_error
     processes, processes_error = _resolve_processes(
         db,
-        role_code=resolved_role_code,
+        role=role,
         stage=stage,
     )
     if processes_error:
@@ -677,18 +689,18 @@ def update_user(
     if current_role_code is None:
         return None, "User role is required"
     stage_id_for_resolve = payload.stage_id
-    if stage_id_for_resolve is None and current_role_code == ROLE_OPERATOR:
+    if stage_id_for_resolve is None and _can_assign_stage(current_role):
         stage_id_for_resolve = user.stage_id
     stage, stage_error = _resolve_stage(
         db,
-        role_code=current_role_code,
+        role=current_role,
         stage_id=stage_id_for_resolve,
     )
     if stage_error:
         return None, stage_error
     processes, processes_error = _resolve_processes(
         db,
-        role_code=current_role_code,
+        role=current_role,
         stage=stage,
     )
     if processes_error:

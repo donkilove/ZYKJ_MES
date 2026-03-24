@@ -21,14 +21,24 @@ from app.services.role_service import (
 router = APIRouter()
 
 
+def _normalize_role_output(role: Role) -> tuple[str, bool]:
+    role_type = role.role_type
+    is_builtin = role.is_builtin
+    if role.code == "maintenance_staff":
+        role_type = "builtin"
+        is_builtin = True
+    return role_type, is_builtin
+
+
 def to_role_item(db: Session, role: Role) -> RoleItem:
+    role_type, is_builtin = _normalize_role_output(role)
     return RoleItem(
         id=role.id,
         code=role.code,
         name=role.name,
         description=role.description,
-        role_type=role.role_type,
-        is_builtin=role.is_builtin,
+        role_type=role_type,
+        is_builtin=is_builtin,
         is_enabled=role.is_enabled,
         user_count=count_active_users_for_role(db, role.id),
         created_at=role.created_at,

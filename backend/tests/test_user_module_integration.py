@@ -348,6 +348,70 @@ class UserModuleIntegrationTest(unittest.TestCase):
         finally:
             db.close()
 
+    def test_custom_role_user_flows_accept_stage_assignment(self) -> None:
+        stage_id = self._create_enabled_stage_without_processes()
+
+        suffix = str(int(time.time() * 1000) % 100000)
+        self.role_code = f"custom_stage_{suffix}"
+        self.username = f"cu{suffix}"
+
+        role_response = self.client.post(
+            "/api/v1/roles",
+            headers=self._headers(),
+            json={
+                "code": self.role_code,
+                "name": f"自定义工段角色{suffix}",
+                "role_type": "custom",
+                "is_enabled": True,
+            },
+        )
+        self.assertEqual(role_response.status_code, 201, role_response.text)
+        self.role_id = int(role_response.json()["data"]["id"])
+
+        create_response = self.client.post(
+            "/api/v1/users",
+            headers=self._headers(),
+            json={
+                "username": self.username,
+                "password": "Pwd@123",
+                "role_code": self.role_code,
+                "stage_id": stage_id,
+                "remark": "自定义角色分配工段回归",
+                "is_active": True,
+            },
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        self.user_id = int(create_response.json()["data"]["id"])
+        self.assertEqual(create_response.json()["data"]["stage_id"], stage_id)
+
+        update_response = self.client.put(
+            f"/api/v1/users/{self.user_id}",
+            headers=self._headers(),
+            json={
+                "remark": "自定义角色保留工段回归",
+                "stage_id": stage_id,
+            },
+        )
+        self.assertEqual(update_response.status_code, 200, update_response.text)
+        self.assertEqual(update_response.json()["data"]["stage_id"], stage_id)
+
+    def test_roles_endpoint_normalizes_maintenance_staff_as_builtin(self) -> None:
+        response = self.client.get(
+            "/api/v1/roles?keyword=maintenance_staff",
+            headers=self._headers(),
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        items = response.json()["data"]["items"]
+        self.assertTrue(items)
+        maintenance_role = next(
+            (item for item in items if item["code"] == "maintenance_staff"),
+            None,
+        )
+        self.assertIsNotNone(maintenance_role)
+        assert maintenance_role is not None
+        self.assertEqual(maintenance_role["role_type"], "builtin")
+        self.assertTrue(maintenance_role["is_builtin"])
+
     def test_builtin_role_lifecycle_allows_manual_toggle(self) -> None:
         db = SessionLocal()
         try:
