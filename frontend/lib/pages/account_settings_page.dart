@@ -8,6 +8,7 @@ import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 import '../services/user_service.dart';
+import '../widgets/crud_page_header.dart';
 
 class AccountSettingsPage extends StatefulWidget {
   const AccountSettingsPage({
@@ -373,22 +374,72 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       return const SizedBox.shrink();
     }
     return Card(
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('用户名：${profile.username}'),
-            Text('显示名称：${profile.fullName ?? '-'}'),
-            Text(
-              '角色：${profile.roleName?.trim().isNotEmpty == true ? profile.roleName! : '-'}',
+            _buildSectionHeader(
+              icon: Icons.badge_outlined,
+              title: '个人资料',
+              subtitle: '展示当前账号的基础信息、组织归属与最近登录情况。',
             ),
-            Text('工段：${profile.stageName ?? '/'}'),
-            Text('账号状态：${profile.isActive ? '启用' : '停用'}'),
-            Text('创建时间：${_formatDateTime(profile.createdAt)}'),
-            Text('最近登录：${_formatDateTime(profile.lastLoginAt)}'),
-            Text('最近登录 IP：${profile.lastLoginIp ?? '-'}'),
-            Text('最近改密时间：${_formatDateTime(profile.passwordChangedAt)}'),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildInfoChip(
+                  label: profile.isActive ? '账号启用中' : '账号已停用',
+                  color: profile.isActive ? Colors.green : Colors.red,
+                  icon: profile.isActive
+                      ? Icons.verified_outlined
+                      : Icons.block_outlined,
+                ),
+                _buildInfoChip(
+                  label: profile.roleName?.trim().isNotEmpty == true
+                      ? profile.roleName!
+                      : '未分配角色',
+                  color: Theme.of(context).colorScheme.primary,
+                  icon: Icons.security_outlined,
+                ),
+                _buildInfoChip(
+                  label: profile.stageName?.trim().isNotEmpty == true
+                      ? '工段 ${profile.stageName!}'
+                      : '未绑定工段',
+                  color: Theme.of(context).colorScheme.secondary,
+                  icon: Icons.factory_outlined,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildFieldGroup(
+              children: [
+                _buildInfoItem('用户名', profile.username),
+                _buildInfoItem('显示名称', profile.fullName ?? '-'),
+                _buildInfoItem(
+                  '角色',
+                  profile.roleName?.trim().isNotEmpty == true
+                      ? profile.roleName!
+                      : '-',
+                ),
+                _buildInfoItem('工段', profile.stageName ?? '/'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildFieldGroup(
+              children: [
+                _buildInfoItem('创建时间', _formatDateTime(profile.createdAt)),
+                _buildInfoItem('最近登录', _formatDateTime(profile.lastLoginAt)),
+                _buildInfoItem('最近登录 IP', profile.lastLoginIp ?? '-'),
+                _buildInfoItem(
+                  '最近改密时间',
+                  _formatDateTime(profile.passwordChangedAt),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -408,6 +459,142 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     return '在线';
   }
 
+  Widget _buildOverviewCard() {
+    final theme = Theme.of(context);
+    final profile = _profile;
+    final currentSession = _session;
+    final statusColor = currentSession == null
+        ? theme.colorScheme.outline
+        : _sessionStatusColor(currentSession.remainingSeconds);
+    final statusLabel = currentSession == null
+        ? (widget.canViewSession ? '未同步' : '不可见')
+        : _sessionStatusLabel(currentSession.remainingSeconds);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          colors: [
+            theme.colorScheme.surfaceContainerHighest,
+            theme.colorScheme.surface,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withValues(alpha: 0.06),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: theme.colorScheme.primary.withValues(
+                    alpha: 0.12,
+                  ),
+                  child: Text(
+                    (profile?.fullName?.isNotEmpty == true
+                            ? profile!.fullName!
+                            : profile?.username ?? '我')
+                        .characters
+                        .first,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 220),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        profile?.fullName?.trim().isNotEmpty == true
+                            ? profile!.fullName!
+                            : profile?.username ?? '个人中心',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '账号 ${profile?.username ?? '-'} · ${profile?.roleName?.trim().isNotEmpty == true ? profile!.roleName! : '未分配角色'}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildOverviewBadge(
+                  label: '会话状态',
+                  value: statusLabel,
+                  color: statusColor,
+                  icon:
+                      currentSession != null &&
+                          currentSession.remainingSeconds <= 600
+                      ? Icons.warning_amber_rounded
+                      : Icons.monitor_heart_outlined,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildStatCard(
+                  label: '账号状态',
+                  value: profile == null
+                      ? '-'
+                      : (profile.isActive ? '启用' : '停用'),
+                  hint: '个人资料状态',
+                  icon: Icons.verified_user_outlined,
+                ),
+                _buildStatCard(
+                  label: '工段归属',
+                  value: profile?.stageName?.trim().isNotEmpty == true
+                      ? profile!.stageName!
+                      : '未绑定',
+                  hint: '当前组织位置',
+                  icon: Icons.schema_outlined,
+                ),
+                _buildStatCard(
+                  label: '最近登录',
+                  value: _formatDateTime(profile?.lastLoginAt),
+                  hint: '最近访问时间',
+                  icon: Icons.history_toggle_off_outlined,
+                ),
+                _buildStatCard(
+                  label: '剩余时长',
+                  value: currentSession == null
+                      ? (widget.canViewSession ? '未同步' : '不可见')
+                      : _formatDuration(currentSession.remainingSeconds),
+                  hint: widget.canViewSession ? '当前登录会话' : '当前无会话权限',
+                  icon: Icons.timer_outlined,
+                  accent: statusColor,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSessionCard() {
     if (!widget.canViewSession) {
       return const SizedBox.shrink();
@@ -415,27 +602,51 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     final currentSession = _session;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('当前会话', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
+            _buildSectionHeader(
+              icon: Icons.monitor_outlined,
+              title: '当前会话',
+              subtitle: '自动刷新当前登录状态，支持直接退出本次登录。',
+            ),
+            const SizedBox(height: 16),
             if (currentSession == null)
-              const Text('未查询到当前在线会话记录')
+              _buildEmptyStateCard(
+                icon: Icons.portable_wifi_off_outlined,
+                title: '未查询到当前在线会话记录',
+                subtitle: '系统暂未返回当前会话信息，可下拉页面后重试。',
+              )
             else ...[
-              _buildSessionStatusRow(currentSession),
-              Text('登录时间：${_formatDateTime(currentSession.loginTime)}'),
-              Text('最后活跃时间：${_formatDateTime(currentSession.lastActiveAt)}'),
-              Text('过期时间：${_formatDateTime(currentSession.expiresAt)}'),
-              _buildRemainingRow(currentSession),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: OutlinedButton(
-                  onPressed: _loggingOut ? null : _logout,
-                  child: Text(_loggingOut ? '退出中...' : '退出当前登录'),
-                ),
+              Row(
+                children: [
+                  Expanded(child: _buildSessionStatusRow(currentSession)),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: _loggingOut ? null : _logout,
+                    icon: const Icon(Icons.logout),
+                    label: Text(_loggingOut ? '退出中...' : '退出当前登录'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildFieldGroup(
+                children: [
+                  _buildInfoItem(
+                    '登录时间',
+                    _formatDateTime(currentSession.loginTime),
+                  ),
+                  _buildInfoItem(
+                    '最后活跃时间',
+                    _formatDateTime(currentSession.lastActiveAt),
+                  ),
+                  _buildInfoItem(
+                    '过期时间',
+                    _formatDateTime(currentSession.expiresAt),
+                  ),
+                  _buildRemainingInfo(currentSession),
+                ],
               ),
             ],
           ],
@@ -447,41 +658,69 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   Widget _buildSessionStatusRow(CurrentSessionResult session) {
     final color = _sessionStatusColor(session.remainingSeconds);
     final label = _sessionStatusLabel(session.remainingSeconds);
-    return Row(
-      children: [
-        const Text('状态：'),
-        if (session.remainingSeconds <= 600)
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: Icon(Icons.warning_amber_rounded, color: color, size: 16),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              session.remainingSeconds <= 600
+                  ? Icons.warning_amber_rounded
+                  : Icons.shield_outlined,
+              color: color,
+              size: 20,
+            ),
           ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(4),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '状态',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: TextStyle(color: color, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
           ),
-          child: Text(
-            label,
-            style: TextStyle(color: color, fontWeight: FontWeight.w600),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildRemainingRow(CurrentSessionResult session) {
+  Widget _buildRemainingInfo(CurrentSessionResult session) {
     final color = _sessionStatusColor(session.remainingSeconds);
     final isWarning = session.remainingSeconds <= 600;
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('剩余时间：', style: isWarning ? TextStyle(color: color) : null),
+        const Text(
+          '剩余时间',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
         Text(
           _formatDuration(session.remainingSeconds),
           style: TextStyle(
             color: color,
-            fontWeight: isWarning ? FontWeight.bold : FontWeight.normal,
-            fontSize: isWarning ? 14 : null,
+            fontWeight: isWarning ? FontWeight.bold : FontWeight.w600,
+            fontSize: isWarning ? 16 : 14,
           ),
         ),
       ],
@@ -492,6 +731,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     final highlightColor = Theme.of(context).colorScheme.primary;
     return Card(
       key: _passwordSectionKey,
+      elevation: 0,
       color: _passwordSectionHighlighted
           ? highlightColor.withValues(alpha: 0.08)
           : null,
@@ -505,13 +745,17 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(20),
         child: Form(
           key: _passwordFormKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('修改密码', style: TextStyle(fontWeight: FontWeight.w600)),
+              _buildSectionHeader(
+                icon: Icons.lock_outline,
+                title: '修改密码',
+                subtitle: '更新当前账号密码，提交成功后将自动退出并要求重新登录。',
+              ),
               if (_passwordSectionHighlighted) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -525,73 +769,331 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   ),
                 ),
               ],
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _oldPasswordController,
-                focusNode: _oldPasswordFocusNode,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: '当前密码',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '当前密码不能为空';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _newPasswordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: '新密码',
-                  helperText: '密码规则：至少6位；不能与原密码相同；不能包含连续4位相同字符；不能与系统中已有用户密码相同。',
-                  helperMaxLines: 3,
-                  border: OutlineInputBorder(),
-                  isDense: true,
+                child: Column(
+                  children: [
+                    TextFormField(
+                      controller: _oldPasswordController,
+                      focusNode: _oldPasswordFocusNode,
+                      obscureText: true,
+                      showCursor: false,
+                      decoration: const InputDecoration(
+                        labelText: '当前密码',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.lock_person_outlined),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return '当前密码不能为空';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _newPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: '新密码',
+                        helperText:
+                            '密码规则：至少6位；不能与原密码相同；不能包含连续4位相同字符；不能与系统中已有用户密码相同。',
+                        helperMaxLines: 3,
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.enhanced_encryption_outlined),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.length < 6) {
+                          return '新密码长度不能少于 6 位';
+                        }
+                        if (value == _oldPasswordController.text) {
+                          return '新密码不能与原密码相同';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _confirmPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: '确认新密码',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.password_outlined),
+                      ),
+                      validator: (value) {
+                        if (value != _newPasswordController.text) {
+                          return '两次输入的新密码不一致';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
                 ),
-                validator: (value) {
-                  if (value == null || value.length < 6) {
-                    return '新密码长度不能少于 6 位';
-                  }
-                  if (value == _oldPasswordController.text) {
-                    return '新密码不能与原密码相同';
-                  }
-                  return null;
-                },
               ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _confirmPasswordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: '确认新密码',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      widget.canChangePassword
+                          ? '修改成功后将结束当前会话。'
+                          : '当前账号没有修改密码权限。',
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: widget.canChangePassword && !_changing
+                        ? _changePassword
+                        : null,
+                    icon: Icon(
+                      _changing ? Icons.hourglass_top : Icons.save_outlined,
+                    ),
+                    label: Text(_changing ? '保存中...' : '修改密码'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: theme.colorScheme.primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
-                validator: (value) {
-                  if (value != _newPasswordController.text) {
-                    return '两次输入的新密码不一致';
-                  }
-                  return null;
-                },
               ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: widget.canChangePassword && !_changing
-                      ? _changePassword
-                      : null,
-                  child: Text(_changing ? '保存中...' : '修改密码'),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildInfoChip({
+    required String label,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(color: color, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewBadge({
+    required String label,
+    required String value,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 12)),
+              Text(
+                value,
+                style: TextStyle(color: color, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard({
+    required String label,
+    required String value,
+    required String hint,
+    required IconData icon,
+    Color? accent,
+  }) {
+    final theme = Theme.of(context);
+    final highlight = accent ?? theme.colorScheme.primary;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 180, maxWidth: 260),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface.withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: theme.colorScheme.outlineVariant),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: highlight),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(hint, style: theme.textTheme.bodySmall),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldGroup({required List<Widget> children}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Wrap(spacing: 16, runSpacing: 16, children: children),
+    );
+  }
+
+  Widget _buildInfoItem(String label, String value) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: 220,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyStateCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(subtitle, style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -603,21 +1105,69 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     }
     return RefreshIndicator(
       onRefresh: _loadData,
-      child: ListView(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(12),
-        children: [
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(_message, style: const TextStyle(color: Colors.red)),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 1080;
+          final sideSpacing = isWide ? 20.0 : 0.0;
+          return SingleChildScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CrudPageHeader(title: '个人中心', onRefresh: _loadData),
+                const SizedBox(height: 12),
+                _buildOverviewCard(),
+                const SizedBox(height: 16),
+                if (_message.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _message,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                      ),
+                    ),
+                  ),
+                if (isWide)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          children: [
+                            _buildProfileCard(),
+                            if (widget.canViewSession) ...[
+                              const SizedBox(height: 16),
+                              _buildSessionCard(),
+                            ],
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: sideSpacing),
+                      Expanded(flex: 4, child: _buildPasswordCard()),
+                    ],
+                  )
+                else ...[
+                  _buildProfileCard(),
+                  if (widget.canViewSession) ...[
+                    const SizedBox(height: 16),
+                    _buildSessionCard(),
+                  ],
+                  const SizedBox(height: 16),
+                  _buildPasswordCard(),
+                ],
+              ],
             ),
-          _buildProfileCard(),
-          const SizedBox(height: 10),
-          _buildSessionCard(),
-          const SizedBox(height: 10),
-          _buildPasswordCard(),
-        ],
+          );
+        },
       ),
     );
   }

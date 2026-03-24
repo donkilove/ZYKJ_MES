@@ -6,6 +6,7 @@ import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/authz_service.dart';
 import '../services/user_service.dart';
+import '../widgets/crud_page_header.dart';
 
 const Map<String, String> _moduleNameFallbackZh = {
   'user': '用户管理',
@@ -516,6 +517,62 @@ class _FunctionPermissionConfigPageState
     }
   }
 
+  Future<void> _refreshCurrentModule() async {
+    final moduleCode = _selectedModuleCode;
+    if (moduleCode == null || _loading || _saving) {
+      return;
+    }
+    if (_hasDirty) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('刷新页面'),
+            content: const Text('当前有未保存改动，是否放弃并刷新？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('放弃并刷新'),
+              ),
+            ],
+          );
+        },
+      );
+      if (discard != true) {
+        return;
+      }
+    }
+
+    setState(() {
+      _loading = true;
+      _message = '';
+    });
+    try {
+      await _loadModuleData(moduleCode);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '刷新权限配置失败：${_errorMessage(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
   void _setRoleModuleEnabled({
     required String roleCode,
     required _RoleDraft draft,
@@ -765,7 +822,13 @@ class _FunctionPermissionConfigPageState
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          CrudPageHeader(
+            title: '功能权限配置',
+            onRefresh: _loading || _saving ? null : _refreshCurrentModule,
+          ),
+          const SizedBox(height: 12),
           Card(
             margin: EdgeInsets.zero,
             child: Padding(

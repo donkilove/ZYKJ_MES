@@ -4,14 +4,16 @@ import '../models/app_session.dart';
 import '../models/user_models.dart';
 import '../services/api_exception.dart';
 import '../services/user_service.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/simple_pagination_bar.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 class LoginSessionPage extends StatefulWidget {
   const LoginSessionPage({
     super.key,
     required this.session,
     required this.onLogout,
-    required this.canViewLoginLogs,
     required this.canViewOnlineSessions,
     required this.canForceOffline,
     this.userService,
@@ -19,7 +21,6 @@ class LoginSessionPage extends StatefulWidget {
 
   final AppSession session;
   final VoidCallback onLogout;
-  final bool canViewLoginLogs;
   final bool canViewOnlineSessions;
   final bool canForceOffline;
   final UserService? userService;
@@ -29,43 +30,48 @@ class LoginSessionPage extends StatefulWidget {
 }
 
 class _LoginSessionPageState extends State<LoginSessionPage> {
-  static const int _logPageSize = 200;
   static const int _sessionPageSize = 200;
 
   late final UserService _userService;
 
-  final TextEditingController _logUsernameController = TextEditingController();
   final TextEditingController _sessionKeywordController =
       TextEditingController();
-  bool? _logSuccessFilter;
-  DateTime? _logStartTime;
-  DateTime? _logEndTime;
-
-  bool _loadingLogs = false;
   bool _loadingSessions = false;
   String _message = '';
-  String? _sessionStatusFilter;
 
-  int _logTotal = 0;
   int _sessionTotal = 0;
-  int _logPage = 1;
   int _sessionPage = 1;
-  List<LoginLogItem> _loginLogs = const [];
   List<OnlineSessionItem> _onlineSessions = const [];
   final Set<String> _selectedSessionIds = <String>{};
-
-  int get _logTotalPages {
-    if (_logTotal <= 0) {
-      return 1;
-    }
-    return ((_logTotal - 1) ~/ _logPageSize) + 1;
-  }
 
   int get _sessionTotalPages {
     if (_sessionTotal <= 0) {
       return 1;
     }
     return ((_sessionTotal - 1) ~/ _sessionPageSize) + 1;
+  }
+
+  List<OnlineSessionItem> get _selectableSessions => widget.canForceOffline
+      ? _onlineSessions.where((item) => item.status == 'active').toList()
+      : const [];
+
+  bool get _hasSelectableSessions => _selectableSessions.isNotEmpty;
+
+  bool get _allCurrentPageSelected {
+    final selectableIds = _selectableSessions
+        .map((item) => item.sessionTokenId)
+        .toSet();
+    return selectableIds.isNotEmpty &&
+        selectableIds.every(_selectedSessionIds.contains);
+  }
+
+  bool get _someCurrentPageSelected {
+    if (_allCurrentPageSelected) {
+      return false;
+    }
+    return _selectableSessions.any(
+      (item) => _selectedSessionIds.contains(item.sessionTokenId),
+    );
   }
 
   @override
@@ -77,7 +83,6 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
 
   @override
   void dispose() {
-    _logUsernameController.dispose();
     _sessionKeywordController.dispose();
     super.dispose();
   }
@@ -93,72 +98,13 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
   }
 
   Future<void> _loadAll() async {
-    final tasks = <Future<void>>[];
-    if (widget.canViewLoginLogs) {
-      tasks.add(_loadLoginLogs());
-    }
-    if (widget.canViewOnlineSessions) {
-      tasks.add(_loadOnlineSessions());
-    }
-    if (tasks.isEmpty) {
+    if (!widget.canViewOnlineSessions) {
       setState(() {
-        _message = '当前账号没有登录日志或在线会话查看权限。';
+        _message = '当前账号没有在线会话查看权限。';
       });
       return;
     }
-    await Future.wait(tasks);
-  }
-
-  Future<void> _loadLoginLogs({int? page}) async {
-    final targetPage = page ?? _logPage;
-    setState(() {
-      _loadingLogs = true;
-      _message = '';
-    });
-    try {
-      final result = await _userService.listLoginLogs(
-        page: targetPage,
-        pageSize: _logPageSize,
-        username: _logUsernameController.text.trim(),
-        success: _logSuccessFilter,
-        startTime: _logStartTime,
-        endTime: _logEndTime,
-      );
-      if (!mounted) {
-        return;
-      }
-      final resolvedTotalPages = result.total <= 0
-          ? 1
-          : (((result.total - 1) ~/ _logPageSize) + 1);
-      final resolvedPage = targetPage > resolvedTotalPages
-          ? resolvedTotalPages
-          : targetPage;
-      setState(() {
-        _loginLogs = result.items;
-        _logTotal = result.total;
-        _logPage = resolvedPage;
-      });
-      if (resolvedPage != targetPage) {
-        await _loadLoginLogs(page: resolvedPage);
-      }
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      setState(() {
-        _message = '加载登录日志失败：${_errorMessage(error)}';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingLogs = false;
-        });
-      }
-    }
+    await _loadOnlineSessions();
   }
 
   Future<void> _loadOnlineSessions({int? page}) async {
@@ -172,16 +118,15 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         page: targetPage,
         pageSize: _sessionPageSize,
         keyword: _sessionKeywordController.text.trim(),
-        statusFilter: _sessionStatusFilter,
+        statusFilter: 'active',
       );
       if (!mounted) {
         return;
       }
-      final validIds = result.items.map((item) => item.sessionTokenId).toSet();
-      final activeIds = result.items
+      final activeItems = result.items
           .where((item) => item.status == 'active')
-          .map((item) => item.sessionTokenId)
-          .toSet();
+          .toList();
+      final validIds = activeItems.map((item) => item.sessionTokenId).toSet();
       final resolvedTotalPages = result.total <= 0
           ? 1
           : (((result.total - 1) ~/ _sessionPageSize) + 1);
@@ -189,12 +134,10 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
           ? resolvedTotalPages
           : targetPage;
       setState(() {
-        _onlineSessions = result.items;
+        _onlineSessions = activeItems;
         _sessionTotal = result.total;
         _sessionPage = resolvedPage;
-        _selectedSessionIds.removeWhere(
-          (id) => !validIds.contains(id) || !activeIds.contains(id),
-        );
+        _selectedSessionIds.removeWhere((id) => !validIds.contains(id));
       });
       if (resolvedPage != targetPage) {
         await _loadOnlineSessions(page: resolvedPage);
@@ -229,16 +172,8 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         '${twoDigits(local.hour)}:${twoDigits(local.minute)}:${twoDigits(local.second)}';
   }
 
-  String _sessionStatusLabel(String status) {
-    return status == 'active' ? '在线' : '离线';
-  }
-
   bool _canForceOfflineSession(OnlineSessionItem item) {
     return widget.canForceOffline && item.status == 'active';
-  }
-
-  Color _sessionStatusColor(BuildContext context, String status) {
-    return status == 'active' ? Colors.green : Colors.grey;
   }
 
   Future<void> _forceOfflineSingle(String sessionTokenId) async {
@@ -294,195 +229,49 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
     }
   }
 
-  Widget _buildLoginLogsTab() {
-    final startLabel = _logStartTime != null
-        ? '${_logStartTime!.year}-${_logStartTime!.month.toString().padLeft(2, '0')}-${_logStartTime!.day.toString().padLeft(2, '0')}'
-        : '开始日期';
-    final endLabel = _logEndTime != null
-        ? '${_logEndTime!.year}-${_logEndTime!.month.toString().padLeft(2, '0')}-${_logEndTime!.day.toString().padLeft(2, '0')}'
-        : '结束日期';
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Wrap(
+  void _toggleSelectCurrentPage(bool? value) {
+    if (!_hasSelectableSessions) {
+      return;
+    }
+    final nextSelected = value ?? false;
+    setState(() {
+      for (final item in _selectableSessions) {
+        if (nextSelected) {
+          _selectedSessionIds.add(item.sessionTokenId);
+        } else {
+          _selectedSessionIds.remove(item.sessionTokenId);
+        }
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (!widget.canViewOnlineSessions) {
+      return Center(
+        child: Text(_message.isEmpty ? '当前账号没有在线会话查看权限。' : _message),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CrudPageHeader(
+            title: '在线会话',
+            onRefresh: _loadingSessions ? null : () => _loadOnlineSessions(),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
             spacing: 8,
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _logUsernameController,
-                  decoration: const InputDecoration(
-                    labelText: '用户名',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadLoginLogs(page: 1),
-                ),
-              ),
-              DropdownButton<bool?>(
-                value: _logSuccessFilter,
-                items: const [
-                  DropdownMenuItem<bool?>(value: null, child: Text('全部')),
-                  DropdownMenuItem<bool?>(value: true, child: Text('成功')),
-                  DropdownMenuItem<bool?>(value: false, child: Text('失败')),
-                ],
-                onChanged: (value) {
-                  setState(() => _logSuccessFilter = value);
-                  _loadLoginLogs(page: 1);
-                },
-              ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(startLabel),
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: _logStartTime ?? DateTime.now(),
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime.now().add(const Duration(days: 1)),
-                  );
-                  if (picked != null) {
-                    setState(() => _logStartTime = picked);
-                  }
-                },
-              ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(endLabel),
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: _logEndTime ?? DateTime.now(),
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime.now().add(const Duration(days: 1)),
-                  );
-                  if (picked != null) {
-                    setState(
-                      () => _logEndTime = DateTime(
-                        picked.year,
-                        picked.month,
-                        picked.day,
-                        23,
-                        59,
-                        59,
-                      ),
-                    );
-                  }
-                },
-              ),
-              if (_logStartTime != null || _logEndTime != null)
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _logStartTime = null;
-                      _logEndTime = null;
-                    });
-                    _loadLoginLogs(page: 1);
-                  },
-                  child: const Text('清除时间'),
-                ),
-              OutlinedButton(
-                onPressed: () => _loadLoginLogs(page: 1),
-                child: const Text('查询'),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text('总数：$_logTotal'),
-          ),
-        ),
-        Expanded(
-          child: _loadingLogs
-              ? const Center(child: CircularProgressIndicator())
-              : _loginLogs.isEmpty
-              ? const Center(child: Text('暂无登录日志'))
-              : Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: Scrollbar(
-                      thumbVisibility: true,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: 980),
-                          child: SingleChildScrollView(
-                            child: DataTable(
-                              columnSpacing: 20,
-                              headingRowHeight: 44,
-                              dataRowMinHeight: 56,
-                              dataRowMaxHeight: 72,
-                              columns: const [
-                                DataColumn(label: Text('用户名')),
-                                DataColumn(label: Text('结果')),
-                                DataColumn(label: Text('登录时间')),
-                                DataColumn(label: Text('IP 地址')),
-                                DataColumn(label: Text('终端信息')),
-                                DataColumn(label: Text('失败原因')),
-                              ],
-                              rows: _loginLogs.map((item) {
-                                final successColor = item.success
-                                    ? Colors.green
-                                    : Theme.of(context).colorScheme.error;
-                                return DataRow(
-                                  cells: [
-                                    DataCell(Text(item.username)),
-                                    DataCell(
-                                      Text(
-                                        item.success ? '成功' : '失败',
-                                        style: TextStyle(
-                                          color: successColor,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(_formatDateTime(item.loginTime)),
-                                    ),
-                                    DataCell(Text(item.ipAddress ?? '-')),
-                                    DataCell(Text(item.terminalInfo ?? '-')),
-                                    DataCell(Text(item.failureReason ?? '-')),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: SimplePaginationBar(
-            page: _logPage,
-            totalPages: _logTotalPages,
-            total: _logTotal,
-            loading: _loadingLogs,
-            onPrevious: () => _loadLoginLogs(page: _logPage - 1),
-            onNext: () => _loadLoginLogs(page: _logPage + 1),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOnlineSessionsTab() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
+                width: 320,
                 child: TextField(
                   controller: _sessionKeywordController,
                   decoration: const InputDecoration(
@@ -493,28 +282,25 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                   onSubmitted: (_) => _loadOnlineSessions(page: 1),
                 ),
               ),
-              const SizedBox(width: 8),
               OutlinedButton(
                 onPressed: () => _loadOnlineSessions(page: 1),
                 child: const Text('查询'),
               ),
-              const SizedBox(width: 8),
-              DropdownButton<String?>(
-                value: _sessionStatusFilter,
-                items: const [
-                  DropdownMenuItem<String?>(value: null, child: Text('全部状态')),
-                  DropdownMenuItem<String?>(value: 'active', child: Text('在线')),
-                  DropdownMenuItem<String?>(
-                    value: 'offline',
-                    child: Text('离线'),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Checkbox(
+                    value: _allCurrentPageSelected
+                        ? true
+                        : (_someCurrentPageSelected ? null : false),
+                    tristate: true,
+                    onChanged: _hasSelectableSessions
+                        ? _toggleSelectCurrentPage
+                        : null,
                   ),
+                  const Text('全选当前页'),
                 ],
-                onChanged: (value) {
-                  setState(() => _sessionStatusFilter = value);
-                  _loadOnlineSessions(page: 1);
-                },
               ),
-              const SizedBox(width: 8),
               FilledButton(
                 onPressed:
                     widget.canForceOffline && _selectedSessionIds.isNotEmpty
@@ -524,129 +310,104 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
               ),
             ],
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text('总数：$_sessionTotal'),
-          ),
-        ),
-        Expanded(
-          child: _loadingSessions
-              ? const Center(child: CircularProgressIndicator())
-              : _onlineSessions.isEmpty
-              ? const Center(child: Text('暂无在线会话'))
-              : Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: Scrollbar(
-                      thumbVisibility: true,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: 1220),
-                          child: SingleChildScrollView(
-                            child: DataTable(
-                              columnSpacing: 16,
-                              headingRowHeight: 44,
-                              dataRowMinHeight: 60,
-                              dataRowMaxHeight: 76,
-                              columns: const [
-                                DataColumn(label: Text('选择')),
-                                DataColumn(label: Text('用户名')),
-                                DataColumn(label: Text('角色')),
-                                DataColumn(label: Text('工段')),
-                                DataColumn(label: Text('状态')),
-                                DataColumn(label: Text('登录时间')),
-                                DataColumn(label: Text('最后活跃')),
-                                DataColumn(label: Text('IP 地址')),
-                                DataColumn(label: Text('终端信息')),
-                                DataColumn(label: Text('操作')),
-                              ],
-                              rows: _onlineSessions.map((item) {
-                                final checked = _selectedSessionIds.contains(
-                                  item.sessionTokenId,
-                                );
-                                final canForceOffline = _canForceOfflineSession(
-                                  item,
-                                );
-                                return DataRow(
-                                  cells: [
-                                    DataCell(
-                                      Checkbox(
-                                        value: checked,
-                                        onChanged: canForceOffline
-                                            ? (value) {
-                                                setState(() {
-                                                  if (value ?? false) {
-                                                    _selectedSessionIds.add(
-                                                      item.sessionTokenId,
-                                                    );
-                                                  } else {
-                                                    _selectedSessionIds.remove(
-                                                      item.sessionTokenId,
-                                                    );
-                                                  }
-                                                });
-                                              }
-                                            : null,
-                                      ),
-                                    ),
-                                    DataCell(Text(item.username)),
-                                    DataCell(
-                                      Text(
-                                        item.roleName?.trim().isNotEmpty == true
-                                            ? item.roleName!
-                                            : '-',
-                                      ),
-                                    ),
-                                    DataCell(Text(item.stageName ?? '-')),
-                                    DataCell(
-                                      Text(
-                                        _sessionStatusLabel(item.status),
-                                        style: TextStyle(
-                                          color: _sessionStatusColor(
-                                            context,
-                                            item.status,
-                                          ),
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(_formatDateTime(item.loginTime)),
-                                    ),
-                                    DataCell(
-                                      Text(_formatDateTime(item.lastActiveAt)),
-                                    ),
-                                    DataCell(Text(item.ipAddress ?? '-')),
-                                    DataCell(Text(item.terminalInfo ?? '-')),
-                                    DataCell(
-                                      OutlinedButton(
-                                        onPressed: canForceOffline
-                                            ? () => _forceOfflineSingle(
-                                                item.sessionTokenId,
-                                              )
-                                            : null,
-                                        child: const Text('强制下线'),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
+          const SizedBox(height: 12),
+          if (_message.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ),
+          Expanded(
+            child: CrudListTableSection(
+              loading: _loadingSessions,
+              isEmpty: _onlineSessions.isEmpty,
+              emptyText: '暂无在线会话',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columnSpacing: 16,
+                dataRowMinHeight: 60,
+                dataRowMaxHeight: 76,
+                columns: [
+                  UnifiedListTableHeaderStyle.column(context, '选择'),
+                  UnifiedListTableHeaderStyle.column(context, '用户名'),
+                  UnifiedListTableHeaderStyle.column(context, '角色'),
+                  UnifiedListTableHeaderStyle.column(context, '工段'),
+                  UnifiedListTableHeaderStyle.column(context, '状态'),
+                  UnifiedListTableHeaderStyle.column(context, '登录时间'),
+                  UnifiedListTableHeaderStyle.column(context, '最后活跃'),
+                  UnifiedListTableHeaderStyle.column(context, 'IP 地址'),
+                  UnifiedListTableHeaderStyle.column(context, '终端信息'),
+                  UnifiedListTableHeaderStyle.column(context, '操作'),
+                ],
+                rows: _onlineSessions.map((item) {
+                  final checked = _selectedSessionIds.contains(
+                    item.sessionTokenId,
+                  );
+                  final canForceOffline = _canForceOfflineSession(item);
+                  return DataRow(
+                    cells: [
+                      DataCell(
+                        Checkbox(
+                          value: checked,
+                          onChanged: canForceOffline
+                              ? (value) {
+                                  setState(() {
+                                    if (value ?? false) {
+                                      _selectedSessionIds.add(
+                                        item.sessionTokenId,
+                                      );
+                                    } else {
+                                      _selectedSessionIds.remove(
+                                        item.sessionTokenId,
+                                      );
+                                    }
+                                  });
+                                }
+                              : null,
+                        ),
+                      ),
+                      DataCell(Text(item.username)),
+                      DataCell(
+                        Text(
+                          item.roleName?.trim().isNotEmpty == true
+                              ? item.roleName!
+                              : '-',
+                        ),
+                      ),
+                      DataCell(Text(item.stageName ?? '-')),
+                      const DataCell(
+                        Text(
+                          '在线',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: SimplePaginationBar(
+                      DataCell(Text(_formatDateTime(item.loginTime))),
+                      DataCell(Text(_formatDateTime(item.lastActiveAt))),
+                      DataCell(Text(item.ipAddress ?? '-')),
+                      DataCell(Text(item.terminalInfo ?? '-')),
+                      DataCell(
+                        OutlinedButton(
+                          onPressed: canForceOffline
+                              ? () => _forceOfflineSingle(item.sessionTokenId)
+                              : null,
+                          child: const Text('强制下线'),
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
             page: _sessionPage,
             totalPages: _sessionTotalPages,
             total: _sessionTotal,
@@ -654,47 +415,6 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
             onPrevious: () => _loadOnlineSessions(page: _sessionPage - 1),
             onNext: () => _loadOnlineSessions(page: _sessionPage + 1),
           ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tabs = <Tab>[];
-    final pages = <Widget>[];
-    if (widget.canViewLoginLogs) {
-      tabs.add(const Tab(text: '登录日志'));
-      pages.add(_buildLoginLogsTab());
-    }
-    if (widget.canViewOnlineSessions) {
-      tabs.add(const Tab(text: '在线会话'));
-      pages.add(_buildOnlineSessionsTab());
-    }
-
-    if (tabs.isEmpty) {
-      return Center(
-        child: Text(_message.isEmpty ? '当前账号没有登录日志或在线会话查看权限。' : _message),
-      );
-    }
-
-    return DefaultTabController(
-      length: tabs.length,
-      child: Column(
-        children: [
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _message,
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ),
-            ),
-          TabBar(tabs: tabs),
-          Expanded(child: TabBarView(children: pages)),
         ],
       ),
     );

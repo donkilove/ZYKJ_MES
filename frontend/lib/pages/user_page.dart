@@ -105,9 +105,6 @@ class _UserPageState extends State<UserPage> {
 
   bool get _canViewMySession => true;
 
-  bool get _canViewLoginLogs =>
-      _hasPermission(UserFeaturePermissionCodes.loginSessionLoginLogsView);
-
   bool get _canViewOnlineSessions =>
       _hasPermission(UserFeaturePermissionCodes.loginSessionOnlineView);
 
@@ -225,7 +222,6 @@ class _UserPageState extends State<UserPage> {
               child: LoginSessionPage(
                 session: widget.session,
                 onLogout: widget.onLogout,
-                canViewLoginLogs: _canViewLoginLogs,
                 canViewOnlineSessions: _canViewOnlineSessions,
                 canForceOffline: _canManageSessions,
               ),

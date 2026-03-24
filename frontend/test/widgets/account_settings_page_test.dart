@@ -63,7 +63,8 @@ void main() {
     }
 
     await pumpPage();
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(
       find.byKey(const ValueKey('account-settings-change-password-anchor')),
@@ -78,7 +79,8 @@ void main() {
     );
 
     await pumpPage();
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(
       find.byKey(const ValueKey('account-settings-change-password-anchor')),
       findsNothing,
