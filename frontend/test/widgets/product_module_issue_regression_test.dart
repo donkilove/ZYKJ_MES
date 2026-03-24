@@ -413,6 +413,11 @@ class _ParameterManagementContractService extends ProductService {
   final List<int> versionUpdateCalls = [];
   final List<int> historyCalls = [];
   final List<int> listPageSizes = [];
+  String? lastVersionKeyword;
+  String? lastParamNameKeyword;
+  String? lastParamCategoryKeyword;
+  DateTime? lastUpdatedAfter;
+  DateTime? lastUpdatedBefore;
   int legacyListCalls = 0;
 
   @override
@@ -456,6 +461,11 @@ class _ParameterManagementContractService extends ProductService {
     DateTime? updatedBefore,
   }) async {
     listPageSizes.add(pageSize);
+    lastVersionKeyword = versionKeyword;
+    lastParamNameKeyword = paramNameKeyword;
+    lastParamCategoryKeyword = paramCategoryKeyword;
+    lastUpdatedAfter = updatedAfter;
+    lastUpdatedBefore = updatedBefore;
     return ProductParameterVersionListResult(
       total: parameterVersionRows.length,
       items: parameterVersionRows,
@@ -674,6 +684,8 @@ class _ParameterQueryPageService extends ProductService {
   int parameterQueryCalls = 0;
   int legacyListCalls = 0;
   final List<int> pageSizes = [];
+  String? lastLifecycleStatus;
+  bool? lastHasEffectiveVersion;
 
   @override
   Future<ProductListResult> listProducts({
@@ -700,10 +712,13 @@ class _ParameterQueryPageService extends ProductService {
     String? keyword,
     String? category,
     String? lifecycleStatus,
+    bool? hasEffectiveVersion,
     String? effectiveVersionKeyword,
   }) async {
     parameterQueryCalls += 1;
     pageSizes.add(pageSize);
+    lastLifecycleStatus = lifecycleStatus;
+    lastHasEffectiveVersion = hasEffectiveVersion;
     return ProductListResult(total: products.length, items: products);
   }
 }
@@ -1515,6 +1530,41 @@ void main() {
       expect(service.legacyListCalls, 0, reason: '保存链路不应触发旧参数读取兜底。');
     });
 
+    testWidgets('参数管理页列表态不再显示明细筛选且请求不传对应参数', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _ParameterManagementContractService();
+
+      await tester.pumpWidget(
+        _host(
+          ProductParameterManagementPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: 'product-parameter-management',
+            service: service,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('搜索产品名称'), findsOneWidget);
+      expect(find.text('分类筛选'), findsOneWidget);
+      expect(find.text('版本号筛选'), findsNothing);
+      expect(find.text('参数名称筛选'), findsNothing);
+      expect(find.text('参数分组筛选'), findsNothing);
+      expect(find.text('修改起始日期'), findsNothing);
+      expect(find.text('修改截止日期'), findsNothing);
+      expect(find.text('清除日期'), findsNothing);
+      expect(find.text('筛选条件直接命中版本参数明细；查看/编辑/历史/导出均绑定当前版本行。'), findsNothing);
+      expect(service.lastVersionKeyword, isNull);
+      expect(service.lastParamNameKeyword, isNull);
+      expect(service.lastParamCategoryKeyword, isNull);
+      expect(service.lastUpdatedAfter, isNull);
+      expect(service.lastUpdatedBefore, isNull);
+    });
+
     testWidgets('参数编辑应即时提示 Link 格式错误', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1800, 1200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1603,8 +1653,22 @@ void main() {
 
       expect(service.parameterQueryCalls, 1);
       expect(service.pageSizes, [200], reason: '参数查询首屏应使用后端允许的分页大小。');
+      expect(
+        service.lastLifecycleStatus,
+        'active',
+        reason: '参数查询页应固定查询启用中的产品。',
+      );
+      expect(
+        service.lastHasEffectiveVersion,
+        isTrue,
+        reason: '参数查询页应固定查询已有生效版本的产品。',
+      );
       expect(service.legacyListCalls, 0);
       expect(find.text('产品51'), findsOneWidget);
+      expect(find.text('状态筛选'), findsNothing);
+      expect(find.text('生效版本号筛选'), findsNothing);
+      expect(find.byIcon(Icons.more_vert), findsNothing);
+      expect(find.widgetWithText(TextButton, '查看参数'), findsOneWidget);
     });
   });
 }

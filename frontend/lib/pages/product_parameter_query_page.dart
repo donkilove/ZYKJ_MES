@@ -16,8 +16,6 @@ import '../widgets/unified_list_table_header_style.dart';
 
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
 
-enum _ProductParameterQueryListAction { view }
-
 class ProductParameterQueryPage extends StatefulWidget {
   const ProductParameterQueryPage({
     super.key,
@@ -53,9 +51,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   List<ProductItem> _products = const [];
   int _handledJumpSeq = 0;
   String _selectedCategoryFilter = '';
-  String _selectedStatusFilter = '';
-  final TextEditingController _versionFilterController =
-      TextEditingController();
 
   @override
   void initState() {
@@ -84,7 +79,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   @override
   void dispose() {
     _keywordController.dispose();
-    _versionFilterController.dispose();
     super.dispose();
   }
 
@@ -121,27 +115,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     }
   }
 
-  List<PopupMenuEntry<_ProductParameterQueryListAction>>
-  _buildListActionMenuItems() {
-    return const [
-      PopupMenuItem(
-        value: _ProductParameterQueryListAction.view,
-        child: Text('查看参数'),
-      ),
-    ];
-  }
-
-  Future<void> _handleListAction(
-    _ProductParameterQueryListAction action,
-    ProductItem product,
-  ) async {
-    switch (action) {
-      case _ProductParameterQueryListAction.view:
-        await _showParametersDialog(product);
-        return;
-    }
-  }
-
   ProductItem? _findProductById(int productId) {
     for (final product in _products) {
       if (product.id == productId) {
@@ -162,8 +135,8 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
         pageSize: _listPageSize,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
-        lifecycleStatus: _selectedStatusFilter,
-        effectiveVersionKeyword: _versionFilterController.text.trim(),
+        lifecycleStatus: 'active',
+        hasEffectiveVersion: true,
       );
       if (!mounted) {
         return;
@@ -271,8 +244,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       final bytes = await _productService.exportProductParameters(
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
-        lifecycleStatus: _selectedStatusFilter,
-        versionKeyword: _versionFilterController.text.trim(),
+        lifecycleStatus: 'active',
         effectiveOnly: true,
       );
       final fileName = '产品参数查询_${DateTime.now().millisecondsSinceEpoch}.csv';
@@ -458,36 +430,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedStatusFilter,
-                  decoration: const InputDecoration(
-                    labelText: '状态筛选',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    DropdownMenuItem<String>(
-                      value: 'active',
-                      child: Text('启用'),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: 'inactive',
-                      child: Text('停用'),
-                    ),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _selectedStatusFilter = value ?? '';
-                          });
-                          _loadProducts();
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
               FilledButton.icon(
                 onPressed: _loading ? null : _loadProducts,
                 icon: const Icon(Icons.search),
@@ -500,23 +442,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                     : _exportParameters,
                 icon: const Icon(Icons.download),
                 label: const Text('导出'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              SizedBox(
-                width: 200,
-                child: TextField(
-                  controller: _versionFilterController,
-                  decoration: const InputDecoration(
-                    labelText: '生效版本号筛选',
-                    hintText: '如 V1.2',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadProducts(),
-                ),
               ),
             ],
           ),
@@ -579,15 +504,12 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                                 ),
                                 DataCell(Text(_formatTime(product.createdAt))),
                                 DataCell(
-                                  UnifiedListTableHeaderStyle.actionMenuButton<
-                                    _ProductParameterQueryListAction
-                                  >(
-                                    theme: theme,
-                                    onSelected: (action) {
-                                      _handleListAction(action, product);
-                                    },
-                                    itemBuilder: (context) =>
-                                        _buildListActionMenuItems(),
+                                  Center(
+                                    child: TextButton(
+                                      onPressed: () =>
+                                          _showParametersDialog(product),
+                                      child: const Text('查看参数'),
+                                    ),
                                   ),
                                 ),
                               ],

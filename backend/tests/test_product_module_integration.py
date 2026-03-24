@@ -647,8 +647,8 @@ class ProductModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(target["matched_parameter_category"], "基础参数")
         self.assertGreaterEqual(int(target["parameter_count"]), 1)
 
-    def test_parameter_query_supports_effective_version_keyword_contract(self) -> None:
-        product = self._create_product(suffix="参数查询版本筛选")
+    def test_parameter_query_supports_active_and_effective_contract(self) -> None:
+        product = self._create_product(suffix="参数查询启用筛选")
         v1 = int(product["current_version"])
 
         activate_response = self._activate_version(
@@ -659,7 +659,8 @@ class ProductModuleIntegrationTest(unittest.TestCase):
 
         matched = self.client.get(
             "/api/v1/products/parameter-query"
-            f"?keyword={urllib.parse.quote(str(product['name']))}&effective_version_keyword=V1.0",
+            f"?keyword={urllib.parse.quote(str(product['name']))}"
+            "&lifecycle_status=active&has_effective_version=true",
             headers=self._headers(),
         )
         self.assertEqual(matched.status_code, 200, matched.text)
@@ -670,7 +671,8 @@ class ProductModuleIntegrationTest(unittest.TestCase):
 
         missed = self.client.get(
             "/api/v1/products/parameter-query"
-            f"?keyword={urllib.parse.quote(str(product['name']))}&effective_version_keyword=V1.9",
+            f"?keyword={urllib.parse.quote(str(product['name']))}"
+            "&lifecycle_status=inactive&has_effective_version=true",
             headers=self._headers(),
         )
         self.assertEqual(missed.status_code, 200, missed.text)

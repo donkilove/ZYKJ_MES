@@ -63,9 +63,13 @@ void main() {
           expect(request.uri.queryParameters['page'], '1');
           expect(request.uri.queryParameters['page_size'], '10');
           expect(request.uri.queryParameters['keyword'], '参数查询');
+          expect(request.uri.queryParameters['lifecycle_status'], 'active');
+          expect(request.uri.queryParameters['has_effective_version'], 'true');
           expect(
-            request.uri.queryParameters['effective_version_keyword'],
-            'V1.0',
+            request.uri.queryParameters.containsKey(
+              'effective_version_keyword',
+            ),
+            isFalse,
           );
           return TestResponse.json(
             200,
@@ -411,7 +415,8 @@ void main() {
         page: 1,
         pageSize: 10,
         keyword: '参数查询',
-        effectiveVersionKeyword: 'V1.0',
+        lifecycleStatus: 'active',
+        hasEffectiveVersion: true,
       );
       final updateResult = await service.updateProductParameters(
         productId: 8,

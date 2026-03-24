@@ -465,6 +465,7 @@ def get_product_parameter_query_products(
     keyword: str | None = Query(default=None),
     category: str | None = Query(default=None),
     lifecycle_status: str | None = Query(default=None),
+    has_effective_version: bool | None = Query(default=None),
     effective_version_keyword: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("product.parameters.view")),
@@ -476,6 +477,7 @@ def get_product_parameter_query_products(
         keyword,
         category,
         lifecycle_status,
+        has_effective_version=has_effective_version,
         effective_version_keyword=effective_version_keyword,
     )
     return success_response(

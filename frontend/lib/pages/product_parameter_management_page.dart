@@ -78,14 +78,6 @@ class _ProductParameterManagementPageState
   String _message = '';
   List<ProductParameterVersionListItem> _versionRows = const [];
   String _selectedCategoryFilter = '';
-  DateTime? _updatedAfter;
-  DateTime? _updatedBefore;
-  final TextEditingController _versionFilterController =
-      TextEditingController();
-  final TextEditingController _paramNameFilterController =
-      TextEditingController();
-  final TextEditingController _paramCategoryFilterController =
-      TextEditingController();
 
   int _handledJumpSeq = 0;
 
@@ -128,9 +120,6 @@ class _ProductParameterManagementPageState
   void dispose() {
     _disposeEditorRows();
     _keywordController.dispose();
-    _versionFilterController.dispose();
-    _paramNameFilterController.dispose();
-    _paramCategoryFilterController.dispose();
     _remarkController.dispose();
     _editorVerticalController.dispose();
     _editorHorizontalController.dispose();
@@ -342,11 +331,6 @@ class _ProductParameterManagementPageState
         pageSize: _listPageSize,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
-        versionKeyword: _versionFilterController.text.trim(),
-        paramNameKeyword: _paramNameFilterController.text.trim(),
-        paramCategoryKeyword: _paramCategoryFilterController.text.trim(),
-        updatedAfter: _updatedAfter,
-        updatedBefore: _updatedBefore,
       );
       if (!mounted) {
         return;
@@ -1448,120 +1432,6 @@ class _ProductParameterManagementPageState
           ],
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            SizedBox(
-              width: 200,
-              child: TextField(
-                controller: _versionFilterController,
-                decoration: const InputDecoration(
-                  labelText: '版本号筛选',
-                  hintText: '如 V1.2',
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (_) => _loadProducts(),
-              ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 200,
-              child: TextField(
-                controller: _paramNameFilterController,
-                decoration: const InputDecoration(
-                  labelText: '参数名称筛选',
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (_) => _loadProducts(),
-              ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 200,
-              child: TextField(
-                controller: _paramCategoryFilterController,
-                decoration: const InputDecoration(
-                  labelText: '参数分组筛选',
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (_) => _loadProducts(),
-              ),
-            ),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(
-              onPressed: _loading
-                  ? null
-                  : () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate:
-                            _updatedAfter ??
-                            DateTime.now().subtract(const Duration(days: 30)),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now(),
-                        helpText: '修改起始日期',
-                      );
-                      if (picked != null) {
-                        setState(() => _updatedAfter = picked);
-                      }
-                    },
-              icon: const Icon(Icons.calendar_today, size: 16),
-              label: Text(
-                _updatedAfter != null
-                    ? '起始：${_formatTime(_updatedAfter!).substring(0, 10)}'
-                    : '修改起始日期',
-              ),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: _loading
-                  ? null
-                  : () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _updatedBefore ?? DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now().add(const Duration(days: 1)),
-                        helpText: '修改截止日期',
-                      );
-                      if (picked != null) {
-                        setState(
-                          () => _updatedBefore = DateTime(
-                            picked.year,
-                            picked.month,
-                            picked.day,
-                            23,
-                            59,
-                            59,
-                          ),
-                        );
-                      }
-                    },
-              icon: const Icon(Icons.calendar_today, size: 16),
-              label: Text(
-                _updatedBefore != null
-                    ? '截止：${_formatTime(_updatedBefore!).substring(0, 10)}'
-                    : '修改截止日期',
-              ),
-            ),
-            if (_updatedAfter != null || _updatedBefore != null) ...[
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _updatedAfter = null;
-                    _updatedBefore = null;
-                  });
-                },
-                child: const Text('清除日期'),
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '筛选条件直接命中版本参数明细；查看/编辑/历史/导出均绑定当前版本行。',
-          style: theme.textTheme.bodySmall,
-        ),
         const SizedBox(height: 12),
         if (_message.isNotEmpty)
           Padding(

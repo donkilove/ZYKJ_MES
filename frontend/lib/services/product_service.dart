@@ -88,6 +88,7 @@ class ProductService {
     String? keyword,
     String? category,
     String? lifecycleStatus,
+    bool? hasEffectiveVersion,
     String? effectiveVersionKeyword,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
@@ -99,6 +100,9 @@ class ProductService {
     }
     if (lifecycleStatus != null && lifecycleStatus.trim().isNotEmpty) {
       query['lifecycle_status'] = lifecycleStatus.trim();
+    }
+    if (hasEffectiveVersion != null) {
+      query['has_effective_version'] = hasEffectiveVersion ? 'true' : 'false';
     }
     if (effectiveVersionKeyword != null &&
         effectiveVersionKeyword.trim().isNotEmpty) {
