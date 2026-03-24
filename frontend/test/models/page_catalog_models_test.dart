@@ -20,21 +20,44 @@ void main() {
 
   test('fallback page catalog provides predefined pages', () {
     expect(fallbackPageCatalog, isNotEmpty);
-    expect(
-      fallbackPageCatalog.any((entry) => entry.code == 'home'),
-      isTrue,
-    );
+    expect(fallbackPageCatalog.any((entry) => entry.code == 'home'), isTrue);
     expect(
       fallbackPageCatalog.any((entry) => entry.code == 'process_management'),
       isTrue,
     );
     expect(
-      fallbackPageCatalog.any((entry) => entry.code == 'production_process_config'),
+      fallbackPageCatalog.any(
+        (entry) => entry.code == 'production_process_config',
+      ),
       isTrue,
     );
     expect(
-      fallbackPageCatalog.any((entry) => entry.code == 'page_visibility_config'),
+      fallbackPageCatalog.any(
+        (entry) => entry.code == 'page_visibility_config',
+      ),
       isFalse,
+    );
+  });
+
+  test('fallback sidebar order matches expected navigation order', () {
+    final sidebarCodes =
+        fallbackPageCatalog
+            .where((entry) => entry.pageType == 'sidebar')
+            .toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+    expect(
+      sidebarCodes.map((entry) => entry.code).toList(),
+      equals([
+        'home',
+        'user',
+        'product',
+        'craft',
+        'production',
+        'quality',
+        'equipment',
+        'message',
+      ]),
     );
   });
 }
