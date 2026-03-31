@@ -85,7 +85,6 @@ void main() {
                   'process_id': 11,
                   'process_code': 'ST-01-01',
                   'process_name': '切割',
-                  'is_key_process': true,
                   'created_at': '2026-03-19T00:00:00Z',
                   'updated_at': '2026-03-19T00:00:00Z',
                 },
@@ -152,7 +151,7 @@ void main() {
       expect(stageLight.items.single.name, '切割段');
       expect(processLight.items.single.code, 'ST-01-01');
       expect(draftDetail.template.sourceType, 'template');
-      expect(draftDetail.steps.single.isKeyProcess, isTrue);
+      expect(draftDetail.steps.single.processCode, 'ST-01-01');
       expect(versionList.items.single.recordTitle, '发布记录 P1');
       expect(utf8.decode(base64Decode(currentExport)), '{"type":"template"}');
       expect(utf8.decode(base64Decode(versionExport)), '{"type":"version"}');

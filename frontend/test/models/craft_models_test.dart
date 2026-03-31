@@ -96,6 +96,7 @@ void main() {
     });
 
     expect(payload.toJson()['stage_id'], 10);
+    expect(payload.toJson().containsKey('is_key_process'), isFalse);
     expect(payload.toJson().containsKey('standard_minutes'), isFalse);
     expect(payload.toJson().containsKey('step_remark'), isFalse);
     expect(step.processCode, '01-01');
@@ -215,12 +216,7 @@ void main() {
       'source_template_name': '系统母版',
       'source_system_master_version': 7,
       'steps': [
-        {
-          'step_order': 1,
-          'stage_id': 10,
-          'process_id': 20,
-          'is_key_process': true,
-        },
+        {'step_order': 1, 'stage_id': 10, 'process_id': 20},
       ],
     });
 
@@ -228,7 +224,7 @@ void main() {
     expect(export.sourceType, 'system_master');
     expect(export.sourceTemplateName, '系统母版');
     expect(export.sourceSystemMasterVersion, 7);
-    expect(export.steps.single.isKeyProcess, isTrue);
+    expect(export.steps.single.processId, 20);
 
     final templateRef = CraftTemplateReferenceResult.fromJson({
       'template_id': 12,

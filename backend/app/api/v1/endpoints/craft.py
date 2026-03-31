@@ -232,7 +232,6 @@ def _to_template_detail(row: ProductProcessTemplate) -> ProductProcessTemplateDe
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
-                is_key_process=step.is_key_process,
                 created_at=step.created_at,
                 updated_at=step.updated_at,
             )
@@ -264,7 +263,6 @@ def _to_system_master_template_item(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
-                is_key_process=step.is_key_process,
                 created_at=step.created_at,
                 updated_at=step.updated_at,
             )
@@ -486,7 +484,6 @@ def _to_system_master_template_version_list_result(
                         process_id=step.process_id,
                         process_code=step.process_code,
                         process_name=step.process_name,
-                        is_key_process=step.is_key_process,
                         created_at=step.created_at,
                         updated_at=step.updated_at,
                     )
@@ -1146,7 +1143,6 @@ def export_templates_api(
                         step_order=step.step_order,
                         stage_id=step.stage_id,
                         process_id=step.process_id,
-                        is_key_process=step.is_key_process,
                     )
                     for step in steps
                 ],

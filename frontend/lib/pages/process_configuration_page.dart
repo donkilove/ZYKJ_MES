@@ -14,15 +14,10 @@ import '../widgets/locked_form_dialog.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 class _TemplateStepDraft {
-  _TemplateStepDraft({
-    required this.stageId,
-    required this.processId,
-    this.isKeyProcess = false,
-  });
+  _TemplateStepDraft({required this.stageId, required this.processId});
 
   int stageId;
   int processId;
-  bool isKeyProcess;
 }
 
 enum _TemplateAction {
@@ -407,7 +402,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return _TemplateStepDraft(
         stageId: stage.id,
         processId: processRows.first.id,
-        isKeyProcess: false,
       );
     }
     return null;
@@ -423,7 +417,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           stepOrder: i + 1,
           stageId: steps[i].stageId,
           processId: steps[i].processId,
-          isKeyProcess: steps[i].isKeyProcess,
         ),
       );
     }
@@ -491,10 +484,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                 '${step.stageCode} ${step.stageName}',
                               ),
                               subtitle: Text(
-                                '${step.processCode} ${step.processName}\n'
-                                '${step.isKeyProcess ? '关键工序' : '普通工序'}',
+                                '${step.processCode} ${step.processName}',
                               ),
-                              isThreeLine: false,
                             );
                           },
                         ),
@@ -599,7 +590,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             (item) => _TemplateStepDraft(
               stageId: item.stageId,
               processId: item.processId,
-              isKeyProcess: item.isKeyProcess,
             ),
           )
           .toList();
@@ -857,18 +847,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  CheckboxListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    dense: true,
-                                    title: const Text('关键工序'),
-                                    value: step.isKeyProcess,
-                                    onChanged: (value) {
-                                      setDialogState(() {
-                                        step.isKeyProcess = value ?? false;
-                                      });
-                                    },
-                                  ),
                                 ],
                               ),
                             ),
@@ -996,7 +974,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 (item) => _TemplateStepDraft(
                   stageId: item.stageId,
                   processId: item.processId,
-                  isKeyProcess: item.isKeyProcess,
                 ),
               )
               .toList()
@@ -1166,18 +1143,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                         icon: const Icon(Icons.delete_outline),
                                       ),
                                     ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  CheckboxListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    dense: true,
-                                    title: const Text('关键工序'),
-                                    value: step.isKeyProcess,
-                                    onChanged: (value) {
-                                      setDialogState(() {
-                                        step.isKeyProcess = value ?? false;
-                                      });
-                                    },
                                   ),
                                 ],
                               ),
@@ -3579,19 +3544,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
-                  children: [
-                    Chip(
-                      label: Text(step.isKeyProcess ? '关键工序' : '普通工序'),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                ),
-              ),
+              const Expanded(child: SizedBox.shrink()),
             ],
           ),
           const SizedBox(height: 12),

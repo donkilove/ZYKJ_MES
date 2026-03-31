@@ -93,7 +93,6 @@ class _FakeCraftService extends CraftService {
           processId: 101,
           processCode: 'CUT-01',
           processName: '切割',
-          isKeyProcess: false,
           createdAt: now,
           updatedAt: now,
         ),

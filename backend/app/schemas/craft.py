@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 TEMPLATE_LIFECYCLE_DRAFT = "draft"
 TEMPLATE_LIFECYCLE_PUBLISHED = "published"
@@ -106,10 +106,11 @@ class CraftProcessLightListResult(BaseModel):
 
 
 class TemplateStepPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     step_order: int = Field(gt=0)
     stage_id: int = Field(gt=0)
     process_id: int = Field(gt=0)
-    is_key_process: bool = False
 
 
 class ProductProcessTemplateCreate(BaseModel):
@@ -157,7 +158,6 @@ class TemplateStepItem(BaseModel):
     process_id: int
     process_code: str
     process_name: str
-    is_key_process: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -221,7 +221,6 @@ class SystemMasterTemplateStepItem(BaseModel):
     process_id: int
     process_code: str
     process_name: str
-    is_key_process: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -567,7 +566,6 @@ class SystemMasterTemplateVersionStepItem(BaseModel):
     process_id: int
     process_code: str
     process_name: str
-    is_key_process: bool = False
     created_at: datetime
     updated_at: datetime
 

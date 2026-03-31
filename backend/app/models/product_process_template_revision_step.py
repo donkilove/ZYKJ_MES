@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint, text
+from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -35,7 +35,6 @@ class ProductProcessTemplateRevisionStep(Base, TimestampMixin):
     )
     process_code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     process_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    is_key_process: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     revision = relationship("ProductProcessTemplateRevision", back_populates="steps")
     stage = relationship("ProcessStage")
     process = relationship("Process")

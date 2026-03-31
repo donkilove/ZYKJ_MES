@@ -173,7 +173,6 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                         "step_order": 1,
                         "stage_id": stage_id,
                         "process_id": process_id,
-                        "is_key_process": True,
                     }
                 ],
             },
@@ -304,7 +303,7 @@ class CraftModuleIntegrationTest(unittest.TestCase):
             if item["template_name"] == "模板A"
         )
         exported_step = export_item["steps"][0]
-        self.assertTrue(exported_step["is_key_process"])
+        self.assertNotIn("is_key_process", exported_step)
         self.assertNotIn("standard_minutes", exported_step)
         self.assertNotIn("step_remark", exported_step)
 
@@ -425,7 +424,6 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                         "step_order": 1,
                         "stage_id": stage_a["id"],
                         "process_id": process_a["id"],
-                        "is_key_process": True,
                     }
                 ],
             },
@@ -456,7 +454,6 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                         "step_order": 1,
                         "stage_id": stage_b["id"],
                         "process_id": process_b["id"],
-                        "is_key_process": False,
                     }
                 ],
             },
@@ -526,7 +523,6 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                         "step_order": 1,
                         "stage_id": stage_b["id"],
                         "process_id": process_b["id"],
-                        "is_key_process": False,
                     }
                 ],
             },
@@ -785,6 +781,29 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         )
         product = self._create_product("门禁")
 
+        legacy_field_response = self.client.post(
+            "/api/v1/craft/templates",
+            headers=self._headers(),
+            json={
+                "product_id": product["id"],
+                "template_name": "旧字段模板",
+                "is_default": False,
+                "remark": "旧字段应被拒绝",
+                "steps": [
+                    {
+                        "step_order": 1,
+                        "stage_id": stage["id"],
+                        "process_id": process["id"],
+                        "is_key_process": True,
+                    }
+                ],
+            },
+        )
+        self.assertEqual(
+            legacy_field_response.status_code, 422, legacy_field_response.text
+        )
+        self.assertIn("is_key_process", legacy_field_response.text)
+
         create_response = self.client.post(
             "/api/v1/craft/templates",
             headers=self._headers(),
@@ -799,7 +818,6 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                         "step_order": 1,
                         "stage_id": stage["id"],
                         "process_id": process["id"],
-                        "is_key_process": True,
                     }
                 ],
             },
@@ -904,7 +922,6 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                             "step_order": 1,
                             "stage_id": stage["id"],
                             "process_id": process["id"],
-                            "is_key_process": True,
                         }
                     ]
                 },

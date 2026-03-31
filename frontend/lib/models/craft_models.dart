@@ -168,20 +168,17 @@ class CraftTemplateStepPayload {
     required this.stepOrder,
     required this.stageId,
     required this.processId,
-    this.isKeyProcess = false,
   });
 
   final int stepOrder;
   final int stageId;
   final int processId;
-  final bool isKeyProcess;
 
   factory CraftTemplateStepPayload.fromJson(Map<String, dynamic> json) {
     return CraftTemplateStepPayload(
       stepOrder: (json['step_order'] as int?) ?? 0,
       stageId: (json['stage_id'] as int?) ?? 0,
       processId: (json['process_id'] as int?) ?? 0,
-      isKeyProcess: (json['is_key_process'] as bool?) ?? false,
     );
   }
 
@@ -190,7 +187,6 @@ class CraftTemplateStepPayload {
       'step_order': stepOrder,
       'stage_id': stageId,
       'process_id': processId,
-      'is_key_process': isKeyProcess,
     };
   }
 }
@@ -205,7 +201,6 @@ class CraftTemplateStepItem {
     required this.processId,
     required this.processCode,
     required this.processName,
-    required this.isKeyProcess,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -218,7 +213,6 @@ class CraftTemplateStepItem {
   final int processId;
   final String processCode;
   final String processName;
-  final bool isKeyProcess;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -232,7 +226,6 @@ class CraftTemplateStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
-      isKeyProcess: (json['is_key_process'] as bool?) ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -336,7 +329,6 @@ class CraftSystemMasterTemplateStepItem {
     required this.processId,
     required this.processCode,
     required this.processName,
-    required this.isKeyProcess,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -349,7 +341,6 @@ class CraftSystemMasterTemplateStepItem {
   final int processId;
   final String processCode;
   final String processName;
-  final bool isKeyProcess;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -365,7 +356,6 @@ class CraftSystemMasterTemplateStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
-      isKeyProcess: (json['is_key_process'] as bool?) ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -426,7 +416,6 @@ class CraftSystemMasterTemplateVersionStepItem {
     required this.processId,
     required this.processCode,
     required this.processName,
-    required this.isKeyProcess,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -439,7 +428,6 @@ class CraftSystemMasterTemplateVersionStepItem {
   final int processId;
   final String processCode;
   final String processName;
-  final bool isKeyProcess;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -455,7 +443,6 @@ class CraftSystemMasterTemplateVersionStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
-      isKeyProcess: (json['is_key_process'] as bool?) ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );

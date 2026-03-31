@@ -127,7 +127,6 @@ class TemplateStepPayloadItem:
     step_order: int
     stage_id: int
     process_id: int
-    is_key_process: bool = False
 
 
 @dataclass(slots=True)
@@ -135,7 +134,6 @@ class TemplateStepResolvedItem:
     step_order: int
     stage: ProcessStage
     process: Process
-    is_key_process: bool
 
 
 @dataclass(slots=True)
@@ -673,7 +671,6 @@ def _load_template_step_process_map(
                 step_order=item.step_order,
                 stage=stage,
                 process=process,
-                is_key_process=bool(item.is_key_process),
             )
         )
     return result
@@ -697,7 +694,6 @@ def _replace_template_steps(
                 process_id=item.process.id,
                 process_code=item.process.code,
                 process_name=item.process.name,
-                is_key_process=item.is_key_process,
             )
         )
     db.flush()
@@ -720,7 +716,6 @@ def _build_template_steps_payload(
                 step_order=step_order,
                 stage_id=_required_int(item, "stage_id"),
                 process_id=_required_int(item, "process_id"),
-                is_key_process=bool(item.get("is_key_process") or False),
             )
         )
     _validate_step_orders_are_sequential(result)
@@ -736,7 +731,6 @@ def _build_steps_payload_from_template_row(
             step_order=step.step_order,
             stage_id=step.stage_id,
             process_id=step.process_id,
-            is_key_process=step.is_key_process,
         )
         for step in sorted_steps
     ]
@@ -751,7 +745,6 @@ def _build_steps_payload_from_revision_row(
             step_order=step.step_order,
             stage_id=step.stage_id,
             process_id=step.process_id,
-            is_key_process=step.is_key_process,
         )
         for step in sorted_steps
     ]
@@ -959,7 +952,6 @@ def _create_template_revision_snapshot(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
-                is_key_process=step.is_key_process,
             )
         )
     db.flush()
@@ -1040,7 +1032,6 @@ def _replace_system_master_template_steps(
                 process_id=item.process.id,
                 process_code=item.process.code,
                 process_name=item.process.name,
-                is_key_process=item.is_key_process,
             )
         )
     db.flush()
@@ -1075,7 +1066,6 @@ def _create_system_master_revision_snapshot(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
-                is_key_process=step.is_key_process,
             )
         )
     db.flush()
@@ -2380,7 +2370,6 @@ def copy_template(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
-                is_key_process=step.is_key_process,
             )
         )
     db.flush()
@@ -2440,7 +2429,6 @@ def copy_template_from_system_master(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
-                is_key_process=step.is_key_process,
             )
         )
     db.flush()
@@ -2503,7 +2491,6 @@ def copy_template_to_product(
                 process_id=step.process_id,
                 process_code=step.process_code,
                 process_name=step.process_name,
-                is_key_process=step.is_key_process,
             )
         )
     db.flush()
@@ -3774,7 +3761,6 @@ def export_template_detail_json(
                 "process_id": step.process_id,
                 "process_code": step.process_code,
                 "process_name": step.process_name,
-                "is_key_process": step.is_key_process,
             }
             for step in steps
         ],
@@ -3819,7 +3805,6 @@ def export_template_version_json(
                 "process_id": step.process_id,
                 "process_code": step.process_code,
                 "process_name": step.process_name,
-                "is_key_process": step.is_key_process,
             }
             for step in steps
         ],
