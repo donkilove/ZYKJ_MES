@@ -85,9 +85,7 @@ void main() {
                   'process_id': 11,
                   'process_code': 'ST-01-01',
                   'process_name': '切割',
-                  'standard_minutes': 10,
                   'is_key_process': true,
-                  'step_remark': '关键步骤',
                   'created_at': '2026-03-19T00:00:00Z',
                   'updated_at': '2026-03-19T00:00:00Z',
                 },
@@ -154,7 +152,7 @@ void main() {
       expect(stageLight.items.single.name, '切割段');
       expect(processLight.items.single.code, 'ST-01-01');
       expect(draftDetail.template.sourceType, 'template');
-      expect(draftDetail.steps.single.standardMinutes, 10);
+      expect(draftDetail.steps.single.isKeyProcess, isTrue);
       expect(versionList.items.single.recordTitle, '发布记录 P1');
       expect(utf8.decode(base64Decode(currentExport)), '{"type":"template"}');
       expect(utf8.decode(base64Decode(versionExport)), '{"type":"version"}');
@@ -168,9 +166,7 @@ void main() {
           return TestResponse.json(
             200,
             body: {
-              'data': {
-                'content_base64': base64Encode(utf8.encode('csv')),
-              },
+              'data': {'content_base64': base64Encode(utf8.encode('csv'))},
             },
           );
         },
@@ -281,11 +277,7 @@ void main() {
               'blocking_reference_count': 1,
               'has_blocking_references': true,
               'items': [
-                {
-                  'ref_type': 'product',
-                  'ref_id': 8,
-                  'ref_name': '产品A',
-                },
+                {'ref_type': 'product', 'ref_id': 8, 'ref_name': '产品A'},
                 {
                   'ref_type': 'user_stage',
                   'ref_id': 31,

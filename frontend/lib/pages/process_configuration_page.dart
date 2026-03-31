@@ -9,6 +9,7 @@ import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/production_service.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
@@ -16,16 +17,12 @@ class _TemplateStepDraft {
   _TemplateStepDraft({
     required this.stageId,
     required this.processId,
-    this.standardMinutes = 0,
     this.isKeyProcess = false,
-    this.stepRemark = '',
   });
 
   int stageId;
   int processId;
-  int standardMinutes;
   bool isKeyProcess;
-  String stepRemark;
 }
 
 enum _TemplateAction {
@@ -101,6 +98,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   List<CraftProcessItem> _processes = const [];
   List<CraftTemplateItem> _templates = const [];
   CraftSystemMasterTemplateItem? _systemMasterTemplate;
+  bool _systemMasterExpanded = true;
   final Map<int, CraftTemplateDetail> _detailCache = {};
   int? _focusedTemplateId;
   String _jumpNotice = '';
@@ -203,6 +201,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       if (!mounted) {
         return;
       }
+      final hadSystemMaster = _systemMasterTemplate != null;
+      final hasSystemMaster = systemMasterTemplate != null;
       setState(() {
         _products = [...products]..sort((a, b) => a.name.compareTo(b.name));
         _stages = [...stageResult.items]
@@ -218,6 +218,11 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         _templates = [...templateResult.items]
           ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
         _systemMasterTemplate = systemMasterTemplate;
+        if (!hasSystemMaster) {
+          _systemMasterExpanded = true;
+        } else if (!hadSystemMaster) {
+          _systemMasterExpanded = false;
+        }
         if (_productFilterId != null &&
             !_products.any((item) => item.id == _productFilterId)) {
           _productFilterId = null;
@@ -349,6 +354,18 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     return '${value.year}-$month-$day';
   }
 
+  String _formatDateTimeLabel(DateTime? value) {
+    if (value == null) {
+      return '-';
+    }
+    final local = value.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day $hour:$minute';
+  }
+
   Future<void> _pickUpdatedDate({required bool isFrom}) async {
     final initialDate = isFrom
         ? (_updatedFromDate ?? DateTime.now())
@@ -390,9 +407,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return _TemplateStepDraft(
         stageId: stage.id,
         processId: processRows.first.id,
-        standardMinutes: 0,
         isKeyProcess: false,
-        stepRemark: '',
       );
     }
     return null;
@@ -408,9 +423,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           stepOrder: i + 1,
           stageId: steps[i].stageId,
           processId: steps[i].processId,
-          standardMinutes: steps[i].standardMinutes,
           isKeyProcess: steps[i].isKeyProcess,
-          stepRemark: steps[i].stepRemark,
         ),
       );
     }
@@ -479,10 +492,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                               ),
                               subtitle: Text(
                                 '${step.processCode} ${step.processName}\n'
-                                '标准工时：${step.standardMinutes} 分钟｜${step.isKeyProcess ? '关键工序' : '普通工序'}'
-                                '${step.stepRemark.trim().isNotEmpty ? '｜说明：${step.stepRemark.trim()}' : ''}',
+                                '${step.isKeyProcess ? '关键工序' : '普通工序'}',
                               ),
-                              isThreeLine: true,
+                              isThreeLine: false,
                             );
                           },
                         ),
@@ -587,9 +599,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             (item) => _TemplateStepDraft(
               stageId: item.stageId,
               processId: item.processId,
-              standardMinutes: item.standardMinutes,
               isKeyProcess: item.isKeyProcess,
-              stepRemark: item.stepRemark,
             ),
           )
           .toList();
@@ -848,50 +858,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                     ],
                                   ),
                                   const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 160,
-                                        child: TextFormField(
-                                          initialValue: step.standardMinutes
-                                              .toString(),
-                                          decoration: const InputDecoration(
-                                            labelText: '标准工时(分钟)',
-                                            border: OutlineInputBorder(),
-                                            isDense: true,
-                                          ),
-                                          keyboardType: TextInputType.number,
-                                          inputFormatters: [
-                                            FilteringTextInputFormatter
-                                                .digitsOnly,
-                                          ],
-                                          onChanged: (value) {
-                                            setDialogState(() {
-                                              step.standardMinutes =
-                                                  int.tryParse(value) ?? 0;
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: TextFormField(
-                                          initialValue: step.stepRemark,
-                                          decoration: const InputDecoration(
-                                            labelText: '步骤说明',
-                                            border: OutlineInputBorder(),
-                                            isDense: true,
-                                          ),
-                                          maxLength: 500,
-                                          onChanged: (value) {
-                                            setDialogState(() {
-                                              step.stepRemark = value.trim();
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                                   CheckboxListTile(
                                     contentPadding: EdgeInsets.zero,
                                     dense: true,
@@ -1030,9 +996,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 (item) => _TemplateStepDraft(
                   stageId: item.stageId,
                   processId: item.processId,
-                  standardMinutes: item.standardMinutes,
                   isKeyProcess: item.isKeyProcess,
-                  stepRemark: item.stepRemark,
                 ),
               )
               .toList()
@@ -1204,50 +1168,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                     ],
                                   ),
                                   const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 160,
-                                        child: TextFormField(
-                                          initialValue: step.standardMinutes
-                                              .toString(),
-                                          decoration: const InputDecoration(
-                                            labelText: '标准工时(分钟)',
-                                            border: OutlineInputBorder(),
-                                            isDense: true,
-                                          ),
-                                          keyboardType: TextInputType.number,
-                                          inputFormatters: [
-                                            FilteringTextInputFormatter
-                                                .digitsOnly,
-                                          ],
-                                          onChanged: (value) {
-                                            setDialogState(() {
-                                              step.standardMinutes =
-                                                  int.tryParse(value) ?? 0;
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: TextFormField(
-                                          initialValue: step.stepRemark,
-                                          decoration: const InputDecoration(
-                                            labelText: '步骤说明',
-                                            border: OutlineInputBorder(),
-                                            isDense: true,
-                                          ),
-                                          maxLength: 500,
-                                          onChanged: (value) {
-                                            setDialogState(() {
-                                              step.stepRemark = value.trim();
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                                   CheckboxListTile(
                                     contentPadding: EdgeInsets.zero,
                                     dense: true,
@@ -1787,7 +1707,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         item: item,
         title: '$actionText模板',
         confirmText: actionText,
-        description: '确认$actionText模板 ${item.templateName} 吗？停用后模板将不能继续用于维护与新建流程。',
+        description:
+            '确认$actionText模板 ${item.templateName} 吗？停用后模板将不能继续用于维护与新建流程。',
       );
     }
     if (confirmed != true) {
@@ -2122,7 +2043,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             ),
           ),
           if (analysis.items.length > previewOrders.length)
-            Text('其余 ${analysis.items.length - previewOrders.length} 条请通过“影响分析”查看。'),
+            Text(
+              '其余 ${analysis.items.length - previewOrders.length} 条请通过“影响分析”查看。',
+            ),
         ],
         if (previewReferences.isNotEmpty) ...[
           if (previewOrders.isNotEmpty) const SizedBox(height: 12),
@@ -2181,7 +2104,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Theme.of(dialogContext).colorScheme.errorContainer,
+                        color: Theme.of(
+                          dialogContext,
+                        ).colorScheme.errorContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -3613,19 +3538,134 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     );
   }
 
-  Widget _buildSystemMasterStepCell(
-    String text, {
-    int flex = 1,
-    TextAlign textAlign = TextAlign.start,
-    bool isHeader = false,
-  }) {
-    final theme = Theme.of(context);
-    final style = isHeader
-        ? theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)
-        : theme.textTheme.bodyMedium;
-    return Expanded(
-      flex: flex,
-      child: Text(text, textAlign: textAlign, style: style),
+  Widget _buildSystemMasterStepCard(
+    ThemeData theme,
+    CraftSystemMasterTemplateStepItem step,
+  ) {
+    final stageLabel = '${step.stageCode} ${step.stageName}'.trim();
+    final processLabel = '${step.processCode} ${step.processName}'.trim();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.32,
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '步骤 ${step.stepOrder}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    Chip(
+                      label: Text(step.isKeyProcess ? '关键工序' : '普通工序'),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 720 ? 2 : 1;
+              const spacing = 12.0;
+              final itemWidth =
+                  (constraints.maxWidth - spacing * (columns - 1)) / columns;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  SizedBox(
+                    width: itemWidth,
+                    child: _buildStepInfoBlock(theme, '工段', stageLabel),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _buildStepInfoBlock(theme, '工序', processLabel),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepInfoBlock(ThemeData theme, String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: theme.textTheme.bodySmall),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  int _responsiveFilterColumns(double maxWidth) {
+    if (maxWidth >= 1320) {
+      return 3;
+    }
+    if (maxWidth >= 860) {
+      return 2;
+    }
+    return 1;
+  }
+
+  Widget _buildResponsiveFilterGrid(List<Widget> children) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 12.0;
+        final columns = _responsiveFilterColumns(constraints.maxWidth);
+        final itemWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: children
+              .map((child) => SizedBox(width: itemWidth, child: child))
+              .toList(),
+        );
+      },
     );
   }
 
@@ -3658,262 +3698,550 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           if (steps.isEmpty)
             const Text('暂无系统母版步骤')
           else
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: theme.dividerColor),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.65),
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(7),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        _buildSystemMasterStepCell(
-                          '序号',
-                          textAlign: TextAlign.center,
-                          isHeader: true,
-                        ),
-                        _buildSystemMasterStepCell(
-                          '工段',
-                          flex: 2,
-                          isHeader: true,
-                        ),
-                        _buildSystemMasterStepCell(
-                          '工序',
-                          flex: 2,
-                          isHeader: true,
-                        ),
-                        _buildSystemMasterStepCell(
-                          '标准工时',
-                          isHeader: true,
-                          textAlign: TextAlign.center,
-                        ),
-                        _buildSystemMasterStepCell(
-                          '关键工序',
-                          isHeader: true,
-                          textAlign: TextAlign.center,
-                        ),
-                        _buildSystemMasterStepCell(
-                          '备注',
-                          flex: 2,
-                          isHeader: true,
-                        ),
-                      ],
-                    ),
+            Column(
+              children: List.generate(steps.length, (index) {
+                final step = steps[index];
+                return Padding(
+                  padding: EdgeInsets.only(
+                    bottom: index == steps.length - 1 ? 0 : 12,
                   ),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 280),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: steps.length,
-                      separatorBuilder: (context, index) =>
-                          Divider(height: 1, color: theme.dividerColor),
-                      itemBuilder: (context, index) {
-                        final step = steps[index];
-                        final stageLabel = '${step.stageCode} ${step.stageName}'
-                            .trim();
-                        final processLabel =
-                            '${step.processCode} ${step.processName}'.trim();
-                        final remark = step.stepRemark.trim().isEmpty
-                            ? '-'
-                            : step.stepRemark.trim();
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildSystemMasterStepCell(
-                                '${step.stepOrder}',
-                                textAlign: TextAlign.center,
-                              ),
-                              _buildSystemMasterStepCell(stageLabel, flex: 2),
-                              _buildSystemMasterStepCell(processLabel, flex: 2),
-                              _buildSystemMasterStepCell(
-                                '${step.standardMinutes} 分钟',
-                                textAlign: TextAlign.center,
-                              ),
-                              _buildSystemMasterStepCell(
-                                step.isKeyProcess ? '是' : '否',
-                                textAlign: TextAlign.center,
-                              ),
-                              _buildSystemMasterStepCell(remark, flex: 2),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
+                  child: _buildSystemMasterStepCard(theme, step),
+                );
+              }),
             ),
         ],
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final templates = _filteredTemplates;
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildSummaryMetric(
+    ThemeData theme, {
+    required String label,
+    required String value,
+    IconData? icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.45,
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: theme.colorScheme.primary),
+            const SizedBox(width: 6),
+          ],
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
+              Text(label, style: theme.textTheme.bodySmall),
+              const SizedBox(height: 2),
               Text(
-                '生产工序配置',
-                style: theme.textTheme.headlineSmall?.copyWith(
+                value,
+                style: theme.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const Spacer(),
-              if (_canManageSystemMasterTemplate)
-                FilledButton.icon(
-                  onPressed: _loading
-                      ? null
-                      : () => _showSystemMasterTemplateDialog(),
-                  icon: Icon(
-                    _systemMasterTemplate == null ? Icons.add_box : Icons.edit,
-                  ),
-                  label: Text(
-                    _systemMasterTemplate == null ? '新建系统母版' : '编辑系统母版',
-                  ),
-                ),
-              if (_canManageSystemMasterTemplate &&
-                  _systemMasterTemplate != null)
-                const SizedBox(width: 8),
-              if (_canManageSystemMasterTemplate &&
-                  _systemMasterTemplate != null)
-                OutlinedButton.icon(
-                  onPressed: _loading ? null : _showSystemMasterVersionDialog,
-                  icon: const Icon(Icons.history),
-                  label: const Text('母版历史版本'),
-                ),
-              if (_canManageSystemMasterTemplate) const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: (_loading || !_canManageTemplates)
-                    ? null
-                    : () => _showTemplateDialog(),
-                icon: const Icon(Icons.add),
-                label: const Text('新增模板'),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: (_loading || !_canManageTemplates)
-                    ? null
-                    : _showExportDialog,
-                icon: const Icon(Icons.download),
-                label: const Text('导出模板'),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: (_loading || !_canManageTemplates)
-                    ? null
-                    : _showImportDialog,
-                icon: const Icon(Icons.upload),
-                label: const Text('批量导入'),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadData,
-                icon: const Icon(Icons.refresh),
-              ),
             ],
           ),
-          const SizedBox(height: 12),
-          _buildJumpBanner(theme),
-          if (_canManageTemplates)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSystemMasterManagementCard(ThemeData theme) {
+    final master = _systemMasterTemplate;
+    final hasMaster = master != null;
+    final summaryText = hasMaster
+        ? '系统默认工序母版已配置，可按需查看步骤、历史版本与维护入口。'
+        : '当前未配置系统母版，建议先建立默认步骤，便于新增模板快速套版。';
+
+    return Card(
+      child: ExpansionTile(
+        key: const PageStorageKey<String>('system-master-management-tile'),
+        initiallyExpanded: _systemMasterExpanded,
+        onExpansionChanged: (expanded) {
+          setState(() {
+            _systemMasterExpanded = expanded;
+          });
+        },
+        tilePadding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+        childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        title: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.account_tree_outlined,
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: _loading ? null : _showTopCopyFromMasterShortcut,
-                    icon: const Icon(Icons.library_add),
-                    label: const Text('从系统母版套版'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _loading
-                        ? null
-                        : () async {
-                            final item = _requireFocusedTemplate('从已有模板复制');
-                            if (item == null) {
-                              return;
-                            }
-                            await _copyTemplate(item);
-                          },
-                    icon: const Icon(Icons.copy_all),
-                    label: const Text('从已有模板复制'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _loading
-                        ? null
-                        : () async {
-                            final item = _requireFocusedTemplate('导出版本参数');
-                            if (item == null) {
-                              return;
-                            }
-                            await _showVersionDialog(item);
-                          },
-                    icon: const Icon(Icons.tune),
-                    label: const Text('导出版本参数'),
-                  ),
-                  if (_focusedTemplate != null)
-                    Text(
-                      '当前定位：${_focusedTemplate!.templateName}（${_focusedTemplate!.productName}）',
-                      style: theme.textTheme.bodySmall,
+                  Text(
+                    '系统母版管理',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(summaryText, style: theme.textTheme.bodySmall),
                 ],
               ),
             ),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              border: Border.all(color: theme.dividerColor),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              _systemMasterTemplate == null
-                  ? '系统母版状态：未配置（新建产品将跳过自动绑定默认模板）'
-                  : '系统母版状态：已配置（版本 v${_systemMasterTemplate!.version}，步骤 ${_systemMasterTemplate!.steps.length}，最近更新人 ${_systemMasterTemplate!.updatedByUsername ?? '-'}，最近更新时间 ${_systemMasterTemplate!.updatedAt.toLocal()}；自动套版门禁默认开启，可由后端配置 craft_auto_bind_default_template_enabled 关闭）',
-            ),
+          ],
+        ),
+        children: _systemMasterExpanded
+            ? [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _buildSummaryMetric(
+                      theme,
+                      label: '配置状态',
+                      value: hasMaster ? '已配置' : '未配置',
+                      icon: hasMaster
+                          ? Icons.check_circle_outline
+                          : Icons.info_outline,
+                    ),
+                    _buildSummaryMetric(
+                      theme,
+                      label: '版本号',
+                      value: hasMaster ? 'v${master.version}' : '-',
+                      icon: Icons.layers_outlined,
+                    ),
+                    _buildSummaryMetric(
+                      theme,
+                      label: '步骤数',
+                      value: hasMaster ? '${master.steps.length} 步' : '0 步',
+                      icon: Icons.format_list_numbered,
+                    ),
+                    _buildSummaryMetric(
+                      theme,
+                      label: '最近更新人',
+                      value: hasMaster
+                          ? ((master.updatedByUsername?.trim().isNotEmpty ??
+                                    false)
+                                ? master.updatedByUsername!.trim()
+                                : '-')
+                          : '-',
+                      icon: Icons.person_outline,
+                    ),
+                    _buildSummaryMetric(
+                      theme,
+                      label: '最近更新时间',
+                      value: _formatDateTimeLabel(master?.updatedAt),
+                      icon: Icons.schedule,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (_canViewSystemMasterVersions)
+                      OutlinedButton.icon(
+                        onPressed: _loading
+                            ? null
+                            : _showSystemMasterVersionDialog,
+                        icon: const Icon(Icons.history),
+                        label: const Text('母版历史版本'),
+                      ),
+                    if (_canManageSystemMasterTemplate)
+                      FilledButton.icon(
+                        onPressed: _loading
+                            ? null
+                            : _showSystemMasterTemplateDialog,
+                        icon: Icon(
+                          hasMaster ? Icons.edit_outlined : Icons.add_box,
+                        ),
+                        label: Text(hasMaster ? '编辑系统母版' : '新建系统母版'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        hasMaster
+                            ? '自动套版门禁默认开启，可由后端配置 `craft_auto_bind_default_template_enabled` 关闭。'
+                            : '未配置时，新建产品会跳过自动绑定默认模板。',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildSystemMasterStepsSection(theme),
+              ]
+            : const <Widget>[],
+      ),
+    );
+  }
+
+  Widget _buildTemplateList(
+    ThemeData theme,
+    List<CraftTemplateItem> templates,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildTemplateHeaderRow(theme),
+        const SizedBox(height: 8),
+        if (templates.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: Text('暂无模板数据')),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: templates.length,
+            separatorBuilder: (context, index) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final item = templates[index];
+              final isFocused = item.id == _focusedTemplateId;
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _focusedTemplateId = item.id;
+                  });
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 12,
+                  ),
+                  decoration: isFocused
+                      ? BoxDecoration(
+                          color: theme.colorScheme.primaryContainer.withValues(
+                            alpha: 0.28,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        )
+                      : null,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(flex: 2, child: Text(item.productName)),
+                      Expanded(flex: 2, child: Text(item.templateName)),
+                      Expanded(
+                        flex: 1,
+                        child: Text(
+                          '${item.version} / P${item.publishedVersion}',
+                        ),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: Text(item.isDefault ? '是' : '否'),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: Text(
+                          '${_lifecycleLabel(item.lifecycleStatus)} / ${item.isEnabled ? '启用' : '停用'}',
+                        ),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: Text(item.updatedByUsername ?? '-'),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(item.updatedAt.toLocal().toString()),
+                      ),
+                      SizedBox(
+                        width: 64,
+                        child:
+                            UnifiedListTableHeaderStyle.actionMenuButton<
+                              _TemplateAction
+                            >(
+                              theme: theme,
+                              onSelected: (action) {
+                                _handleTemplateAction(action, item);
+                              },
+                              itemBuilder: (context) {
+                                final items =
+                                    <PopupMenuEntry<_TemplateAction>>[];
+                                if (_canManageTemplates) {
+                                  items.add(
+                                    PopupMenuItem(
+                                      value: item.lifecycleStatus == 'draft'
+                                          ? _TemplateAction.edit
+                                          : _TemplateAction.createDraft,
+                                      child: Text(
+                                        item.lifecycleStatus == 'draft'
+                                            ? '编辑'
+                                            : '创建草稿',
+                                      ),
+                                    ),
+                                  );
+                                  if (item.lifecycleStatus == 'draft') {
+                                    items.add(
+                                      const PopupMenuItem(
+                                        value: _TemplateAction.publish,
+                                        child: Text('发布'),
+                                      ),
+                                    );
+                                  }
+                                  items.add(
+                                    const PopupMenuItem(
+                                      value: _TemplateAction.copy,
+                                      child: Text('复制（同产品）'),
+                                    ),
+                                  );
+                                  items.add(
+                                    const PopupMenuItem(
+                                      value: _TemplateAction.copyToProduct,
+                                      child: Text('跨产品复制'),
+                                    ),
+                                  );
+                                  items.add(
+                                    const PopupMenuItem(
+                                      value: _TemplateAction.copyFromMaster,
+                                      child: Text('从系统母版套版'),
+                                    ),
+                                  );
+                                  if (item.lifecycleStatus == 'published') {
+                                    items.add(
+                                      const PopupMenuItem(
+                                        value: _TemplateAction.archive,
+                                        child: Text('归档'),
+                                      ),
+                                    );
+                                  }
+                                  if (item.lifecycleStatus == 'archived') {
+                                    items.add(
+                                      const PopupMenuItem(
+                                        value: _TemplateAction.unarchive,
+                                        child: Text('取消归档'),
+                                      ),
+                                    );
+                                  }
+                                  items.add(
+                                    PopupMenuItem(
+                                      value: item.isEnabled
+                                          ? _TemplateAction.disable
+                                          : _TemplateAction.enable,
+                                      child: Text(item.isEnabled ? '停用' : '启用'),
+                                    ),
+                                  );
+                                }
+                                if (_canViewTemplates) {
+                                  items.add(
+                                    const PopupMenuItem(
+                                      value: _TemplateAction.detail,
+                                      child: Text('查看详情'),
+                                    ),
+                                  );
+                                  items.add(
+                                    const PopupMenuItem(
+                                      value: _TemplateAction.impact,
+                                      child: Text('影响分析'),
+                                    ),
+                                  );
+                                  items.add(
+                                    const PopupMenuItem(
+                                      value: _TemplateAction.versions,
+                                      child: Text('版本管理'),
+                                    ),
+                                  );
+                                  items.add(
+                                    const PopupMenuItem(
+                                      value: _TemplateAction.compare,
+                                      child: Text('版本对比'),
+                                    ),
+                                  );
+                                }
+                                if (_canManageTemplates) {
+                                  items.add(
+                                    const PopupMenuItem(
+                                      value: _TemplateAction.rollback,
+                                      child: Text('回滚模板'),
+                                    ),
+                                  );
+                                  items.add(
+                                    const PopupMenuItem(
+                                      value: _TemplateAction.delete,
+                                      child: Text('删除'),
+                                    ),
+                                  );
+                                }
+                                return items;
+                              },
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
-          const SizedBox(height: 12),
-          _buildSystemMasterStepsSection(theme),
-          const SizedBox(height: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
+      ],
+    );
+  }
+
+  Widget _buildTemplateWorkspace(
+    ThemeData theme,
+    List<CraftTemplateItem> templates,
+  ) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '模板工作区',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '将高频模板操作、筛选与列表集中在同一工作区，减少首屏切换成本。',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withValues(
+                      alpha: 0.55,
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '共 ${templates.length} 条模板',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FilledButton.icon(
+                  onPressed: (_loading || !_canManageTemplates)
+                      ? null
+                      : () => _showTemplateDialog(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('新增模板'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: (_loading || !_canManageTemplates)
+                      ? null
+                      : _showTopCopyFromMasterShortcut,
+                  icon: const Icon(Icons.library_add),
+                  label: const Text('从系统母版套版'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: (_loading || !_canManageTemplates)
+                      ? null
+                      : () async {
+                          final item = _requireFocusedTemplate('从已有模板复制');
+                          if (item == null) {
+                            return;
+                          }
+                          await _copyTemplate(item);
+                        },
+                  icon: const Icon(Icons.copy_all),
+                  label: const Text('从已有模板复制'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: (_loading || !_canManageTemplates)
+                      ? null
+                      : _showExportDialog,
+                  icon: const Icon(Icons.download),
+                  label: const Text('导出模板'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: (_loading || !_canManageTemplates)
+                      ? null
+                      : _showImportDialog,
+                  icon: const Icon(Icons.upload),
+                  label: const Text('批量导入'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _loading
+                      ? null
+                      : () async {
+                          final item = _requireFocusedTemplate('导出版本参数');
+                          if (item == null) {
+                            return;
+                          }
+                          await _showVersionDialog(item);
+                        },
+                  icon: const Icon(Icons.tune),
+                  label: const Text('导出版本参数'),
+                ),
+                if (_focusedTemplate != null)
+                  Text(
+                    '当前定位：${_focusedTemplate!.templateName}（${_focusedTemplate!.productName}）',
+                    style: theme.textTheme.bodySmall,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: theme.dividerColor),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 320,
-                    child: DropdownButtonFormField<int?>(
+                  Text(
+                    '模板筛选',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '支持按产品、生命周期、分类、默认状态与更新时间快速缩小范围。',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildResponsiveFilterGrid([
+                    DropdownButtonFormField<int?>(
+                      isExpanded: true,
                       initialValue: _productFilterId,
                       decoration: const InputDecoration(
                         labelText: '按产品筛选',
@@ -3937,10 +4265,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         });
                       },
                     ),
-                  ),
-                  SizedBox(
-                    width: 220,
-                    child: DropdownButtonFormField<String?>(
+                    DropdownButtonFormField<String?>(
+                      isExpanded: true,
                       initialValue: _lifecycleFilter,
                       decoration: const InputDecoration(
                         labelText: '按生命周期筛选',
@@ -3971,10 +4297,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         await _loadData();
                       },
                     ),
-                  ),
-                  SizedBox(
-                    width: 280,
-                    child: TextField(
+                    TextField(
                       controller: _templateKeywordController,
                       decoration: const InputDecoration(
                         labelText: '模板名称搜索',
@@ -3987,10 +4310,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         });
                       },
                     ),
-                  ),
-                  SizedBox(
-                    width: 220,
-                    child: DropdownButtonFormField<String?>(
+                    DropdownButtonFormField<String?>(
+                      isExpanded: true,
                       initialValue: _productCategoryFilter,
                       decoration: const InputDecoration(
                         labelText: '产品分类筛选',
@@ -4014,10 +4335,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         });
                       },
                     ),
-                  ),
-                  SizedBox(
-                    width: 200,
-                    child: DropdownButtonFormField<bool?>(
+                    DropdownButtonFormField<bool?>(
+                      isExpanded: true,
                       initialValue: _defaultTemplateFilter,
                       decoration: const InputDecoration(
                         labelText: '默认模板筛选',
@@ -4043,10 +4362,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         });
                       },
                     ),
-                  ),
-                  SizedBox(
-                    width: 180,
-                    child: DropdownButtonFormField<bool?>(
+                    DropdownButtonFormField<bool?>(
+                      isExpanded: true,
                       initialValue: _templateEnabledFilter,
                       decoration: const InputDecoration(
                         labelText: '启用状态筛选',
@@ -4069,302 +4386,108 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         });
                       },
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => _pickUpdatedDate(isFrom: true),
-                    icon: const Icon(Icons.event),
-                    label: Text('起始更新日：${_formatDateLabel(_updatedFromDate)}'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _pickUpdatedDate(isFrom: false),
-                    icon: const Icon(Icons.event_available),
-                    label: Text('结束更新日：${_formatDateLabel(_updatedToDate)}'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _updatedFromDate = null;
-                        _updatedToDate = null;
-                        _templateKeyword = '';
-                        _templateKeywordController.clear();
-                        _productCategoryFilter = null;
-                        _defaultTemplateFilter = null;
-                        _templateEnabledFilter = null;
-                      });
-                    },
-                    icon: const Icon(Icons.clear_all),
-                    label: const Text('清空本地筛选'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : Column(
+                  ]),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      _buildTemplateHeaderRow(theme),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: templates.isEmpty
-                            ? const Center(child: Text('暂无模板数据'))
-                            : ListView.separated(
-                                itemCount: templates.length,
-                                separatorBuilder: (context, index) =>
-                                    const Divider(height: 1),
-                                itemBuilder: (context, index) {
-                                  final item = templates[index];
-                                  final isFocused =
-                                      item.id == _focusedTemplateId;
-                                  return InkWell(
-                                    onTap: () {
-                                      setState(() {
-                                        _focusedTemplateId = item.id;
-                                      });
-                                    },
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 8,
-                                        horizontal: 12,
-                                      ),
-                                      decoration: isFocused
-                                          ? BoxDecoration(
-                                              color: theme
-                                                  .colorScheme
-                                                  .primaryContainer
-                                                  .withValues(alpha: 0.28),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            )
-                                          : null,
-                                      child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      children: [
-                                        Expanded(
-                                          flex: 2,
-                                          child: Text(item.productName),
-                                        ),
-                                        Expanded(
-                                          flex: 2,
-                                          child: Text(item.templateName),
-                                        ),
-                                        Expanded(
-                                          flex: 1,
-                                          child: Text(
-                                            '${item.version} / P${item.publishedVersion}',
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 1,
-                                          child: Text(
-                                            item.isDefault ? '是' : '否',
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 1,
-                                          child: Text(
-                                            '${_lifecycleLabel(item.lifecycleStatus)} / ${item.isEnabled ? '启用' : '停用'}',
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 1,
-                                          child: Text(
-                                            item.updatedByUsername ?? '-',
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 2,
-                                          child: Text(
-                                            item.updatedAt.toLocal().toString(),
-                                          ),
-                                        ),
-                                        SizedBox(
-                                          width: 64,
-                                          child:
-                                              UnifiedListTableHeaderStyle.actionMenuButton<
-                                                _TemplateAction
-                                              >(
-                                                theme: theme,
-                                                onSelected: (action) {
-                                                  _handleTemplateAction(
-                                                    action,
-                                                    item,
-                                                  );
-                                                },
-                                                itemBuilder: (context) {
-                                                  final items =
-                                                      <
-                                                        PopupMenuEntry<
-                                                          _TemplateAction
-                                                        >
-                                                      >[];
-                                                  if (_canManageTemplates) {
-                                                    items.add(
-                                                      PopupMenuItem(
-                                                        value:
-                                                            item.lifecycleStatus ==
-                                                                'draft'
-                                                            ? _TemplateAction
-                                                                  .edit
-                                                            : _TemplateAction
-                                                                  .createDraft,
-                                                        child: Text(
-                                                          item.lifecycleStatus ==
-                                                                  'draft'
-                                                              ? '编辑'
-                                                              : '创建草稿',
-                                                        ),
-                                                      ),
-                                                    );
-                                                    if (item.lifecycleStatus ==
-                                                        'draft') {
-                                                      items.add(
-                                                        const PopupMenuItem(
-                                                          value: _TemplateAction
-                                                              .publish,
-                                                          child: Text('发布'),
-                                                        ),
-                                                      );
-                                                    }
-                                                    items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .copy,
-                                                        child: Text('复制（同产品）'),
-                                                      ),
-                                                    );
-                                                    items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .copyToProduct,
-                                                        child: Text('跨产品复制'),
-                                                      ),
-                                                    );
-                                                    items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .copyFromMaster,
-                                                        child: Text('从系统母版套版'),
-                                                      ),
-                                                    );
-                                                    if (item.lifecycleStatus ==
-                                                        'published') {
-                                                      items.add(
-                                                        const PopupMenuItem(
-                                                          value: _TemplateAction
-                                                              .archive,
-                                                          child: Text('归档'),
-                                                        ),
-                                                      );
-                                                    }
-                                                    if (item.lifecycleStatus ==
-                                                        'archived') {
-                                                      items.add(
-                                                        const PopupMenuItem(
-                                                          value: _TemplateAction
-                                                              .unarchive,
-                                                          child: Text('取消归档'),
-                                                        ),
-                                                      );
-                                                    }
-                                                    items.add(
-                                                      PopupMenuItem(
-                                                        value: item.isEnabled
-                                                            ? _TemplateAction
-                                                                  .disable
-                                                            : _TemplateAction
-                                                                  .enable,
-                                                        child: Text(
-                                                          item.isEnabled
-                                                              ? '停用'
-                                                              : '启用',
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-                                                  if (_canViewTemplates) {
-                                                    items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .detail,
-                                                        child: Text('查看详情'),
-                                                      ),
-                                                    );
-                                                    items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .impact,
-                                                        child: Text('影响分析'),
-                                                      ),
-                                                    );
-                                                    items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .versions,
-                                                        child: Text('版本管理'),
-                                                      ),
-                                                    );
-                                                    items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .compare,
-                                                        child: Text('版本对比'),
-                                                      ),
-                                                    );
-                                                  }
-                                                  if (_canManageTemplates) {
-                                                    items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .rollback,
-                                                        child: Text('回滚模板'),
-                                                      ),
-                                                    );
-                                                  }
-                                                  if (_canManageTemplates) {
-                                                    items.add(
-                                                      const PopupMenuItem(
-                                                        value: _TemplateAction
-                                                            .delete,
-                                                        child: Text('删除'),
-                                                      ),
-                                                    );
-                                                  }
-                                                  return items;
-                                                },
-                                              ),
-                                        ),
-                                      ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
+                      OutlinedButton.icon(
+                        onPressed: () => _pickUpdatedDate(isFrom: true),
+                        icon: const Icon(Icons.event),
+                        label: Text(
+                          '起始更新日：${_formatDateLabel(_updatedFromDate)}',
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => _pickUpdatedDate(isFrom: false),
+                        icon: const Icon(Icons.event_available),
+                        label: Text(
+                          '结束更新日：${_formatDateLabel(_updatedToDate)}',
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _updatedFromDate = null;
+                            _updatedToDate = null;
+                            _templateKeyword = '';
+                            _templateKeywordController.clear();
+                            _productCategoryFilter = null;
+                            _defaultTemplateFilter = null;
+                            _templateEnabledFilter = null;
+                          });
+                        },
+                        icon: const Icon(Icons.clear_all),
+                        label: const Text('清空本地筛选'),
                       ),
                     ],
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_message.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  _message,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else
+              _buildTemplateList(theme, templates),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final templates = _filteredTemplates;
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CrudPageHeader(
+            title: '生产工序配置',
+            onRefresh: _loading ? null : _loadData,
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildJumpBanner(theme),
+                        const SizedBox(height: 12),
+                        _buildSystemMasterManagementCard(theme),
+                        const SizedBox(height: 12),
+                        _buildTemplateWorkspace(theme, templates),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

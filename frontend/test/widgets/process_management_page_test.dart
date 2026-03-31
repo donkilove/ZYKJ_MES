@@ -4,6 +4,7 @@ import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/craft_models.dart';
 import 'package:mes_client/pages/process_management_page.dart';
 import 'package:mes_client/services/craft_service.dart';
+import 'package:mes_client/widgets/crud_page_header.dart';
 
 class _FakeCraftService extends CraftService {
   _FakeCraftService() : super(AppSession(baseUrl: '', accessToken: ''));
@@ -80,29 +81,63 @@ class _FakeCraftService extends CraftService {
   }
 }
 
-void main() {
-  testWidgets('工序管理引用弹窗展示编码字段', (tester) async {
-    tester.view.physicalSize = const Size(1600, 1200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
+Future<void> _pumpProcessManagementPage(
+  WidgetTester tester, {
+  required Size size,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ProcessManagementPage(
-            session: AppSession(baseUrl: '', accessToken: ''),
-            onLogout: () {},
-            canWrite: true,
-            craftService: _FakeCraftService(),
-          ),
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: ProcessManagementPage(
+          session: AppSession(baseUrl: '', accessToken: ''),
+          onLogout: () {},
+          canWrite: true,
+          craftService: _FakeCraftService(),
         ),
       ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
+void main() {
+  testWidgets('中等桌面宽度下恢复左右双栏并接入公共页头', (tester) async {
+    await _pumpProcessManagementPage(tester, size: const Size(1200, 1200));
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(find.text('全部状态'), findsNothing);
+    expect(find.byTooltip('导出工段'), findsNothing);
+    expect(find.byTooltip('导出工序'), findsNothing);
+
+    final stageListTopLeft = tester.getTopLeft(find.text('工段列表'));
+    final processListTopLeft = tester.getTopLeft(find.text('工序列表'));
+
+    expect(processListTopLeft.dy, lessThan(stageListTopLeft.dy + 80));
+    expect(processListTopLeft.dx, greaterThan(stageListTopLeft.dx + 80));
+  });
+
+  testWidgets('窄屏宽度下仍保持上下单栏兜底', (tester) async {
+    await _pumpProcessManagementPage(tester, size: const Size(900, 1200));
+
+    expect(tester.takeException(), isNull);
+
+    final stageListTopLeft = tester.getTopLeft(find.text('工段列表'));
+    final processListTopLeft = tester.getTopLeft(find.text('工序列表'));
+
+    expect(processListTopLeft.dy, greaterThan(stageListTopLeft.dy + 80));
+  });
+
+  testWidgets('工序管理引用弹窗展示编码字段', (tester) async {
+    await _pumpProcessManagementPage(tester, size: const Size(1600, 1200));
 
     await tester.tap(find.text('操作').last);
     await tester.pumpAndSettle();

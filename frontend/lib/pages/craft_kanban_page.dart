@@ -258,17 +258,55 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     return _processes.where((p) => p.stageId == _selectedStageId).toList();
   }
 
+  Widget _buildFilterGroup({
+    required BuildContext context,
+    required String title,
+    required List<Widget> children,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        border: Border.all(color: theme.dividerColor),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: children,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMetricHeader() {
     final bool busy = _loadingProducts || _loadingMetrics || _exporting;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        _buildFilterGroup(
+          context: context,
+          title: '主筛选',
           children: [
             SizedBox(
-              width: 280,
+              width: 320,
               child: DropdownButtonFormField<int>(
                 initialValue: _selectedProductId,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: '选择产品',
                   border: OutlineInputBorder(),
@@ -294,11 +332,11 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
                       },
               ),
             ),
-            const SizedBox(width: 8),
             SizedBox(
-              width: 200,
+              width: 220,
               child: DropdownButtonFormField<int?>(
                 initialValue: _selectedStageId,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: '工段筛选',
                   border: OutlineInputBorder(),
@@ -326,11 +364,11 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
                       },
               ),
             ),
-            const SizedBox(width: 8),
             SizedBox(
-              width: 200,
+              width: 220,
               child: DropdownButtonFormField<int?>(
                 initialValue: _selectedProcessId,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: '工序筛选',
                   border: OutlineInputBorder(),
@@ -357,22 +395,36 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
                       },
               ),
             ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: busy ? null : _loadMetrics,
-              icon: const Icon(Icons.refresh),
-              label: const Text('刷新'),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: busy ? null : _exportMetricsCsv,
-              icon: const Icon(Icons.download),
-              label: const Text('导出数据'),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).dividerColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  FilledButton.icon(
+                    onPressed: busy ? null : _loadMetrics,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('刷新'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : _exportMetricsCsv,
+                    icon: const Icon(Icons.download),
+                    label: const Text('导出数据'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        Row(
+        _buildFilterGroup(
+          context: context,
+          title: '日期范围',
           children: [
             OutlinedButton.icon(
               onPressed: busy
@@ -398,7 +450,6 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
                     : '${_startDate!.year}-${_startDate!.month.toString().padLeft(2, '0')}-${_startDate!.day.toString().padLeft(2, '0')}',
               ),
             ),
-            const SizedBox(width: 8),
             OutlinedButton.icon(
               onPressed: busy
                   ? null
@@ -423,8 +474,7 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
                     : '${_endDate!.year}-${_endDate!.month.toString().padLeft(2, '0')}-${_endDate!.day.toString().padLeft(2, '0')}',
               ),
             ),
-            if (_startDate != null || _endDate != null) ...[
-              const SizedBox(width: 8),
+            if (_startDate != null || _endDate != null)
               TextButton(
                 onPressed: busy
                     ? null
@@ -437,7 +487,6 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
                       },
                 child: const Text('清除日期'),
               ),
-            ],
           ],
         ),
       ],

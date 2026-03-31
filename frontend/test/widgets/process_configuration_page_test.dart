@@ -251,7 +251,7 @@ void main() {
     );
   }
 
-  testWidgets('主页面直接展示系统母版步骤明细', (tester) async {
+  testWidgets('已配置系统母版时默认展示摘要并提供管理入口', (tester) async {
     await pumpPage(
       tester,
       systemMasterTemplate: CraftSystemMasterTemplateItem(
@@ -273,9 +273,7 @@ void main() {
             processId: 11,
             processCode: 'CUT-01',
             processName: '激光切割',
-            standardMinutes: 15,
             isKeyProcess: true,
-            stepRemark: '首件确认',
             createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
             updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
           ),
@@ -283,25 +281,19 @@ void main() {
       ),
     );
 
-    expect(find.text('系统母版步骤'), findsOneWidget);
-    expect(find.text('序号'), findsOneWidget);
-    expect(find.text('工段'), findsOneWidget);
-    expect(find.text('工序'), findsOneWidget);
-    expect(find.text('标准工时'), findsOneWidget);
-    expect(find.text('关键工序'), findsOneWidget);
-    expect(find.text('备注'), findsOneWidget);
-    expect(find.text('CUT 切割段'), findsOneWidget);
-    expect(find.text('CUT-01 激光切割'), findsOneWidget);
-    expect(find.text('15 分钟'), findsOneWidget);
-    expect(find.text('是'), findsOneWidget);
-    expect(find.text('首件确认'), findsOneWidget);
+    expect(find.text('系统母版管理'), findsOneWidget);
+    expect(find.text('系统默认工序母版已配置，可按需查看步骤、历史版本与维护入口。'), findsOneWidget);
+    expect(find.text('CUT 切割段'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('无系统母版时主页面安全降级', (tester) async {
     await pumpPage(tester);
 
+    expect(find.text('系统母版管理'), findsOneWidget);
     expect(find.text('系统母版步骤'), findsOneWidget);
     expect(find.text('暂无系统母版步骤'), findsOneWidget);
+    expect(find.text('未配置'), findsWidgets);
   });
 
   testWidgets('接收模板跳转参数后定位到目标模板', (tester) async {
@@ -383,9 +375,7 @@ void main() {
                 processId: 11,
                 processCode: 'CUT-01',
                 processName: '激光切割',
-                standardMinutes: 12,
                 isKeyProcess: false,
-                stepRemark: '',
                 createdAt: DateTime.parse('2026-03-02T00:00:00Z'),
                 updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
               ),
@@ -552,6 +542,136 @@ void main() {
     expect(find.text('导出版本参数'), findsOneWidget);
   });
 
+  testWidgets('展开系统母版后页面仍可下滚且模板操作按钮可正常打开', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpPage(
+      tester,
+      systemMasterTemplate: CraftSystemMasterTemplateItem(
+        id: 1,
+        version: 3,
+        createdByUserId: 9,
+        createdByUsername: 'planner',
+        updatedByUserId: 9,
+        updatedByUsername: 'planner',
+        createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+        updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
+        steps: List.generate(
+          12,
+          (index) => CraftSystemMasterTemplateStepItem(
+            id: index + 1,
+            stepOrder: index + 1,
+            stageId: 1,
+            stageCode: 'CUT',
+            stageName: '切割段',
+            processId: 11,
+            processCode: 'CUT-01',
+            processName: '激光切割',
+            isKeyProcess: index.isEven,
+            createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+            updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
+          ),
+        ),
+      ),
+      templates: [buildTemplate(id: 18, version: 5)],
+    );
+
+    await tester.tap(find.text('系统母版管理'));
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(
+      find.text('模板工作区'),
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -300),
+    );
+    expect(find.text('模板工作区'), findsOneWidget);
+
+    await tester.tap(find.text('操作').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('查看详情'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('系统母版展开后摘要区与步骤区构建稳定', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 820));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpPage(
+      tester,
+      systemMasterTemplate: CraftSystemMasterTemplateItem(
+        id: 1,
+        version: 3,
+        createdByUserId: 9,
+        createdByUsername: 'planner',
+        updatedByUserId: 9,
+        updatedByUsername: 'planner',
+        createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+        updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
+        steps: [
+          CraftSystemMasterTemplateStepItem(
+            id: 101,
+            stepOrder: 1,
+            stageId: 1,
+            stageCode: 'CUT',
+            stageName: '切割段',
+            processId: 11,
+            processCode: 'CUT-01',
+            processName: '激光切割',
+            isKeyProcess: true,
+            createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+            updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
+          ),
+        ],
+      ),
+      templates: [buildTemplate(id: 18, version: 5)],
+    );
+
+    await tester.tap(find.text('系统母版管理'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('系统母版管理'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('模板筛选区在窄一些的桌面宽度下不再溢出', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1180, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpPage(tester, templates: [buildTemplate(id: 18, version: 5)]);
+
+    await tester.dragUntilVisible(
+      find.text('按生命周期筛选'),
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -240),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('默认模板筛选'), findsOneWidget);
+    expect(find.text('启用状态筛选'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('模板筛选区在更窄桌面宽度下自动切换为双列或单列', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(920, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpPage(tester, templates: [buildTemplate(id: 18, version: 5)]);
+
+    await tester.dragUntilVisible(
+      find.text('按生命周期筛选'),
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -240),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('模板名称搜索'), findsOneWidget);
+    expect(find.text('产品分类筛选'), findsOneWidget);
+    expect(find.text('清空本地筛选'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('新建模板不再显示直接发布入口', (tester) async {
     await pumpPage(tester, templates: [buildTemplate(id: 18, version: 5)]);
 
@@ -560,6 +680,8 @@ void main() {
 
     expect(find.text('新建后直接发布'), findsNothing);
     expect(find.textContaining('统一先保存为草稿'), findsOneWidget);
+    expect(find.text('标准工时(分钟)'), findsNothing);
+    expect(find.text('步骤说明'), findsNothing);
   });
 
   testWidgets('停用模板遇到阻断级引用时展示后端拦截状态', (tester) async {
@@ -607,5 +729,4 @@ void main() {
     expect(confirmButton.onPressed, isNull);
     expect(craftService.disabledTemplateIds, isEmpty);
   });
-
 }

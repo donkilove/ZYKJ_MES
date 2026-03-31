@@ -41,16 +41,26 @@ class UnifiedListTableHeaderStyle {
     TextAlign textAlign = TextAlign.start,
   }) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: _headerVerticalPadding),
-      child: Text(
-        text,
-        textAlign: textAlign,
-        style: theme.textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
+    return Align(
+      alignment: _alignmentForTextAlign(textAlign),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: _headerVerticalPadding),
+        child: Text(
+          text,
+          textAlign: textAlign,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
+  }
+
+  static Widget cellContent(
+    Widget child, {
+    TextAlign textAlign = TextAlign.start,
+  }) {
+    return Align(alignment: _alignmentForTextAlign(textAlign), child: child);
   }
 
   static DataColumn column(
@@ -69,36 +79,50 @@ class UnifiedListTableHeaderStyle {
     double width = _actionButtonWidth,
     double height = _actionButtonHeight,
   }) {
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Container(
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(
-          horizontal: _actionButtonHorizontalPadding,
-          vertical: _actionButtonVerticalPadding,
-        ),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary,
-          borderRadius: BorderRadius.circular(_actionButtonBorderRadius),
-        ),
-        child: PopupMenuButton<T>(
-          color: theme.colorScheme.primaryContainer,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-          onSelected: onSelected,
-          itemBuilder: itemBuilder,
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: theme.colorScheme.onPrimary,
-                fontSize: _actionButtonFontSize,
+    return PopupMenuButton<T>(
+      color: theme.colorScheme.primaryContainer,
+      padding: EdgeInsets.zero,
+      onSelected: onSelected,
+      itemBuilder: itemBuilder,
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary,
+            borderRadius: BorderRadius.circular(_actionButtonBorderRadius),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: _actionButtonHorizontalPadding,
+              vertical: _actionButtonVerticalPadding,
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: theme.colorScheme.onPrimary,
+                  fontSize: _actionButtonFontSize,
+                ),
               ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  static Alignment _alignmentForTextAlign(TextAlign textAlign) {
+    switch (textAlign) {
+      case TextAlign.center:
+        return Alignment.center;
+      case TextAlign.right:
+      case TextAlign.end:
+        return Alignment.centerRight;
+      case TextAlign.left:
+      case TextAlign.start:
+      case TextAlign.justify:
+        return Alignment.centerLeft;
+    }
   }
 }

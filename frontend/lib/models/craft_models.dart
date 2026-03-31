@@ -168,26 +168,20 @@ class CraftTemplateStepPayload {
     required this.stepOrder,
     required this.stageId,
     required this.processId,
-    this.standardMinutes = 0,
     this.isKeyProcess = false,
-    this.stepRemark = '',
   });
 
   final int stepOrder;
   final int stageId;
   final int processId;
-  final int standardMinutes;
   final bool isKeyProcess;
-  final String stepRemark;
 
   factory CraftTemplateStepPayload.fromJson(Map<String, dynamic> json) {
     return CraftTemplateStepPayload(
       stepOrder: (json['step_order'] as int?) ?? 0,
       stageId: (json['stage_id'] as int?) ?? 0,
       processId: (json['process_id'] as int?) ?? 0,
-      standardMinutes: (json['standard_minutes'] as int?) ?? 0,
       isKeyProcess: (json['is_key_process'] as bool?) ?? false,
-      stepRemark: (json['step_remark'] as String?) ?? '',
     );
   }
 
@@ -196,9 +190,7 @@ class CraftTemplateStepPayload {
       'step_order': stepOrder,
       'stage_id': stageId,
       'process_id': processId,
-      'standard_minutes': standardMinutes,
       'is_key_process': isKeyProcess,
-      'step_remark': stepRemark,
     };
   }
 }
@@ -213,9 +205,7 @@ class CraftTemplateStepItem {
     required this.processId,
     required this.processCode,
     required this.processName,
-    required this.standardMinutes,
     required this.isKeyProcess,
-    required this.stepRemark,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -228,9 +218,7 @@ class CraftTemplateStepItem {
   final int processId;
   final String processCode;
   final String processName;
-  final int standardMinutes;
   final bool isKeyProcess;
-  final String stepRemark;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -244,9 +232,7 @@ class CraftTemplateStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
-      standardMinutes: (json['standard_minutes'] as int?) ?? 0,
       isKeyProcess: (json['is_key_process'] as bool?) ?? false,
-      stepRemark: (json['step_remark'] as String?) ?? '',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -350,9 +336,7 @@ class CraftSystemMasterTemplateStepItem {
     required this.processId,
     required this.processCode,
     required this.processName,
-    required this.standardMinutes,
     required this.isKeyProcess,
-    required this.stepRemark,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -365,9 +349,7 @@ class CraftSystemMasterTemplateStepItem {
   final int processId;
   final String processCode;
   final String processName;
-  final int standardMinutes;
   final bool isKeyProcess;
-  final String stepRemark;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -383,9 +365,7 @@ class CraftSystemMasterTemplateStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
-      standardMinutes: (json['standard_minutes'] as int?) ?? 0,
       isKeyProcess: (json['is_key_process'] as bool?) ?? false,
-      stepRemark: (json['step_remark'] as String?) ?? '',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -446,9 +426,7 @@ class CraftSystemMasterTemplateVersionStepItem {
     required this.processId,
     required this.processCode,
     required this.processName,
-    required this.standardMinutes,
     required this.isKeyProcess,
-    required this.stepRemark,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -461,9 +439,7 @@ class CraftSystemMasterTemplateVersionStepItem {
   final int processId;
   final String processCode;
   final String processName;
-  final int standardMinutes;
   final bool isKeyProcess;
-  final String stepRemark;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -479,9 +455,7 @@ class CraftSystemMasterTemplateVersionStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
-      standardMinutes: (json['standard_minutes'] as int?) ?? 0,
       isKeyProcess: (json['is_key_process'] as bool?) ?? false,
-      stepRemark: (json['step_remark'] as String?) ?? '',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -692,9 +666,7 @@ class CraftTemplateImpactReferenceItem {
   final String? riskLevel;
   final String? riskNote;
 
-  factory CraftTemplateImpactReferenceItem.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory CraftTemplateImpactReferenceItem.fromJson(Map<String, dynamic> json) {
     return CraftTemplateImpactReferenceItem(
       refType: (json['ref_type'] as String?) ?? '',
       refId: (json['ref_id'] as int?) ?? 0,
@@ -757,14 +729,13 @@ class CraftTemplateImpactAnalysis {
             ),
           )
           .toList(),
-      referenceItems:
-          (json['reference_items'] as List<dynamic>? ?? const [])
-              .map(
-                (entry) => CraftTemplateImpactReferenceItem.fromJson(
-                  entry as Map<String, dynamic>,
-                ),
-              )
-              .toList(),
+      referenceItems: (json['reference_items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => CraftTemplateImpactReferenceItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -1038,7 +1009,8 @@ class CraftTemplateBatchExportItem {
       'is_enabled': isEnabled,
       'lifecycle_status': lifecycleStatus,
       'source_type': sourceType,
-      if (sourceTemplateName != null) 'source_template_name': sourceTemplateName,
+      if (sourceTemplateName != null)
+        'source_template_name': sourceTemplateName,
       if (sourceTemplateVersion != null)
         'source_template_version': sourceTemplateVersion,
       if (sourceSystemMasterVersion != null)
@@ -1111,7 +1083,8 @@ class CraftTemplateBatchImportItem {
       'is_enabled': isEnabled,
       'lifecycle_status': lifecycleStatus,
       'source_type': sourceType,
-      if (sourceTemplateName != null) 'source_template_name': sourceTemplateName,
+      if (sourceTemplateName != null)
+        'source_template_name': sourceTemplateName,
       if (sourceTemplateVersion != null)
         'source_template_version': sourceTemplateVersion,
       if (sourceSystemMasterVersion != null)
@@ -1327,12 +1300,12 @@ class CraftTemplateReferenceResult {
       productName: (json['product_name'] as String?) ?? '',
       total: (json['total'] as int?) ?? 0,
       orderReferenceCount: (json['order_reference_count'] as int?) ?? 0,
-      userStageReferenceCount: (json['user_stage_reference_count'] as int?) ?? 0,
+      userStageReferenceCount:
+          (json['user_stage_reference_count'] as int?) ?? 0,
       templateReuseReferenceCount:
           (json['template_reuse_reference_count'] as int?) ?? 0,
       blockingReferenceCount: (json['blocking_reference_count'] as int?) ?? 0,
-      hasBlockingReferences:
-          json['has_blocking_references'] as bool? ?? false,
+      hasBlockingReferences: json['has_blocking_references'] as bool? ?? false,
       items: (json['items'] as List<dynamic>? ?? const [])
           .map((e) => CraftReferenceItem.fromJson(e as Map<String, dynamic>))
           .toList(),

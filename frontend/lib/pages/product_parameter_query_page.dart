@@ -504,12 +504,13 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
                                 ),
                                 DataCell(Text(_formatTime(product.createdAt))),
                                 DataCell(
-                                  Center(
-                                    child: TextButton(
+                                  UnifiedListTableHeaderStyle.cellContent(
+                                    TextButton(
                                       onPressed: () =>
                                           _showParametersDialog(product),
                                       child: const Text('查看参数'),
                                     ),
+                                    textAlign: TextAlign.center,
                                   ),
                                 ),
                               ],

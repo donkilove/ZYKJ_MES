@@ -123,6 +123,27 @@ class _FakeProductionService extends ProductionService {
 }
 
 void main() {
+  Future<void> pumpCraftKanbanPage(
+    WidgetTester tester, {
+    required CraftService craftService,
+    required ProductionService productionService,
+  }) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CraftKanbanPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            craftService: craftService,
+            productionService: productionService,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
   testWidgets('工艺看板展示筛选项与趋势结果', (tester) async {
     final craftService = _FakeCraftService();
     tester.view.physicalSize = const Size(1800, 1400);
@@ -132,20 +153,11 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CraftKanbanPage(
-            session: AppSession(baseUrl: '', accessToken: ''),
-            onLogout: () {},
-            craftService: craftService,
-            productionService: _FakeProductionService(),
-          ),
-        ),
-      ),
+    await pumpCraftKanbanPage(
+      tester,
+      craftService: craftService,
+      productionService: _FakeProductionService(),
     );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('工段筛选'), findsOneWidget);
     expect(find.text('工序趋势对比（平均工时/产能）'), findsOneWidget);
@@ -156,5 +168,66 @@ void main() {
     await tester.pump();
 
     expect(craftService.lastExportLimit, 100);
+  });
+
+  testWidgets('工艺看板顶部筛选区在窄桌面宽度下不溢出', (tester) async {
+    tester.view.physicalSize = const Size(980, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpCraftKanbanPage(
+      tester,
+      craftService: _FakeCraftService(),
+      productionService: _FakeProductionService(),
+    );
+
+    expect(find.text('选择产品'), findsOneWidget);
+    expect(find.text('主筛选'), findsOneWidget);
+    expect(find.text('日期范围'), findsOneWidget);
+    expect(find.text('工段筛选'), findsOneWidget);
+    expect(find.text('导出数据'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('工艺看板日期范围在选择日期后显示清除日期', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpCraftKanbanPage(
+      tester,
+      craftService: _FakeCraftService(),
+      productionService: _FakeProductionService(),
+    );
+
+    expect(find.text('开始日期'), findsOneWidget);
+    expect(find.text('结束日期'), findsOneWidget);
+    expect(find.text('清除日期'), findsNothing);
+
+    await tester.tap(find.text('开始日期'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('15').last);
+    await tester.pumpAndSettle();
+    final confirmButton = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextButton &&
+          widget.child is Text &&
+          (((widget.child as Text).data ?? '') == '确定' ||
+              ((widget.child as Text).data ?? '') == 'OK'),
+    );
+    await tester.tap(confirmButton.first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('清除日期'), findsOneWidget);
+    expect(find.text('开始日期'), findsNothing);
+    expect(find.text('结束日期'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

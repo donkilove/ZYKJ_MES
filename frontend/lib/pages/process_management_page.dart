@@ -1,11 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/craft_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
@@ -36,6 +35,8 @@ class ProcessManagementPage extends StatefulWidget {
 }
 
 class _ProcessManagementPageState extends State<ProcessManagementPage> {
+  static const double _twoPaneBreakpoint = 1100;
+
   late final CraftService _service;
 
   bool _loading = false;
@@ -48,10 +49,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   final _processSearchController = TextEditingController();
   String _stageKeyword = '';
   String _processKeyword = '';
-  bool? _stageEnabledFilter;
-  bool? _processEnabledFilter;
   int? _processStageFilter;
-  bool _exporting = false;
   int? _focusedProcessId;
   String _jumpNotice = '';
   int _lastHandledJumpRequestId = -1;
@@ -82,9 +80,6 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           )
           .toList();
     }
-    if (_stageEnabledFilter != null) {
-      list = list.where((s) => s.isEnabled == _stageEnabledFilter).toList();
-    }
     return list;
   }
 
@@ -103,9 +98,6 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                 (p.stageName?.toLowerCase().contains(kw) ?? false),
           )
           .toList();
-    }
-    if (_processEnabledFilter != null) {
-      list = list.where((p) => p.isEnabled == _processEnabledFilter).toList();
     }
     return list;
   }
@@ -173,63 +165,10 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       _processStageFilter = matched!.stageId;
       _processKeyword = '';
       _processSearchController.clear();
-      _processEnabledFilter = null;
       _focusedProcessId = matched.id;
       _jumpNotice = '已定位工序 #${matched.id} ${matched.name}';
     });
     _lastHandledJumpRequestId = widget.jumpRequestId;
-  }
-
-  Future<void> _exportCsv({required bool isStage}) async {
-    setState(() {
-      _exporting = true;
-      _message = '';
-    });
-    try {
-      final csvBase64 = isStage
-          ? await _service.exportStages(
-              keyword: _stageKeyword.isNotEmpty ? _stageKeyword : null,
-              enabled: _stageEnabledFilter,
-            )
-          : await _service.exportProcesses(
-              keyword: _processKeyword.isNotEmpty ? _processKeyword : null,
-              stageId: _processStageFilter,
-              enabled: _processEnabledFilter,
-            );
-      if (!mounted) return;
-      if (csvBase64.isEmpty) {
-        setState(() => _message = '无数据可导出');
-        return;
-      }
-      final bytes = base64Decode(csvBase64);
-      final csvString = String.fromCharCodes(bytes);
-      showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: Text(isStage ? '工段导出预览' : '工序导出预览'),
-          content: SizedBox(
-            width: 600,
-            height: 400,
-            child: SingleChildScrollView(child: SelectableText(csvString)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      if (_isUnauthorized(e)) {
-        widget.onLogout();
-        return;
-      }
-      setState(() => _message = '导出失败：${_errorMessage(e)}');
-    } finally {
-      if (mounted) setState(() => _exporting = false);
-    }
   }
 
   void _showNoPermission() {
@@ -247,14 +186,8 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       _message = '';
     });
     try {
-      final stageResult = await _service.listStages(
-        pageSize: 500,
-        enabled: null,
-      );
-      final processResult = await _service.listProcesses(
-        pageSize: 500,
-        enabled: null,
-      );
+      final stageResult = await _service.listStages(pageSize: 500);
+      final processResult = await _service.listProcesses(pageSize: 500);
       if (!mounted) {
         return;
       }
@@ -1061,8 +994,44 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   }) {
     return Text(
       text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       textAlign: textAlign,
       style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+    );
+  }
+
+  Widget _buildCellText(
+    String text, {
+    TextAlign textAlign = TextAlign.start,
+    TextStyle? style,
+  }) {
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: textAlign,
+      style: style,
+    );
+  }
+
+  Widget _buildToolbarSearchField({
+    required TextEditingController controller,
+    required String hintText,
+    required ValueChanged<String> onChanged,
+  }) {
+    return SizedBox(
+      width: 220,
+      child: TextField(
+        controller: controller,
+        decoration: const InputDecoration(
+          prefixIcon: Icon(Icons.search, size: 16),
+          isDense: true,
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        ).copyWith(hintText: hintText),
+        onChanged: onChanged,
+      ),
     );
   }
 
@@ -1168,15 +1137,13 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          CrudPageHeader(title: '工序管理', onRefresh: _loading ? null : _loadData),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(
-                '工序管理',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
               FilledButton.icon(
                 onPressed: (_loading || !widget.canWrite)
                     ? null
@@ -1191,12 +1158,6 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                     : () => _showProcessDialog(),
                 icon: const Icon(Icons.add),
                 label: const Text('新增工序'),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadData,
-                icon: const Icon(Icons.refresh),
               ),
             ],
           ),
@@ -1216,7 +1177,8 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : LayoutBuilder(
                     builder: (context, constraints) {
-                      final isNarrow = constraints.maxWidth < 960;
+                      final isNarrow =
+                          constraints.maxWidth < _twoPaneBreakpoint;
                       return Flex(
                         direction: isNarrow ? Axis.vertical : Axis.horizontal,
                         children: [
@@ -1227,68 +1189,21 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
                                       children: [
                                         Text(
                                           '工段列表',
                                           style: theme.textTheme.titleMedium,
                                         ),
-                                        const SizedBox(width: 12),
-                                        SizedBox(
-                                          width: 180,
-                                          child: TextField(
-                                            controller: _stageSearchController,
-                                            decoration: const InputDecoration(
-                                              hintText: '搜索工段',
-                                              prefixIcon: Icon(
-                                                Icons.search,
-                                                size: 16,
-                                              ),
-                                              isDense: true,
-                                              border: OutlineInputBorder(),
-                                              contentPadding:
-                                                  EdgeInsets.symmetric(
-                                                    vertical: 6,
-                                                    horizontal: 8,
-                                                  ),
-                                            ),
-                                            onChanged: (v) => setState(
-                                              () => _stageKeyword = v.trim(),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        DropdownButton<bool?>(
-                                          value: _stageEnabledFilter,
-                                          isDense: true,
-                                          hint: const Text('全部状态'),
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: null,
-                                              child: Text('全部状态'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: true,
-                                              child: Text('启用'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: false,
-                                              child: Text('停用'),
-                                            ),
-                                          ],
+                                        _buildToolbarSearchField(
+                                          controller: _stageSearchController,
+                                          hintText: '搜索工段',
                                           onChanged: (v) => setState(
-                                            () => _stageEnabledFilter = v,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        IconButton(
-                                          tooltip: '导出工段',
-                                          onPressed: _exporting
-                                              ? null
-                                              : () => _exportCsv(isStage: true),
-                                          icon: const Icon(
-                                            Icons.download,
-                                            size: 20,
+                                            () => _stageKeyword = v.trim(),
                                           ),
                                         ),
                                       ],
@@ -1320,15 +1235,19 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                     children: [
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Text(item.code),
+                                                        child: _buildCellText(
+                                                          item.code,
+                                                        ),
                                                       ),
                                                       Expanded(
                                                         flex: 2,
-                                                        child: Text(item.name),
+                                                        child: _buildCellText(
+                                                          item.name,
+                                                        ),
                                                       ),
                                                       Expanded(
                                                         flex: 2,
-                                                        child: Text(
+                                                        child: _buildCellText(
                                                           item.remark.isEmpty
                                                               ? '-'
                                                               : item.remark,
@@ -1336,13 +1255,13 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                       ),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Text(
+                                                        child: _buildCellText(
                                                           '${item.sortOrder}',
                                                         ),
                                                       ),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Text(
+                                                        child: _buildCellText(
                                                           item.isEnabled
                                                               ? '启用'
                                                               : '停用',
@@ -1350,13 +1269,13 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                       ),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Text(
+                                                        child: _buildCellText(
                                                           '${item.processCount}',
                                                         ),
                                                       ),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Text(
+                                                        child: _buildCellText(
                                                           '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
                                                           style: theme
                                                               .textTheme
@@ -1443,61 +1362,23 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
                                       children: [
                                         Text(
                                           '工序列表',
                                           style: theme.textTheme.titleMedium,
                                         ),
-                                        const SizedBox(width: 12),
-                                        SizedBox(
-                                          width: 180,
-                                          child: TextField(
-                                            controller:
-                                                _processSearchController,
-                                            decoration: const InputDecoration(
-                                              hintText: '搜索工序',
-                                              prefixIcon: Icon(
-                                                Icons.search,
-                                                size: 16,
-                                              ),
-                                              isDense: true,
-                                              border: OutlineInputBorder(),
-                                              contentPadding:
-                                                  EdgeInsets.symmetric(
-                                                    vertical: 6,
-                                                    horizontal: 8,
-                                                  ),
-                                            ),
-                                            onChanged: (v) => setState(
-                                              () => _processKeyword = v.trim(),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        DropdownButton<bool?>(
-                                          value: _processEnabledFilter,
-                                          isDense: true,
-                                          hint: const Text('全部状态'),
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: null,
-                                              child: Text('全部状态'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: true,
-                                              child: Text('启用'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: false,
-                                              child: Text('停用'),
-                                            ),
-                                          ],
+                                        _buildToolbarSearchField(
+                                          controller: _processSearchController,
+                                          hintText: '搜索工序',
                                           onChanged: (v) => setState(
-                                            () => _processEnabledFilter = v,
+                                            () => _processKeyword = v.trim(),
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
                                         DropdownButton<int?>(
                                           value: _processStageFilter,
                                           isDense: true,
@@ -1516,18 +1397,6 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                           ],
                                           onChanged: (v) => setState(
                                             () => _processStageFilter = v,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        IconButton(
-                                          tooltip: '导出工序',
-                                          onPressed: _exporting
-                                              ? null
-                                              : () =>
-                                                    _exportCsv(isStage: false),
-                                          icon: const Icon(
-                                            Icons.download,
-                                            size: 20,
                                           ),
                                         ),
                                       ],
@@ -1578,21 +1447,25 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                     children: [
                                                       Expanded(
                                                         flex: 2,
-                                                        child: Text(
+                                                        child: _buildCellText(
                                                           item.stageName ?? '-',
                                                         ),
                                                       ),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Text(item.code),
+                                                        child: _buildCellText(
+                                                          item.code,
+                                                        ),
                                                       ),
                                                       Expanded(
                                                         flex: 2,
-                                                        child: Text(item.name),
+                                                        child: _buildCellText(
+                                                          item.name,
+                                                        ),
                                                       ),
                                                       Expanded(
                                                         flex: 2,
-                                                        child: Text(
+                                                        child: _buildCellText(
                                                           item.remark.isEmpty
                                                               ? '-'
                                                               : item.remark,
@@ -1600,7 +1473,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                       ),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Text(
+                                                        child: _buildCellText(
                                                           item.isEnabled
                                                               ? '启用'
                                                               : '停用',
@@ -1608,7 +1481,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                                                       ),
                                                       Expanded(
                                                         flex: 1,
-                                                        child: Text(
+                                                        child: _buildCellText(
                                                           '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
                                                           style: theme
                                                               .textTheme

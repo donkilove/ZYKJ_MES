@@ -1669,6 +1669,26 @@ void main() {
       expect(find.text('生效版本号筛选'), findsNothing);
       expect(find.byIcon(Icons.more_vert), findsNothing);
       expect(find.widgetWithText(TextButton, '查看参数'), findsOneWidget);
+      expect(
+        find.ancestor(
+          of: find.text('操作'),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Align && widget.alignment == Alignment.center,
+          ),
+        ),
+        findsOneWidget,
+        reason: '操作列表头应在列宽内真正居中，而不只是文本居中。',
+      );
+      expect(
+        find.ancestor(
+          of: find.widgetWithText(TextButton, '查看参数'),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Align && widget.alignment == Alignment.center,
+          ),
+        ),
+        findsOneWidget,
+        reason: '查看参数按钮应通过公共单元格包装保持垂直居中和水平居中。',
+      );
     });
   });
 }

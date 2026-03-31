@@ -109,9 +109,7 @@ class TemplateStepPayload(BaseModel):
     step_order: int = Field(gt=0)
     stage_id: int = Field(gt=0)
     process_id: int = Field(gt=0)
-    standard_minutes: int = Field(default=0, ge=0)
     is_key_process: bool = False
-    step_remark: str = Field(default="", max_length=500)
 
 
 class ProductProcessTemplateCreate(BaseModel):
@@ -159,9 +157,7 @@ class TemplateStepItem(BaseModel):
     process_id: int
     process_code: str
     process_name: str
-    standard_minutes: int = 0
     is_key_process: bool = False
-    step_remark: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -225,9 +221,7 @@ class SystemMasterTemplateStepItem(BaseModel):
     process_id: int
     process_code: str
     process_name: str
-    standard_minutes: int = 0
     is_key_process: bool = False
-    step_remark: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -573,9 +567,7 @@ class SystemMasterTemplateVersionStepItem(BaseModel):
     process_id: int
     process_code: str
     process_name: str
-    standard_minutes: int = 0
     is_key_process: bool = False
-    step_remark: str = ""
     created_at: datetime
     updated_at: datetime
 

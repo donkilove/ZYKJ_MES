@@ -173,9 +173,7 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                         "step_order": 1,
                         "stage_id": stage_id,
                         "process_id": process_id,
-                        "standard_minutes": 15,
                         "is_key_process": True,
-                        "step_remark": "关键首工序",
                     }
                 ],
             },
@@ -286,7 +284,8 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                 "utf-8-sig"
             )
         )
-        self.assertEqual(version_payload["steps"][0]["standard_minutes"], 15)
+        self.assertNotIn("standard_minutes", version_payload["steps"][0])
+        self.assertNotIn("step_remark", version_payload["steps"][0])
 
         export_kanban = self.client.get(
             f"/api/v1/craft/kanban/process-metrics/export?product_id={product['id']}&limit=50",
@@ -305,9 +304,9 @@ class CraftModuleIntegrationTest(unittest.TestCase):
             if item["template_name"] == "模板A"
         )
         exported_step = export_item["steps"][0]
-        self.assertEqual(exported_step["standard_minutes"], 15)
         self.assertTrue(exported_step["is_key_process"])
-        self.assertEqual(exported_step["step_remark"], "关键首工序")
+        self.assertNotIn("standard_minutes", exported_step)
+        self.assertNotIn("step_remark", exported_step)
 
     def test_detail_queries_and_reference_code_fields(self) -> None:
         stage = self._create_stage("D01")
@@ -426,9 +425,7 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                         "step_order": 1,
                         "stage_id": stage_a["id"],
                         "process_id": process_a["id"],
-                        "standard_minutes": 20,
                         "is_key_process": True,
-                        "step_remark": "直接修改",
                     }
                 ],
             },
@@ -459,9 +456,7 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                         "step_order": 1,
                         "stage_id": stage_b["id"],
                         "process_id": process_b["id"],
-                        "standard_minutes": 5,
                         "is_key_process": False,
-                        "step_remark": "新工序",
                     }
                 ],
             },
@@ -531,9 +526,7 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                         "step_order": 1,
                         "stage_id": stage_b["id"],
                         "process_id": process_b["id"],
-                        "standard_minutes": 10,
                         "is_key_process": False,
-                        "step_remark": "新版本工序",
                     }
                 ],
             },
@@ -806,9 +799,7 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                         "step_order": 1,
                         "stage_id": stage["id"],
                         "process_id": process["id"],
-                        "standard_minutes": 8,
                         "is_key_process": True,
-                        "step_remark": "首工序",
                     }
                 ],
             },
@@ -913,9 +904,7 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                             "step_order": 1,
                             "stage_id": stage["id"],
                             "process_id": process["id"],
-                            "standard_minutes": 12,
                             "is_key_process": True,
-                            "step_remark": "系统母版首工序",
                         }
                     ]
                 },

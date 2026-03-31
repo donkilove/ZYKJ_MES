@@ -96,6 +96,8 @@ void main() {
     });
 
     expect(payload.toJson()['stage_id'], 10);
+    expect(payload.toJson().containsKey('standard_minutes'), isFalse);
+    expect(payload.toJson().containsKey('step_remark'), isFalse);
     expect(step.processCode, '01-01');
     expect(template.templateName, '默认模板');
     expect(detail.steps.single.processName, '切割');
@@ -217,9 +219,7 @@ void main() {
           'step_order': 1,
           'stage_id': 10,
           'process_id': 20,
-          'standard_minutes': 18,
           'is_key_process': true,
-          'step_remark': '扩展字段',
         },
       ],
     });
@@ -228,9 +228,7 @@ void main() {
     expect(export.sourceType, 'system_master');
     expect(export.sourceTemplateName, '系统母版');
     expect(export.sourceSystemMasterVersion, 7);
-    expect(export.steps.single.standardMinutes, 18);
     expect(export.steps.single.isKeyProcess, isTrue);
-    expect(export.steps.single.stepRemark, '扩展字段');
 
     final templateRef = CraftTemplateReferenceResult.fromJson({
       'template_id': 12,
