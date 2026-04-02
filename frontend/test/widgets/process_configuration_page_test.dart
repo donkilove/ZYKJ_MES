@@ -23,7 +23,6 @@ class _FakeCraftService extends CraftService {
   systemMasterTemplateVersions;
   final Map<int?, CraftTemplateImpactAnalysis> templateImpactByVersion;
   final List<int?> requestedImpactVersions = [];
-  final List<int> archivedTemplateIds = [];
   final List<int> disabledTemplateIds = [];
   final List<int> deletedTemplateIds = [];
 
@@ -107,22 +106,6 @@ class _FakeCraftService extends CraftService {
   }
 
   @override
-  Future<CraftTemplateVersionCompareResult> compareTemplateVersions({
-    required int templateId,
-    required int fromVersion,
-    required int toVersion,
-  }) async {
-    return CraftTemplateVersionCompareResult(
-      fromVersion: fromVersion,
-      toVersion: toVersion,
-      addedSteps: 0,
-      removedSteps: 0,
-      changedSteps: 0,
-      items: const [],
-    );
-  }
-
-  @override
   Future<CraftSystemMasterTemplateVersionListResult>
   listSystemMasterTemplateVersions() async {
     return systemMasterTemplateVersions ??
@@ -152,12 +135,6 @@ class _FakeCraftService extends CraftService {
   }
 
   @override
-  Future<CraftTemplateDetail> archiveTemplate({required int templateId}) async {
-    archivedTemplateIds.add(templateId);
-    return CraftTemplateDetail(template: templates.first, steps: const []);
-  }
-
-  @override
   Future<CraftTemplateDetail> disableTemplate({required int templateId}) async {
     disabledTemplateIds.add(templateId);
     return CraftTemplateDetail(template: templates.first, steps: const []);
@@ -170,11 +147,14 @@ class _FakeCraftService extends CraftService {
 }
 
 class _FakeProductionService extends ProductionService {
-  _FakeProductionService() : super(AppSession(baseUrl: '', accessToken: ''));
+  _FakeProductionService(this.products)
+    : super(AppSession(baseUrl: '', accessToken: ''));
+
+  final List<ProductionProductOption> products;
 
   @override
   Future<List<ProductionProductOption>> listProductOptions() async {
-    return [ProductionProductOption(id: 1, name: '产品A')];
+    return products;
   }
 }
 
@@ -182,6 +162,7 @@ void main() {
   Future<void> pumpPage(
     WidgetTester tester, {
     _FakeCraftService? craftService,
+    List<ProductionProductOption>? products,
     CraftSystemMasterTemplateItem? systemMasterTemplate,
     List<CraftTemplateItem> templates = const [],
     Map<int, List<CraftTemplateVersionItem>> templateVersions = const {},
@@ -191,7 +172,7 @@ void main() {
     bool systemMasterVersions = false,
     int jumpRequestId = 0,
   }) async {
-    tester.view.physicalSize = const Size(1920, 2200);
+    tester.view.physicalSize = const Size(1600, 1800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -215,7 +196,13 @@ void main() {
                   templateVersions: templateVersions,
                   systemMasterTemplateVersions: systemMasterTemplateVersions,
                 ),
-            productionService: _FakeProductionService(),
+            productionService: _FakeProductionService(
+              products ??
+                  [
+                    ProductionProductOption(id: 1, name: '产品A'),
+                    ProductionProductOption(id: 2, name: '产品B'),
+                  ],
+            ),
             templateId: templateId,
             version: version,
             systemMasterVersions: systemMasterVersions,
@@ -229,19 +216,29 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   }
 
-  CraftTemplateItem buildTemplate({required int id, required int version}) {
+  CraftTemplateItem buildTemplate({
+    required int id,
+    required int productId,
+    required String productName,
+    required String templateName,
+    String productCategory = '标准件',
+    String lifecycleStatus = 'published',
+    bool enabled = true,
+    bool isDefault = false,
+    int version = 1,
+  }) {
     final now = DateTime.parse('2026-03-02T00:00:00Z');
     return CraftTemplateItem(
       id: id,
-      productId: 1,
-      productName: '产品A',
-      productCategory: '标准件',
-      templateName: '切割模板$id',
+      productId: productId,
+      productName: productName,
+      productCategory: productCategory,
+      templateName: templateName,
       version: version,
-      lifecycleStatus: 'published',
+      lifecycleStatus: lifecycleStatus,
       publishedVersion: version,
-      isDefault: true,
-      isEnabled: true,
+      isDefault: isDefault,
+      isEnabled: enabled,
       createdByUserId: 9,
       createdByUsername: 'planner',
       updatedByUserId: 9,
@@ -251,66 +248,197 @@ void main() {
     );
   }
 
-  testWidgets('已配置系统母版时默认展示摘要并提供管理入口', (tester) async {
+  testWidgets('未选择产品时右侧展示空列表态', (tester) async {
     await pumpPage(
       tester,
-      systemMasterTemplate: CraftSystemMasterTemplateItem(
-        id: 1,
-        version: 3,
-        createdByUserId: 9,
-        createdByUsername: 'planner',
-        updatedByUserId: 9,
-        updatedByUsername: 'planner',
-        createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-        updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
-        steps: [
-          CraftSystemMasterTemplateStepItem(
-            id: 101,
-            stepOrder: 1,
-            stageId: 1,
-            stageCode: 'CUT',
-            stageName: '切割段',
-            processId: 11,
-            processCode: 'CUT-01',
-            processName: '激光切割',
-            createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-            updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
-          ),
-        ],
+      templates: [
+        buildTemplate(
+          id: 1,
+          productId: 1,
+          productName: '产品A',
+          templateName: 'A-模板',
+        ),
+      ],
+    );
+
+    expect(find.text('产品列表'), findsOneWidget);
+    expect(find.text('模板工作区'), findsOneWidget);
+    expect(find.text('未选择产品，当前不展示模板列表。'), findsOneWidget);
+    expect(find.text('A-模板'), findsNothing);
+  });
+
+  testWidgets('选择产品后仅展示当前产品模板并移除模板筛选区', (tester) async {
+    await pumpPage(
+      tester,
+      templates: [
+        buildTemplate(
+          id: 1,
+          productId: 1,
+          productName: '产品A',
+          templateName: 'A-模板',
+          lifecycleStatus: 'draft',
+          isDefault: true,
+        ),
+        buildTemplate(
+          id: 2,
+          productId: 2,
+          productName: '产品B',
+          templateName: 'B-模板',
+          lifecycleStatus: 'archived',
+        ),
+      ],
+    );
+
+    await tester.tap(find.text('产品A').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前产品：产品A'), findsOneWidget);
+    expect(find.text('A-模板'), findsOneWidget);
+    expect(find.text('B-模板'), findsNothing);
+    expect(find.text('新增模板'), findsOneWidget);
+    expect(find.text('从系统母版套版'), findsOneWidget);
+    expect(find.text('从已有模板复制'), findsNothing);
+    expect(find.text('导出模板'), findsNothing);
+    expect(find.text('导出版本参数'), findsNothing);
+    expect(find.text('批量导入'), findsNothing);
+    expect(find.text('模板筛选'), findsNothing);
+    expect(find.text('生命周期筛选'), findsNothing);
+    expect(find.text('启用状态筛选'), findsNothing);
+    expect(find.text('产品分类筛选'), findsNothing);
+    expect(find.text('模板名称搜索'), findsNothing);
+  });
+
+  testWidgets('产品列表展示默认模板配置状态点', (tester) async {
+    await pumpPage(
+      tester,
+      templates: [
+        buildTemplate(
+          id: 1,
+          productId: 1,
+          productName: '产品A',
+          templateName: 'A-默认模板',
+          isDefault: true,
+        ),
+        buildTemplate(
+          id: 2,
+          productId: 2,
+          productName: '产品B',
+          templateName: 'B-普通模板',
+          isDefault: false,
+        ),
+      ],
+    );
+
+    expect(find.text('已配置默认模板'), findsOneWidget);
+    expect(find.text('未配置默认模板'), findsOneWidget);
+  });
+
+  testWidgets('产品列表为可滚动区域且仍可切换到后续产品', (tester) async {
+    final products = List.generate(
+      10,
+      (index) => ProductionProductOption(
+        id: index + 1,
+        name: '产品${(index + 1).toString().padLeft(2, '0')}',
       ),
     );
 
-    expect(find.text('系统母版管理'), findsOneWidget);
-    expect(find.text('系统默认工序母版已配置，可按需查看步骤、历史版本与维护入口。'), findsOneWidget);
-    expect(find.text('CUT 切割段'), findsNothing);
-    expect(tester.takeException(), isNull);
+    final templates = List.generate(
+      10,
+      (index) => buildTemplate(
+        id: index + 1,
+        productId: index + 1,
+        productName: '产品${(index + 1).toString().padLeft(2, '0')}',
+        templateName: '模板${(index + 1).toString().padLeft(2, '0')}',
+      ),
+    );
+
+    await pumpPage(tester, products: products, templates: templates);
+
+    final productList = find.byKey(
+      const ValueKey('process-config-product-list-scroll'),
+    );
+    expect(productList, findsOneWidget);
+    expect(find.text('产品10'), findsNothing);
+
+    await tester.drag(productList, const Offset(0, -500));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('产品10').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前产品：产品10'), findsOneWidget);
+    expect(find.text('模板10'), findsOneWidget);
+    expect(find.text('模板01'), findsNothing);
   });
 
-  testWidgets('无系统母版时主页面安全降级', (tester) async {
-    await pumpPage(tester);
-
-    expect(find.text('系统母版管理'), findsOneWidget);
-    expect(find.text('系统母版步骤'), findsOneWidget);
-    expect(find.text('暂无系统母版步骤'), findsOneWidget);
-    expect(find.text('未配置'), findsWidgets);
-  });
-
-  testWidgets('接收模板跳转参数后定位到目标模板', (tester) async {
+  testWidgets('模板操作菜单仅保留主链路入口', (tester) async {
     await pumpPage(
       tester,
-      templates: [buildTemplate(id: 18, version: 5)],
+      templates: [
+        buildTemplate(
+          id: 1,
+          productId: 1,
+          productName: '产品A',
+          templateName: 'A-模板',
+          lifecycleStatus: 'draft',
+        ),
+      ],
+    );
+
+    await tester.tap(find.text('产品A').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byWidgetPredicate((widget) => widget is PopupMenuButton).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('编辑'), findsOneWidget);
+    expect(find.text('发布'), findsOneWidget);
+    expect(find.text('查看详情'), findsOneWidget);
+    expect(find.text('版本管理'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
+    expect(find.text('复制（同产品）'), findsNothing);
+    expect(find.text('跨产品复制'), findsNothing);
+    expect(find.text('影响分析'), findsNothing);
+    expect(find.text('版本对比'), findsNothing);
+    expect(find.text('回滚模板'), findsNothing);
+  });
+
+  testWidgets('接收模板跳转参数后自动选中所属产品', (tester) async {
+    await pumpPage(
+      tester,
+      templates: [
+        buildTemplate(
+          id: 18,
+          productId: 1,
+          productName: '产品A',
+          templateName: '切割模板18',
+          version: 5,
+        ),
+      ],
       templateId: 18,
       jumpRequestId: 1,
     );
 
     expect(find.textContaining('已定位模板 #18 切割模板18'), findsOneWidget);
+    expect(find.text('当前产品：产品A'), findsOneWidget);
+    expect(find.text('切割模板18'), findsOneWidget);
     expect(find.text('查看详情'), findsOneWidget);
   });
 
-  testWidgets('接收模板版本跳转参数后自动打开版本视图', (tester) async {
+  testWidgets('接收模板版本跳转参数后自动打开版本管理', (tester) async {
     await pumpPage(
       tester,
-      templates: [buildTemplate(id: 18, version: 5)],
+      templates: [
+        buildTemplate(
+          id: 18,
+          productId: 1,
+          productName: '产品A',
+          templateName: '切割模板18',
+          version: 5,
+        ),
+      ],
       templateVersions: {
         18: [
           CraftTemplateVersionItem(
@@ -318,7 +446,7 @@ void main() {
             action: 'publish',
             recordType: 'publish',
             recordTitle: '发布记录 P5',
-            recordSummary: '草稿经发布门禁确认后成为当前生效版本',
+            recordSummary: '当前版本',
             note: '当前版本',
             sourceVersion: 4,
             createdByUserId: 9,
@@ -330,7 +458,7 @@ void main() {
             action: 'publish',
             recordType: 'publish',
             recordTitle: '发布记录 P4',
-            recordSummary: '草稿经发布门禁确认后成为当前生效版本',
+            recordSummary: '目标版本',
             note: '目标版本',
             sourceVersion: 3,
             createdByUserId: 9,
@@ -343,6 +471,7 @@ void main() {
       version: 4,
       jumpRequestId: 2,
     );
+
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -351,9 +480,11 @@ void main() {
     expect(find.text('发布记录 P4 · 目标版本'), findsOneWidget);
   });
 
-  testWidgets('接收系统母版历史版本跳转参数后自动打开历史版本视图', (tester) async {
+  testWidgets('系统母版历史版本跳转仍可用', (tester) async {
     await pumpPage(
       tester,
+      systemMasterVersions: true,
+      jumpRequestId: 3,
       systemMasterTemplateVersions: CraftSystemMasterTemplateVersionListResult(
         total: 1,
         items: [
@@ -381,9 +512,8 @@ void main() {
           ),
         ],
       ),
-      systemMasterVersions: true,
-      jumpRequestId: 3,
     );
+
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -391,298 +521,16 @@ void main() {
     expect(find.text('v2 · publish'), findsOneWidget);
   });
 
-  testWidgets('回滚弹窗切换目标版本时刷新专属预览', (tester) async {
+  testWidgets('停用模板遇到阻断级引用时禁止继续提交', (tester) async {
     final craftService = _FakeCraftService(
-      templates: [buildTemplate(id: 18, version: 5)],
-      templateVersions: {
-        18: [
-          CraftTemplateVersionItem(
-            version: 5,
-            action: 'publish',
-            recordType: 'publish',
-            recordTitle: '发布记录 P5',
-            recordSummary: '草稿经发布门禁确认后成为当前生效版本',
-            note: '当前版本',
-            sourceVersion: 4,
-            createdByUserId: 9,
-            createdByUsername: 'planner',
-            createdAt: DateTime.parse('2026-03-02T00:00:00Z'),
-          ),
-          CraftTemplateVersionItem(
-            version: 4,
-            action: 'publish',
-            recordType: 'publish',
-            recordTitle: '发布记录 P4',
-            recordSummary: '草稿经发布门禁确认后成为当前生效版本',
-            note: '可回滚版本',
-            sourceVersion: 3,
-            createdByUserId: 9,
-            createdByUsername: 'planner',
-            createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-          ),
-        ],
-      },
-      templateImpactByVersion: {
-        5: CraftTemplateImpactAnalysis(
-          targetVersion: 5,
-          totalOrders: 3,
-          pendingOrders: 2,
-          inProgressOrders: 1,
-          syncableOrders: 3,
-          blockedOrders: 0,
-          totalReferences: 0,
-          userStageReferenceCount: 0,
-          templateReuseReferenceCount: 0,
-          items: [
-            CraftTemplateImpactOrderItem(
-              orderId: 1001,
-              orderCode: 'MO-1001',
-              orderStatus: 'pending',
-              syncable: true,
-              reason: null,
-            ),
-          ],
-          referenceItems: const [],
+      templates: [
+        buildTemplate(
+          id: 18,
+          productId: 1,
+          productName: '产品A',
+          templateName: '切割模板18',
         ),
-        4: CraftTemplateImpactAnalysis(
-          targetVersion: 4,
-          totalOrders: 1,
-          pendingOrders: 0,
-          inProgressOrders: 1,
-          syncableOrders: 0,
-          blockedOrders: 1,
-          totalReferences: 2,
-          userStageReferenceCount: 1,
-          templateReuseReferenceCount: 1,
-          items: [
-            CraftTemplateImpactOrderItem(
-              orderId: 1002,
-              orderCode: 'MO-1002',
-              orderStatus: 'in_progress',
-              syncable: false,
-              reason: '当前工序无法对齐目标版本',
-            ),
-          ],
-          referenceItems: [
-            CraftTemplateImpactReferenceItem(
-              refType: 'user_stage',
-              refId: 31,
-              refCode: 'operator_a',
-              refName: '操作员A',
-              detail: '工段：CUT 切割段',
-              refStatus: '正在使用',
-              jumpModule: 'user',
-              jumpTarget: 'user-management?user_id=31',
-              riskLevel: 'medium',
-              riskNote: '需确认用户工段分配',
-            ),
-            CraftTemplateImpactReferenceItem(
-              refType: 'template_reuse',
-              refId: 32,
-              refCode: 'TMP-32',
-              refName: '复用模板32',
-              detail: '复用到 产品B · published',
-              refStatus: '正在使用',
-              jumpModule: 'craft',
-              jumpTarget: 'process-configuration?template_id=32',
-              riskLevel: 'medium',
-              riskNote: '需确认复用模板联动',
-            ),
-          ],
-        ),
-      },
-    );
-
-    await pumpPage(
-      tester,
-      craftService: craftService,
-      templateId: 18,
-      version: 4,
-      jumpRequestId: 4,
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    await tester.tap(find.widgetWithText(FilledButton, '回滚').first);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.text('当前预览版本：v5'), findsOneWidget);
-    expect(find.text('总计 3'), findsOneWidget);
-    expect(find.text('MO-1001'), findsOneWidget);
-
-    await tester.tap(find.text('v5').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('v4').last);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.text('当前预览版本：v4'), findsOneWidget);
-    expect(find.text('总计 1'), findsOneWidget);
-    expect(find.text('MO-1002'), findsOneWidget);
-    expect(find.text('关键引用对象'), findsOneWidget);
-    expect(find.textContaining('operator_a 操作员A'), findsOneWidget);
-    expect(find.textContaining('TMP-32 复用模板32'), findsOneWidget);
-    expect(find.textContaining('当前工序无法对齐目标版本'), findsOneWidget);
-    expect(craftService.requestedImpactVersions, containsAllInOrder([5, 4]));
-  });
-
-  testWidgets('主页面显式提供套版复制与导出版本参数入口', (tester) async {
-    await pumpPage(
-      tester,
-      templates: [buildTemplate(id: 18, version: 5)],
-      templateId: 18,
-      jumpRequestId: 5,
-    );
-
-    expect(find.text('从系统母版套版'), findsAtLeastNWidgets(1));
-    expect(find.text('从已有模板复制'), findsOneWidget);
-    expect(find.text('导出版本参数'), findsOneWidget);
-  });
-
-  testWidgets('展开系统母版后页面仍可下滚且模板操作按钮可正常打开', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1280, 720));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-
-    await pumpPage(
-      tester,
-      systemMasterTemplate: CraftSystemMasterTemplateItem(
-        id: 1,
-        version: 3,
-        createdByUserId: 9,
-        createdByUsername: 'planner',
-        updatedByUserId: 9,
-        updatedByUsername: 'planner',
-        createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-        updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
-        steps: List.generate(
-          12,
-          (index) => CraftSystemMasterTemplateStepItem(
-            id: index + 1,
-            stepOrder: index + 1,
-            stageId: 1,
-            stageCode: 'CUT',
-            stageName: '切割段',
-            processId: 11,
-            processCode: 'CUT-01',
-            processName: '激光切割',
-            createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-            updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
-          ),
-        ),
-      ),
-      templates: [buildTemplate(id: 18, version: 5)],
-    );
-
-    await tester.tap(find.text('系统母版管理'));
-    await tester.pumpAndSettle();
-
-    await tester.dragUntilVisible(
-      find.text('模板工作区'),
-      find.byType(SingleChildScrollView).first,
-      const Offset(0, -300),
-    );
-    expect(find.text('模板工作区'), findsOneWidget);
-
-    await tester.tap(find.text('操作').last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('查看详情'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('系统母版展开后摘要区与步骤区构建稳定', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1280, 820));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-
-    await pumpPage(
-      tester,
-      systemMasterTemplate: CraftSystemMasterTemplateItem(
-        id: 1,
-        version: 3,
-        createdByUserId: 9,
-        createdByUsername: 'planner',
-        updatedByUserId: 9,
-        updatedByUsername: 'planner',
-        createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-        updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
-        steps: [
-          CraftSystemMasterTemplateStepItem(
-            id: 101,
-            stepOrder: 1,
-            stageId: 1,
-            stageCode: 'CUT',
-            stageName: '切割段',
-            processId: 11,
-            processCode: 'CUT-01',
-            processName: '激光切割',
-            createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-            updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
-          ),
-        ],
-      ),
-      templates: [buildTemplate(id: 18, version: 5)],
-    );
-
-    await tester.tap(find.text('系统母版管理'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('系统母版管理'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('模板筛选区在窄一些的桌面宽度下不再溢出', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1180, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-
-    await pumpPage(tester, templates: [buildTemplate(id: 18, version: 5)]);
-
-    await tester.dragUntilVisible(
-      find.text('按生命周期筛选'),
-      find.byType(SingleChildScrollView).first,
-      const Offset(0, -240),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('默认模板筛选'), findsOneWidget);
-    expect(find.text('启用状态筛选'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('模板筛选区在更窄桌面宽度下自动切换为双列或单列', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(920, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-
-    await pumpPage(tester, templates: [buildTemplate(id: 18, version: 5)]);
-
-    await tester.dragUntilVisible(
-      find.text('按生命周期筛选'),
-      find.byType(SingleChildScrollView).first,
-      const Offset(0, -240),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('模板名称搜索'), findsOneWidget);
-    expect(find.text('产品分类筛选'), findsOneWidget);
-    expect(find.text('清空本地筛选'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('新建模板不再显示直接发布入口', (tester) async {
-    await pumpPage(tester, templates: [buildTemplate(id: 18, version: 5)]);
-
-    await tester.tap(find.widgetWithText(FilledButton, '新增模板'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('新建后直接发布'), findsNothing);
-    expect(find.textContaining('统一先保存为草稿'), findsOneWidget);
-    expect(find.text('标准工时(分钟)'), findsNothing);
-    expect(find.text('步骤说明'), findsNothing);
-  });
-
-  testWidgets('停用模板遇到阻断级引用时展示后端拦截状态', (tester) async {
-    final craftService = _FakeCraftService(
-      templates: [buildTemplate(id: 18, version: 5)],
+      ],
       templateImpactByVersion: {
         null: CraftTemplateImpactAnalysis(
           targetVersion: 5,
@@ -691,7 +539,7 @@ void main() {
           inProgressOrders: 1,
           syncableOrders: 0,
           blockedOrders: 1,
-          totalReferences: 1,
+          totalReferences: 0,
           userStageReferenceCount: 0,
           templateReuseReferenceCount: 0,
           items: [
@@ -709,6 +557,8 @@ void main() {
     );
 
     await pumpPage(tester, craftService: craftService);
+    await tester.tap(find.text('产品A').last);
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byWidgetPredicate((widget) => widget is PopupMenuButton).first,

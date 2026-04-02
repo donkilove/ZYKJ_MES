@@ -1,7 +1,4 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../models/app_session.dart';
 import '../models/craft_models.dart';
@@ -25,17 +22,9 @@ enum _TemplateAction {
   edit,
   createDraft,
   publish,
-  copy,
-  copyToProduct,
-  copyFromMaster,
   enable,
   disable,
-  archive,
-  unarchive,
-  impact,
   versions,
-  compare,
-  rollback,
   delete,
 }
 
@@ -73,20 +62,19 @@ class ProcessConfigurationPage extends StatefulWidget {
 }
 
 class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
+  static const int _productListVisibleCount = 6;
+  static const double _productListItemHeight = 72;
+  static const double _productListItemSpacing = 8;
+
   late final CraftService _craftService;
   late final ProductionService _productionService;
 
   bool _loading = false;
   String _message = '';
   int? _productFilterId;
-  String? _lifecycleFilter;
-  final _templateKeywordController = TextEditingController();
-  String _templateKeyword = '';
-  String? _productCategoryFilter;
-  bool? _defaultTemplateFilter;
-  bool? _templateEnabledFilter;
-  DateTime? _updatedFromDate;
-  DateTime? _updatedToDate;
+  final ScrollController _productListScrollController = ScrollController();
+  final _productKeywordController = TextEditingController();
+  String _productKeyword = '';
 
   List<ProductionProductOption> _products = const [];
   List<CraftStageItem> _stages = const [];
@@ -110,7 +98,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
 
   @override
   void dispose() {
-    _templateKeywordController.dispose();
+    _productListScrollController.dispose();
+    _productKeywordController.dispose();
     super.dispose();
   }
 
@@ -169,28 +158,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         pageSize: 500,
         enabled: true,
       );
-      final templateResult = await _craftService.listTemplates(
-        pageSize: 500,
-        productId: _productFilterId,
-        keyword: _templateKeyword.isEmpty ? null : _templateKeyword,
-        productCategory: _productCategoryFilter,
-        isDefault: _defaultTemplateFilter,
-        enabled: _templateEnabledFilter,
-        lifecycleStatus: _lifecycleFilter,
-        updatedFrom: _updatedFromDate,
-        updatedTo: _updatedToDate == null
-            ? null
-            : DateTime(
-                _updatedToDate!.year,
-                _updatedToDate!.month,
-                _updatedToDate!.day,
-                23,
-                59,
-                59,
-                999,
-                999,
-              ),
-      );
+      final templateResult = await _craftService.listTemplates(pageSize: 500);
       final systemMasterTemplate = await _craftService
           .getSystemMasterTemplate();
       if (!mounted) {
@@ -221,10 +189,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         if (_productFilterId != null &&
             !_products.any((item) => item.id == _productFilterId)) {
           _productFilterId = null;
-        }
-        if (_productCategoryFilter != null &&
-            !_productCategoryOptions.contains(_productCategoryFilter)) {
-          _productCategoryFilter = null;
         }
       });
     } catch (error) {
@@ -304,13 +268,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     final version = widget.version;
     setState(() {
       _productFilterId = matched!.productId;
-      _templateKeyword = '';
-      _templateKeywordController.clear();
-      _productCategoryFilter = null;
-      _defaultTemplateFilter = null;
-      _templateEnabledFilter = null;
-      _updatedFromDate = null;
-      _updatedToDate = null;
       _focusedTemplateId = matched.id;
       _jumpNotice = version == null
           ? '已定位模板 #${matched.id} ${matched.templateName}'
@@ -327,26 +284,23 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   }
 
   List<CraftTemplateItem> get _filteredTemplates {
-    return _templates;
-  }
-
-  List<String> get _productCategoryOptions {
-    final categories = <String>{
-      for (final item in _templates)
-        if (item.productCategory.trim().isNotEmpty) item.productCategory.trim(),
-    };
-    final sorted = categories.toList();
-    sorted.sort();
-    return sorted;
-  }
-
-  String _formatDateLabel(DateTime? value) {
-    if (value == null) {
-      return '未设置';
+    var selectedProductId = _productFilterId;
+    if (selectedProductId == null) {
+      return const [];
     }
-    final month = value.month.toString().padLeft(2, '0');
-    final day = value.day.toString().padLeft(2, '0');
-    return '${value.year}-$month-$day';
+    return _templates
+        .where((item) => item.productId == selectedProductId)
+        .toList();
+  }
+
+  List<ProductionProductOption> get _visibleProducts {
+    final keyword = _productKeyword.trim().toLowerCase();
+    if (keyword.isEmpty) {
+      return _products;
+    }
+    return _products
+        .where((item) => item.name.toLowerCase().contains(keyword))
+        .toList();
   }
 
   String _formatDateTimeLabel(DateTime? value) {
@@ -359,34 +313,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     return '${local.year}-$month-$day $hour:$minute';
-  }
-
-  Future<void> _pickUpdatedDate({required bool isFrom}) async {
-    final initialDate = isFrom
-        ? (_updatedFromDate ?? DateTime.now())
-        : (_updatedToDate ?? _updatedFromDate ?? DateTime.now());
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(2020, 1, 1),
-      lastDate: DateTime(2100, 12, 31),
-    );
-    if (picked == null) {
-      return;
-    }
-    setState(() {
-      if (isFrom) {
-        _updatedFromDate = picked;
-        if (_updatedToDate != null && _updatedToDate!.isBefore(picked)) {
-          _updatedToDate = picked;
-        }
-      } else {
-        _updatedToDate = picked;
-        if (_updatedFromDate != null && _updatedFromDate!.isAfter(picked)) {
-          _updatedFromDate = picked;
-        }
-      }
-    });
   }
 
   List<CraftProcessItem> _processesByStage(int stageId) {
@@ -494,33 +420,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () async {
-                try {
-                  final contentBase64 = await _craftService
-                      .exportTemplateDetail(templateId: item.id);
-                  if (!dialogContext.mounted) {
-                    return;
-                  }
-                  await _showJsonPreviewDialog(
-                    dialogContext,
-                    title: '模板导出 - ${item.templateName}',
-                    contentBase64: contentBase64,
-                  );
-                } catch (error) {
-                  if (_isUnauthorized(error)) {
-                    widget.onLogout();
-                    return;
-                  }
-                  if (dialogContext.mounted) {
-                    ScaffoldMessenger.of(dialogContext).showSnackBar(
-                      SnackBar(content: Text(_errorMessage(error))),
-                    );
-                  }
-                }
-              },
-              child: const Text('导出当前模板'),
-            ),
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('关闭'),
@@ -1306,183 +1205,16 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
   }
 
-  Future<void> _copyTemplate(CraftTemplateItem item) async {
+  Future<void> _copyFromSystemMaster() async {
     if (!_canManageTemplates) {
       _showNoPermission();
       return;
     }
-    final nameController = TextEditingController(
-      text: '${item.templateName} 副本',
-    );
-    final saved = await showLockedFormDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('复制模板'),
-          content: SizedBox(
-            width: 420,
-            child: TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: '新模板名称',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final newName = nameController.text.trim();
-                if (newName.isEmpty) {
-                  ScaffoldMessenger.of(
-                    dialogContext,
-                  ).showSnackBar(const SnackBar(content: Text('请输入新模板名称')));
-                  return;
-                }
-                try {
-                  await _craftService.copyTemplate(
-                    templateId: item.id,
-                    newName: newName,
-                  );
-                  if (dialogContext.mounted) {
-                    Navigator.of(dialogContext).pop(true);
-                  }
-                } catch (error) {
-                  if (_isUnauthorized(error)) {
-                    widget.onLogout();
-                    return;
-                  }
-                  if (dialogContext.mounted) {
-                    ScaffoldMessenger.of(dialogContext).showSnackBar(
-                      SnackBar(content: Text(_errorMessage(error))),
-                    );
-                  }
-                }
-              },
-              child: const Text('复制'),
-            ),
-          ],
-        );
-      },
-    );
-    nameController.dispose();
-    if (saved == true) {
-      await _loadData();
-    }
-  }
-
-  Future<void> _copyTemplateToProduct(CraftTemplateItem item) async {
-    if (!_canManageTemplates) {
-      _showNoPermission();
-      return;
-    }
-    if (_products.isEmpty) {
+    var selectedProductId = _productFilterId;
+    if (selectedProductId == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('暂无可用产品')));
-      return;
-    }
-    final nameController = TextEditingController(
-      text: '${item.templateName} 副本',
-    );
-    int selectedProductId = _products.first.id;
-    final saved = await showLockedFormDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (ctx, setDialogState) {
-            return AlertDialog(
-              title: const Text('跨产品复制模板'),
-              content: SizedBox(
-                width: 420,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<int>(
-                      initialValue: selectedProductId,
-                      decoration: const InputDecoration(
-                        labelText: '目标产品',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _products
-                          .map(
-                            (p) => DropdownMenuItem(
-                              value: p.id,
-                              child: Text(p.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) {
-                          setDialogState(() => selectedProductId = v);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: '新模板名称',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    final newName = nameController.text.trim();
-                    if (newName.isEmpty) {
-                      ScaffoldMessenger.of(
-                        dialogContext,
-                      ).showSnackBar(const SnackBar(content: Text('请输入新模板名称')));
-                      return;
-                    }
-                    try {
-                      await _craftService.copyTemplateToProduct(
-                        templateId: item.id,
-                        targetProductId: selectedProductId,
-                        newName: newName,
-                      );
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text(_errorMessage(error))),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('复制'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    nameController.dispose();
-    if (saved == true) await _loadData();
-  }
-
-  Future<void> _copyFromSystemMaster(CraftTemplateItem item) async {
-    if (!_canManageTemplates) {
-      _showNoPermission();
+      ).showSnackBar(const SnackBar(content: Text('请先选择产品')));
       return;
     }
     if (_products.isEmpty) {
@@ -1492,7 +1224,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     final nameController = TextEditingController(text: '系统母版套版');
-    int selectedProductId = item.productId;
     final saved = await showLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -1552,7 +1283,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                     }
                     try {
                       await _craftService.copySystemMasterToProduct(
-                        productId: selectedProductId,
+                        productId: selectedProductId!,
                         newName: newName,
                       );
                       if (dialogContext.mounted) {
@@ -1580,57 +1311,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     );
     nameController.dispose();
     if (saved == true) await _loadData();
-  }
-
-  Future<void> _archiveTemplate(CraftTemplateItem item) async {
-    if (!_canManageTemplates) {
-      _showNoPermission();
-      return;
-    }
-    final confirmed = await _confirmTemplateActionWithImpact(
-      item: item,
-      title: '归档模板',
-      confirmText: '归档',
-      description: '确认归档模板 ${item.templateName} 吗？归档后将无法用于新订单。',
-    );
-    if (confirmed != true) {
-      return;
-    }
-    try {
-      await _craftService.archiveTemplate(templateId: item.id);
-      await _loadData();
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
-    }
-  }
-
-  Future<void> _unarchiveTemplate(CraftTemplateItem item) async {
-    if (!_canManageTemplates) {
-      _showNoPermission();
-      return;
-    }
-    try {
-      await _craftService.unarchiveTemplate(templateId: item.id);
-      await _loadData();
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
-    }
   }
 
   Future<void> _setTemplateEnabled(
@@ -1784,144 +1464,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     return '该记录仅用于历史追溯，是否生效以发布记录为准。';
   }
 
-  CraftTemplateItem? _requireFocusedTemplate(String actionLabel) {
-    final focused = _focusedTemplate;
-    if (focused != null) {
-      return focused;
-    }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('请先在模板列表中定位后再执行“$actionLabel”')));
-    return null;
-  }
-
   Future<void> _showTopCopyFromMasterShortcut() async {
     if (!_canManageTemplates) {
       _showNoPermission();
       return;
     }
-    final focused = _focusedTemplate;
-    if (focused != null) {
-      await _copyFromSystemMaster(focused);
-      return;
-    }
-    if (_products.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('暂无可用产品')));
-      return;
-    }
-    final fallbackProductId = _productFilterId ?? _products.first.id;
-    final fallbackProduct = _products.firstWhere(
-      (item) => item.id == fallbackProductId,
-      orElse: () => _products.first,
-    );
-    await _copyFromSystemMaster(
-      CraftTemplateItem(
-        id: 0,
-        productId: fallbackProduct.id,
-        productName: fallbackProduct.name,
-        productCategory: '',
-        templateName: '系统母版套版',
-        version: 0,
-        lifecycleStatus: 'draft',
-        publishedVersion: 0,
-        isDefault: false,
-        isEnabled: true,
-        createdByUserId: null,
-        createdByUsername: null,
-        updatedByUserId: null,
-        updatedByUsername: null,
-        remark: '',
-        sourceType: 'manual',
-        sourceTemplateId: null,
-        sourceTemplateName: null,
-        sourceTemplateVersion: null,
-        sourceProductId: null,
-        sourceSystemMasterVersion: null,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-    );
-  }
-
-  int _parseIntSafe(Object? value, {int fallback = 0}) {
-    if (value is int) {
-      return value;
-    }
-    if (value is num) {
-      return value.toInt();
-    }
-    if (value is String) {
-      return int.tryParse(value.trim()) ?? fallback;
-    }
-    return fallback;
-  }
-
-  List<CraftTemplateBatchImportItem> _parseImportItems(dynamic decoded) {
-    final dynamic rawItems;
-    if (decoded is List) {
-      rawItems = decoded;
-    } else if (decoded is Map<String, dynamic>) {
-      rawItems = decoded['items'];
-    } else {
-      throw const FormatException('导入内容必须是数组或包含 items 的对象');
-    }
-
-    if (rawItems is! List) {
-      throw const FormatException('导入内容中的 items 必须是数组');
-    }
-
-    final result = <CraftTemplateBatchImportItem>[];
-    for (final entry in rawItems) {
-      if (entry is! Map<String, dynamic>) {
-        throw const FormatException('每条模板必须是对象结构');
-      }
-      final stepsRaw = entry['steps'];
-      if (stepsRaw is! List) {
-        throw const FormatException('模板 steps 必须是数组');
-      }
-      final steps = <CraftTemplateStepPayload>[];
-      for (final stepEntry in stepsRaw) {
-        if (stepEntry is! Map<String, dynamic>) {
-          throw const FormatException('步骤项必须是对象');
-        }
-        steps.add(
-          CraftTemplateStepPayload(
-            stepOrder: _parseIntSafe(stepEntry['step_order'], fallback: 0),
-            stageId: _parseIntSafe(stepEntry['stage_id'], fallback: 0),
-            processId: _parseIntSafe(stepEntry['process_id'], fallback: 0),
-          ),
-        );
-      }
-
-      final productIdRaw = entry['product_id'];
-      int? productId;
-      if (productIdRaw != null) {
-        productId = _parseIntSafe(productIdRaw, fallback: 0);
-      }
-      final productNameRaw = entry['product_name'];
-      final productName = productNameRaw is String
-          ? productNameRaw.trim()
-          : null;
-
-      result.add(
-        CraftTemplateBatchImportItem(
-          productId: productId != null && productId > 0 ? productId : null,
-          productName: (productName != null && productName.isNotEmpty)
-              ? productName
-              : null,
-          templateName: (entry['template_name'] as String? ?? '').trim(),
-          isDefault: (entry['is_default'] as bool?) ?? false,
-          isEnabled: (entry['is_enabled'] as bool?) ?? true,
-          lifecycleStatus: (entry['lifecycle_status'] as String? ?? 'draft')
-              .trim()
-              .toLowerCase(),
-          steps: steps,
-        ),
-      );
-    }
-    return result;
+    await _copyFromSystemMaster();
   }
 
   String _impactReferenceTitle(CraftTemplateImpactReferenceItem item) {
@@ -2122,115 +1670,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
   }
 
-  Future<void> _showImpactAnalysisDialog(CraftTemplateItem item) async {
-    if (!_canViewTemplates) {
-      _showNoPermission();
-      return;
-    }
-    try {
-      final analysis = await _craftService.getTemplateImpactAnalysis(
-        templateId: item.id,
-      );
-      if (!mounted) {
-        return;
-      }
-
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text('影响分析 - ${item.templateName}'),
-          content: SizedBox(
-            width: 820,
-            height: 520,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildImpactSummaryWrap(analysis),
-                const SizedBox(height: 12),
-                const Text(
-                  '订单明细',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: analysis.items.isEmpty
-                      ? const Center(child: Text('暂无受影响订单'))
-                      : ListView.separated(
-                          itemCount: analysis.items.length,
-                          separatorBuilder: (context, index) =>
-                              const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final order = analysis.items[index];
-                            return ListTile(
-                              dense: true,
-                              title: Text(order.orderCode),
-                              subtitle: Text(
-                                '状态：${order.orderStatus}${(order.reason ?? '').isNotEmpty ? '，原因：${order.reason}' : ''}',
-                              ),
-                              trailing: Text(
-                                order.syncable ? '可同步' : '阻塞',
-                                style: TextStyle(
-                                  color: order.syncable
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.error,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-                _buildImpactReferenceSection(analysis),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
-      );
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
-    }
-  }
-
-  Future<void> _showJsonPreviewDialog(
-    BuildContext context, {
-    required String title,
-    required String contentBase64,
-  }) async {
-    final content = contentBase64.trim().isEmpty
-        ? '无导出内容'
-        : utf8.decode(base64Decode(contentBase64));
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 760,
-          height: 520,
-          child: SingleChildScrollView(child: SelectableText(content)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _showPublishDialog(CraftTemplateItem item) async {
     if (!_canManageTemplates) {
       _showNoPermission();
@@ -2385,281 +1824,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
   }
 
-  Future<bool> _showRollbackDialog({
-    required CraftTemplateItem item,
-    required int targetVersion,
-    required List<int> availableVersions,
-  }) async {
-    bool applyOrderSync = false;
-    bool confirmed = false;
-    final versionOptions = availableVersions.toSet().toList()
-      ..sort((left, right) => right.compareTo(left));
-    int selectedTargetVersion = versionOptions.contains(targetVersion)
-        ? targetVersion
-        : versionOptions.first;
-    bool loadingAnalysis = false;
-    final noteController = TextEditingController(
-      text: '回滚到版本 v$selectedTargetVersion',
-    );
-    CraftTemplateImpactAnalysis? analysis;
-
-    try {
-      analysis = await _craftService.getTemplateImpactAnalysis(
-        templateId: item.id,
-        targetVersion: selectedTargetVersion,
-      );
-      selectedTargetVersion = analysis.targetVersion;
-    } catch (error) {
-      noteController.dispose();
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return false;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
-      return false;
-    }
-    if (!mounted) {
-      noteController.dispose();
-      return false;
-    }
-
-    final done = await showLockedFormDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final currentAnalysis = analysis!;
-
-            Future<void> reloadImpactAnalysis(int nextTargetVersion) async {
-              final previousVersion =
-                  analysis?.targetVersion ?? selectedTargetVersion;
-              setDialogState(() {
-                loadingAnalysis = true;
-                selectedTargetVersion = nextTargetVersion;
-              });
-              try {
-                final nextAnalysis = await _craftService
-                    .getTemplateImpactAnalysis(
-                      templateId: item.id,
-                      targetVersion: nextTargetVersion,
-                    );
-                if (!dialogContext.mounted) {
-                  return;
-                }
-                setDialogState(() {
-                  analysis = nextAnalysis;
-                  selectedTargetVersion = nextAnalysis.targetVersion;
-                  loadingAnalysis = false;
-                  final currentNote = noteController.text.trim();
-                  if (currentNote.isEmpty ||
-                      currentNote == '回滚到版本 v$previousVersion') {
-                    noteController.text =
-                        '回滚到版本 v${nextAnalysis.targetVersion}';
-                  }
-                });
-              } catch (error) {
-                if (_isUnauthorized(error)) {
-                  widget.onLogout();
-                  return;
-                }
-                if (!dialogContext.mounted) {
-                  return;
-                }
-                setDialogState(() {
-                  loadingAnalysis = false;
-                });
-                ScaffoldMessenger.of(
-                  dialogContext,
-                ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-              }
-            }
-
-            return AlertDialog(
-              title: Text('回滚模板 - ${item.templateName}'),
-              content: SizedBox(
-                width: 620,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DropdownButtonFormField<int>(
-                      initialValue: selectedTargetVersion,
-                      decoration: const InputDecoration(
-                        labelText: '回滚目标版本',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: versionOptions
-                          .map(
-                            (version) => DropdownMenuItem(
-                              value: version,
-                              child: Text('v$version'),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: loadingAnalysis
-                          ? null
-                          : (value) {
-                              if (value == null ||
-                                  value == selectedTargetVersion) {
-                                return;
-                              }
-                              reloadImpactAnalysis(value);
-                            },
-                    ),
-                    const SizedBox(height: 8),
-                    Text('当前预览版本：v${currentAnalysis.targetVersion}'),
-                    const SizedBox(height: 8),
-                    if (loadingAnalysis) const LinearProgressIndicator(),
-                    if (loadingAnalysis) const SizedBox(height: 8),
-                    _buildImpactSummaryWrap(currentAnalysis),
-                    const SizedBox(height: 8),
-                    if (currentAnalysis.items.any((order) => !order.syncable))
-                      Text(
-                        '存在无法同步的订单，回滚时会自动跳过受阻订单。',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    if (currentAnalysis.referenceItems.isNotEmpty)
-                      Text(
-                        '已纳入用户工段引用与模板复用关系，请回滚前同步确认关键引用对象。',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('同步未完成订单'),
-                      value: applyOrderSync,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          applyOrderSync = value;
-                          if (!value) {
-                            confirmed = false;
-                          }
-                        });
-                      },
-                    ),
-                    if (applyOrderSync)
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('我已确认回滚影响'),
-                        value: confirmed,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            confirmed = value ?? false;
-                          });
-                        },
-                      ),
-                    TextField(
-                      controller: noteController,
-                      maxLength: 256,
-                      decoration: const InputDecoration(
-                        labelText: '回滚说明（可选）',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      '订单明细',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 220,
-                      child: currentAnalysis.items.isEmpty
-                          ? const Center(child: Text('暂无受影响订单'))
-                          : ListView.separated(
-                              itemCount: currentAnalysis.items.length,
-                              separatorBuilder: (_, separatorIndex) =>
-                                  const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final order = currentAnalysis.items[index];
-                                return ListTile(
-                                  dense: true,
-                                  title: Text(order.orderCode),
-                                  subtitle: Text(
-                                    '状态：${order.orderStatus}${(order.reason ?? '').isNotEmpty ? '，原因：${order.reason}' : ''}',
-                                  ),
-                                  trailing: Text(
-                                    order.syncable ? '可同步' : '阻塞',
-                                    style: TextStyle(
-                                      color: order.syncable
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.primary
-                                          : Theme.of(context).colorScheme.error,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                    _buildImpactReferenceSection(currentAnalysis),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (applyOrderSync && !confirmed) {
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        const SnackBar(content: Text('请先确认影响后再回滚')),
-                      );
-                      return;
-                    }
-                    try {
-                      await _craftService.rollbackTemplate(
-                        templateId: item.id,
-                        targetVersion: selectedTargetVersion,
-                        applyOrderSync: applyOrderSync,
-                        confirmed: !applyOrderSync || confirmed,
-                        note: noteController.text.trim().isEmpty
-                            ? null
-                            : noteController.text.trim(),
-                      );
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text(_errorMessage(error))),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('确认回滚'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    noteController.dispose();
-    if (done == true) {
-      _detailCache.remove(item.id);
-      await _loadData();
-      return true;
-    }
-    return false;
-  }
-
   Future<void> _showVersionDialog(
     CraftTemplateItem item, {
     int? initialTargetVersion,
@@ -2668,394 +1832,105 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       _showNoPermission();
       return;
     }
-    CraftTemplateVersionListResult versions;
     try {
-      versions = await _craftService.listTemplateVersions(templateId: item.id);
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-    if (versions.items.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('该模板暂无发布版本记录')));
-      return;
-    }
-
-    final hasInitialTargetVersion =
-        initialTargetVersion != null &&
-        versions.items.any((entry) => entry.version == initialTargetVersion);
-    int fromVersion = versions.items.length > 1
-        ? versions.items[1].version
-        : versions.items.first.version;
-    int toVersion = hasInitialTargetVersion
-        ? initialTargetVersion
-        : versions.items.first.version;
-    if (hasInitialTargetVersion && versions.items.length > 1) {
-      fromVersion = versions.items.first.version == initialTargetVersion
-          ? versions.items[1].version
-          : versions.items.first.version;
-    }
-    CraftTemplateVersionCompareResult? compareResult;
-
-    Future<void> loadCompare() async {
-      if (fromVersion == toVersion) {
-        compareResult = CraftTemplateVersionCompareResult(
-          fromVersion: fromVersion,
-          toVersion: toVersion,
-          addedSteps: 0,
-          removedSteps: 0,
-          changedSteps: 0,
-          items: const [],
-        );
-        return;
-      }
-      compareResult = await _craftService.compareTemplateVersions(
+      final versions = await _craftService.listTemplateVersions(
         templateId: item.id,
-        fromVersion: fromVersion,
-        toVersion: toVersion,
       );
-    }
-
-    try {
-      await loadCompare();
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
+      if (!mounted) {
         return;
       }
-      if (mounted) {
+      if (versions.items.isEmpty) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+        ).showSnackBar(const SnackBar(content: Text('该模板暂无发布版本记录')));
+        return;
       }
-      return;
-    }
 
-    if (!mounted) {
-      return;
-    }
+      final hasInitialTargetVersion =
+          initialTargetVersion != null &&
+          versions.items.any((entry) => entry.version == initialTargetVersion);
 
-    final done = await showLockedFormDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text('版本管理 - ${item.templateName}'),
-              content: SizedBox(
-                width: 980,
-                height: 620,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '版本对比',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<int>(
-                            initialValue: fromVersion,
-                            decoration: const InputDecoration(
-                              labelText: '基准版本',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: versions.items
-                                .map(
-                                  (item) => DropdownMenuItem<int>(
-                                    value: item.version,
-                                    child: Text(
-                                      'v${item.version} · ${item.action}',
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              if (value == null) {
-                                return;
-                              }
-                              setDialogState(() {
-                                fromVersion = value;
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: DropdownButtonFormField<int>(
-                            initialValue: toVersion,
-                            decoration: const InputDecoration(
-                              labelText: '目标版本',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: versions.items
-                                .map(
-                                  (item) => DropdownMenuItem<int>(
-                                    value: item.version,
-                                    child: Text(
-                                      'v${item.version} · ${item.action}',
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              if (value == null) {
-                                return;
-                              }
-                              setDialogState(() {
-                                toVersion = value;
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton.tonal(
-                          onPressed: () async {
-                            try {
-                              await loadCompare();
-                              if (dialogContext.mounted) {
-                                setDialogState(() {});
-                              }
-                            } catch (error) {
-                              if (_isUnauthorized(error)) {
-                                widget.onLogout();
-                                return;
-                              }
-                              if (dialogContext.mounted) {
-                                ScaffoldMessenger.of(
-                                  dialogContext,
-                                ).showSnackBar(
-                                  SnackBar(content: Text(_errorMessage(error))),
-                                );
-                              }
-                            }
-                          },
-                          child: const Text('对比'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (compareResult != null)
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          Chip(label: Text('新增 ${compareResult!.addedSteps}')),
-                          Chip(
-                            label: Text('删除 ${compareResult!.removedSteps}'),
-                          ),
-                          Chip(
-                            label: Text('变更 ${compareResult!.changedSteps}'),
-                          ),
-                        ],
-                      ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child:
-                          compareResult == null || compareResult!.items.isEmpty
-                          ? const Center(child: Text('当前版本组合无差异'))
-                          : ListView.separated(
-                              itemCount: compareResult!.items.length,
-                              separatorBuilder: (context, index) =>
-                                  const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final diff = compareResult!.items[index];
-                                return ListTile(
-                                  dense: true,
-                                  title: Text(
-                                    '步骤 ${diff.stepOrder} · ${diff.diffType}',
-                                  ),
-                                  subtitle: Text(
-                                    'from: ${diff.fromProcessCode ?? '-'}  ->  to: ${diff.toProcessCode ?? '-'}',
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _canManageTemplates ? '历史版本（点击回滚）' : '历史版本',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    if (hasInitialTargetVersion)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          '已自动定位目标版本 v$initialTargetVersion',
-                          style: Theme.of(dialogContext).textTheme.bodySmall,
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: versions.items.length,
-                        separatorBuilder: (context, index) =>
-                            const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final version = versions.items[index];
-                          final isTargetVersion =
-                              version.version == initialTargetVersion;
-                          return ListTile(
-                            dense: true,
-                            tileColor: isTargetVersion
-                                ? Theme.of(dialogContext)
-                                      .colorScheme
-                                      .primaryContainer
-                                      .withValues(alpha: 0.28)
-                                : null,
-                            title: Text(
-                              isTargetVersion
-                                  ? '${_templateVersionActionLabel(version)} · 目标版本'
-                                  : _templateVersionActionLabel(version),
-                            ),
-                            subtitle: Text(
-                              '${version.createdAt.toLocal()} · ${_templateVersionSummary(version)}'
-                              '${version.note != null && version.note!.trim().isNotEmpty ? '\n说明：${version.note}' : ''}'
-                              '${version.createdByUsername != null && version.createdByUsername!.trim().isNotEmpty ? '\n操作人：${version.createdByUsername}' : ''}'
-                              '${version.sourceVersion != null ? '\n来源版本：v${version.sourceVersion}' : ''}',
-                            ),
-                            isThreeLine: true,
-                            trailing: _canManageTemplates
-                                ? Wrap(
-                                    spacing: 8,
-                                    children: [
-                                      TextButton(
-                                        onPressed: () async {
-                                          try {
-                                            final contentBase64 =
-                                                await _craftService
-                                                    .exportTemplateVersion(
-                                                      templateId: item.id,
-                                                      version: version.version,
-                                                    );
-                                            if (!dialogContext.mounted) {
-                                              return;
-                                            }
-                                            await _showJsonPreviewDialog(
-                                              dialogContext,
-                                              title:
-                                                  '版本导出 - ${item.templateName} v${version.version}',
-                                              contentBase64: contentBase64,
-                                            );
-                                          } catch (error) {
-                                            if (_isUnauthorized(error)) {
-                                              widget.onLogout();
-                                              return;
-                                            }
-                                            if (dialogContext.mounted) {
-                                              ScaffoldMessenger.of(
-                                                dialogContext,
-                                              ).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    _errorMessage(error),
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                          }
-                                        },
-                                        child: const Text('导出'),
-                                      ),
-                                      FilledButton.tonal(
-                                        onPressed: () async {
-                                          final rolledBack =
-                                              await _showRollbackDialog(
-                                                item: item,
-                                                targetVersion: version.version,
-                                                availableVersions: versions
-                                                    .items
-                                                    .map(
-                                                      (entry) => entry.version,
-                                                    )
-                                                    .toList(),
-                                              );
-                                          if (rolledBack &&
-                                              dialogContext.mounted) {
-                                            Navigator.of(
-                                              dialogContext,
-                                            ).pop(true);
-                                          }
-                                        },
-                                        child: const Text('回滚'),
-                                      ),
-                                    ],
-                                  )
-                                : TextButton(
-                                    onPressed: () async {
-                                      try {
-                                        final contentBase64 =
-                                            await _craftService
-                                                .exportTemplateVersion(
-                                                  templateId: item.id,
-                                                  version: version.version,
-                                                );
-                                        if (!dialogContext.mounted) {
-                                          return;
-                                        }
-                                        await _showJsonPreviewDialog(
-                                          dialogContext,
-                                          title:
-                                              '版本导出 - ${item.templateName} v${version.version}',
-                                          contentBase64: contentBase64,
-                                        );
-                                      } catch (error) {
-                                        if (_isUnauthorized(error)) {
-                                          widget.onLogout();
-                                          return;
-                                        }
-                                        if (dialogContext.mounted) {
-                                          ScaffoldMessenger.of(
-                                            dialogContext,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                _errorMessage(error),
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    },
-                                    child: const Text('导出'),
-                                  ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('版本管理 - ${item.templateName}'),
+          content: SizedBox(
+            width: 860,
+            height: 560,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '当前产品：${item.productName} · 当前版本 v${item.version} · 已发布 P${item.publishedVersion}',
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('关闭'),
+                if (hasInitialTargetVersion)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      '已自动定位目标版本 v$initialTargetVersion',
+                      style: Theme.of(dialogContext).textTheme.bodySmall,
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                const Text(
+                  '历史版本',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: versions.items.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final version = versions.items[index];
+                      final isTargetVersion =
+                          version.version == initialTargetVersion;
+                      return ListTile(
+                        dense: true,
+                        tileColor: isTargetVersion
+                            ? Theme.of(dialogContext)
+                                  .colorScheme
+                                  .primaryContainer
+                                  .withValues(alpha: 0.28)
+                            : null,
+                        title: Text(
+                          isTargetVersion
+                              ? '${_templateVersionActionLabel(version)} · 目标版本'
+                              : _templateVersionActionLabel(version),
+                        ),
+                        subtitle: Text(
+                          '${version.createdAt.toLocal()} · ${_templateVersionSummary(version)}'
+                          '${version.note != null && version.note!.trim().isNotEmpty ? '\n说明：${version.note}' : ''}'
+                          '${version.createdByUsername != null && version.createdByUsername!.trim().isNotEmpty ? '\n操作人：${version.createdByUsername}' : ''}'
+                          '${version.sourceVersion != null ? '\n来源版本：v${version.sourceVersion}' : ''}',
+                        ),
+                        isThreeLine: true,
+                      );
+                    },
+                  ),
                 ),
               ],
-            );
-          },
-        );
-      },
-    );
-
-    if (done == true) {
-      _detailCache.remove(item.id);
-      await _loadData();
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
     }
   }
 
@@ -3096,246 +1971,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     );
   }
 
-  Future<void> _showExportDialog() async {
-    if (!_canManageTemplates) {
-      _showNoPermission();
-      return;
-    }
-    try {
-      final result = await _craftService.exportTemplates(
-        productId: _productFilterId,
-        keyword: _templateKeyword.isEmpty ? null : _templateKeyword,
-        productCategory: _productCategoryFilter,
-        isDefault: _defaultTemplateFilter,
-        enabled: _templateEnabledFilter,
-        lifecycleStatus: _lifecycleFilter,
-        updatedFrom: _updatedFromDate,
-        updatedTo: _updatedToDate == null
-            ? null
-            : DateTime(
-                _updatedToDate!.year,
-                _updatedToDate!.month,
-                _updatedToDate!.day,
-                23,
-                59,
-                59,
-                999,
-                999,
-              ),
-      );
-      if (!mounted) {
-        return;
-      }
-      final text = const JsonEncoder.withIndent('  ').convert({
-        'exported_at': result.exportedAt.toIso8601String(),
-        'items': result.items.map((item) => item.toJson()).toList(),
-      });
-
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text('批量导出（${result.total} 条）'),
-          content: SizedBox(
-            width: 900,
-            height: 560,
-            child: Column(
-              children: [
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.tonalIcon(
-                    onPressed: () async {
-                      await Clipboard.setData(ClipboardData(text: text));
-                      if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          const SnackBar(content: Text('已复制到剪贴板')),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.copy),
-                    label: const Text('复制 JSON'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: SingleChildScrollView(child: SelectableText(text)),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
-      );
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
-    }
-  }
-
-  Future<void> _showImportDialog() async {
-    if (!_canManageTemplates) {
-      _showNoPermission();
-      return;
-    }
-    final payloadController = TextEditingController();
-    bool overwriteExisting = false;
-
-    final done = await showLockedFormDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('批量导入模板'),
-              content: SizedBox(
-                width: 900,
-                height: 620,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('覆盖同名模板'),
-                      value: overwriteExisting,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          overwriteExisting = value;
-                        });
-                      },
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        '说明：导入成功后统一生成草稿模板，不允许直接绕过发布流程。',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: payloadController,
-                        maxLines: null,
-                        expands: true,
-                        decoration: const InputDecoration(
-                          labelText: '导入 JSON',
-                          hintText: '粘贴导出的 items 数组或 {"items": [...]}',
-                          border: OutlineInputBorder(),
-                          alignLabelWithHint: true,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    final rawText = payloadController.text.trim();
-                    if (rawText.isEmpty) {
-                      ScaffoldMessenger.of(
-                        dialogContext,
-                      ).showSnackBar(const SnackBar(content: Text('请先粘贴导入内容')));
-                      return;
-                    }
-
-                    try {
-                      final decoded = jsonDecode(rawText);
-                      final items = _parseImportItems(decoded);
-                      if (items.isEmpty) {
-                        throw const FormatException('导入内容为空');
-                      }
-                      final result = await _craftService.importTemplates(
-                        items: items,
-                        overwriteExisting: overwriteExisting,
-                      );
-                      if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '导入完成：创建 ${result.created}，更新 ${result.updated}，跳过 ${result.skipped}',
-                            ),
-                          ),
-                        );
-                        if (result.errors.isNotEmpty) {
-                          await showDialog<void>(
-                            context: dialogContext,
-                            builder: (errorContext) => AlertDialog(
-                              title: Text('导入错误明细（${result.errors.length} 条）'),
-                              content: SizedBox(
-                                width: 720,
-                                height: 420,
-                                child: ListView.separated(
-                                  itemCount: result.errors.length,
-                                  separatorBuilder: (context, index) =>
-                                      const Divider(height: 1),
-                                  itemBuilder: (context, index) => ListTile(
-                                    dense: true,
-                                    title: Text(result.errors[index]),
-                                  ),
-                                ),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(errorContext).pop(),
-                                  child: const Text('关闭'),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        if (dialogContext.mounted) {
-                          Navigator.of(dialogContext).pop(true);
-                        }
-                      }
-                    } on FormatException catch (error) {
-                      if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text('导入格式错误：${error.message}')),
-                        );
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text(_errorMessage(error))),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('开始导入'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    payloadController.dispose();
-    if (done == true) {
-      await _loadData();
-    }
-  }
-
   Future<void> _handleTemplateAction(
     _TemplateAction action,
     CraftTemplateItem item,
@@ -3347,27 +1982,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           return;
         }
         await _showTemplateDetailDialog(item);
-        return;
-      case _TemplateAction.copy:
-        if (!_canManageTemplates) {
-          _showNoPermission();
-          return;
-        }
-        await _copyTemplate(item);
-        return;
-      case _TemplateAction.copyToProduct:
-        if (!_canManageTemplates) {
-          _showNoPermission();
-          return;
-        }
-        await _copyTemplateToProduct(item);
-        return;
-      case _TemplateAction.copyFromMaster:
-        if (!_canManageTemplates) {
-          _showNoPermission();
-          return;
-        }
-        await _copyFromSystemMaster(item);
         return;
       case _TemplateAction.enable:
         if (!_canManageTemplates) {
@@ -3382,20 +1996,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
           return;
         }
         await _setTemplateEnabled(item, enabled: false);
-        return;
-      case _TemplateAction.archive:
-        if (!_canManageTemplates) {
-          _showNoPermission();
-          return;
-        }
-        await _archiveTemplate(item);
-        return;
-      case _TemplateAction.unarchive:
-        if (!_canManageTemplates) {
-          _showNoPermission();
-          return;
-        }
-        await _unarchiveTemplate(item);
         return;
       case _TemplateAction.edit:
         if (!_canManageTemplates) {
@@ -3424,29 +2024,8 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         }
         await _showPublishDialog(item);
         return;
-      case _TemplateAction.impact:
-        if (!_canViewTemplates) {
-          _showNoPermission();
-          return;
-        }
-        await _showImpactAnalysisDialog(item);
-        return;
       case _TemplateAction.versions:
         if (!_canViewTemplates) {
-          _showNoPermission();
-          return;
-        }
-        await _showVersionDialog(item);
-        return;
-      case _TemplateAction.compare:
-        if (!_canViewTemplates) {
-          _showNoPermission();
-          return;
-        }
-        await _showVersionDialog(item);
-        return;
-      case _TemplateAction.rollback:
-        if (!_canManageTemplates) {
           _showNoPermission();
           return;
         }
@@ -3474,6 +2053,128 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     );
   }
 
+  bool _hasDefaultTemplateConfigured(int productId) {
+    return _templates.any(
+      (item) => item.productId == productId && item.isDefault,
+    );
+  }
+
+  Widget _buildProductDefaultStatus(
+    ThemeData theme, {
+    required bool configured,
+  }) {
+    final color = configured
+        ? theme.colorScheme.primary
+        : theme.colorScheme.outline;
+    final text = configured ? '已配置默认模板' : '未配置默认模板';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(text, style: theme.textTheme.bodySmall?.copyWith(color: color)),
+      ],
+    );
+  }
+
+  Widget _buildProductPanel(ThemeData theme) {
+    final visibleProducts = _visibleProducts;
+    final productListHeight =
+        (_productListItemHeight * _productListVisibleCount) +
+        (_productListItemSpacing * (_productListVisibleCount - 1));
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '产品列表',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _productKeywordController,
+              decoration: const InputDecoration(
+                labelText: '搜索产品',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _productKeyword = value;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            if (visibleProducts.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text('暂无匹配产品'),
+              )
+            else
+              SizedBox(
+                height: productListHeight,
+                child: Scrollbar(
+                  controller: _productListScrollController,
+                  thumbVisibility:
+                      visibleProducts.length > _productListVisibleCount,
+                  child: ListView.separated(
+                    key: const ValueKey('process-config-product-list-scroll'),
+                    controller: _productListScrollController,
+                    primary: false,
+                    itemCount: visibleProducts.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: _productListItemSpacing),
+                    itemBuilder: (context, index) {
+                      final product = visibleProducts[index];
+                      final selected = product.id == _productFilterId;
+                      final hasDefaultTemplate = _hasDefaultTemplateConfigured(
+                        product.id,
+                      );
+                      return SizedBox(
+                        height: _productListItemHeight,
+                        child: ListTile(
+                          dense: true,
+                          selected: selected,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          selectedTileColor: theme.colorScheme.primaryContainer
+                              .withValues(alpha: 0.4),
+                          title: Text(product.name),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: _buildProductDefaultStatus(
+                              theme,
+                              configured: hasDefaultTemplate,
+                            ),
+                          ),
+                          onTap: () {
+                            setState(() {
+                              _productFilterId = product.id;
+                              _focusedTemplateId = null;
+                            });
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTemplateHeaderRow(ThemeData theme) {
     return Container(
       width: double.infinity,
@@ -3487,181 +2188,17 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(flex: 2, child: _buildHeaderLabel(theme, '产品')),
           Expanded(flex: 2, child: _buildHeaderLabel(theme, '模板名称')),
           Expanded(flex: 1, child: _buildHeaderLabel(theme, '版本/发布')),
-          Expanded(flex: 1, child: _buildHeaderLabel(theme, '默认')),
-          Expanded(flex: 1, child: _buildHeaderLabel(theme, '生命周期/状态')),
+          Expanded(flex: 1, child: _buildHeaderLabel(theme, '生命周期')),
+          Expanded(flex: 1, child: _buildHeaderLabel(theme, '启用状态')),
+          Expanded(flex: 1, child: _buildHeaderLabel(theme, '产品分类')),
           Expanded(flex: 1, child: _buildHeaderLabel(theme, '最近更新人')),
           Expanded(flex: 2, child: _buildHeaderLabel(theme, '更新时间')),
           SizedBox(
             width: 64,
             child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSystemMasterStepCard(
-    ThemeData theme,
-    CraftSystemMasterTemplateStepItem step,
-  ) {
-    final stageLabel = '${step.stageCode} ${step.stageName}'.trim();
-    final processLabel = '${step.processCode} ${step.processName}'.trim();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.32,
-        ),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '步骤 ${step.stepOrder}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Expanded(child: SizedBox.shrink()),
-            ],
-          ),
-          const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 720 ? 2 : 1;
-              const spacing = 12.0;
-              final itemWidth =
-                  (constraints.maxWidth - spacing * (columns - 1)) / columns;
-
-              return Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: [
-                  SizedBox(
-                    width: itemWidth,
-                    child: _buildStepInfoBlock(theme, '工段', stageLabel),
-                  ),
-                  SizedBox(
-                    width: itemWidth,
-                    child: _buildStepInfoBlock(theme, '工序', processLabel),
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStepInfoBlock(ThemeData theme, String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: theme.textTheme.bodySmall),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  int _responsiveFilterColumns(double maxWidth) {
-    if (maxWidth >= 1320) {
-      return 3;
-    }
-    if (maxWidth >= 860) {
-      return 2;
-    }
-    return 1;
-  }
-
-  Widget _buildResponsiveFilterGrid(List<Widget> children) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        final columns = _responsiveFilterColumns(constraints.maxWidth);
-        final itemWidth =
-            (constraints.maxWidth - spacing * (columns - 1)) / columns;
-
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: children
-              .map((child) => SizedBox(width: itemWidth, child: child))
-              .toList(),
-        );
-      },
-    );
-  }
-
-  Widget _buildSystemMasterStepsSection(ThemeData theme) {
-    final List<CraftSystemMasterTemplateStepItem> steps =
-        _systemMasterTemplate?.steps ??
-        const <CraftSystemMasterTemplateStepItem>[];
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: theme.dividerColor),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '系统母版步骤',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            steps.isEmpty ? '未配置系统母版，主页面暂无可展示步骤。' : '当前主页面直接展示系统母版完整步骤明细。',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          if (steps.isEmpty)
-            const Text('暂无系统母版步骤')
-          else
-            Column(
-              children: List.generate(steps.length, (index) {
-                final step = steps[index];
-                return Padding(
-                  padding: EdgeInsets.only(
-                    bottom: index == steps.length - 1 ? 0 : 12,
-                  ),
-                  child: _buildSystemMasterStepCard(theme, step),
-                );
-              }),
-            ),
         ],
       ),
     );
@@ -3707,14 +2244,87 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     );
   }
 
+  Widget _buildSystemMasterMetaItem(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Text(
+            '$label$value',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSystemMasterManagementCard(ThemeData theme) {
     final master = _systemMasterTemplate;
     final hasMaster = master != null;
-    final summaryText = hasMaster
-        ? '系统默认工序母版已配置，可按需查看步骤、历史版本与维护入口。'
-        : '当前未配置系统母版，建议先建立默认步骤，便于新增模板快速套版。';
+    List<Widget> buildSummaryMetrics() {
+      return [
+        _buildSummaryMetric(
+          theme,
+          label: '配置状态',
+          value: hasMaster ? '已配置' : '未配置',
+          icon: hasMaster ? Icons.check_circle_outline : Icons.info_outline,
+        ),
+        _buildSummaryMetric(
+          theme,
+          label: '版本号',
+          value: hasMaster ? 'v${master.version}' : '-',
+          icon: Icons.layers_outlined,
+        ),
+        _buildSummaryMetric(
+          theme,
+          label: '步骤数',
+          value: hasMaster ? '${master.steps.length} 步' : '0 步',
+          icon: Icons.format_list_numbered,
+        ),
+      ];
+    }
+
+    List<Widget> buildMetaInfo() {
+      final updatedBy = hasMaster
+          ? ((master.updatedByUsername?.trim().isNotEmpty ?? false)
+                ? master.updatedByUsername!.trim()
+                : '-')
+          : '-';
+      return [
+        _buildSystemMasterMetaItem(
+          theme,
+          icon: Icons.person_outline,
+          label: '最近更新人：',
+          value: updatedBy,
+        ),
+        _buildSystemMasterMetaItem(
+          theme,
+          icon: Icons.schedule,
+          label: '最近更新时间：',
+          value: _formatDateTimeLabel(master?.updatedAt),
+        ),
+      ];
+    }
 
     return Card(
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
         key: const PageStorageKey<String>('system-master-management-tile'),
         initiallyExpanded: _systemMasterExpanded,
@@ -3725,6 +2335,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         },
         tilePadding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
         childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        collapsedShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
         title: Row(
           children: [
             Container(
@@ -3751,8 +2365,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(summaryText, style: theme.textTheme.bodySmall),
                 ],
               ),
             ),
@@ -3760,89 +2372,138 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         ),
         children: _systemMasterExpanded
             ? [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _buildSummaryMetric(
-                      theme,
-                      label: '配置状态',
-                      value: hasMaster ? '已配置' : '未配置',
-                      icon: hasMaster
-                          ? Icons.check_circle_outline
-                          : Icons.info_outline,
-                    ),
-                    _buildSummaryMetric(
-                      theme,
-                      label: '版本号',
-                      value: hasMaster ? 'v${master.version}' : '-',
-                      icon: Icons.layers_outlined,
-                    ),
-                    _buildSummaryMetric(
-                      theme,
-                      label: '步骤数',
-                      value: hasMaster ? '${master.steps.length} 步' : '0 步',
-                      icon: Icons.format_list_numbered,
-                    ),
-                    _buildSummaryMetric(
-                      theme,
-                      label: '最近更新人',
-                      value: hasMaster
-                          ? ((master.updatedByUsername?.trim().isNotEmpty ??
-                                    false)
-                                ? master.updatedByUsername!.trim()
-                                : '-')
-                          : '-',
-                      icon: Icons.person_outline,
-                    ),
-                    _buildSummaryMetric(
-                      theme,
-                      label: '最近更新时间',
-                      value: _formatDateTimeLabel(master?.updatedAt),
-                      icon: Icons.schedule,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (_canViewSystemMasterVersions)
-                      OutlinedButton.icon(
-                        onPressed: _loading
-                            ? null
-                            : _showSystemMasterVersionDialog,
-                        icon: const Icon(Icons.history),
-                        label: const Text('母版历史版本'),
-                      ),
-                    if (_canManageSystemMasterTemplate)
-                      FilledButton.icon(
-                        onPressed: _loading
-                            ? null
-                            : _showSystemMasterTemplateDialog,
-                        icon: Icon(
-                          hasMaster ? Icons.edit_outlined : Icons.add_box,
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final summaryWrap = Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: buildSummaryMetrics(),
+                    );
+                    final metaWrap = Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: buildMetaInfo(),
+                    );
+
+                    final actionWrap = Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.end,
+                      children: [
+                        if (_canViewSystemMasterVersions)
+                          OutlinedButton.icon(
+                            onPressed: _loading
+                                ? null
+                                : _showSystemMasterVersionDialog,
+                            icon: const Icon(Icons.history),
+                            label: const Text('母版历史版本'),
+                          ),
+                        if (_canManageSystemMasterTemplate)
+                          FilledButton.icon(
+                            onPressed: _loading
+                                ? null
+                                : _showSystemMasterTemplateDialog,
+                            icon: Icon(
+                              hasMaster ? Icons.edit_outlined : Icons.add_box,
+                            ),
+                            label: Text(hasMaster ? '编辑系统母版' : '新建系统母版'),
+                          ),
+                      ],
+                    );
+
+                    final overviewCard = Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant,
                         ),
-                        label: Text(hasMaster ? '编辑系统母版' : '新建系统母版'),
                       ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        hasMaster
-                            ? '自动套版门禁默认开启，可由后端配置 `craft_auto_bind_default_template_enabled` 关闭。'
-                            : '未配置时，新建产品会跳过自动绑定默认模板。',
-                        style: theme.textTheme.bodySmall,
+                      child: constraints.maxWidth < 1180
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '系统母版管理',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                summaryWrap,
+                                const SizedBox(height: 12),
+                                actionWrap,
+                              ],
+                            )
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '系统母版管理',
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      summaryWrap,
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 24),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 260,
+                                  ),
+                                  child: actionWrap,
+                                ),
+                              ],
+                            ),
+                    );
+
+                    final metaCard = Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant.withValues(
+                            alpha: 0.7,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                      child: metaWrap,
+                    );
+
+                    return Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1120),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              key: const Key('system-master-summary-section'),
+                              child: overviewCard,
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              key: const Key('system-master-meta-section'),
+                              child: metaCard,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                const SizedBox(height: 16),
-                _buildSystemMasterStepsSection(theme),
               ]
             : const <Widget>[],
       ),
@@ -3895,7 +2556,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Expanded(flex: 2, child: Text(item.productName)),
                       Expanded(flex: 2, child: Text(item.templateName)),
                       Expanded(
                         flex: 1,
@@ -3905,12 +2565,18 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                       ),
                       Expanded(
                         flex: 1,
-                        child: Text(item.isDefault ? '是' : '否'),
+                        child: Text(_lifecycleLabel(item.lifecycleStatus)),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: Text(item.isEnabled ? '启用' : '停用'),
                       ),
                       Expanded(
                         flex: 1,
                         child: Text(
-                          '${_lifecycleLabel(item.lifecycleStatus)} / ${item.isEnabled ? '启用' : '停用'}',
+                          item.productCategory.trim().isEmpty
+                              ? '-'
+                              : item.productCategory,
                         ),
                       ),
                       Expanded(
@@ -3956,40 +2622,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                     );
                                   }
                                   items.add(
-                                    const PopupMenuItem(
-                                      value: _TemplateAction.copy,
-                                      child: Text('复制（同产品）'),
-                                    ),
-                                  );
-                                  items.add(
-                                    const PopupMenuItem(
-                                      value: _TemplateAction.copyToProduct,
-                                      child: Text('跨产品复制'),
-                                    ),
-                                  );
-                                  items.add(
-                                    const PopupMenuItem(
-                                      value: _TemplateAction.copyFromMaster,
-                                      child: Text('从系统母版套版'),
-                                    ),
-                                  );
-                                  if (item.lifecycleStatus == 'published') {
-                                    items.add(
-                                      const PopupMenuItem(
-                                        value: _TemplateAction.archive,
-                                        child: Text('归档'),
-                                      ),
-                                    );
-                                  }
-                                  if (item.lifecycleStatus == 'archived') {
-                                    items.add(
-                                      const PopupMenuItem(
-                                        value: _TemplateAction.unarchive,
-                                        child: Text('取消归档'),
-                                      ),
-                                    );
-                                  }
-                                  items.add(
                                     PopupMenuItem(
                                       value: item.isEnabled
                                           ? _TemplateAction.disable
@@ -4007,30 +2639,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                                   );
                                   items.add(
                                     const PopupMenuItem(
-                                      value: _TemplateAction.impact,
-                                      child: Text('影响分析'),
-                                    ),
-                                  );
-                                  items.add(
-                                    const PopupMenuItem(
                                       value: _TemplateAction.versions,
                                       child: Text('版本管理'),
                                     ),
                                   );
-                                  items.add(
-                                    const PopupMenuItem(
-                                      value: _TemplateAction.compare,
-                                      child: Text('版本对比'),
-                                    ),
-                                  );
                                 }
                                 if (_canManageTemplates) {
-                                  items.add(
-                                    const PopupMenuItem(
-                                      value: _TemplateAction.rollback,
-                                      child: Text('回滚模板'),
-                                    ),
-                                  );
                                   items.add(
                                     const PopupMenuItem(
                                       value: _TemplateAction.delete,
@@ -4056,6 +2670,16 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     ThemeData theme,
     List<CraftTemplateItem> templates,
   ) {
+    String? selectedProductName;
+    final selectedProductId = _productFilterId;
+    if (selectedProductId != null) {
+      for (final product in _products) {
+        if (product.id == selectedProductId) {
+          selectedProductName = product.name;
+          break;
+        }
+      }
+    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -4074,11 +2698,13 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '将高频模板操作、筛选与列表集中在同一工作区，减少首屏切换成本。',
-                        style: theme.textTheme.bodySmall,
-                      ),
+                      if (selectedProductName != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '当前产品：$selectedProductName',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -4109,276 +2735,26 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 FilledButton.icon(
-                  onPressed: (_loading || !_canManageTemplates)
+                  onPressed:
+                      (_loading ||
+                          !_canManageTemplates ||
+                          _productFilterId == null)
                       ? null
                       : () => _showTemplateDialog(),
                   icon: const Icon(Icons.add),
                   label: const Text('新增模板'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: (_loading || !_canManageTemplates)
+                  onPressed:
+                      (_loading ||
+                          !_canManageTemplates ||
+                          _productFilterId == null)
                       ? null
                       : _showTopCopyFromMasterShortcut,
                   icon: const Icon(Icons.library_add),
                   label: const Text('从系统母版套版'),
                 ),
-                OutlinedButton.icon(
-                  onPressed: (_loading || !_canManageTemplates)
-                      ? null
-                      : () async {
-                          final item = _requireFocusedTemplate('从已有模板复制');
-                          if (item == null) {
-                            return;
-                          }
-                          await _copyTemplate(item);
-                        },
-                  icon: const Icon(Icons.copy_all),
-                  label: const Text('从已有模板复制'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: (_loading || !_canManageTemplates)
-                      ? null
-                      : _showExportDialog,
-                  icon: const Icon(Icons.download),
-                  label: const Text('导出模板'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: (_loading || !_canManageTemplates)
-                      ? null
-                      : _showImportDialog,
-                  icon: const Icon(Icons.upload),
-                  label: const Text('批量导入'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _loading
-                      ? null
-                      : () async {
-                          final item = _requireFocusedTemplate('导出版本参数');
-                          if (item == null) {
-                            return;
-                          }
-                          await _showVersionDialog(item);
-                        },
-                  icon: const Icon(Icons.tune),
-                  label: const Text('导出版本参数'),
-                ),
-                if (_focusedTemplate != null)
-                  Text(
-                    '当前定位：${_focusedTemplate!.templateName}（${_focusedTemplate!.productName}）',
-                    style: theme.textTheme.bodySmall,
-                  ),
               ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: theme.dividerColor),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '模板筛选',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '支持按产品、生命周期、分类、默认状态与更新时间快速缩小范围。',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildResponsiveFilterGrid([
-                    DropdownButtonFormField<int?>(
-                      isExpanded: true,
-                      initialValue: _productFilterId,
-                      decoration: const InputDecoration(
-                        labelText: '按产品筛选',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem<int?>(
-                          value: null,
-                          child: Text('全部产品'),
-                        ),
-                        ..._products.map(
-                          (item) => DropdownMenuItem<int?>(
-                            value: item.id,
-                            child: Text(item.name),
-                          ),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _productFilterId = value;
-                        });
-                      },
-                    ),
-                    DropdownButtonFormField<String?>(
-                      isExpanded: true,
-                      initialValue: _lifecycleFilter,
-                      decoration: const InputDecoration(
-                        labelText: '按生命周期筛选',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: const [
-                        DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('全部状态'),
-                        ),
-                        DropdownMenuItem<String?>(
-                          value: 'draft',
-                          child: Text('草稿'),
-                        ),
-                        DropdownMenuItem<String?>(
-                          value: 'published',
-                          child: Text('已发布'),
-                        ),
-                        DropdownMenuItem<String?>(
-                          value: 'archived',
-                          child: Text('已归档'),
-                        ),
-                      ],
-                      onChanged: (value) async {
-                        setState(() {
-                          _lifecycleFilter = value;
-                        });
-                        await _loadData();
-                      },
-                    ),
-                    TextField(
-                      controller: _templateKeywordController,
-                      decoration: const InputDecoration(
-                        labelText: '模板名称搜索',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.search),
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          _templateKeyword = value.trim();
-                        });
-                      },
-                    ),
-                    DropdownButtonFormField<String?>(
-                      isExpanded: true,
-                      initialValue: _productCategoryFilter,
-                      decoration: const InputDecoration(
-                        labelText: '产品分类筛选',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('全部分类'),
-                        ),
-                        ..._productCategoryOptions.map(
-                          (category) => DropdownMenuItem<String?>(
-                            value: category,
-                            child: Text(category),
-                          ),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _productCategoryFilter = value;
-                        });
-                      },
-                    ),
-                    DropdownButtonFormField<bool?>(
-                      isExpanded: true,
-                      initialValue: _defaultTemplateFilter,
-                      decoration: const InputDecoration(
-                        labelText: '默认模板筛选',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: const [
-                        DropdownMenuItem<bool?>(
-                          value: null,
-                          child: Text('全部默认状态'),
-                        ),
-                        DropdownMenuItem<bool?>(
-                          value: true,
-                          child: Text('默认模板'),
-                        ),
-                        DropdownMenuItem<bool?>(
-                          value: false,
-                          child: Text('非默认模板'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _defaultTemplateFilter = value;
-                        });
-                      },
-                    ),
-                    DropdownButtonFormField<bool?>(
-                      isExpanded: true,
-                      initialValue: _templateEnabledFilter,
-                      decoration: const InputDecoration(
-                        labelText: '启用状态筛选',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: const [
-                        DropdownMenuItem<bool?>(
-                          value: null,
-                          child: Text('全部状态'),
-                        ),
-                        DropdownMenuItem<bool?>(value: true, child: Text('启用')),
-                        DropdownMenuItem<bool?>(
-                          value: false,
-                          child: Text('停用'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _templateEnabledFilter = value;
-                        });
-                      },
-                    ),
-                  ]),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () => _pickUpdatedDate(isFrom: true),
-                        icon: const Icon(Icons.event),
-                        label: Text(
-                          '起始更新日：${_formatDateLabel(_updatedFromDate)}',
-                        ),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => _pickUpdatedDate(isFrom: false),
-                        icon: const Icon(Icons.event_available),
-                        label: Text(
-                          '结束更新日：${_formatDateLabel(_updatedToDate)}',
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _updatedFromDate = null;
-                            _updatedToDate = null;
-                            _templateKeyword = '';
-                            _templateKeywordController.clear();
-                            _productCategoryFilter = null;
-                            _defaultTemplateFilter = null;
-                            _templateEnabledFilter = null;
-                          });
-                        },
-                        icon: const Icon(Icons.clear_all),
-                        label: const Text('清空本地筛选'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
             ),
             const SizedBox(height: 16),
             if (_message.isNotEmpty)
@@ -4391,7 +2767,17 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                   ),
                 ),
               ),
-            if (_loading)
+            if (_productFilterId == null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: Text(
+                    '未选择产品，当前不展示模板列表。',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+              )
+            else if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 32),
                 child: Center(child: CircularProgressIndicator()),
@@ -4434,7 +2820,31 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                         const SizedBox(height: 12),
                         _buildSystemMasterManagementCard(theme),
                         const SizedBox(height: 12),
-                        _buildTemplateWorkspace(theme, templates),
+                        constraints.maxWidth >= 1080
+                            ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 280,
+                                    child: _buildProductPanel(theme),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _buildTemplateWorkspace(
+                                      theme,
+                                      templates,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildProductPanel(theme),
+                                  const SizedBox(height: 12),
+                                  _buildTemplateWorkspace(theme, templates),
+                                ],
+                              ),
                       ],
                     ),
                   ),
