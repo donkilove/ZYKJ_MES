@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/app_session.dart';
 import '../services/auth_service.dart';
@@ -127,6 +128,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _submitLogin() async {
+    if (_loading) {
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -165,6 +170,20 @@ class _LoginPageState extends State<LoginPage> {
         });
       }
     }
+  }
+
+  Widget _wrapLoginSubmitShortcut(Widget child) {
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.enter): () {
+          _submitLogin();
+        },
+        const SingleActivator(LogicalKeyboardKey.numpadEnter): () {
+          _submitLogin();
+        },
+      },
+      child: child,
+    );
   }
 
   Future<void> _openRegisterPage() async {
@@ -469,61 +488,71 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     );
                   }
-                  return TextFormField(
-                    controller: textEditingController,
-                    focusNode: focusNode,
-                    decoration: InputDecoration(
-                      labelText: '账号',
-                      border: const OutlineInputBorder(),
-                      helperText: _accounts.isEmpty ? '可直接输入账号' : '可输入或从下拉列表选择',
+                  return _wrapLoginSubmitShortcut(
+                    TextFormField(
+                      controller: textEditingController,
+                      focusNode: focusNode,
+                      decoration: InputDecoration(
+                        labelText: '账号',
+                        border: const OutlineInputBorder(),
+                        helperText: _accounts.isEmpty
+                            ? '可直接输入账号'
+                            : '可输入或从下拉列表选择',
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return '请输入账号';
+                        }
+                        if (value.trim().length < 2) {
+                          return '账号至少 2 个字符';
+                        }
+                        return null;
+                      },
+                      onChanged: (value) {
+                        _accountController.text = value;
+                      },
+                      onFieldSubmitted: (_) => onFieldSubmitted(),
                     ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return '请输入账号';
-                      }
-                      if (value.trim().length < 2) {
-                        return '账号至少 2 个字符';
-                      }
-                      return null;
-                    },
-                    onChanged: (value) {
-                      _accountController.text = value;
-                    },
-                    onFieldSubmitted: (_) => onFieldSubmitted(),
                   );
                 },
           ),
           const SizedBox(height: 12),
-          TextFormField(
-            controller: _passwordController,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: '密码',
-              border: OutlineInputBorder(),
+          _wrapLoginSubmitShortcut(
+            TextFormField(
+              controller: _passwordController,
+              obscureText: true,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: '密码',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return '请输入密码';
+                }
+                if (value.length < 6) {
+                  return '密码至少 6 个字符';
+                }
+                return null;
+              },
+              onFieldSubmitted: (_) => _submitLogin(),
             ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return '请输入密码';
-              }
-              if (value.length < 6) {
-                return '密码至少 6 个字符';
-              }
-              return null;
-            },
           ),
           const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
-                child: FilledButton(
-                  onPressed: _loading ? null : _submitLogin,
-                  child: _loading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('登录'),
+                child: _wrapLoginSubmitShortcut(
+                  FilledButton(
+                    onPressed: _loading ? null : _submitLogin,
+                    child: _loading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('登录'),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
