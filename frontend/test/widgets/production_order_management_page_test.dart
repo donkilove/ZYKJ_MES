@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
@@ -13,6 +11,12 @@ class _FakeProductionOrderManagementService extends ProductionService {
   _FakeProductionOrderManagementService()
     : super(AppSession(baseUrl: '', accessToken: ''));
 
+  String? lastListKeyword;
+  String? lastListProductName;
+  DateTime? lastListStartDateFrom;
+  DateTime? lastListStartDateTo;
+  DateTime? lastListDueDateFrom;
+  DateTime? lastListDueDateTo;
   @override
   Future<ProductionOrderListResult> listOrders({
     required int page,
@@ -26,6 +30,12 @@ class _FakeProductionOrderManagementService extends ProductionService {
     DateTime? dueDateFrom,
     DateTime? dueDateTo,
   }) async {
+    lastListKeyword = keyword;
+    lastListProductName = productName;
+    lastListStartDateFrom = startDateFrom;
+    lastListStartDateTo = startDateTo;
+    lastListDueDateFrom = dueDateFrom;
+    lastListDueDateTo = dueDateTo;
     return ProductionOrderListResult(
       total: 1,
       items: [
@@ -74,54 +84,6 @@ class _FakeProductionOrderManagementService extends ProductionService {
       ),
     ];
   }
-
-  @override
-  Future<Map<String, dynamic>> exportOrders({
-    String? keyword,
-    String? status,
-    String? productName,
-    bool? pipelineEnabled,
-    DateTime? startDateFrom,
-    DateTime? startDateTo,
-    DateTime? dueDateFrom,
-    DateTime? dueDateTo,
-  }) async {
-    return {
-      'file_name': 'orders_export.csv',
-      'content_base64': base64Encode(utf8.encode('订单号,产品\nPO-1,产品A')),
-    };
-  }
-
-  @override
-  Future<ProductionEventLogListResult> searchOrderEvents({
-    required String orderCode,
-    String? eventType,
-    String? operatorUsername,
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async {
-    expect(eventType, 'order_deleted');
-    return ProductionEventLogListResult(
-      total: 1,
-      items: [
-        ProductionEventLogItem(
-          id: 1,
-          orderId: null,
-          orderCode: orderCode,
-          orderStatus: 'pending',
-          productName: '产品A',
-          processCode: '01-01',
-          eventType: 'order_deleted',
-          eventTitle: '订单已删除',
-          eventDetail: '删除订单 PO-1',
-          operatorUserId: 1,
-          operatorUsername: 'admin',
-          payloadJson: '{"deleted":true}',
-          createdAt: DateTime(2026, 3, 1, 10),
-        ),
-      ],
-    );
-  }
 }
 
 class _FakeCraftService extends CraftService {
@@ -145,81 +107,53 @@ class _FakeCraftService extends CraftService {
 }
 
 void main() {
-  testWidgets('production order management export action does not crash', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1920, 1400);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
+  testWidgets(
+    'production order management uses keyword as single search entry',
+    (tester) async {
+      final service = _FakeProductionOrderManagementService();
+      tester.view.physicalSize = const Size(1920, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ProductionOrderManagementPage(
-            session: AppSession(baseUrl: '', accessToken: ''),
-            onLogout: () {},
-            canCreateOrder: true,
-            canEditOrder: true,
-            canDeleteOrder: true,
-            canCompleteOrder: true,
-            canUpdatePipelineMode: true,
-            service: _FakeProductionOrderManagementService(),
-            craftService: _FakeCraftService(),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ProductionOrderManagementPage(
+              session: AppSession(baseUrl: '', accessToken: ''),
+              onLogout: () {},
+              canCreateOrder: true,
+              canEditOrder: true,
+              canDeleteOrder: true,
+              canCompleteOrder: true,
+              canUpdatePipelineMode: true,
+              service: service,
+              craftService: _FakeCraftService(),
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('总数：1'), findsOneWidget);
+      expect(find.text('总数：1'), findsOneWidget);
+      expect(find.widgetWithText(TextField, '搜索订单号/产品'), findsOneWidget);
+      expect(find.widgetWithText(TextField, '产品名称'), findsNothing);
 
-    await tester.tap(find.widgetWithText(OutlinedButton, '导出'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      await tester.enterText(find.widgetWithText(TextField, '搜索订单号/产品'), '产品A');
+      await tester.tap(find.widgetWithText(FilledButton, '查询'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('总数：1'), findsOneWidget);
-  });
-
-  testWidgets('production order management can query deleted order trace', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1920, 1400);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ProductionOrderManagementPage(
-            session: AppSession(baseUrl: '', accessToken: ''),
-            onLogout: () {},
-            canCreateOrder: true,
-            canEditOrder: true,
-            canDeleteOrder: true,
-            canCompleteOrder: true,
-            canUpdatePipelineMode: true,
-            service: _FakeProductionOrderManagementService(),
-            craftService: _FakeCraftService(),
-          ),
-        ),
-      ),
-    );
-
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.enterText(find.widgetWithText(TextField, '删除追溯订单号'), 'PO-1');
-    await tester.tap(find.widgetWithText(OutlinedButton, '删除追溯'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('删除追溯 - PO-1'), findsOneWidget);
-    expect(find.textContaining('订单已删除'), findsOneWidget);
-  });
+      expect(service.lastListKeyword, '产品A');
+      expect(service.lastListProductName, isNull);
+      expect(service.lastListStartDateFrom, isNull);
+      expect(service.lastListStartDateTo, isNull);
+      expect(service.lastListDueDateFrom, isNull);
+      expect(service.lastListDueDateTo, isNull);
+    },
+  );
 }

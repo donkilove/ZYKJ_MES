@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -49,19 +46,12 @@ class _ProductionOrderManagementPageState
   late final ProductionService _service;
   late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
-  final TextEditingController _deletedOrderCodeController =
-      TextEditingController();
 
   bool _loading = false;
   String _message = '';
   int _total = 0;
   String? _statusFilter;
   bool? _pipelineEnabledFilter;
-  DateTime? _startDateFrom;
-  DateTime? _startDateTo;
-  DateTime? _dueDateFrom;
-  DateTime? _dueDateTo;
-  final TextEditingController _productNameController = TextEditingController();
   List<ProductionOrderItem> _items = const [];
   List<ProductionProductOption> _products = const [];
   List<ProductionProcessOption> _processes = const [];
@@ -79,8 +69,6 @@ class _ProductionOrderManagementPageState
   @override
   void dispose() {
     _keywordController.dispose();
-    _productNameController.dispose();
-    _deletedOrderCodeController.dispose();
     super.dispose();
   }
 
@@ -115,15 +103,6 @@ class _ProductionOrderManagementPageState
     return '${local.year}-$mm-$dd';
   }
 
-  Future<DateTime?> _pickDate(BuildContext context, DateTime? initial) async {
-    return showDatePicker(
-      context: context,
-      initialDate: initial ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-    );
-  }
-
   Future<void> _loadReferenceData() async {
     try {
       final products = await _service.listProductOptions();
@@ -155,136 +134,6 @@ class _ProductionOrderManagementPageState
     }
   }
 
-  Future<void> _exportOrders() async {
-    try {
-      final result = await _service.exportOrders(
-        keyword: _keywordController.text.trim().isEmpty
-            ? null
-            : _keywordController.text.trim(),
-        status: _statusFilter,
-        productName: _productNameController.text.trim().isEmpty
-            ? null
-            : _productNameController.text.trim(),
-        pipelineEnabled: _pipelineEnabledFilter,
-        startDateFrom: _startDateFrom,
-        startDateTo: _startDateTo,
-        dueDateFrom: _dueDateFrom,
-        dueDateTo: _dueDateTo,
-      );
-      if (!mounted) return;
-      final filename =
-          (result['file_name'] as String?) ??
-          (result['filename'] as String?) ??
-          'orders.csv';
-      final base64Data =
-          (result['content_base64'] as String?) ??
-          (result['data'] as String?) ??
-          '';
-      final bytes = base64Decode(base64Data);
-      final location = await getSaveLocation(
-        suggestedName: filename,
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'CSV', extensions: ['csv']),
-        ],
-      );
-      if (location == null || !mounted) return;
-      await XFile.fromData(
-        bytes,
-        mimeType: 'text/csv',
-        name: filename,
-      ).saveTo(location.path);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('导出失败：${_errorMessage(error)}')));
-    }
-  }
-
-  Future<void> _showDeletedOrderTraceDialog() async {
-    final orderCode = _deletedOrderCodeController.text.trim();
-    if (orderCode.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请输入订单号后再查询删除追溯')));
-      return;
-    }
-    try {
-      final result = await _service.searchOrderEvents(
-        orderCode: orderCode,
-        eventType: 'order_deleted',
-      );
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text('删除追溯 - $orderCode'),
-          content: SizedBox(
-            width: 760,
-            height: 420,
-            child: result.items.isEmpty
-                ? const Center(child: Text('未查到相关事件日志'))
-                : ListView.separated(
-                    itemCount: result.items.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final item = result.items[index];
-                      final snapshotSegments = <String>[];
-                      if ((item.orderCode ?? '').trim().isNotEmpty) {
-                        snapshotSegments.add(item.orderCode!.trim());
-                      }
-                      if ((item.productName ?? '').trim().isNotEmpty) {
-                        snapshotSegments.add(item.productName!.trim());
-                      }
-                      if ((item.processCode ?? '').trim().isNotEmpty) {
-                        snapshotSegments.add(item.processCode!.trim());
-                      }
-                      if ((item.orderStatus ?? '').trim().isNotEmpty) {
-                        snapshotSegments.add(item.orderStatus!.trim());
-                      }
-                      final payload = (item.payloadJson ?? '').trim();
-                      return ListTile(
-                        title: Text(item.eventTitle),
-                        subtitle: Text(
-                          '${_formatDateTime(item.createdAt)}  ${item.eventDetail ?? ''}'
-                          '${snapshotSegments.isEmpty ? '' : '\n快照：${snapshotSegments.join(' ｜ ')}'}'
-                          '${payload.isEmpty ? '' : '\n载荷：$payload'}',
-                        ),
-                        isThreeLine:
-                            snapshotSegments.isNotEmpty || payload.isNotEmpty,
-                        trailing: Text(item.operatorUsername ?? '-'),
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('查询删除追溯失败：${_errorMessage(error)}')),
-      );
-    }
-  }
-
   Future<void> _loadOrders() async {
     setState(() {
       _loading = true;
@@ -296,14 +145,7 @@ class _ProductionOrderManagementPageState
         pageSize: 200,
         keyword: _keywordController.text.trim(),
         status: _statusFilter,
-        productName: _productNameController.text.trim().isEmpty
-            ? null
-            : _productNameController.text.trim(),
         pipelineEnabled: _pipelineEnabledFilter,
-        startDateFrom: _startDateFrom,
-        startDateTo: _startDateTo,
-        dueDateFrom: _dueDateFrom,
-        dueDateTo: _dueDateTo,
       );
       if (!mounted) {
         return;
@@ -736,18 +578,6 @@ class _ProductionOrderManagementPageState
               ),
               const SizedBox(width: 12),
               SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _productNameController,
-                  decoration: const InputDecoration(
-                    labelText: '产品名称',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadOrders(),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
                 width: 150,
                 child: DropdownButtonFormField<String?>(
                   initialValue: _statusFilter,
@@ -807,31 +637,6 @@ class _ProductionOrderManagementPageState
                 label: const Text('查询'),
               ),
               const SizedBox(width: 8),
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _deletedOrderCodeController,
-                  decoration: const InputDecoration(
-                    labelText: '删除追溯订单号',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _showDeletedOrderTraceDialog(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: _loading ? null : _showDeletedOrderTraceDialog,
-                icon: const Icon(Icons.history),
-                label: const Text('删除追溯'),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: _loading ? null : _exportOrders,
-                icon: const Icon(Icons.download),
-                label: const Text('导出'),
-              ),
-              const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: _loading || !widget.canCreateOrder
                     ? null
@@ -839,67 +644,6 @@ class _ProductionOrderManagementPageState
                 icon: const Icon(Icons.add),
                 label: const Text('创建'),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                icon: const Icon(Icons.date_range, size: 16),
-                label: Text(
-                  '开始日期：${_startDateFrom == null ? '不限' : _formatDate(_startDateFrom)} ~ ${_startDateTo == null ? '不限' : _formatDate(_startDateTo)}',
-                ),
-                onPressed: () async {
-                  final from = await _pickDate(context, _startDateFrom);
-                  if (from == null || !mounted) return;
-                  // ignore: use_build_context_synchronously
-                  final to = await _pickDate(context, _startDateTo ?? from);
-                  if (!mounted) return;
-                  setState(() {
-                    _startDateFrom = from;
-                    _startDateTo = to;
-                  });
-                  _loadOrders();
-                },
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.event, size: 16),
-                label: Text(
-                  '交期：${_dueDateFrom == null ? '不限' : _formatDate(_dueDateFrom)} ~ ${_dueDateTo == null ? '不限' : _formatDate(_dueDateTo)}',
-                ),
-                onPressed: () async {
-                  final from = await _pickDate(context, _dueDateFrom);
-                  if (from == null || !mounted) return;
-                  // ignore: use_build_context_synchronously
-                  final to = await _pickDate(context, _dueDateTo ?? from);
-                  if (!mounted) return;
-                  setState(() {
-                    _dueDateFrom = from;
-                    _dueDateTo = to;
-                  });
-                  _loadOrders();
-                },
-              ),
-              if (_startDateFrom != null ||
-                  _startDateTo != null ||
-                  _dueDateFrom != null ||
-                  _dueDateTo != null) ...[
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  icon: const Icon(Icons.clear, size: 16),
-                  label: const Text('清除日期'),
-                  onPressed: () {
-                    setState(() {
-                      _startDateFrom = null;
-                      _startDateTo = null;
-                      _dueDateFrom = null;
-                      _dueDateTo = null;
-                    });
-                    _loadOrders();
-                  },
-                ),
-              ],
             ],
           ),
           const SizedBox(height: 12),
