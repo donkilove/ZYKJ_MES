@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../models/app_session.dart';
 import '../models/craft_models.dart';
 import '../models/production_models.dart';
+import '../models/quality_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/production_service.dart';
+import '../services/quality_supplier_service.dart';
 
 class _OrderProcessStepDraft {
   _OrderProcessStepDraft({
@@ -38,6 +40,7 @@ class ProductionOrderFormPage extends StatefulWidget {
     this.initialTemplates = const [],
     this.service,
     this.craftService,
+    this.supplierService,
   });
 
   final AppSession session;
@@ -48,6 +51,7 @@ class ProductionOrderFormPage extends StatefulWidget {
   final List<CraftTemplateItem> initialTemplates;
   final ProductionService? service;
   final CraftService? craftService;
+  final QualitySupplierService? supplierService;
 
   @override
   State<ProductionOrderFormPage> createState() =>
@@ -57,6 +61,7 @@ class ProductionOrderFormPage extends StatefulWidget {
 class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
   late final ProductionService _service;
   late final CraftService _craftService;
+  late final QualitySupplierService _supplierService;
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _orderCodeController;
@@ -72,11 +77,13 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
   List<ProductionProductOption> _products = const [];
   List<ProductionProcessOption> _processes = const [];
   List<CraftTemplateItem> _templates = const [];
+  List<QualitySupplierItem> _suppliers = const [];
   final Map<int, CraftTemplateDetail> _templateDetailCache = {};
 
   DateTime? _startDate;
   DateTime? _dueDate;
   int? _selectedProductId;
+  int? _selectedSupplierId;
   int? _selectedTemplateId;
   bool _saveAsTemplate = false;
   bool _newTemplateSetDefault = false;
@@ -90,6 +97,8 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
     super.initState();
     _service = widget.service ?? ProductionService(widget.session);
     _craftService = widget.craftService ?? CraftService(widget.session);
+    _supplierService =
+        widget.supplierService ?? QualitySupplierService(widget.session);
 
     _products = List<ProductionProductOption>.from(widget.initialProducts);
     _processes = List<ProductionProcessOption>.from(widget.initialProcesses);
@@ -109,6 +118,7 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
     _startDate = widget.existing?.startDate;
     _dueDate = widget.existing?.dueDate;
     _selectedProductId = widget.existing?.productId;
+    _selectedSupplierId = widget.existing?.supplierId;
     _selectedTemplateId = widget.existing?.processTemplateId;
 
     _initializeForm();
@@ -206,6 +216,31 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
     return items;
   }
 
+  void _ensureCurrentSupplierOption({
+    required int? supplierId,
+    required String? supplierName,
+  }) {
+    if (supplierId == null) {
+      return;
+    }
+    if (_suppliers.any((item) => item.id == supplierId)) {
+      return;
+    }
+    _suppliers = [
+      ..._suppliers,
+      QualitySupplierItem(
+        id: supplierId,
+        name: supplierName?.trim().isNotEmpty == true
+            ? supplierName!.trim()
+            : '供应商#$supplierId',
+        remark: null,
+        isEnabled: false,
+        createdAt: DateTime(1970, 1, 1),
+        updatedAt: DateTime(1970, 1, 1),
+      ),
+    ];
+  }
+
   List<_OrderProcessStepDraft> _buildStepsFromProcessCodes(List<String> codes) {
     final steps = <_OrderProcessStepDraft>[];
     for (final code in codes) {
@@ -255,7 +290,8 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
   Future<void> _loadReferenceDataIfNeeded() async {
     if (_products.isNotEmpty &&
         _processes.isNotEmpty &&
-        _templates.isNotEmpty) {
+        _templates.isNotEmpty &&
+        _suppliers.isNotEmpty) {
       return;
     }
     final products = _products.isNotEmpty
@@ -271,9 +307,13 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
             pageSize: 500,
             enabled: null,
           )).items;
+    final suppliers = _suppliers.isNotEmpty
+        ? _suppliers
+        : (await _supplierService.listSuppliers(enabled: true)).items;
     _products = products;
     _processes = processes;
     _templates = templates;
+    _suppliers = suppliers;
   }
 
   Future<void> _initializeForm() async {
@@ -292,11 +332,15 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
         return;
       }
 
-      _selectedProductId ??= _products.first.id;
-
       if (_isEdit) {
         final detail = await _service.getOrderDetail(
           orderId: widget.existing!.id,
+        );
+        _selectedProductId = detail.order.productId;
+        _selectedSupplierId = detail.order.supplierId;
+        _ensureCurrentSupplierOption(
+          supplierId: detail.order.supplierId,
+          supplierName: detail.order.supplierName,
         );
         final sorted = detail.processes.toList()
           ..sort((a, b) => a.processOrder.compareTo(b.processOrder));
@@ -304,6 +348,16 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
         _routeSteps = _buildStepsFromProcessCodes(processCodes);
         _selectedTemplateId = detail.order.processTemplateId;
       } else {
+        if (_suppliers.isEmpty) {
+          if (mounted) {
+            setState(() {
+              _message = '请先配置启用中的供应商后再创建订单。';
+            });
+          }
+          return;
+        }
+        _selectedProductId ??= _products.first.id;
+        _selectedSupplierId ??= _suppliers.first.id;
         final templates = _templatesByProduct(_selectedProductId!);
         if (templates.isNotEmpty) {
           final defaultTemplate =
@@ -484,6 +538,10 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
       _showSnackBar('请选择产品。');
       return;
     }
+    if (_selectedSupplierId == null) {
+      _showSnackBar('请选择供应商。');
+      return;
+    }
     if (_routeSteps.isEmpty) {
       _showSnackBar('至少选择一道工序。');
       return;
@@ -522,6 +580,7 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
         await _service.updateOrder(
           orderId: widget.existing!.id,
           productId: _selectedProductId!,
+          supplierId: _selectedSupplierId!,
           quantity: quantity,
           processCodes: processCodes,
           templateId: _selectedTemplateId,
@@ -539,6 +598,7 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
         await _service.createOrder(
           orderCode: _orderCodeController.text.trim(),
           productId: _selectedProductId!,
+          supplierId: _selectedSupplierId!,
           quantity: quantity,
           processCodes: processCodes,
           templateId: _selectedTemplateId,
@@ -640,6 +700,13 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
         ? const <CraftTemplateItem>[]
         : _templatesByProduct(selectedProductId);
     final stageOptions = _stageOptions();
+    final supplierItems = _suppliers.toList()
+      ..sort((a, b) {
+        if (a.isEnabled != b.isEnabled) {
+          return a.isEnabled ? -1 : 1;
+        }
+        return a.name.compareTo(b.name);
+      });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -671,7 +738,7 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<int>(
-          key: ValueKey<int?>(_selectedProductId),
+          key: ValueKey<String>('product-${_selectedProductId ?? 'none'}'),
           initialValue: _selectedProductId,
           decoration: const InputDecoration(
             labelText: '产品',
@@ -695,8 +762,38 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
                 },
         ),
         const SizedBox(height: 12),
+        DropdownButtonFormField<int>(
+          key: ValueKey<String>('supplier-${_selectedSupplierId ?? 'none'}'),
+          initialValue: _selectedSupplierId,
+          decoration: const InputDecoration(
+            labelText: '供应商',
+            border: OutlineInputBorder(),
+          ),
+          items: supplierItems
+              .map(
+                (item) => DropdownMenuItem<int>(
+                  value: item.id,
+                  child: Text(item.isEnabled ? item.name : '${item.name}（已停用）'),
+                ),
+              )
+              .toList(),
+          validator: (value) {
+            if (value == null) {
+              return '供应商不能为空';
+            }
+            return null;
+          },
+          onChanged: _submitting
+              ? null
+              : (value) {
+                  setState(() {
+                    _selectedSupplierId = value;
+                  });
+                },
+        ),
+        const SizedBox(height: 12),
         DropdownButtonFormField<int?>(
-          key: ValueKey<int?>(_selectedTemplateId),
+          key: ValueKey<String>('template-${_selectedTemplateId ?? 'none'}'),
           initialValue: _selectedTemplateId,
           decoration: const InputDecoration(
             labelText: '工序模板',

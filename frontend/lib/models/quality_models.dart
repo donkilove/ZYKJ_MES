@@ -35,6 +35,72 @@ String verificationCodeSourceLabel(String source) {
   }
 }
 
+class QualitySupplierItem {
+  const QualitySupplierItem({
+    required this.id,
+    required this.name,
+    required this.remark,
+    required this.isEnabled,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final int id;
+  final String name;
+  final String? remark;
+  final bool isEnabled;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory QualitySupplierItem.fromJson(Map<String, dynamic> json) {
+    return QualitySupplierItem(
+      id: (json['id'] as int?) ?? 0,
+      name: (json['name'] as String?) ?? '',
+      remark: json['remark'] as String?,
+      isEnabled: (json['is_enabled'] as bool?) ?? true,
+      createdAt:
+          _parseDateTimeOrNull(json['created_at']) ?? DateTime(1970, 1, 1),
+      updatedAt:
+          _parseDateTimeOrNull(json['updated_at']) ?? DateTime(1970, 1, 1),
+    );
+  }
+}
+
+class QualitySupplierListResult {
+  const QualitySupplierListResult({required this.total, required this.items});
+
+  final int total;
+  final List<QualitySupplierItem> items;
+
+  factory QualitySupplierListResult.fromJson(Map<String, dynamic> json) {
+    return QualitySupplierListResult(
+      total: (json['total'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) =>
+                QualitySupplierItem.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(),
+    );
+  }
+}
+
+class QualitySupplierUpsertPayload {
+  const QualitySupplierUpsertPayload({
+    required this.name,
+    required this.remark,
+    required this.isEnabled,
+  });
+
+  final String name;
+  final String? remark;
+  final bool isEnabled;
+
+  Map<String, dynamic> toJson() {
+    return {'name': name, 'remark': remark, 'is_enabled': isEnabled};
+  }
+}
+
 class FirstArticleListItem {
   FirstArticleListItem({
     required this.id,

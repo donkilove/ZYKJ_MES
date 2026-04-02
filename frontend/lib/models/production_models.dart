@@ -93,6 +93,8 @@ class ProductionOrderItem {
     required this.orderCode,
     required this.productId,
     required this.productName,
+    required this.supplierId,
+    required this.supplierName,
     required this.productVersion,
     required this.quantity,
     required this.status,
@@ -116,6 +118,8 @@ class ProductionOrderItem {
   final String orderCode;
   final int productId;
   final String productName;
+  final int? supplierId;
+  final String? supplierName;
   final int? productVersion;
   final int quantity;
   final String status;
@@ -140,6 +144,8 @@ class ProductionOrderItem {
       orderCode: (json['order_code'] as String?) ?? '',
       productId: (json['product_id'] as int?) ?? 0,
       productName: (json['product_name'] as String?) ?? '',
+      supplierId: json['supplier_id'] as int?,
+      supplierName: json['supplier_name'] as String?,
       productVersion: json['product_version'] as int?,
       quantity: (json['quantity'] as int?) ?? 0,
       status: (json['status'] as String?) ?? 'pending',
@@ -1768,8 +1774,11 @@ class RepairDefectPhenomenonDetailItem {
       productionSubOrderId: json['production_sub_order_id'] as int?,
       productionRecordType: json['production_record_type'] as String?,
       productionRecordQuantity: json['production_record_quantity'] as int?,
-      productionRecordCreatedAt: _parseDateOrNull(json['production_record_created_at']),
-      productionRecordOperatorUserId: json['production_record_operator_user_id'] as int?,
+      productionRecordCreatedAt: _parseDateOrNull(
+        json['production_record_created_at'],
+      ),
+      productionRecordOperatorUserId:
+          json['production_record_operator_user_id'] as int?,
     );
   }
 }

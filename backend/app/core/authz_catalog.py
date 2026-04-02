@@ -85,6 +85,11 @@ PERM_PROD_REPAIR_ORDERS_DETAIL = "production.repair_orders.detail"
 PERM_QUALITY_SCRAP_STATISTICS_LIST = "quality.scrap_statistics.list"
 PERM_QUALITY_SCRAP_STATISTICS_DETAIL = "quality.scrap_statistics.detail"
 PERM_QUALITY_SCRAP_STATISTICS_EXPORT = "quality.scrap_statistics.export"
+PERM_QUALITY_SUPPLIERS_LIST = "quality.suppliers.list"
+PERM_QUALITY_SUPPLIERS_DETAIL = "quality.suppliers.detail"
+PERM_QUALITY_SUPPLIERS_CREATE = "quality.suppliers.create"
+PERM_QUALITY_SUPPLIERS_UPDATE = "quality.suppliers.update"
+PERM_QUALITY_SUPPLIERS_DELETE = "quality.suppliers.delete"
 PERM_QUALITY_REPAIR_ORDERS_LIST = "quality.repair_orders.list"
 PERM_QUALITY_REPAIR_ORDERS_DETAIL = "quality.repair_orders.detail"
 PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY = (
@@ -145,6 +150,12 @@ PAGE_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("quality_repair_orders", "维修订单（品质）", AUTHZ_MODULE_QUALITY, "quality"),
     ("quality_trend", "质量趋势", AUTHZ_MODULE_QUALITY, "quality"),
     ("quality_defect_analysis", "不良分析", AUTHZ_MODULE_QUALITY, "quality"),
+    (
+        "quality_supplier_management",
+        "供应商管理",
+        AUTHZ_MODULE_QUALITY,
+        "quality",
+    ),
     ("craft", "工艺模块", AUTHZ_MODULE_CRAFT, None),
     ("process_management", "工序管理", AUTHZ_MODULE_CRAFT, "craft"),
     ("production_process_config", "生产工序配置", AUTHZ_MODULE_CRAFT, "craft"),
@@ -716,6 +727,36 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         "导出不良分析",
         AUTHZ_MODULE_QUALITY,
         "quality_defect_analysis",
+    ),
+    (
+        PERM_QUALITY_SUPPLIERS_LIST,
+        "查看供应商",
+        AUTHZ_MODULE_QUALITY,
+        "quality",
+    ),
+    (
+        PERM_QUALITY_SUPPLIERS_DETAIL,
+        "查看供应商详情",
+        AUTHZ_MODULE_QUALITY,
+        "quality",
+    ),
+    (
+        PERM_QUALITY_SUPPLIERS_CREATE,
+        "创建供应商",
+        AUTHZ_MODULE_QUALITY,
+        "quality",
+    ),
+    (
+        PERM_QUALITY_SUPPLIERS_UPDATE,
+        "更新供应商",
+        AUTHZ_MODULE_QUALITY,
+        "quality",
+    ),
+    (
+        PERM_QUALITY_SUPPLIERS_DELETE,
+        "删除供应商",
+        AUTHZ_MODULE_QUALITY,
+        "quality",
     ),
     (
         PERM_QUALITY_SCRAP_STATISTICS_LIST,

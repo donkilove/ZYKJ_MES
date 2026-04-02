@@ -6,6 +6,7 @@ import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/production_service.dart';
+import '../services/quality_supplier_service.dart';
 import '../widgets/adaptive_table_container.dart';
 import '../widgets/locked_form_dialog.dart';
 import 'production_order_detail_page.dart';
@@ -24,6 +25,7 @@ class ProductionOrderManagementPage extends StatefulWidget {
     required this.canUpdatePipelineMode,
     this.service,
     this.craftService,
+    this.supplierService,
   });
 
   final AppSession session;
@@ -35,6 +37,7 @@ class ProductionOrderManagementPage extends StatefulWidget {
   final bool canUpdatePipelineMode;
   final ProductionService? service;
   final CraftService? craftService;
+  final QualitySupplierService? supplierService;
 
   @override
   State<ProductionOrderManagementPage> createState() =>
@@ -81,16 +84,6 @@ class _ProductionOrderManagementPageState
       return error.message;
     }
     return error.toString();
-  }
-
-  String _formatDateTime(DateTime value) {
-    final local = value.toLocal();
-    final mm = local.month.toString().padLeft(2, '0');
-    final dd = local.day.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final min = local.minute.toString().padLeft(2, '0');
-    final sec = local.second.toString().padLeft(2, '0');
-    return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
   String _formatDate(DateTime? value) {
@@ -199,6 +192,7 @@ class _ProductionOrderManagementPageState
           initialProducts: _products,
           initialProcesses: _processes,
           initialTemplates: _templates,
+          supplierService: widget.supplierService,
         ),
       ),
     );
@@ -668,48 +662,43 @@ class _ProductionOrderManagementPageState
                     child: AdaptiveTableContainer(
                       child: DataTable(
                         columns: const [
-                          DataColumn(label: Text('订单号')),
-                          DataColumn(label: Text('产品')),
-                          DataColumn(label: Text('产品版本')),
+                          DataColumn(label: Text('订单编号')),
+                          DataColumn(label: Text('产品名称')),
+                          DataColumn(label: Text('供应商')),
                           DataColumn(label: Text('数量')),
+                          DataColumn(label: Text('交货日期')),
                           DataColumn(label: Text('状态')),
                           DataColumn(label: Text('当前工序')),
-                          DataColumn(label: Text('模板名称/版本')),
-                          DataColumn(label: Text('并行模式')),
-                          DataColumn(label: Text('创建人')),
-                          DataColumn(label: Text('开始日期')),
-                          DataColumn(label: Text('交期')),
-                          DataColumn(label: Text('更新时间')),
+                          DataColumn(label: Text('备注')),
                           DataColumn(label: Text('操作')),
                         ],
                         rows: _items.map((item) {
-                          final templateLabel = item.processTemplateName != null
-                              ? '${item.processTemplateName} v${item.processTemplateVersion ?? '-'}'
-                              : '-';
+                          final supplierName = item.supplierName?.trim();
+                          final remark = item.remark?.trim();
                           return DataRow(
                             cells: [
                               DataCell(Text(item.orderCode)),
                               DataCell(Text(item.productName)),
                               DataCell(
                                 Text(
-                                  item.productVersion != null
-                                      ? 'v${item.productVersion}'
-                                      : '-',
+                                  supplierName == null || supplierName.isEmpty
+                                      ? '-'
+                                      : supplierName,
                                 ),
                               ),
                               DataCell(Text('${item.quantity}')),
+                              DataCell(Text(_formatDate(item.dueDate))),
                               DataCell(
                                 Text(productionOrderStatusLabel(item.status)),
                               ),
                               DataCell(Text(item.currentProcessName ?? '-')),
-                              DataCell(Text(templateLabel)),
                               DataCell(
-                                Text(item.pipelineEnabled ? '开启' : '关闭'),
+                                Text(
+                                  remark == null || remark.isEmpty
+                                      ? '-'
+                                      : remark,
+                                ),
                               ),
-                              DataCell(Text(item.createdByUsername ?? '-')),
-                              DataCell(Text(_formatDate(item.startDate))),
-                              DataCell(Text(_formatDate(item.dueDate))),
-                              DataCell(Text(_formatDateTime(item.updatedAt))),
                               DataCell(
                                 PopupMenuButton<String>(
                                   tooltip: '操作',

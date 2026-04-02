@@ -43,6 +43,7 @@ from app.models.craft_system_master_template_revision_step import CraftSystemMas
 from app.models.registration_request import RegistrationRequest
 from app.models.role import Role
 from app.models.role_permission_grant import RolePermissionGrant
+from app.models.supplier import Supplier
 from app.models.user import User
 from app.models.user_session import UserSession
 
@@ -66,6 +67,7 @@ __all__ = [
     "RegistrationRequest",
     "PermissionCatalog",
     "RolePermissionGrant",
+    "Supplier",
     "Equipment",
     "EquipmentRule",
     "EquipmentRuntimeParameter",

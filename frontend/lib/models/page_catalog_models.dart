@@ -548,6 +548,20 @@ const fallbackPageCatalog = <PageCatalogItem>[
   ),
 
   PageCatalogItem(
+    code: 'quality_supplier_management',
+
+    name: '供应商管理',
+
+    pageType: 'tab',
+
+    parentCode: 'quality',
+
+    alwaysVisible: true,
+
+    sortOrder: 67,
+  ),
+
+  PageCatalogItem(
     code: 'craft',
 
     name: '工艺',

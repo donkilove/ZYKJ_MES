@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../services/quality_service.dart';
+import '../services/quality_supplier_service.dart';
 import 'daily_first_article_page.dart';
 import 'quality_data_page.dart';
 import 'quality_defect_analysis_page.dart';
 import 'quality_repair_orders_page.dart';
+import 'quality_supplier_management_page.dart';
 import 'quality_scrap_statistics_page.dart';
 import 'quality_trend_page.dart';
 
@@ -16,6 +18,7 @@ const String qualityScrapStatisticsTabCode = 'quality_scrap_statistics';
 const String qualityRepairOrdersTabCode = 'quality_repair_orders';
 const String qualityTrendTabCode = 'quality_trend';
 const String qualityDefectAnalysisTabCode = 'quality_defect_analysis';
+const String qualitySupplierManagementTabCode = 'quality_supplier_management';
 
 const List<String> _defaultTabOrder = [
   firstArticleManagementTabCode,
@@ -24,6 +27,7 @@ const List<String> _defaultTabOrder = [
   qualityRepairOrdersTabCode,
   qualityTrendTabCode,
   qualityDefectAnalysisTabCode,
+  qualitySupplierManagementTabCode,
 ];
 
 class QualityPage extends StatefulWidget {
@@ -37,6 +41,7 @@ class QualityPage extends StatefulWidget {
     this.routePayloadJson,
     this.firstArticleService,
     this.repairScrapService,
+    this.supplierService,
   });
 
   final AppSession session;
@@ -47,6 +52,7 @@ class QualityPage extends StatefulWidget {
   final String? routePayloadJson;
   final QualityService? firstArticleService;
   final QualityService? repairScrapService;
+  final QualitySupplierService? supplierService;
 
   @override
   State<QualityPage> createState() => _QualityPageState();
@@ -141,6 +147,8 @@ class _QualityPageState extends State<QualityPage>
         return '质量趋势';
       case qualityDefectAnalysisTabCode:
         return '不良分析';
+      case qualitySupplierManagementTabCode:
+        return '供应商管理';
       default:
         return code;
     }
@@ -181,7 +189,8 @@ class _QualityPageState extends State<QualityPage>
             'quality.scrap_statistics.export',
           ),
           service: widget.repairScrapService,
-          jumpPayloadJson: widget.preferredTabCode == qualityScrapStatisticsTabCode
+          jumpPayloadJson:
+              widget.preferredTabCode == qualityScrapStatisticsTabCode
               ? widget.routePayloadJson
               : null,
         );
@@ -213,6 +222,12 @@ class _QualityPageState extends State<QualityPage>
           canExport: widget.capabilityCodes.contains(
             'quality.defect_analysis.export',
           ),
+        );
+      case qualitySupplierManagementTabCode:
+        return QualitySupplierManagementPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          service: widget.supplierService,
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));

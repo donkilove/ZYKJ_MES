@@ -3,6 +3,34 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 
+class SupplierBase(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    remark: str | None = Field(default=None, max_length=1024)
+    is_enabled: bool = True
+
+
+class SupplierCreate(SupplierBase):
+    pass
+
+
+class SupplierUpdate(SupplierBase):
+    pass
+
+
+class SupplierItem(BaseModel):
+    id: int
+    name: str
+    remark: str | None = None
+    is_enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupplierListResult(BaseModel):
+    total: int
+    items: list[SupplierItem]
+
+
 class FirstArticleListItem(BaseModel):
     id: int
     order_id: int

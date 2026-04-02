@@ -34,6 +34,7 @@ from app.models.production_sub_order import ProductionSubOrder  # noqa: E402
 from app.models.product import Product  # noqa: E402
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon  # noqa: E402
 from app.models.repair_order import RepairOrder  # noqa: E402
+from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
 
 
@@ -47,6 +48,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.stage_ids: list[int] = []
         self.process_ids: list[int] = []
         self.product_ids: list[int] = []
+        self.supplier_ids: list[int] = []
         self.order_ids: list[int] = []
         self.repair_order_ids: list[int] = []
         self.scrap_statistics_ids: list[int] = []
@@ -66,6 +68,11 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                     db.commit()
             for order_id in reversed(self.order_ids):
                 row = db.get(ProductionOrder, order_id)
+                if row is not None:
+                    db.delete(row)
+                    db.commit()
+            for supplier_id in reversed(self.supplier_ids):
+                row = db.get(Supplier, supplier_id)
                 if row is not None:
                     db.delete(row)
                     db.commit()
@@ -182,6 +189,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
 
     def _create_order(self, *, product_id: int, steps: list[dict]) -> dict:
         order_code = f"PO-IT-{int(time.time() * 1000)}"
+        supplier = self._create_supplier(f"订单供应商{order_code[-6:]}")
         with patch("app.services.production_order_service.create_message_for_users"):
             response = self.client.post(
                 "/api/v1/production/orders",
@@ -189,6 +197,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 json={
                     "order_code": order_code,
                     "product_id": product_id,
+                    "supplier_id": supplier["id"],
                     "quantity": 10,
                     "process_steps": steps,
                 },
@@ -196,6 +205,17 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.text)
         row = response.json()["data"]
         self.order_ids.append(int(row["id"]))
+        return row
+
+    def _create_supplier(self, name: str, *, is_enabled: bool = True) -> dict:
+        response = self.client.post(
+            "/api/v1/quality/suppliers",
+            headers=self._headers(),
+            json={"name": name, "remark": "生产集成测试", "is_enabled": is_enabled},
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        row = response.json()["data"]
+        self.supplier_ids.append(int(row["id"]))
         return row
 
     def _create_scrap_statistics(
@@ -292,6 +312,44 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 409, response.text)
         self.assertIn("Max producible quantity is 6", response.text)
 
+    def test_create_order_requires_valid_supplier(self) -> None:
+        stage = self._create_stage("SUP0")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="SUP0"
+        )
+        product = self._create_product("供应商校验")
+        self._activate_product(product)
+
+        missing_response = self.client.post(
+            "/api/v1/production/orders",
+            headers=self._headers(),
+            json={
+                "order_code": f"PO-MISS-{int(time.time() * 1000)}",
+                "product_id": product["id"],
+                "quantity": 10,
+                "process_steps": [
+                    {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+                ],
+            },
+        )
+        self.assertEqual(missing_response.status_code, 422, missing_response.text)
+
+        invalid_response = self.client.post(
+            "/api/v1/production/orders",
+            headers=self._headers(),
+            json={
+                "order_code": f"PO-BAD-{int(time.time() * 1000)}",
+                "product_id": product["id"],
+                "supplier_id": 999999,
+                "quantity": 10,
+                "process_steps": [
+                    {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+                ],
+            },
+        )
+        self.assertEqual(invalid_response.status_code, 400, invalid_response.text)
+        self.assertIn("供应商不存在或已停用", invalid_response.text)
+
     def test_delete_order_keeps_event_log_snapshot(self) -> None:
         stage = self._create_stage("B")
         process = self._create_process(
@@ -340,6 +398,183 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(trace_items[0]["event_type"], "order_deleted")
         self.assertEqual(trace_items[0]["operator_username"], "admin")
         self.order_ids.remove(int(order["id"]))
+
+    def test_delete_supplier_fails_when_referenced_by_order(self) -> None:
+        stage = self._create_stage("SUP1")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="SUP1"
+        )
+        product = self._create_product("删除供应商阻断")
+        self._activate_product(product)
+        supplier = self._create_supplier(f"引用供应商{int(time.time() * 1000)}")
+
+        with patch("app.services.production_order_service.create_message_for_users"):
+            create_response = self.client.post(
+                "/api/v1/production/orders",
+                headers=self._headers(),
+                json={
+                    "order_code": f"PO-SUP-{int(time.time() * 1000)}",
+                    "product_id": product["id"],
+                    "supplier_id": supplier["id"],
+                    "quantity": 10,
+                    "process_steps": [
+                        {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+                    ],
+                },
+            )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        self.order_ids.append(int(create_response.json()["data"]["id"]))
+
+        delete_response = self.client.delete(
+            f"/api/v1/quality/suppliers/{supplier['id']}",
+            headers=self._headers(),
+        )
+        self.assertEqual(delete_response.status_code, 409, delete_response.text)
+        self.assertIn("供应商已被生产订单引用，无法删除", delete_response.text)
+
+    def test_order_reads_supplier_snapshot_after_supplier_rename(self) -> None:
+        stage = self._create_stage("SUP2")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="SUP2"
+        )
+        product = self._create_product("供应商快照")
+        self._activate_product(product)
+        supplier = self._create_supplier(f"快照供应商{int(time.time() * 1000)}")
+
+        with patch("app.services.production_order_service.create_message_for_users"):
+            create_response = self.client.post(
+                "/api/v1/production/orders",
+                headers=self._headers(),
+                json={
+                    "order_code": f"PO-SNAP-{int(time.time() * 1000)}",
+                    "product_id": product["id"],
+                    "supplier_id": supplier["id"],
+                    "quantity": 10,
+                    "process_steps": [
+                        {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+                    ],
+                },
+            )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        order = create_response.json()["data"]
+        self.order_ids.append(int(order["id"]))
+        original_name = supplier["name"]
+
+        rename_response = self.client.put(
+            f"/api/v1/quality/suppliers/{supplier['id']}",
+            headers=self._headers(),
+            json={"name": f"{original_name}-已改名", "remark": "生产集成测试", "is_enabled": True},
+        )
+        self.assertEqual(rename_response.status_code, 200, rename_response.text)
+
+        list_response = self.client.get(
+            "/api/v1/production/orders",
+            headers=self._headers(),
+            params={"keyword": order["order_code"]},
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        list_item = list_response.json()["data"]["items"][0]
+        self.assertEqual(list_item["supplier_id"], supplier["id"])
+        self.assertEqual(list_item["supplier_name"], original_name)
+
+        detail_response = self.client.get(
+            f"/api/v1/production/orders/{order['id']}",
+            headers=self._headers(),
+        )
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        detail_order = detail_response.json()["data"]["order"]
+        self.assertEqual(detail_order["supplier_id"], supplier["id"])
+        self.assertEqual(detail_order["supplier_name"], original_name)
+
+    def test_update_pending_order_allows_current_disabled_supplier_only(self) -> None:
+        stage = self._create_stage("SUP3")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="SUP3"
+        )
+        product = self._create_product("停用供应商保留")
+        self._activate_product(product)
+        current_supplier = self._create_supplier(
+            f"当前供应商{int(time.time() * 1000)}"
+        )
+        other_disabled_supplier = self._create_supplier(
+            f"其他停用供应商{int(time.time() * 1000)}",
+            is_enabled=False,
+        )
+
+        with patch("app.services.production_order_service.create_message_for_users"):
+            create_response = self.client.post(
+                "/api/v1/production/orders",
+                headers=self._headers(),
+                json={
+                    "order_code": f"PO-UPD-{int(time.time() * 1000)}",
+                    "product_id": product["id"],
+                    "supplier_id": current_supplier["id"],
+                    "quantity": 10,
+                    "process_steps": [
+                        {
+                            "step_order": 1,
+                            "stage_id": stage["id"],
+                            "process_id": process["id"],
+                        }
+                    ],
+                },
+            )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        order = create_response.json()["data"]
+        self.order_ids.append(int(order["id"]))
+
+        disable_response = self.client.put(
+            f"/api/v1/quality/suppliers/{current_supplier['id']}",
+            headers=self._headers(),
+            json={
+                "name": current_supplier["name"],
+                "remark": "生产集成测试",
+                "is_enabled": False,
+            },
+        )
+        self.assertEqual(disable_response.status_code, 200, disable_response.text)
+
+        with patch("app.services.production_order_service.create_message_for_users"):
+            keep_response = self.client.put(
+                f"/api/v1/production/orders/{order['id']}",
+                headers=self._headers(),
+                json={
+                    "product_id": product["id"],
+                    "supplier_id": current_supplier["id"],
+                    "quantity": 12,
+                    "process_steps": [
+                        {
+                            "step_order": 1,
+                            "stage_id": stage["id"],
+                            "process_id": process["id"],
+                        }
+                    ],
+                },
+            )
+        self.assertEqual(keep_response.status_code, 200, keep_response.text)
+        keep_order = keep_response.json()["data"]
+        self.assertEqual(keep_order["supplier_id"], current_supplier["id"])
+        self.assertEqual(keep_order["supplier_name"], current_supplier["name"])
+        self.assertEqual(keep_order["quantity"], 12)
+
+        switch_response = self.client.put(
+            f"/api/v1/production/orders/{order['id']}",
+            headers=self._headers(),
+            json={
+                "product_id": product["id"],
+                "supplier_id": other_disabled_supplier["id"],
+                "quantity": 12,
+                "process_steps": [
+                    {
+                        "step_order": 1,
+                        "stage_id": stage["id"],
+                        "process_id": process["id"],
+                    }
+                ],
+            },
+        )
+        self.assertEqual(switch_response.status_code, 400, switch_response.text)
+        self.assertIn("供应商不存在或已停用", switch_response.text)
 
     def test_complete_repair_order_accepts_multiple_return_allocations(self) -> None:
         stage_a = self._create_stage("C1")
@@ -956,6 +1191,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                     operator_user_id=admin.id,
                     production_quantity=3,
                     record_type="production",
+                    created_at=datetime(2026, 3, 5, 9, 0, tzinfo=UTC),
                 )
             )
             db.commit()

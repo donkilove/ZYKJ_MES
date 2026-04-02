@@ -14,6 +14,8 @@ Map<String, dynamic> _orderJson() {
     'order_code': 'PO-1',
     'product_id': 10,
     'product_name': 'Product-A',
+    'supplier_id': 5,
+    'supplier_name': 'Supplier-A',
     'quantity': 100,
     'status': 'pending',
     'current_process_code': '01-01',
@@ -182,6 +184,7 @@ void main() {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['order_code'], 'PO-1');
             expect(body['product_id'], 10);
+            expect(body['supplier_id'], 5);
             expect(body['start_date'], '2026-03-01');
             expect(body['due_date'], '2026-03-20');
             expect(body['save_as_template'], true);
@@ -190,6 +193,7 @@ void main() {
           },
           'PUT /production/orders/1': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+            expect(body['supplier_id'], 5);
             expect(body['quantity'], 120);
             expect(body['start_date'], '2026-03-02');
             expect(body['due_date'], '2026-03-22');
@@ -822,6 +826,7 @@ void main() {
         final createdOrder = await service.createOrder(
           orderCode: 'PO-1',
           productId: 10,
+          supplierId: 5,
           quantity: 100,
           processCodes: const ['01-01'],
           templateId: 3,
@@ -836,6 +841,7 @@ void main() {
         final updatedOrder = await service.updateOrder(
           orderId: 1,
           productId: 10,
+          supplierId: 5,
           quantity: 120,
           processCodes: const ['01-01'],
           templateId: 3,
@@ -996,6 +1002,7 @@ void main() {
         );
 
         expect(orders.items.single.orderCode, 'PO-1');
+        expect(orders.items.single.supplierName, 'Supplier-A');
         expect(createdOrder.quantity, 100);
         expect(updatedOrder.quantity, 100);
         expect(complete.status, 'completed');
@@ -1080,6 +1087,7 @@ void main() {
         () => service.createOrder(
           orderCode: 'A',
           productId: 1,
+          supplierId: 1,
           quantity: 1,
           processCodes: const ['01-01'],
         ),

@@ -44,6 +44,8 @@ class _FakeProductionOrderManagementService extends ProductionService {
           orderCode: 'PO-1',
           productId: 1,
           productName: '产品A',
+          supplierId: null,
+          supplierName: null,
           productVersion: null,
           quantity: 10,
           status: 'pending',
@@ -142,6 +144,17 @@ void main() {
       expect(find.text('总数：1'), findsOneWidget);
       expect(find.widgetWithText(TextField, '搜索订单号/产品'), findsOneWidget);
       expect(find.widgetWithText(TextField, '产品名称'), findsNothing);
+      expect(find.text('订单编号'), findsOneWidget);
+      expect(find.text('产品名称'), findsOneWidget);
+      expect(find.text('供应商'), findsOneWidget);
+      expect(find.text('交货日期'), findsOneWidget);
+      expect(find.text('备注'), findsOneWidget);
+      expect(find.text('产品版本'), findsNothing);
+      expect(find.text('模板名称/版本'), findsNothing);
+      expect(find.text('创建人'), findsNothing);
+      expect(find.text('开始日期'), findsNothing);
+      expect(find.text('更新时间'), findsNothing);
+      expect(find.text('-'), findsWidgets);
 
       await tester.enterText(find.widgetWithText(TextField, '搜索订单号/产品'), '产品A');
       await tester.tap(find.widgetWithText(FilledButton, '查询'));

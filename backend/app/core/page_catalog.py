@@ -47,6 +47,7 @@ PAGE_QUALITY_SCRAP_STATISTICS = "quality_scrap_statistics"
 PAGE_QUALITY_REPAIR_ORDERS = "quality_repair_orders"
 PAGE_QUALITY_TREND = "quality_trend"
 PAGE_QUALITY_DEFECT_ANALYSIS = "quality_defect_analysis"
+PAGE_QUALITY_SUPPLIER_MANAGEMENT = "quality_supplier_management"
 PAGE_CRAFT = "craft"
 PAGE_PROCESS_MANAGEMENT = "process_management"
 PAGE_PRODUCTION_PROCESS_CONFIG = "production_process_config"
@@ -347,6 +348,14 @@ PAGE_CATALOG = [
         "sort_order": 66,
     },
     {
+        "code": PAGE_QUALITY_SUPPLIER_MANAGEMENT,
+        "name": "供应商管理",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_QUALITY,
+        "always_visible": True,
+        "sort_order": 67,
+    },
+    {
         "code": PAGE_CRAFT,
         "name": "工艺",
         "page_type": PAGE_TYPE_SIDEBAR,
@@ -452,6 +461,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY_REPAIR_ORDERS,
         PAGE_QUALITY_TREND,
         PAGE_QUALITY_DEFECT_ANALYSIS,
+        PAGE_QUALITY_SUPPLIER_MANAGEMENT,
         PAGE_CRAFT,
         PAGE_PROCESS_MANAGEMENT,
         PAGE_PRODUCTION_PROCESS_CONFIG,
@@ -491,6 +501,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY_REPAIR_ORDERS,
         PAGE_QUALITY_TREND,
         PAGE_QUALITY_DEFECT_ANALYSIS,
+        PAGE_QUALITY_SUPPLIER_MANAGEMENT,
         PAGE_CRAFT,
         PAGE_PROCESS_MANAGEMENT,
         PAGE_PRODUCTION_PROCESS_CONFIG,
@@ -518,6 +529,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY_REPAIR_ORDERS,
         PAGE_QUALITY_TREND,
         PAGE_QUALITY_DEFECT_ANALYSIS,
+        PAGE_QUALITY_SUPPLIER_MANAGEMENT,
         PAGE_MESSAGE,
         PAGE_MESSAGE_CENTER,
     },

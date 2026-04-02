@@ -181,6 +181,7 @@ class ProductionService implements RepairScrapService {
   Future<ProductionOrderItem> createOrder({
     required String orderCode,
     required int productId,
+    required int supplierId,
     required int quantity,
     required List<String> processCodes,
     int? templateId,
@@ -199,6 +200,7 @@ class ProductionService implements RepairScrapService {
       body: jsonEncode({
         'order_code': orderCode,
         'product_id': productId,
+        'supplier_id': supplierId,
         'quantity': quantity,
         'process_codes': processCodes,
         'template_id': templateId,
@@ -225,6 +227,7 @@ class ProductionService implements RepairScrapService {
   Future<ProductionOrderItem> updateOrder({
     required int orderId,
     required int productId,
+    required int supplierId,
     required int quantity,
     required List<String> processCodes,
     int? templateId,
@@ -242,6 +245,7 @@ class ProductionService implements RepairScrapService {
       headers: _authHeaders,
       body: jsonEncode({
         'product_id': productId,
+        'supplier_id': supplierId,
         'quantity': quantity,
         'process_codes': processCodes,
         'template_id': templateId,

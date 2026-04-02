@@ -12,6 +12,12 @@ class ProductionOrder(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     order_code: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     product_id: Mapped[int] = mapped_column(ForeignKey("mes_product.id", ondelete="RESTRICT"), nullable=False)
+    supplier_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_supplier.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    supplier_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     product_version: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
@@ -45,6 +51,7 @@ class ProductionOrder(Base, TimestampMixin):
     )
 
     product = relationship("Product")
+    supplier = relationship("Supplier", back_populates="orders")
     created_by = relationship("User")
     process_template = relationship("ProductProcessTemplate")
     processes = relationship(

@@ -33,6 +33,7 @@ from app.models.process_stage import ProcessStage
 from app.models.registration_request import RegistrationRequest
 from app.models.role import Role
 from app.models.role_permission_grant import RolePermissionGrant
+from app.models.supplier import Supplier
 from app.models.user import User
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.product_process_template_step import ProductProcessTemplateStep
@@ -59,6 +60,7 @@ __all__ = [
     "RegistrationRequest",
     "PermissionCatalog",
     "RolePermissionGrant",
+    "Supplier",
     "Equipment",
     "MaintenanceItem",
     "MaintenancePlan",

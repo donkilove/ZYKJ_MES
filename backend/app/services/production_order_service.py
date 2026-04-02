@@ -40,6 +40,7 @@ from app.models.production_assist_authorization import ProductionAssistAuthoriza
 from app.models.process_stage import ProcessStage
 from app.models.product import Product
 from app.models.role import Role
+from app.models.supplier import Supplier
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.product_process_template_step import ProductProcessTemplateStep
 from app.models.production_record import ProductionRecord
@@ -49,6 +50,10 @@ from app.models.production_sub_order import ProductionSubOrder
 from app.models.order_event_log import OrderEventLog
 from app.models.user import User
 from app.services.message_service import create_message_for_users
+from app.services.quality_supplier_service import (
+    get_enabled_supplier_for_order,
+    get_supplier_by_id,
+)
 from app.services.assist_authorization_service import (
     ASSIST_STATUS_APPROVED,
     ASSIST_STATUS_CONSUMED,
@@ -310,6 +315,25 @@ def _resolve_template(
     if template.lifecycle_status != "published":
         raise ValueError("Template is not published")
     return template
+
+
+def _set_order_supplier_snapshot(*, order: ProductionOrder, supplier: Supplier) -> None:
+    order.supplier_id = supplier.id
+    order.supplier_name = supplier.name
+
+
+def _resolve_supplier_for_pending_order_update(
+    db: Session,
+    *,
+    order: ProductionOrder,
+    supplier_id: int,
+) -> Supplier:
+    if order.supplier_id == supplier_id:
+        supplier = get_supplier_by_id(db, supplier_id)
+        if supplier is None:
+            raise ValueError("供应商不存在或已停用")
+        return supplier
+    return get_enabled_supplier_for_order(db, supplier_id=supplier_id)
 
 
 def _resolve_steps_from_payload(
@@ -1304,6 +1328,7 @@ def create_order(
     *,
     order_code: str,
     product_id: int,
+    supplier_id: int,
     quantity: int,
     start_date: date | None,
     due_date: date | None,
@@ -1330,6 +1355,7 @@ def create_order(
         raise ValueError("Product not found")
     if product.lifecycle_status != PRODUCT_LIFECYCLE_ACTIVE:
         raise ValueError("Product is not active")
+    supplier = get_enabled_supplier_for_order(db, supplier_id=supplier_id)
 
     route_steps, selected_template = _resolve_route_steps(
         db,
@@ -1361,6 +1387,8 @@ def create_order(
     order = ProductionOrder(
         order_code=normalized_order_code,
         product_id=product_id,
+        supplier_id=supplier.id,
+        supplier_name=supplier.name,
         quantity=quantity,
         status=ORDER_STATUS_PENDING,
         current_process_code=resolved_process_codes[0],
@@ -1372,6 +1400,7 @@ def create_order(
         created_by_user_id=operator.id,
     )
     _set_order_product_snapshot(order=order, product=product)
+    _set_order_supplier_snapshot(order=order, supplier=supplier)
     _set_order_template_snapshot(order=order, template=final_template)
     db.add(order)
     db.flush()
@@ -1397,6 +1426,8 @@ def create_order(
         operator_user_id=operator.id,
         payload={
             "order_code": order.order_code,
+            "supplier_id": order.supplier_id,
+            "supplier_name": order.supplier_name,
             "quantity": order.quantity,
             "process_codes": resolved_process_codes,
             "process_template_id": order.process_template_id,
@@ -1420,6 +1451,7 @@ def update_order(
     *,
     order: ProductionOrder,
     product_id: int,
+    supplier_id: int,
     quantity: int,
     start_date: date | None,
     due_date: date | None,
@@ -1443,6 +1475,11 @@ def update_order(
         raise ValueError("Product not found")
     if product.lifecycle_status != PRODUCT_LIFECYCLE_ACTIVE:
         raise ValueError("Product is not active")
+    supplier = _resolve_supplier_for_pending_order_update(
+        db,
+        order=order,
+        supplier_id=supplier_id,
+    )
 
     route_steps, selected_template = _resolve_route_steps(
         db,
@@ -1481,6 +1518,8 @@ def update_order(
     db.flush()
 
     order.product_id = product_id
+    order.supplier_id = supplier.id
+    order.supplier_name = supplier.name
     order.quantity = quantity
     order.start_date = start_date
     order.due_date = due_date
@@ -1490,6 +1529,7 @@ def update_order(
     order.pipeline_enabled = False
     order.pipeline_process_codes = ""
     _set_order_product_snapshot(order=order, product=product)
+    _set_order_supplier_snapshot(order=order, supplier=supplier)
     _set_order_template_snapshot(order=order, template=final_template)
 
     process_rows = _build_order_process_rows(
@@ -1513,6 +1553,8 @@ def update_order(
         operator_user_id=operator.id,
         payload={
             "quantity": order.quantity,
+            "supplier_id": order.supplier_id,
+            "supplier_name": order.supplier_name,
             "process_codes": resolved_process_codes,
             "process_template_id": order.process_template_id,
         },

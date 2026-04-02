@@ -16,6 +16,7 @@ class OrderProcessStepPayload(BaseModel):
 class OrderCreate(BaseModel):
     order_code: str = Field(min_length=2, max_length=64)
     product_id: int = Field(gt=0)
+    supplier_id: int = Field(gt=0)
     quantity: int = Field(gt=0)
     start_date: date | None = None
     due_date: date | None = None
@@ -51,6 +52,7 @@ class OrderCreate(BaseModel):
 
 class OrderUpdate(BaseModel):
     product_id: int = Field(gt=0)
+    supplier_id: int = Field(gt=0)
     quantity: int = Field(gt=0)
     start_date: date | None = None
     due_date: date | None = None
@@ -152,6 +154,8 @@ class OrderItem(BaseModel):
     order_code: str
     product_id: int
     product_name: str
+    supplier_id: int | None = None
+    supplier_name: str | None = None
     product_version: int | None = None
     quantity: int
     status: str

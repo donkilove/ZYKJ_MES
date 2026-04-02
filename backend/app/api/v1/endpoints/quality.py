@@ -44,6 +44,10 @@ from app.schemas.production import (
 from app.services.audit_service import write_audit_log
 from app.services.message_service import create_message_for_users
 from app.schemas.quality import (
+    SupplierCreate,
+    SupplierItem,
+    SupplierListResult,
+    SupplierUpdate,
     DefectAnalysisExportResult,
     DefectAnalysisResult,
     FirstArticleDetail,
@@ -89,6 +93,13 @@ from app.services.production_repair_service import (
     list_repair_orders,
     list_scrap_statistics,
 )
+from app.services.quality_supplier_service import (
+    create_supplier,
+    delete_supplier,
+    get_supplier_by_id,
+    list_suppliers,
+    update_supplier,
+)
 from app.models.order_event_log import OrderEventLog
 from app.models.production_record import ProductionRecord
 from app.models.production_scrap_statistics import ProductionScrapStatistics
@@ -96,6 +107,19 @@ from app.models.repair_order import RepairOrder
 
 
 router = APIRouter()
+
+PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW = "page.quality_supplier_management.view"
+
+
+def _to_supplier_item(row) -> SupplierItem:
+    return SupplierItem(
+        id=row.id,
+        name=row.name,
+        remark=row.remark,
+        is_enabled=row.is_enabled,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 
 
 def _to_quality_repair_order_item(row: RepairOrder) -> RepairOrderItem:
@@ -663,6 +687,142 @@ def get_quality_scrap_statistics_api(
             items=[_to_quality_scrap_statistics_item(row) for row in rows],
         )
     )
+
+
+@router.get("/suppliers", response_model=ApiResponse[SupplierListResult])
+def list_suppliers_api(
+    keyword: str | None = Query(default=None),
+    enabled: bool | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)),
+) -> ApiResponse[SupplierListResult]:
+    total, rows = list_suppliers(db, keyword=keyword, enabled=enabled)
+    return success_response(
+        SupplierListResult(total=total, items=[_to_supplier_item(row) for row in rows])
+    )
+
+
+@router.get("/suppliers/{supplier_id}", response_model=ApiResponse[SupplierItem])
+def get_supplier_detail_api(
+    supplier_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)),
+) -> ApiResponse[SupplierItem]:
+    row = get_supplier_by_id(db, supplier_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="供应商不存在")
+    return success_response(_to_supplier_item(row))
+
+
+@router.post("/suppliers", response_model=ApiResponse[SupplierItem], status_code=status.HTTP_201_CREATED)
+def create_supplier_api(
+    payload: SupplierCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_permission(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)
+    ),
+) -> ApiResponse[SupplierItem]:
+    try:
+        row = create_supplier(
+            db,
+            name=payload.name,
+            remark=payload.remark,
+            is_enabled=payload.is_enabled,
+        )
+        write_audit_log(
+            db,
+            action_code="quality.suppliers.create",
+            action_name="创建供应商",
+            target_type="supplier",
+            target_id=str(row.id),
+            target_name=row.name,
+            operator=current_user,
+            after_data={"name": row.name, "remark": row.remark, "is_enabled": row.is_enabled},
+        )
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return success_response(_to_supplier_item(row))
+
+
+@router.put("/suppliers/{supplier_id}", response_model=ApiResponse[SupplierItem])
+def update_supplier_api(
+    supplier_id: int,
+    payload: SupplierUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_permission(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)
+    ),
+) -> ApiResponse[SupplierItem]:
+    row = get_supplier_by_id(db, supplier_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="供应商不存在")
+    before_data = {"name": row.name, "remark": row.remark, "is_enabled": row.is_enabled}
+    try:
+        row = update_supplier(
+            db,
+            row=row,
+            name=payload.name,
+            remark=payload.remark,
+            is_enabled=payload.is_enabled,
+        )
+        write_audit_log(
+            db,
+            action_code="quality.suppliers.update",
+            action_name="更新供应商",
+            target_type="supplier",
+            target_id=str(row.id),
+            target_name=row.name,
+            operator=current_user,
+            before_data=before_data,
+            after_data={"name": row.name, "remark": row.remark, "is_enabled": row.is_enabled},
+        )
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return success_response(_to_supplier_item(row))
+
+
+@router.delete("/suppliers/{supplier_id}", response_model=ApiResponse[dict[str, str]])
+def delete_supplier_api(
+    supplier_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_permission(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)
+    ),
+) -> ApiResponse[dict[str, str]]:
+    row = get_supplier_by_id(db, supplier_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="供应商不存在")
+    before_data = {"name": row.name, "remark": row.remark, "is_enabled": row.is_enabled}
+    try:
+        delete_supplier(db, row=row)
+        write_audit_log(
+            db,
+            action_code="quality.suppliers.delete",
+            action_name="删除供应商",
+            target_type="supplier",
+            target_id=str(supplier_id),
+            target_name=row.name,
+            operator=current_user,
+            before_data=before_data,
+        )
+        db.commit()
+    except RuntimeError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return success_response({"message": "供应商已删除"})
 
 
 @router.post(

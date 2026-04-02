@@ -31,6 +31,8 @@ void main() {
       'order_code': 'PO-1',
       'product_id': 10,
       'product_name': '产品A',
+      'supplier_id': 8,
+      'supplier_name': '供应商甲',
       'quantity': 100,
       'status': 'pending',
       'current_process_code': null,
@@ -54,6 +56,8 @@ void main() {
         'order_code': 'PO-1',
         'product_id': 10,
         'product_name': '产品A',
+        'supplier_id': 9,
+        'supplier_name': '供应商乙',
         'quantity': 100,
         'status': 'pending',
         'created_at': '2026-03-01T00:00:00Z',
@@ -125,6 +129,8 @@ void main() {
 
     expect(order.startDate, isNull);
     expect(order.dueDate, isNull);
+    expect(order.supplierId, 8);
+    expect(order.supplierName, '供应商甲');
     expect(order.pipelineEnabled, isTrue);
     expect(order.pipelineProcessCodes, ['01-01', '02-01']);
     expect(detail.processes.single.processCode, '01-01');
@@ -132,6 +138,7 @@ void main() {
     expect(detail.records.single.productionQuantity, 5);
     expect(detail.events.single.eventType, 'created');
     expect(detail.events.single.orderCode, 'PO-1');
+    expect(detail.order.supplierName, '供应商乙');
     expect(ProductionOrderListResult(total: 1, items: [order]).items.length, 1);
   });
 
