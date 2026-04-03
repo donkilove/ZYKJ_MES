@@ -25,11 +25,25 @@ class FirstArticleRecord(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
+    template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_first_article_template.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     verification_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     verification_code: Mapped[str] = mapped_column(String(32), nullable=False)
     result: Mapped[str] = mapped_column(String(32), nullable=False, default="passed")
+    check_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    test_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     order = relationship("ProductionOrder", back_populates="first_article_records")
     order_process = relationship("ProductionOrderProcess", back_populates="first_article_records")
     operator = relationship("User")
+    template = relationship("FirstArticleTemplate")
+    participants = relationship(
+        "FirstArticleParticipant",
+        back_populates="record",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

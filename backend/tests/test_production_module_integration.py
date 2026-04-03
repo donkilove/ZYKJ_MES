@@ -18,6 +18,8 @@ if str(BACKEND_DIR) not in sys.path:
 from app.db.session import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.daily_verification_code import DailyVerificationCode  # noqa: E402
+from app.models.first_article_record import FirstArticleRecord  # noqa: E402
+from app.models.first_article_template import FirstArticleTemplate  # noqa: E402
 from app.models.order_sub_order_pipeline_instance import (  # noqa: E402
     OrderSubOrderPipelineInstance,
 )
@@ -52,6 +54,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.order_ids: list[int] = []
         self.repair_order_ids: list[int] = []
         self.scrap_statistics_ids: list[int] = []
+        self.user_ids: list[int] = []
 
     def tearDown(self) -> None:
         db = SessionLocal()
@@ -68,6 +71,11 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                     db.commit()
             for order_id in reversed(self.order_ids):
                 row = db.get(ProductionOrder, order_id)
+                if row is not None:
+                    db.delete(row)
+                    db.commit()
+            for user_id in reversed(self.user_ids):
+                row = db.get(User, user_id)
                 if row is not None:
                     db.delete(row)
                     db.commit()
@@ -217,6 +225,26 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         row = response.json()["data"]
         self.supplier_ids.append(int(row["id"]))
         return row
+
+    def _create_active_user(self, suffix: str) -> User:
+        db = SessionLocal()
+        try:
+            row = User(
+                username=f"production_user_{suffix}_{int(time.time() * 1000)}",
+                full_name=f"生产参与人-{suffix}",
+                password_hash="test-password-hash",
+                is_active=True,
+                is_superuser=False,
+                remark="生产集成测试",
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            db.expunge(row)
+            self.user_ids.append(int(row.id))
+            return row
+        finally:
+            db.close()
 
     def _create_scrap_statistics(
         self,
@@ -399,6 +427,81 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(trace_items[0]["operator_username"], "admin")
         self.order_ids.remove(int(order["id"]))
 
+    def test_create_and_update_order_allow_duplicate_process_codes(self) -> None:
+        stage = self._create_stage("DUP0")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="DUP0"
+        )
+        product = self._create_product("重复工序路线")
+        self._activate_product(product)
+        supplier = self._create_supplier(f"重复工序供应商{int(time.time() * 1000)}")
+        order_code = f"PO-DUP-{int(time.time() * 1000)}"
+
+        with patch("app.services.production_order_service.create_message_for_users"):
+            create_response = self.client.post(
+                "/api/v1/production/orders",
+                headers=self._headers(),
+                json={
+                    "order_code": order_code,
+                    "product_id": product["id"],
+                    "supplier_id": supplier["id"],
+                    "quantity": 10,
+                    "process_codes": [process["code"], process["code"]],
+                },
+            )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        created_order = create_response.json()["data"]
+        self.order_ids.append(int(created_order["id"]))
+
+        db = SessionLocal()
+        try:
+            created_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(created_order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(created_rows), 2)
+            self.assertEqual(
+                [row.process_code for row in created_rows],
+                [process["code"], process["code"]],
+            )
+        finally:
+            db.close()
+
+        with patch("app.services.production_order_service.create_message_for_users"):
+            update_response = self.client.put(
+                f"/api/v1/production/orders/{created_order['id']}",
+                headers=self._headers(),
+                json={
+                    "product_id": product["id"],
+                    "supplier_id": supplier["id"],
+                    "quantity": 12,
+                    "process_codes": [
+                        process["code"],
+                        process["code"],
+                        process["code"],
+                    ],
+                },
+            )
+        self.assertEqual(update_response.status_code, 200, update_response.text)
+
+        db = SessionLocal()
+        try:
+            updated_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(created_order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(updated_rows), 3)
+            self.assertEqual(
+                [row.process_code for row in updated_rows],
+                [process["code"], process["code"], process["code"]],
+            )
+        finally:
+            db.close()
+
     def test_delete_supplier_fails_when_referenced_by_order(self) -> None:
         stage = self._create_stage("SUP1")
         process = self._create_process(
@@ -575,6 +678,64 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(switch_response.status_code, 400, switch_response.text)
         self.assertIn("供应商不存在或已停用", switch_response.text)
+
+    def test_my_orders_contract_includes_supplier_due_date_and_remark(self) -> None:
+        stage = self._create_stage("MYORD")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="MYORD"
+        )
+        product = self._create_product("我的工单契约")
+        self._activate_product(product)
+        supplier = self._create_supplier(f"我的工单供应商{int(time.time() * 1000)}")
+
+        due_date = "2026-04-18"
+        remark = "订单查询备注"
+        with patch("app.services.production_order_service.create_message_for_users"):
+            create_response = self.client.post(
+                "/api/v1/production/orders",
+                headers=self._headers(),
+                json={
+                    "order_code": f"PO-MY-{int(time.time() * 1000)}",
+                    "product_id": product["id"],
+                    "supplier_id": supplier["id"],
+                    "quantity": 10,
+                    "due_date": due_date,
+                    "remark": remark,
+                    "process_steps": [
+                        {
+                            "step_order": 1,
+                            "stage_id": stage["id"],
+                            "process_id": process["id"],
+                        }
+                    ],
+                },
+            )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        order = create_response.json()["data"]
+        self.order_ids.append(int(order["id"]))
+
+        list_response = self.client.get(
+            "/api/v1/production/my-orders",
+            headers=self._headers(),
+            params={"keyword": order["order_code"]},
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        list_items = list_response.json()["data"]["items"]
+        self.assertEqual(len(list_items), 1)
+        list_item = list_items[0]
+        self.assertEqual(list_item["supplier_name"], supplier["name"])
+        self.assertEqual(list_item["due_date"], due_date)
+        self.assertEqual(list_item["remark"], remark)
+
+        context_response = self.client.get(
+            f"/api/v1/production/my-orders/{order['id']}/context",
+            headers=self._headers(),
+        )
+        self.assertEqual(context_response.status_code, 200, context_response.text)
+        context_item = context_response.json()["data"]["item"]
+        self.assertEqual(context_item["supplier_name"], supplier["name"])
+        self.assertEqual(context_item["due_date"], due_date)
+        self.assertEqual(context_item["remark"], remark)
 
     def test_complete_repair_order_accepts_multiple_return_allocations(self) -> None:
         stage_a = self._create_stage("C1")
@@ -1212,6 +1373,138 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         csv_text = base64.b64decode(response.json()["data"]["content_base64"]).decode("utf-8-sig")
         rows = list(csv.reader(io.StringIO(csv_text)))
         self.assertEqual(rows[1][9], "生产中")
+
+    def test_first_article_rich_submission_and_queries_work(self) -> None:
+        stage = self._create_stage("FA1")
+        process = self._create_process(
+            stage_id=stage["id"],
+            stage_code=stage["code"],
+            suffix="FA1",
+        )
+        product = self._create_product("富首件")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+        participant_a = self._create_active_user("A")
+        participant_b = self._create_active_user("B")
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            assert order_row is not None
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .first()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert process_row is not None and admin is not None
+
+            today_code = (
+                db.query(DailyVerificationCode)
+                .filter(DailyVerificationCode.verify_date == date.today())
+                .first()
+            )
+            if today_code is None:
+                today_code = DailyVerificationCode(
+                    verify_date=date.today(),
+                    code="code-fa1",
+                    created_by_user_id=admin.id,
+                )
+                db.add(today_code)
+            else:
+                today_code.code = "code-fa1"
+
+            template = FirstArticleTemplate(
+                product_id=order_row.product_id,
+                process_code=process_row.process_code,
+                template_name="首件模板-FA1",
+                check_content="模板检验内容",
+                test_value="模板测试值",
+                is_enabled=True,
+            )
+            db.add(
+                ProductionSubOrder(
+                    order_process_id=process_row.id,
+                    operator_user_id=admin.id,
+                    assigned_quantity=10,
+                    completed_quantity=0,
+                    status="pending",
+                    is_visible=True,
+                )
+            )
+            db.add(template)
+            db.commit()
+            db.refresh(template)
+            process_id = int(process_row.id)
+            template_id = int(template.id)
+        finally:
+            db.close()
+
+        template_response = self.client.get(
+            f"/api/v1/production/orders/{order['id']}/first-article/templates",
+            headers=self._headers(),
+            params={"order_process_id": process_id},
+        )
+        self.assertEqual(template_response.status_code, 200, template_response.text)
+        self.assertEqual(template_response.json()["data"]["items"][0]["id"], template_id)
+
+        participant_response = self.client.get(
+            f"/api/v1/production/orders/{order['id']}/first-article/participant-users",
+            headers=self._headers(),
+        )
+        self.assertEqual(participant_response.status_code, 200, participant_response.text)
+        participant_ids = {
+            int(item["id"]) for item in participant_response.json()["data"]["items"]
+        }
+        self.assertIn(participant_a.id, participant_ids)
+        self.assertIn(participant_b.id, participant_ids)
+
+        parameter_response = self.client.get(
+            f"/api/v1/production/orders/{order['id']}/first-article/parameters",
+            headers=self._headers(),
+            params={"order_process_id": process_id},
+        )
+        self.assertEqual(parameter_response.status_code, 200, parameter_response.text)
+        self.assertGreater(parameter_response.json()["data"]["total"], 0)
+
+        submit_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_id,
+                "template_id": template_id,
+                "check_content": "实测检验内容",
+                "test_value": "9.86",
+                "result": "failed",
+                "participant_user_ids": [participant_a.id, participant_b.id],
+                "verification_code": "code-fa1",
+                "remark": "首件富表单提交",
+            },
+        )
+        self.assertEqual(submit_response.status_code, 200, submit_response.text)
+
+        db = SessionLocal()
+        try:
+            record = (
+                db.query(FirstArticleRecord)
+                .filter(FirstArticleRecord.order_id == int(order["id"]))
+                .order_by(FirstArticleRecord.id.desc())
+                .first()
+            )
+            assert record is not None
+            self.assertEqual(record.template_id, template_id)
+            self.assertEqual(record.check_content, "实测检验内容")
+            self.assertEqual(record.test_value, "9.86")
+            self.assertEqual(record.result, "failed")
+            participant_ids = {item.user_id for item in record.participants}
+            self.assertEqual(participant_ids, {participant_a.id, participant_b.id})
+        finally:
+            db.close()
 
     def test_scrap_and_repair_detail_include_applied_and_report_trace(self) -> None:
         stage = self._create_stage("R1")

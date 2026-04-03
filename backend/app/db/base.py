@@ -2,8 +2,10 @@ from app.models.authz_change_log import AuthzChangeLog, AuthzChangeLogItem
 from app.models.base import Base
 from app.models.authz_module_revision import AuthzModuleRevision
 from app.models.daily_verification_code import DailyVerificationCode
+from app.models.first_article_participant import FirstArticleParticipant
 from app.models.equipment import Equipment
 from app.models.first_article_record import FirstArticleRecord
+from app.models.first_article_template import FirstArticleTemplate
 from app.models.maintenance_item import MaintenanceItem
 from app.models.maintenance_plan import MaintenancePlan
 from app.models.maintenance_record import MaintenanceRecord
@@ -81,7 +83,9 @@ __all__ = [
     "RepairDefectPhenomenon",
     "RepairCause",
     "RepairReturnRoute",
+    "FirstArticleParticipant",
     "FirstArticleRecord",
+    "FirstArticleTemplate",
     "DailyVerificationCode",
     "ProductionRecord",
     "OrderEventLog",

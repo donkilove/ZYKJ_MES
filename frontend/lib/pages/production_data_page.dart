@@ -9,7 +9,9 @@ import '../models/app_session.dart';
 import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 class _StageFilterOption {
   const _StageFilterOption({
@@ -855,35 +857,36 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                     const SizedBox(height: 12),
                     Expanded(
                       flex: 4,
-                      child: Card(
-                        child: rows.isEmpty
-                            ? const Center(child: Text('暂无可统计数据'))
-                            : AdaptiveTableContainer(
-                                child: DataTable(
-                                  columns: const [
-                                    DataColumn(label: Text('产品名称')),
-                                    DataColumn(label: Text('今日产量')),
-                                    DataColumn(label: Text('最后生产时间')),
-                                  ],
-                                  rows: rows.map((row) {
-                                    return DataRow(
-                                      cells: [
-                                        DataCell(Text(row.productName)),
-                                        DataCell(Text('${row.quantity}')),
-                                        DataCell(
-                                          Text(
-                                            row.latestTimeText.isEmpty
-                                                ? _formatDateTime(
-                                                    row.latestTime,
-                                                  )
-                                                : row.latestTimeText,
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  }).toList(),
+                      child: CrudListTableSection(
+                        loading: false,
+                        isEmpty: rows.isEmpty,
+                        emptyText: '暂无可统计数据',
+                        enableUnifiedHeaderStyle: true,
+                        child: DataTable(
+                          columns: [
+                            UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                            UnifiedListTableHeaderStyle.column(context, '今日产量'),
+                            UnifiedListTableHeaderStyle.column(
+                              context,
+                              '最后生产时间',
+                            ),
+                          ],
+                          rows: rows.map((row) {
+                            return DataRow(
+                              cells: [
+                                DataCell(Text(row.productName)),
+                                DataCell(Text('${row.quantity}')),
+                                DataCell(
+                                  Text(
+                                    row.latestTimeText.isEmpty
+                                        ? _formatDateTime(row.latestTime)
+                                        : row.latestTimeText,
+                                  ),
                                 ),
-                              ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ),
                   ],
@@ -910,67 +913,62 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
         Expanded(
           child: _loadingUnfinished
               ? const Center(child: CircularProgressIndicator())
-              : Card(
-                  child: rows.isEmpty
-                      ? const Center(child: Text('暂无未完工订单'))
-                      : AdaptiveTableContainer(
-                          child: DataTable(
-                            columns: const [
-                              DataColumn(label: Text('订单编号')),
-                              DataColumn(label: Text('产品名称')),
-                              DataColumn(label: Text('当前工序')),
-                              DataColumn(label: Text('订单状态')),
-                              DataColumn(label: Text('已产总量')),
-                              DataColumn(label: Text('剩余数量')),
-                              DataColumn(label: Text('进度')),
-                            ],
-                            rows: rows.map((row) {
-                              final progress = row.progressPercent / 100.0;
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(row.orderCode)),
-                                  DataCell(Text(row.productName)),
-                                  DataCell(
-                                    Text(
-                                      row.currentProcessName.trim().isEmpty
-                                          ? '-'
-                                          : row.currentProcessName,
-                                    ),
+              : CrudListTableSection(
+                  loading: false,
+                  isEmpty: rows.isEmpty,
+                  emptyText: '暂无未完工订单',
+                  enableUnifiedHeaderStyle: true,
+                  child: DataTable(
+                    columns: [
+                      UnifiedListTableHeaderStyle.column(context, '订单编号'),
+                      UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                      UnifiedListTableHeaderStyle.column(context, '当前工序'),
+                      UnifiedListTableHeaderStyle.column(context, '订单状态'),
+                      UnifiedListTableHeaderStyle.column(context, '已产总量'),
+                      UnifiedListTableHeaderStyle.column(context, '剩余数量'),
+                      UnifiedListTableHeaderStyle.column(context, '进度'),
+                    ],
+                    rows: rows.map((row) {
+                      final progress = row.progressPercent / 100.0;
+                      return DataRow(
+                        cells: [
+                          DataCell(Text(row.orderCode)),
+                          DataCell(Text(row.productName)),
+                          DataCell(
+                            Text(
+                              row.currentProcessName.trim().isEmpty
+                                  ? '-'
+                                  : row.currentProcessName,
+                            ),
+                          ),
+                          DataCell(
+                            Text(productionOrderStatusLabel(row.orderStatus)),
+                          ),
+                          DataCell(Text('${row.producedTotal}')),
+                          DataCell(Text('${row.remainingQuantity}')),
+                          DataCell(
+                            SizedBox(
+                              width: 200,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${row.progressPercent.toStringAsFixed(2)}%',
                                   ),
-                                  DataCell(
-                                    Text(
-                                      productionOrderStatusLabel(
-                                        row.orderStatus,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(Text('${row.producedTotal}')),
-                                  DataCell(Text('${row.remainingQuantity}')),
-                                  DataCell(
-                                    SizedBox(
-                                      width: 200,
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '${row.progressPercent.toStringAsFixed(2)}%',
-                                          ),
-                                          const SizedBox(height: 4),
-                                          LinearProgressIndicator(
-                                            value: progress.clamp(0, 1),
-                                            minHeight: 8,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                  const SizedBox(height: 4),
+                                  LinearProgressIndicator(
+                                    value: progress.clamp(0, 1),
+                                    minHeight: 8,
                                   ),
                                 ],
-                              );
-                            }).toList(),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
                 ),
         ),
       ],
@@ -1229,71 +1227,61 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
                     const SizedBox(height: 12),
                     Expanded(
                       flex: 6,
-                      child: Card(
-                        child: rows.isEmpty
-                            ? const Center(child: Text('暂无可统计数据'))
-                            : AdaptiveTableContainer(
-                                child: DataTable(
-                                  columns: const [
-                                    DataColumn(label: Text('订单编号')),
-                                    DataColumn(label: Text('产品名称')),
-                                    DataColumn(label: Text('工段')),
-                                    DataColumn(label: Text('工序')),
-                                    DataColumn(label: Text('操作员')),
-                                    DataColumn(label: Text('产量')),
-                                    DataColumn(label: Text('生产时间')),
-                                    DataColumn(label: Text('订单状态')),
-                                  ],
-                                  rows: rows.map((row) {
-                                    final stageLabel = [
-                                      row.stageCode ?? '',
-                                      row.stageName ?? '',
-                                    ].join(' ').trim();
-                                    return DataRow(
-                                      cells: [
-                                        DataCell(Text(row.orderCode)),
-                                        DataCell(Text(row.productName)),
-                                        DataCell(
-                                          Text(
-                                            stageLabel.isEmpty
-                                                ? '-'
-                                                : stageLabel,
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            '${row.processCode} ${row.processName}',
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            row.operatorUsername.trim().isEmpty
-                                                ? '-'
-                                                : row.operatorUsername,
-                                          ),
-                                        ),
-                                        DataCell(Text('${row.quantity}')),
-                                        DataCell(
-                                          Text(
-                                            row.productionTimeText.isEmpty
-                                                ? _formatDateTime(
-                                                    row.productionTime,
-                                                  )
-                                                : row.productionTimeText,
-                                          ),
-                                        ),
-                                        DataCell(
-                                          Text(
-                                            productionOrderStatusLabel(
-                                              row.orderStatus,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  }).toList(),
+                      child: CrudListTableSection(
+                        loading: false,
+                        isEmpty: rows.isEmpty,
+                        emptyText: '暂无可统计数据',
+                        enableUnifiedHeaderStyle: true,
+                        child: DataTable(
+                          columns: [
+                            UnifiedListTableHeaderStyle.column(context, '订单编号'),
+                            UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                            UnifiedListTableHeaderStyle.column(context, '工段'),
+                            UnifiedListTableHeaderStyle.column(context, '工序'),
+                            UnifiedListTableHeaderStyle.column(context, '操作员'),
+                            UnifiedListTableHeaderStyle.column(context, '产量'),
+                            UnifiedListTableHeaderStyle.column(context, '生产时间'),
+                            UnifiedListTableHeaderStyle.column(context, '订单状态'),
+                          ],
+                          rows: rows.map((row) {
+                            final stageLabel = [
+                              row.stageCode ?? '',
+                              row.stageName ?? '',
+                            ].join(' ').trim();
+                            return DataRow(
+                              cells: [
+                                DataCell(Text(row.orderCode)),
+                                DataCell(Text(row.productName)),
+                                DataCell(
+                                  Text(stageLabel.isEmpty ? '-' : stageLabel),
                                 ),
-                              ),
+                                DataCell(
+                                  Text('${row.processCode} ${row.processName}'),
+                                ),
+                                DataCell(
+                                  Text(
+                                    row.operatorUsername.trim().isEmpty
+                                        ? '-'
+                                        : row.operatorUsername,
+                                  ),
+                                ),
+                                DataCell(Text('${row.quantity}')),
+                                DataCell(
+                                  Text(
+                                    row.productionTimeText.isEmpty
+                                        ? _formatDateTime(row.productionTime)
+                                        : row.productionTimeText,
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    productionOrderStatusLabel(row.orderStatus),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ),
                   ],
@@ -1307,36 +1295,37 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     if (_processStats.isEmpty) {
       return const Center(child: Text('暂无工序统计数据。'));
     }
-    return Card(
-      child: AdaptiveTableContainer(
-        child: DataTable(
-          columns: const [
-            DataColumn(label: Text('工序编码')),
-            DataColumn(label: Text('工序名称')),
-            DataColumn(label: Text('总订单数')),
-            DataColumn(label: Text('待生产')),
-            DataColumn(label: Text('生产中')),
-            DataColumn(label: Text('部分完成')),
-            DataColumn(label: Text('生产完成')),
-            DataColumn(label: Text('可见总量')),
-            DataColumn(label: Text('完成总量')),
-          ],
-          rows: _processStats.map((item) {
-            return DataRow(
-              cells: [
-                DataCell(Text(item.processCode)),
-                DataCell(Text(item.processName)),
-                DataCell(Text('${item.totalOrders}')),
-                DataCell(Text('${item.pendingOrders}')),
-                DataCell(Text('${item.inProgressOrders}')),
-                DataCell(Text('${item.partialOrders}')),
-                DataCell(Text('${item.completedOrders}')),
-                DataCell(Text('${item.totalVisibleQuantity}')),
-                DataCell(Text('${item.totalCompletedQuantity}')),
-              ],
-            );
-          }).toList(),
-        ),
+    return CrudListTableSection(
+      loading: false,
+      isEmpty: _processStats.isEmpty,
+      enableUnifiedHeaderStyle: true,
+      child: DataTable(
+        columns: [
+          UnifiedListTableHeaderStyle.column(context, '工序编码'),
+          UnifiedListTableHeaderStyle.column(context, '工序名称'),
+          UnifiedListTableHeaderStyle.column(context, '总订单数'),
+          UnifiedListTableHeaderStyle.column(context, '待生产'),
+          UnifiedListTableHeaderStyle.column(context, '生产中'),
+          UnifiedListTableHeaderStyle.column(context, '部分完成'),
+          UnifiedListTableHeaderStyle.column(context, '生产完成'),
+          UnifiedListTableHeaderStyle.column(context, '可见总量'),
+          UnifiedListTableHeaderStyle.column(context, '完成总量'),
+        ],
+        rows: _processStats.map((item) {
+          return DataRow(
+            cells: [
+              DataCell(Text(item.processCode)),
+              DataCell(Text(item.processName)),
+              DataCell(Text('${item.totalOrders}')),
+              DataCell(Text('${item.pendingOrders}')),
+              DataCell(Text('${item.inProgressOrders}')),
+              DataCell(Text('${item.partialOrders}')),
+              DataCell(Text('${item.completedOrders}')),
+              DataCell(Text('${item.totalVisibleQuantity}')),
+              DataCell(Text('${item.totalCompletedQuantity}')),
+            ],
+          );
+        }).toList(),
       ),
     );
   }
@@ -1345,30 +1334,31 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     if (_operatorStats.isEmpty) {
       return const Center(child: Text('暂无人员统计数据。'));
     }
-    return Card(
-      child: AdaptiveTableContainer(
-        child: DataTable(
-          columns: const [
-            DataColumn(label: Text('操作员')),
-            DataColumn(label: Text('工序编码')),
-            DataColumn(label: Text('工序名称')),
-            DataColumn(label: Text('报工次数')),
-            DataColumn(label: Text('报工数量')),
-            DataColumn(label: Text('最近报工时间')),
-          ],
-          rows: _operatorStats.map((item) {
-            return DataRow(
-              cells: [
-                DataCell(Text(item.operatorUsername)),
-                DataCell(Text(item.processCode)),
-                DataCell(Text(item.processName)),
-                DataCell(Text('${item.productionRecords}')),
-                DataCell(Text('${item.productionQuantity}')),
-                DataCell(Text(_formatDateTime(item.lastProductionAt))),
-              ],
-            );
-          }).toList(),
-        ),
+    return CrudListTableSection(
+      loading: false,
+      isEmpty: _operatorStats.isEmpty,
+      enableUnifiedHeaderStyle: true,
+      child: DataTable(
+        columns: [
+          UnifiedListTableHeaderStyle.column(context, '操作员'),
+          UnifiedListTableHeaderStyle.column(context, '工序编码'),
+          UnifiedListTableHeaderStyle.column(context, '工序名称'),
+          UnifiedListTableHeaderStyle.column(context, '报工次数'),
+          UnifiedListTableHeaderStyle.column(context, '报工数量'),
+          UnifiedListTableHeaderStyle.column(context, '最近报工时间'),
+        ],
+        rows: _operatorStats.map((item) {
+          return DataRow(
+            cells: [
+              DataCell(Text(item.operatorUsername)),
+              DataCell(Text(item.processCode)),
+              DataCell(Text(item.processName)),
+              DataCell(Text('${item.productionRecords}')),
+              DataCell(Text('${item.productionQuantity}')),
+              DataCell(Text(_formatDateTime(item.lastProductionAt))),
+            ],
+          );
+        }).toList(),
       ),
     );
   }
@@ -1381,28 +1371,16 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '生产数据查询',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: '刷新全部',
-                onPressed: _anyLoading
-                    ? null
-                    : () async {
-                        await _reloadOverview();
-                        await _reloadToday();
-                        await _reloadUnfinished();
-                        await _reloadManual();
-                      },
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          CrudPageHeader(
+            title: '生产数据查询',
+            onRefresh: _anyLoading
+                ? null
+                : () async {
+                    await _reloadOverview();
+                    await _reloadToday();
+                    await _reloadUnfinished();
+                    await _reloadManual();
+                  },
           ),
           const SizedBox(height: 12),
           Wrap(

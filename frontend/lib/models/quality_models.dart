@@ -486,6 +486,34 @@ class FirstArticleDispositionHistoryItem {
   }
 }
 
+class FirstArticleParticipantItem {
+  const FirstArticleParticipantItem({
+    required this.userId,
+    required this.username,
+    this.fullName,
+  });
+
+  final int? userId;
+  final String username;
+  final String? fullName;
+
+  String get displayName {
+    final normalizedFullName = (fullName ?? '').trim();
+    if (normalizedFullName.isEmpty) {
+      return username;
+    }
+    return '$username ($normalizedFullName)';
+  }
+
+  factory FirstArticleParticipantItem.fromJson(Map<String, dynamic> json) {
+    return FirstArticleParticipantItem(
+      userId: json['user_id'] as int?,
+      username: (json['username'] as String?) ?? '',
+      fullName: json['full_name'] as String?,
+    );
+  }
+}
+
 class FirstArticleDetail {
   const FirstArticleDetail({
     required this.id,
@@ -502,6 +530,11 @@ class FirstArticleDetail {
     required this.checkResult,
     required this.defectDescription,
     required this.checkAt,
+    this.templateId,
+    this.templateName = '',
+    this.checkContent = '',
+    this.testValue = '',
+    this.participants = const [],
     this.disposition,
     this.dispositionHistory = const [],
   });
@@ -520,6 +553,11 @@ class FirstArticleDetail {
   final String checkResult;
   final String defectDescription;
   final DateTime? checkAt;
+  final int? templateId;
+  final String templateName;
+  final String checkContent;
+  final String testValue;
+  final List<FirstArticleParticipantItem> participants;
   final FirstArticleDispositionInfo? disposition;
   final List<FirstArticleDispositionHistoryItem> dispositionHistory;
 
@@ -583,6 +621,17 @@ class FirstArticleDetail {
       checkAt:
           _parseDateTimeOrNull(json['check_at']) ??
           _parseDateTimeOrNull(json['created_at']),
+      templateId: json['template_id'] as int?,
+      templateName: (json['template_name'] as String?) ?? '',
+      checkContent: (json['check_content'] as String?) ?? '',
+      testValue: (json['test_value'] as String?) ?? '',
+      participants: (json['participants'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => FirstArticleParticipantItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
       disposition: disposition,
       dispositionHistory:
           (json['disposition_history'] as List<dynamic>? ?? const [])

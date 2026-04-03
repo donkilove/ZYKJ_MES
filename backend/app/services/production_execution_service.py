@@ -20,7 +20,9 @@ from app.core.production_constants import (
     SUB_ORDER_STATUS_PENDING,
 )
 from app.models.daily_verification_code import DailyVerificationCode
+from app.models.first_article_participant import FirstArticleParticipant
 from app.models.first_article_record import FirstArticleRecord
+from app.models.first_article_template import FirstArticleTemplate
 from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
@@ -307,12 +309,100 @@ def _refresh_order_status(db: Session, *, order: ProductionOrder) -> None:
             break
 
 
+def _normalize_first_article_result(result: str) -> str:
+    normalized = result.strip().lower()
+    if normalized not in {"passed", "failed"}:
+        raise ValueError("First article result must be passed or failed")
+    return normalized
+
+
+def _normalize_optional_text(value: str | None) -> str | None:
+    text = (value or "").strip()
+    return text or None
+
+
+def _build_first_article_event_detail(
+    *,
+    operator_username: str,
+    process_name: str,
+    result: str,
+    remark: str | None,
+) -> str:
+    if result == "passed":
+        prefix = f"{operator_username} 在工序 {process_name} 提交首件并开工。"
+    else:
+        prefix = f"{operator_username} 在工序 {process_name} 提交首件不通过。"
+    normalized_remark = _normalize_optional_text(remark)
+    if normalized_remark is None:
+        return prefix
+    return f"{prefix}{normalized_remark}"
+
+
+def _get_first_article_template(
+    db: Session,
+    *,
+    template_id: int,
+    product_id: int,
+    process_code: str,
+) -> FirstArticleTemplate:
+    row = db.execute(
+        select(FirstArticleTemplate).where(
+            FirstArticleTemplate.id == template_id,
+            FirstArticleTemplate.product_id == product_id,
+            FirstArticleTemplate.process_code == process_code,
+            FirstArticleTemplate.is_enabled.is_(True),
+        )
+    ).scalars().first()
+    if row is None:
+        raise ValueError("First article template not found")
+    return row
+
+
+def _normalize_participant_user_ids(
+    db: Session,
+    *,
+    participant_user_ids: list[int] | None,
+) -> list[int]:
+    normalized_ids: list[int] = []
+    seen: set[int] = set()
+    for raw_user_id in participant_user_ids or []:
+        user_id = int(raw_user_id)
+        if user_id <= 0:
+            raise ValueError("Participant user id must be greater than 0")
+        if user_id in seen:
+            continue
+        seen.add(user_id)
+        normalized_ids.append(user_id)
+    if not normalized_ids:
+        return []
+
+    rows = db.execute(
+        select(User.id).where(
+            User.id.in_(normalized_ids),
+            User.is_active.is_(True),
+            User.is_deleted.is_(False),
+        )
+    ).scalars().all()
+    found_ids = {int(row_id) for row_id in rows}
+    missing_ids = [str(user_id) for user_id in normalized_ids if user_id not in found_ids]
+    if missing_ids:
+        raise ValueError(
+            f"Participant users not found or inactive: {', '.join(missing_ids)}"
+        )
+    return normalized_ids
+
+
 def submit_first_article(
     db: Session,
     *,
     order_id: int,
     order_process_id: int,
     pipeline_instance_id: int | None,
+    template_id: int | None,
+    check_content: str | None,
+    test_value: str | None,
+    result: str,
+    participant_user_ids: list[int] | None,
     verification_code: str,
     remark: str | None,
     operator: User,
@@ -377,48 +467,93 @@ def submit_first_article(
     if verification_code.strip() != code_row.code:
         raise ValueError("Invalid verification code")
 
-    process_row.status = PROCESS_STATUS_IN_PROGRESS
-    _activate_visible_sub_orders(db, order_process_id=process_row.id)
-    sub_order.status = SUB_ORDER_STATUS_IN_PROGRESS
-    sub_order.is_visible = True
-    order.status = ORDER_STATUS_IN_PROGRESS
-    if not order.current_process_code:
-        order.current_process_code = process_row.process_code
+    normalized_result = _normalize_first_article_result(result)
+    template_row = None
+    if template_id is not None:
+        template_row = _get_first_article_template(
+            db,
+            template_id=template_id,
+            product_id=order.product_id,
+            process_code=process_row.process_code,
+        )
+    normalized_check_content = _normalize_optional_text(check_content)
+    normalized_test_value = _normalize_optional_text(test_value)
+    if template_row is not None:
+        if normalized_check_content is None:
+            normalized_check_content = _normalize_optional_text(template_row.check_content)
+        if normalized_test_value is None:
+            normalized_test_value = _normalize_optional_text(template_row.test_value)
+    normalized_participant_user_ids = _normalize_participant_user_ids(
+        db,
+        participant_user_ids=participant_user_ids,
+    )
+
+    if normalized_result == "passed":
+        process_row.status = PROCESS_STATUS_IN_PROGRESS
+        _activate_visible_sub_orders(db, order_process_id=process_row.id)
+        sub_order.status = SUB_ORDER_STATUS_IN_PROGRESS
+        sub_order.is_visible = True
+        order.status = ORDER_STATUS_IN_PROGRESS
+        if not order.current_process_code:
+            order.current_process_code = process_row.process_code
 
     first_article_row = FirstArticleRecord(
         order_id=order.id,
         order_process_id=process_row.id,
         operator_user_id=operator.id,
+        template_id=template_row.id if template_row else None,
         verification_date=date.today(),
         verification_code=verification_code.strip(),
-        result="passed",
+        result=normalized_result,
+        check_content=normalized_check_content,
+        test_value=normalized_test_value,
         remark=(remark or "").strip() or None,
     )
     db.add(first_article_row)
-    db.add(
-        ProductionRecord(
-            order_id=order.id,
-            order_process_id=process_row.id,
-            sub_order_id=sub_order.id,
-            operator_user_id=operator.id,
-            production_quantity=0,
-            record_type=RECORD_TYPE_FIRST_ARTICLE,
+    db.flush()
+    for participant_user_id in normalized_participant_user_ids:
+        db.add(
+            FirstArticleParticipant(
+                record_id=first_article_row.id,
+                user_id=participant_user_id,
+            )
         )
-    )
+
+    if normalized_result == "passed":
+        db.add(
+            ProductionRecord(
+                order_id=order.id,
+                order_process_id=process_row.id,
+                sub_order_id=sub_order.id,
+                operator_user_id=operator.id,
+                production_quantity=0,
+                record_type=RECORD_TYPE_FIRST_ARTICLE,
+            )
+        )
     add_order_event_log(
         db,
         order_id=order.id,
-        event_type="first_article_passed",
-        event_title="首件通过",
-        event_detail=(
-            f"{operator.username} 在工序 {process_row.process_name} 提交首件并开工。"
-            if not remark
-            else f"{operator.username} 在工序 {process_row.process_name} 提交首件并开工。{remark.strip()}"
+        event_type=(
+            "first_article_passed"
+            if normalized_result == "passed"
+            else "first_article_failed"
+        ),
+        event_title="首件通过" if normalized_result == "passed" else "首件不通过",
+        event_detail=_build_first_article_event_detail(
+            operator_username=operator.username,
+            process_name=process_row.process_name,
+            result=normalized_result,
+            remark=remark,
         ),
         operator_user_id=operator.id,
         payload={
+            "first_article_record_id": first_article_row.id,
             "order_process_id": process_row.id,
             "process_code": process_row.process_code,
+            "template_id": template_row.id if template_row else None,
+            "template_name": template_row.template_name if template_row else None,
+            "result": normalized_result,
+            "participant_user_ids": normalized_participant_user_ids,
             "operator_user_id": operator.id,
             "effective_operator_user_id": effective_user_id,
             "assist_authorization_id": assist_row.id if assist_row else None,

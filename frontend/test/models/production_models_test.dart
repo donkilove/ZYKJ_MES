@@ -148,6 +148,7 @@ void main() {
       'order_code': 'PO-9',
       'product_id': 2,
       'product_name': '产品X',
+      'supplier_name': '供应商甲',
       'quantity': 300,
       'order_status': 'in_progress',
       'current_process_id': 8,
@@ -171,6 +172,8 @@ void main() {
       'max_producible_quantity': 30,
       'can_first_article': true,
       'can_end_production': false,
+      'due_date': '2026-03-20',
+      'remark': '订单备注',
       'updated_at': '2026-03-01T00:00:00Z',
     });
     final action = ProductionActionResult.fromJson({
@@ -236,6 +239,9 @@ void main() {
     expect(myOrder.pipelineInstanceNo, 'P9-10-2-ABCD1234');
     expect(myOrder.pipelineStartAllowed, isTrue);
     expect(myOrder.pipelineEndAllowed, isFalse);
+    expect(myOrder.supplierName, '供应商甲');
+    expect(myOrder.dueDate, isNotNull);
+    expect(myOrder.remark, '订单备注');
     expect(pipelineMode.availableProcessCodes.length, 3);
     expect(action.message, 'done');
     expect(overview.finishedQuantity, 800);
@@ -248,6 +254,61 @@ void main() {
       MyOrderListResult(total: 1, items: [myOrder]).items.single.orderId,
       9,
     );
+  });
+
+  test('首件富表单模型支持模板参数参与人与提交序列化', () {
+    final template = FirstArticleTemplateItem.fromJson({
+      'id': 11,
+      'product_id': 2,
+      'process_code': '01-01',
+      'template_name': '默认首件模板',
+      'check_content': '外观检查',
+      'test_value': '9.86',
+    });
+    final participant = FirstArticleParticipantOptionItem.fromJson({
+      'id': 8,
+      'username': 'worker',
+      'full_name': '张三',
+    });
+    final parameters = FirstArticleParameterListResult.fromJson({
+      'product_id': 2,
+      'product_name': '产品X',
+      'parameter_scope': 'effective',
+      'version': 3,
+      'version_label': 'v3',
+      'lifecycle_status': 'active',
+      'total': 1,
+      'items': [
+        {
+          'name': '长度',
+          'category': '尺寸',
+          'type': 'text',
+          'value': '10mm',
+          'description': '模板参数',
+          'sort_order': 1,
+          'is_preset': true,
+        },
+      ],
+    });
+    const request = FirstArticleSubmitRequestInput(
+      orderProcessId: 21,
+      pipelineInstanceId: 301,
+      templateId: 11,
+      checkContent: '实测外观',
+      testValue: '9.80',
+      result: 'passed',
+      participantUserIds: [8, 9],
+      verificationCode: 'code-fa2',
+      remark: '备注',
+      effectiveOperatorUserId: 8,
+      assistAuthorizationId: 99,
+    );
+
+    expect(template.displayLabel, '默认首件模板 (01-01)');
+    expect(participant.displayName, 'worker (张三)');
+    expect(parameters.items.single.value, '10mm');
+    expect(request.toJson()['template_id'], 11);
+    expect(request.toJson()['participant_user_ids'], [8, 9]);
   });
 
   test(

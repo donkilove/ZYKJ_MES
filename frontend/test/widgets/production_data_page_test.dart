@@ -4,6 +4,8 @@ import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/production_models.dart';
 import 'package:mes_client/pages/production_data_page.dart';
 import 'package:mes_client/services/production_service.dart';
+import 'package:mes_client/widgets/crud_list_table_section.dart';
+import 'package:mes_client/widgets/crud_page_header.dart';
 
 class _FakeProductionService extends ProductionService {
   _FakeProductionService() : super(AppSession(baseUrl: '', accessToken: ''));
@@ -199,19 +201,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('生产数据查询'), findsOneWidget);
+    expect(find.byType(CrudPageHeader), findsOneWidget);
     expect(find.text('今日实时产量'), findsOneWidget);
     expect(find.text('未完工进度'), findsOneWidget);
     expect(find.text('手动筛选'), findsOneWidget);
+    expect(find.byType(CrudListTableSection), findsWidgets);
 
     await tester.tap(find.text('未完工进度'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('刷新进度'), findsOneWidget);
+    expect(find.byType(CrudListTableSection), findsWidgets);
 
     await tester.tap(find.text('手动筛选'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('筛选'), findsOneWidget);
     expect(find.text('导出CSV'), findsOneWidget);
+    expect(find.byType(CrudListTableSection), findsWidgets);
   });
 }

@@ -102,6 +102,7 @@ MyOrderItem _buildMyOrderItem() {
     orderCode: 'PO-1',
     productId: 1,
     productName: '产品A',
+    supplierName: '供应商甲',
     quantity: 10,
     orderStatus: 'in_progress',
     currentProcessId: 11,
@@ -129,6 +130,8 @@ MyOrderItem _buildMyOrderItem() {
     maxProducibleQuantity: 5,
     canFirstArticle: true,
     canEndProduction: true,
+    dueDate: DateTime.parse('2026-03-10T00:00:00Z'),
+    remark: '查询备注',
     updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
   );
 }
@@ -192,6 +195,7 @@ void main() {
     expect(find.text('模板名称/版本：标准模板 v5'), findsOneWidget);
     expect(find.text('并行模式：开启'), findsOneWidget);
     expect(find.text('并行实例：P1-21-1-PIPE0501'), findsOneWidget);
+    expect(find.text('视角：我的工单'), findsOneWidget);
     expect(find.text('创建人：admin'), findsOneWidget);
     expect(find.textContaining('创建时间：2026-03-01'), findsOneWidget);
 

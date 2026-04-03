@@ -154,6 +154,25 @@ class _FirstArticleDispositionPageState
     return '${widget.isDispositionMode ? '首件处置' : '首件详情'} #${widget.recordId}';
   }
 
+  String _displayText(String? value) {
+    final normalized = (value ?? '').trim();
+    if (normalized.isEmpty) {
+      return '-';
+    }
+    return normalized;
+  }
+
+  String _participantText(List<FirstArticleParticipantItem> participants) {
+    final labels = participants
+        .map((item) => item.displayName.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    if (labels.isEmpty) {
+      return '-';
+    }
+    return labels.join('、');
+  }
+
   @override
   Widget build(BuildContext context) {
     final canSubmitDisposition =
@@ -195,6 +214,22 @@ class _FirstArticleDispositionPageState
                                 ),
                                 _InfoRow('工序', _detail!.processName),
                                 _InfoRow('操作员', _detail!.operatorUsername),
+                                _InfoRow(
+                                  '模板名称',
+                                  _displayText(_detail!.templateName),
+                                ),
+                                _InfoRow(
+                                  '首件内容',
+                                  _displayText(_detail!.checkContent),
+                                ),
+                                _InfoRow(
+                                  '首件测试值',
+                                  _displayText(_detail!.testValue),
+                                ),
+                                _InfoRow(
+                                  '参与操作员',
+                                  _participantText(_detail!.participants),
+                                ),
                                 _InfoRow(
                                   '检验结果',
                                   firstArticleResultLabel(_detail!.checkResult),

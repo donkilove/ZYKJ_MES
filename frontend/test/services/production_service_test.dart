@@ -398,10 +398,78 @@ void main() {
               },
             );
           },
+          'GET /production/orders/1/first-article/templates': (request) {
+            expect(request.uri.queryParameters['order_process_id'], '11');
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'total': 1,
+                  'items': [
+                    {
+                      'id': 501,
+                      'product_id': 10,
+                      'process_code': '01-01',
+                      'template_name': '首件模板A',
+                      'check_content': '模板检验内容',
+                      'test_value': '模板测试值',
+                    },
+                  ],
+                },
+              },
+            );
+          },
+          'GET /production/orders/1/first-article/participant-users': (_) {
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'total': 2,
+                  'items': [
+                    {'id': 8, 'username': 'worker', 'full_name': '张三'},
+                    {'id': 9, 'username': 'helper', 'full_name': '李四'},
+                  ],
+                },
+              },
+            );
+          },
+          'GET /production/orders/1/first-article/parameters': (request) {
+            expect(request.uri.queryParameters['order_process_id'], '11');
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'product_id': 10,
+                  'product_name': 'Product-A',
+                  'parameter_scope': 'effective',
+                  'version': 2,
+                  'version_label': 'v2',
+                  'lifecycle_status': 'active',
+                  'total': 1,
+                  'items': [
+                    {
+                      'name': '长度',
+                      'category': '尺寸',
+                      'type': 'text',
+                      'value': '10mm',
+                      'description': '模板参数',
+                      'sort_order': 1,
+                      'is_preset': true,
+                    },
+                  ],
+                },
+              },
+            );
+          },
           'POST /production/orders/1/first-article': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['order_process_id'], 11);
             expect(body['pipeline_instance_id'], 301);
+            expect(body['template_id'], 501);
+            expect(body['check_content'], '首件内容');
+            expect(body['test_value'], '9.86');
+            expect(body['result'], 'failed');
+            expect(body['participant_user_ids'], [8, 9]);
             expect(body['verification_code'], 'code-1');
             expect(body['remark'], 'first');
             expect(body['effective_operator_user_id'], 8);
@@ -878,6 +946,16 @@ void main() {
           viewMode: 'assist',
           proxyOperatorUserId: 8,
         );
+        final firstArticleTemplates = await service.listFirstArticleTemplates(
+          orderId: 1,
+          orderProcessId: 11,
+        );
+        final firstArticleParticipants = await service
+            .listFirstArticleParticipantOptions(orderId: 1);
+        final firstArticleParameters = await service.getFirstArticleParameters(
+          orderId: 1,
+          orderProcessId: 11,
+        );
         final orderEvents = await service.searchOrderEvents(
           orderCode: 'PO-1',
           eventType: 'order_deleted',
@@ -887,12 +965,19 @@ void main() {
         );
         final firstArticle = await service.submitFirstArticle(
           orderId: 1,
-          orderProcessId: 11,
-          pipelineInstanceId: 301,
-          verificationCode: 'code-1',
-          remark: 'first',
-          effectiveOperatorUserId: 8,
-          assistAuthorizationId: 99,
+          request: const FirstArticleSubmitRequestInput(
+            orderProcessId: 11,
+            pipelineInstanceId: 301,
+            templateId: 501,
+            checkContent: '首件内容',
+            testValue: '9.86',
+            result: 'failed',
+            participantUserIds: [8, 9],
+            verificationCode: 'code-1',
+            remark: 'first',
+            effectiveOperatorUserId: 8,
+            assistAuthorizationId: 99,
+          ),
         );
         final endProduction = await service.endProduction(
           orderId: 1,
@@ -1013,6 +1098,9 @@ void main() {
         expect(proxyOrders.items.single.workView, 'proxy');
         expect(myOrderContext.found, isTrue);
         expect(myOrderContext.item?.workView, 'assist');
+        expect(firstArticleTemplates.items.single.templateName, '首件模板A');
+        expect(firstArticleParticipants.items.first.displayName, 'worker (张三)');
+        expect(firstArticleParameters.items.single.name, '长度');
         expect(orderEvents.items.single.eventType, 'order_deleted');
         expect(firstArticle.message, 'first article done');
         expect(endProduction.message, 'end production done');
@@ -1036,7 +1124,7 @@ void main() {
         expect(repairSummary.items.single.phenomenon, '毛刺');
         expect(completedRepair.status, 'completed');
         expect(repairExport.fileName, 'repair.csv');
-        expect(server.requests.length, 34);
+        expect(server.requests.length, 37);
       },
     );
 
@@ -1061,17 +1149,62 @@ void main() {
       );
     });
 
-    test('parses 422 validation detail message', () async {
+    test(
+      'parses 422 validation detail message with chinese field labels',
+      () async {
+        final server = await TestHttpServer.start({
+          'POST /production/orders': (_) => TestResponse.json(
+            422,
+            body: {
+              'detail': [
+                {
+                  'type': 'string_too_short',
+                  'loc': ['body', 'order_code'],
+                  'msg': 'String should have at least 2 characters',
+                  'input': 'A',
+                },
+              ],
+            },
+          ),
+        });
+        addTearDown(server.close);
+
+        final service = ProductionService(
+          AppSession(baseUrl: server.baseUrl, accessToken: 'token-production'),
+        );
+
+        await expectLater(
+          () => service.createOrder(
+            orderCode: 'A',
+            productId: 1,
+            supplierId: 1,
+            quantity: 1,
+            processCodes: const ['01-01'],
+          ),
+          throwsA(
+            isA<ApiException>()
+                .having((e) => e.statusCode, 'statusCode', 422)
+                .having(
+                  (e) => e.message,
+                  'message',
+                  contains('订单号: String should have at least 2 characters'),
+                ),
+          ),
+        );
+      },
+    );
+
+    test('parses chinese process route validation message', () async {
       final server = await TestHttpServer.start({
         'POST /production/orders': (_) => TestResponse.json(
           422,
           body: {
             'detail': [
               {
-                'type': 'string_too_short',
-                'loc': ['body', 'order_code'],
-                'msg': 'String should have at least 2 characters',
-                'input': 'A',
+                'type': 'value_error',
+                'loc': ['body', 'process_codes'],
+                'msg': 'Value error, 至少选择一道工序。',
+                'input': [],
               },
             ],
           },
@@ -1085,22 +1218,16 @@ void main() {
 
       await expectLater(
         () => service.createOrder(
-          orderCode: 'A',
+          orderCode: 'PO-1',
           productId: 1,
           supplierId: 1,
           quantity: 1,
-          processCodes: const ['01-01'],
+          processCodes: const ['CUT-01', 'CUT-01'],
         ),
         throwsA(
           isA<ApiException>()
               .having((e) => e.statusCode, 'statusCode', 422)
-              .having(
-                (e) => e.message,
-                'message',
-                contains(
-                  'Order Code: String should have at least 2 characters',
-                ),
-              ),
+              .having((e) => e.message, 'message', '工序路线: 至少选择一道工序。'),
         ),
       );
     });

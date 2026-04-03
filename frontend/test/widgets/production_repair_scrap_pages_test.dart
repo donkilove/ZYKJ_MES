@@ -241,6 +241,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    expect(
+      find.byKey(const ValueKey('productionScrapStatisticsListCard')),
+      findsOneWidget,
+    );
     expect(find.text('报废统计'), findsOneWidget);
     expect(find.text('PO-1'), findsOneWidget);
     expect(find.text('刀具磨损'), findsOneWidget);
@@ -279,6 +283,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    expect(
+      find.byKey(const ValueKey('productionRepairOrdersListCard')),
+      findsOneWidget,
+    );
     expect(find.text('维修订单'), findsOneWidget);
     expect(find.text('RW-1'), findsOneWidget);
     expect(find.text('切割'), findsOneWidget);

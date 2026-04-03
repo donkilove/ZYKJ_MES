@@ -17,6 +17,7 @@ class _FakeProductionOrderFormService extends ProductionService {
 
   int? receivedTemplateId;
   int? receivedSupplierId;
+  int createOrderCallCount = 0;
   List<String> receivedProcessCodes = const [];
   final int? detailSupplierId;
   final String? detailSupplierName;
@@ -37,6 +38,7 @@ class _FakeProductionOrderFormService extends ProductionService {
     DateTime? dueDate,
     String? remark,
   }) async {
+    createOrderCallCount += 1;
     receivedTemplateId = templateId;
     receivedSupplierId = supplierId;
     receivedProcessCodes = processCodes;
@@ -439,5 +441,70 @@ void main() {
 
     expect(find.text('供应商不能为空'), findsOneWidget);
     expect(service.receivedSupplierId, isNull);
+  });
+
+  testWidgets('重复选择小工序时允许提交并保留重复工序路线', (tester) async {
+    final service = _FakeProductionOrderFormService();
+    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProductionOrderFormPage(
+          session: AppSession(baseUrl: '', accessToken: ''),
+          onLogout: () {},
+          initialProducts: [ProductionProductOption(id: 1, name: '产线试产件')],
+          initialProcesses: [
+            ProductionProcessOption(
+              id: 101,
+              code: 'CUT-01',
+              name: '切割',
+              stageId: 11,
+              stageCode: 'CUT',
+              stageName: '切割段',
+            ),
+            ProductionProcessOption(
+              id: 102,
+              code: 'POL-01',
+              name: '抛光',
+              stageId: 11,
+              stageCode: 'CUT',
+              stageName: '切割段',
+            ),
+          ],
+          initialTemplates: const [],
+          service: service,
+          craftService: _FakeCraftService(),
+          supplierService: _FakeQualitySupplierService([
+            QualitySupplierItem(
+              id: 3,
+              name: '启用供应商',
+              remark: null,
+              isEnabled: true,
+              createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+              updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+            ),
+          ]),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '订单号'),
+      'PO-DUP-001',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, '数量'), '15');
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '新增步骤'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, '创建'));
+    await tester.pumpAndSettle();
+
+    expect(service.createOrderCallCount, 1);
+    expect(service.receivedProcessCodes, ['CUT-01', 'CUT-01']);
   });
 }

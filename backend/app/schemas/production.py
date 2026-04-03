@@ -31,11 +31,7 @@ class OrderCreate(BaseModel):
     @field_validator("process_codes")
     @classmethod
     def validate_process_codes(cls, value: list[str]) -> list[str]:
-        normalized = [item.strip() for item in value if item and item.strip()]
-        deduplicated = list(dict.fromkeys(normalized))
-        if len(deduplicated) != len(normalized):
-            raise ValueError("Process codes cannot contain duplicates")
-        return deduplicated
+        return [item.strip() for item in value if item and item.strip()]
 
     @field_validator("process_steps")
     @classmethod
@@ -67,11 +63,7 @@ class OrderUpdate(BaseModel):
     @field_validator("process_codes")
     @classmethod
     def validate_process_codes(cls, value: list[str]) -> list[str]:
-        normalized = [item.strip() for item in value if item and item.strip()]
-        deduplicated = list(dict.fromkeys(normalized))
-        if len(deduplicated) != len(normalized):
-            raise ValueError("Process codes cannot contain duplicates")
-        return deduplicated
+        return [item.strip() for item in value if item and item.strip()]
 
     @field_validator("process_steps")
     @classmethod
@@ -211,7 +203,7 @@ class OrderPipelineModeUpdateRequest(BaseModel):
         normalized = [item.strip() for item in value if item and item.strip()]
         deduplicated = list(dict.fromkeys(normalized))
         if len(deduplicated) != len(normalized):
-            raise ValueError("Process codes cannot contain duplicates")
+            raise ValueError("工序路线中不能重复选择相同的小工序。")
         return deduplicated
 
 
@@ -220,6 +212,7 @@ class MyOrderItem(BaseModel):
     order_code: str
     product_id: int
     product_name: str
+    supplier_name: str | None = None
     quantity: int
     order_status: str
     current_process_id: int
@@ -247,6 +240,8 @@ class MyOrderItem(BaseModel):
     max_producible_quantity: int
     can_first_article: bool
     can_end_production: bool
+    due_date: date | None = None
+    remark: str | None = None
     updated_at: datetime
 
 
@@ -263,10 +258,84 @@ class MyOrderContextResult(BaseModel):
 class FirstArticleRequest(BaseModel):
     order_process_id: int = Field(gt=0)
     pipeline_instance_id: int | None = Field(default=None, gt=0)
+    template_id: int | None = Field(default=None, gt=0)
+    check_content: str | None = Field(default=None, max_length=4000)
+    test_value: str | None = Field(default=None, max_length=4000)
+    result: str = Field(default="passed", min_length=1, max_length=32)
+    participant_user_ids: list[int] = Field(default_factory=list)
     verification_code: str = Field(min_length=1, max_length=32)
     remark: str | None = Field(default=None, max_length=1024)
     effective_operator_user_id: int | None = Field(default=None, gt=0)
     assist_authorization_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("result")
+    @classmethod
+    def validate_first_article_result(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"passed", "failed"}:
+            raise ValueError("result must be passed or failed")
+        return normalized
+
+    @field_validator("participant_user_ids")
+    @classmethod
+    def validate_participant_user_ids(cls, value: list[int]) -> list[int]:
+        deduped: list[int] = []
+        seen: set[int] = set()
+        for item in value:
+            user_id = int(item)
+            if user_id <= 0:
+                raise ValueError("participant_user_ids items must be > 0")
+            if user_id in seen:
+                continue
+            seen.add(user_id)
+            deduped.append(user_id)
+        return deduped
+
+
+class FirstArticleTemplateItem(BaseModel):
+    id: int
+    product_id: int
+    process_code: str
+    template_name: str
+    check_content: str | None = None
+    test_value: str | None = None
+
+
+class FirstArticleTemplateListResult(BaseModel):
+    total: int
+    items: list[FirstArticleTemplateItem]
+
+
+class FirstArticleParticipantOptionItem(BaseModel):
+    id: int
+    username: str
+    full_name: str | None = None
+
+
+class FirstArticleParticipantOptionListResult(BaseModel):
+    total: int
+    items: list[FirstArticleParticipantOptionItem]
+
+
+class FirstArticleParameterItem(BaseModel):
+    name: str
+    category: str
+    type: str
+    value: str
+    description: str = ""
+    sort_order: int
+    is_preset: bool
+
+
+class FirstArticleParameterListResult(BaseModel):
+    product_id: int
+    product_name: str
+    parameter_scope: str
+    version: int
+    version_label: str
+    lifecycle_status: str
+    total: int
+    items: list[FirstArticleParameterItem]
 
 
 class ProductionDefectItem(BaseModel):

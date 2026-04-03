@@ -120,8 +120,11 @@ def _notify_order_changed(
 
 def _normalize_process_codes(process_codes: Iterable[str]) -> list[str]:
     normalized = [item.strip() for item in process_codes if item and item.strip()]
-    deduped = list(dict.fromkeys(normalized))
-    return deduped
+    return list(dict.fromkeys(normalized))
+
+
+def _normalize_route_process_codes(process_codes: Iterable[str]) -> list[str]:
+    return [item.strip() for item in process_codes if item and item.strip()]
 
 
 def _parse_pipeline_process_codes_text(value: str | None) -> list[str]:
@@ -437,7 +440,7 @@ def _resolve_route_steps(
             raise ValueError("Template contains no process steps")
         return results, template
 
-    normalized_codes = _normalize_process_codes(process_codes)
+    normalized_codes = _normalize_route_process_codes(process_codes)
     if not normalized_codes:
         raise ValueError("At least one process is required")
     processes, missing_codes = _resolve_processes_by_codes(db, normalized_codes)
@@ -1734,6 +1737,7 @@ def _build_my_order_item(
         "order_code": order.order_code,
         "product_id": order.product_id,
         "product_name": order.product.name if order.product else "",
+        "supplier_name": order.supplier_name,
         "quantity": order.quantity,
         "order_status": order.status,
         "current_process_id": process_row.id,
@@ -1765,6 +1769,8 @@ def _build_my_order_item(
         "max_producible_quantity": max_producible,
         "can_first_article": can_first_article,
         "can_end_production": can_end_production,
+        "due_date": order.due_date,
+        "remark": order.remark,
         "updated_at": order.updated_at,
     }
 

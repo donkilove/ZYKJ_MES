@@ -115,23 +115,23 @@ void main() {
   });
 
   test('QualityProductStatItem parses quality totals from backend', () {
-      final item = QualityProductStatItem.fromJson({
-        'product_id': 9,
-        'product_name': '产品C',
-        'first_article_total': 10,
-        'passed_total': 8,
-        'failed_total': 2,
-        'pass_rate_percent': 80,
-        'defect_total': 4,
-        'scrap_total': 3,
-        'repair_total': 6,
-      });
-
-      expect(item.productId, 9);
-      expect(item.productName, '产品C');
-      expect(item.defectTotal, 4);
-      expect(item.repairTotal, 6);
+    final item = QualityProductStatItem.fromJson({
+      'product_id': 9,
+      'product_name': '产品C',
+      'first_article_total': 10,
+      'passed_total': 8,
+      'failed_total': 2,
+      'pass_rate_percent': 80,
+      'defect_total': 4,
+      'scrap_total': 3,
+      'repair_total': 6,
     });
+
+    expect(item.productId, 9);
+    expect(item.productName, '产品C');
+    expect(item.defectTotal, 4);
+    expect(item.repairTotal, 6);
+  });
 
   test('QualityTrendItem parses stat_date field from backend', () {
     final item = QualityTrendItem.fromJson({
@@ -208,6 +208,14 @@ void main() {
       'result': 'failed',
       'verification_date': '2026-03-06',
       'verification_code': 'VCX',
+      'template_id': 18,
+      'template_name': '品质首件模板',
+      'check_content': '外观、尺寸、装配确认',
+      'test_value': '9.86',
+      'participants': [
+        {'user_id': 7, 'username': 'quality_user', 'full_name': '质检员'},
+        {'user_id': 8, 'username': 'worker_b'},
+      ],
       'remark': '尺寸偏差',
       'created_at': '2026-03-06T09:30:00Z',
       'disposition_opinion': '复检后返工',
@@ -220,6 +228,12 @@ void main() {
     expect(detail.id, 88);
     expect(detail.productionOrderCode, 'Q-ORD-88');
     expect(detail.checkResult, 'failed');
+    expect(detail.templateId, 18);
+    expect(detail.templateName, '品质首件模板');
+    expect(detail.checkContent, '外观、尺寸、装配确认');
+    expect(detail.testValue, '9.86');
+    expect(detail.participants, hasLength(2));
+    expect(detail.participants.first.displayName, 'quality_user (质检员)');
     expect(detail.defectDescription, '尺寸偏差');
     expect(detail.disposition, isNotNull);
     expect(detail.disposition!.finalJudgment, 'rework');

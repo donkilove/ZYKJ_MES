@@ -6,8 +6,11 @@ import '../models/app_session.dart';
 import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/unified_list_table_header_style.dart';
+import 'production_first_article_page.dart';
 import 'production_order_query_detail_page.dart';
 
 class _DefectRowDraft {
@@ -115,14 +118,44 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   String _errorMessage(Object error) =>
       error is ApiException ? error.message : error.toString();
 
-  String _formatDateTime(DateTime value) {
+  String _formatDate(DateTime? value) {
+    if (value == null) {
+      return '-';
+    }
     final local = value.toLocal();
     final mm = local.month.toString().padLeft(2, '0');
     final dd = local.day.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final min = local.minute.toString().padLeft(2, '0');
-    final sec = local.second.toString().padLeft(2, '0');
-    return '${local.year}-$mm-$dd $hh:$min:$sec';
+    return '${local.year}-$mm-$dd';
+  }
+
+  String _buildQuantitySummary(MyOrderItem item) {
+    final assigned = item.userAssignedQuantity;
+    final completed =
+        item.userCompletedQuantity ?? item.processCompletedQuantity;
+    if (assigned != null) {
+      return '可见${item.visibleQuantity} / 分配$assigned / 完成$completed';
+    }
+    return '可见${item.visibleQuantity} / 完成$completed';
+  }
+
+  Future<void> _handleRowAction(String action, MyOrderItem item) async {
+    switch (action) {
+      case 'detail':
+        await _openOrderDetailPage(item);
+        return;
+      case 'first_article':
+        await _openFirstArticlePage(item);
+        return;
+      case 'end_production':
+        await _showEndProductionDialog(item);
+        return;
+      case 'manual_repair':
+        await _showManualRepairDialog(item);
+        return;
+      case 'apply_assist':
+        await _showApplyAssistDialog(item);
+        return;
+    }
   }
 
   Future<void> _loadProxyOperators() async {
@@ -264,7 +297,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           canCreateAssistAuthorization: widget.canCreateAssistAuthorization,
           initialOrderContext: item,
           onSubmitFirstArticle: (target) =>
-              _showFirstArticleDialog(target, reloadAfterAction: false),
+              _openFirstArticlePage(target, reloadAfterAction: false),
           onEndProduction: (target) =>
               _showEndProductionDialog(target, reloadAfterAction: false),
           onCreateManualRepair: (target) =>
@@ -280,46 +313,24 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
   }
 
-  Future<bool> _showFirstArticleDialog(
+  Future<bool> _openFirstArticlePage(
     MyOrderItem item, {
     bool reloadAfterAction = true,
   }) async {
-    final codeController = TextEditingController();
     try {
-      final ok = await showLockedFormDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('提交首件'),
-          content: TextField(
-            controller: codeController,
-            decoration: const InputDecoration(
-              labelText: '当日校验码',
-              border: OutlineInputBorder(),
-            ),
+      final changed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (context) => ProductionFirstArticlePage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            order: item,
+            service: _service,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('提交'),
-            ),
-          ],
         ),
       );
-      if (ok != true || codeController.text.trim().isEmpty) {
+      if (changed != true) {
         return false;
       }
-      await _service.submitFirstArticle(
-        orderId: item.orderId,
-        orderProcessId: item.currentProcessId,
-        pipelineInstanceId: item.pipelineInstanceId,
-        verificationCode: codeController.text.trim(),
-        effectiveOperatorUserId: item.operatorUserId,
-        assistAuthorizationId: item.assistAuthorizationId,
-      );
       if (!mounted) {
         return false;
       }
@@ -342,8 +353,6 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         context,
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       return false;
-    } finally {
-      codeController.dispose();
     }
   }
 
@@ -903,24 +912,9 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '生产订单查询',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '每 ${widget.pollInterval.inSeconds} 秒自动刷新',
-                style: theme.textTheme.bodySmall,
-              ),
-              IconButton(
-                onPressed: _loading ? null : _loadOrders,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          CrudPageHeader(
+            title: '生产订单查询',
+            onRefresh: _loading ? null : _loadOrders,
           ),
           Row(
             children: [
@@ -1073,79 +1067,86 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
             ),
           const SizedBox(height: 8),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无可执行生产工单'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('订单号')),
-                          DataColumn(label: Text('产品')),
-                          DataColumn(label: Text('订单状态')),
-                          DataColumn(label: Text('工段')),
-                          DataColumn(label: Text('工序')),
-                          DataColumn(label: Text('工序状态')),
-                          DataColumn(label: Text('可见数量')),
-                          DataColumn(label: Text('分配数量')),
-                          DataColumn(label: Text('完成数量')),
-                          DataColumn(label: Text('查看视角')),
-                          DataColumn(label: Text('并行实例')),
-                          DataColumn(label: Text('更新时间')),
-                          DataColumn(label: Text('详情')),
-                        ],
-                        rows: _items.map((item) {
-                          final viewLabel = switch (item.workView) {
-                            'own' => '本人',
-                            'assist' => '代班',
-                            'proxy' => '代理',
-                            _ => item.workView,
-                          };
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(item.orderCode)),
-                              DataCell(Text(item.productName)),
-                              DataCell(
-                                Text(
-                                  productionOrderStatusLabel(item.orderStatus),
-                                ),
-                              ),
-                              DataCell(Text(item.currentStageName ?? '-')),
-                              DataCell(Text(item.currentProcessName)),
-                              DataCell(
-                                Text(
-                                  productionProcessStatusLabel(
-                                    item.processStatus,
-                                  ),
-                                ),
-                              ),
-                              DataCell(Text('${item.visibleQuantity}')),
-                              DataCell(
-                                Text(
-                                  item.userAssignedQuantity != null
-                                      ? '${item.userAssignedQuantity}'
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(
-                                Text('${item.processCompletedQuantity}'),
-                              ),
-                              DataCell(Text(viewLabel)),
-                              DataCell(Text(item.pipelineInstanceNo ?? '-')),
-                              DataCell(Text(_formatDateTime(item.updatedAt))),
-                              DataCell(
-                                OutlinedButton(
-                                  onPressed: () => _openOrderDetailPage(item),
-                                  child: const Text('详情'),
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+            child: CrudListTableSection(
+              cardKey: const ValueKey('productionOrderQueryListCard'),
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无可执行生产工单',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: [
+                  UnifiedListTableHeaderStyle.column(context, '订单编号'),
+                  UnifiedListTableHeaderStyle.column(context, '产品型号'),
+                  UnifiedListTableHeaderStyle.column(context, '供应商'),
+                  UnifiedListTableHeaderStyle.column(context, '工序'),
+                  UnifiedListTableHeaderStyle.column(context, '数量概况'),
+                  UnifiedListTableHeaderStyle.column(context, '状态'),
+                  UnifiedListTableHeaderStyle.column(context, '交货日期'),
+                  UnifiedListTableHeaderStyle.column(context, '备注'),
+                  UnifiedListTableHeaderStyle.column(context, '操作'),
+                ],
+                rows: _items.map((item) {
+                  final supplierName = item.supplierName?.trim();
+                  final remark = item.remark?.trim();
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(item.orderCode)),
+                      DataCell(Text(item.productName)),
+                      DataCell(
+                        Text(
+                          supplierName == null || supplierName.isEmpty
+                              ? '-'
+                              : supplierName,
+                        ),
                       ),
-                    ),
-                  ),
+                      DataCell(Text(item.currentProcessName)),
+                      DataCell(Text(_buildQuantitySummary(item))),
+                      DataCell(
+                        Text(productionOrderStatusLabel(item.orderStatus)),
+                      ),
+                      DataCell(Text(_formatDate(item.dueDate))),
+                      DataCell(
+                        Text(remark == null || remark.isEmpty ? '-' : remark),
+                      ),
+                      DataCell(
+                        UnifiedListTableHeaderStyle.actionMenuButton<String>(
+                          theme: theme,
+                          onSelected: (action) =>
+                              _handleRowAction(action, item),
+                          itemBuilder: (context) => [
+                            const PopupMenuItem<String>(
+                              value: 'detail',
+                              child: Text('详情'),
+                            ),
+                            if (widget.canFirstArticle && item.canFirstArticle)
+                              const PopupMenuItem<String>(
+                                value: 'first_article',
+                                child: Text('首件'),
+                              ),
+                            if (widget.canEndProduction &&
+                                item.canEndProduction)
+                              const PopupMenuItem<String>(
+                                value: 'end_production',
+                                child: Text('报工'),
+                              ),
+                            if (widget.canCreateManualRepairOrder)
+                              const PopupMenuItem<String>(
+                                value: 'manual_repair',
+                                child: Text('送修'),
+                              ),
+                            if (widget.canCreateAssistAuthorization)
+                              const PopupMenuItem<String>(
+                                value: 'apply_assist',
+                                child: Text('代班'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
           ),
         ],
       ),

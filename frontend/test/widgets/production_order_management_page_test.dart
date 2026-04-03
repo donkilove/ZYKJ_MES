@@ -141,6 +141,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
+      expect(
+        find.byKey(const ValueKey('productionOrderManagementListCard')),
+        findsOneWidget,
+      );
       expect(find.text('总数：1'), findsOneWidget);
       expect(find.widgetWithText(TextField, '搜索订单号/产品'), findsOneWidget);
       expect(find.widgetWithText(TextField, '产品名称'), findsNothing);

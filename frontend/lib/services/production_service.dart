@@ -428,27 +428,89 @@ class ProductionService implements RepairScrapService {
     return MyOrderContextResult.fromJson(data);
   }
 
-  Future<ProductionActionResult> submitFirstArticle({
+  Future<FirstArticleTemplateListResult> listFirstArticleTemplates({
     required int orderId,
     required int orderProcessId,
-    int? pipelineInstanceId,
-    required String verificationCode,
-    String? remark,
-    int? effectiveOperatorUserId,
-    int? assistAuthorizationId,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/orders/$orderId/first-article/templates',
+    ).replace(queryParameters: {'order_process_id': '$orderProcessId'});
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) =>
+              FirstArticleTemplateItem.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+    return FirstArticleTemplateListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<FirstArticleParticipantOptionListResult>
+  listFirstArticleParticipantOptions({required int orderId}) async {
+    final uri = Uri.parse(
+      '$_basePath/orders/$orderId/first-article/participant-users',
+    );
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) => FirstArticleParticipantOptionItem.fromJson(
+            entry as Map<String, dynamic>,
+          ),
+        )
+        .toList();
+    return FirstArticleParticipantOptionListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
+  }
+
+  Future<FirstArticleParameterListResult> getFirstArticleParameters({
+    required int orderId,
+    required int orderProcessId,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/orders/$orderId/first-article/parameters',
+    ).replace(queryParameters: {'order_process_id': '$orderProcessId'});
+    final response = await http.get(uri, headers: _authHeaders);
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return FirstArticleParameterListResult.fromJson(data);
+  }
+
+  Future<ProductionActionResult> submitFirstArticle({
+    required int orderId,
+    required FirstArticleSubmitRequestInput request,
   }) async {
     final uri = Uri.parse('$_basePath/orders/$orderId/first-article');
     final response = await http.post(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({
-        'order_process_id': orderProcessId,
-        'pipeline_instance_id': pipelineInstanceId,
-        'verification_code': verificationCode,
-        'remark': remark,
-        'effective_operator_user_id': effectiveOperatorUserId,
-        'assist_authorization_id': assistAuthorizationId,
-      }),
+      body: jsonEncode(request.toJson()),
     );
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -1231,7 +1293,7 @@ class ProductionService implements RepairScrapService {
     if (message is String && message.isNotEmpty) {
       return message;
     }
-    return 'Request failed (status $statusCode)';
+    return '请求失败（状态码：$statusCode）';
   }
 
   String? _extractValidationDetailMessage(List<dynamic> detail) {
@@ -1244,7 +1306,7 @@ class ProductionService implements RepairScrapService {
       if (item is! Map<String, dynamic>) {
         continue;
       }
-      final msg = (item['msg'] as String?)?.trim();
+      final msg = _normalizeValidationMessage((item['msg'] as String?)?.trim());
       if (msg == null || msg.isEmpty) {
         continue;
       }
@@ -1270,36 +1332,49 @@ class ProductionService implements RepairScrapService {
     return messages.join('; ');
   }
 
+  String? _normalizeValidationMessage(String? msg) {
+    if (msg == null) {
+      return null;
+    }
+    const valueErrorPrefix = 'Value error, ';
+    if (msg.startsWith(valueErrorPrefix)) {
+      return msg.substring(valueErrorPrefix.length).trim();
+    }
+    return msg;
+  }
+
   String? _fieldLabelForValidation(String field) {
     switch (field) {
       case 'order_code':
-        return 'Order Code';
+        return '订单号';
       case 'product_id':
-        return 'Product';
+        return '产品';
+      case 'supplier_id':
+        return '供应商';
       case 'quantity':
-        return 'Quantity';
+        return '数量';
       case 'start_date':
-        return 'Start Date';
+        return '开工日期';
       case 'due_date':
-        return 'Due Date';
+        return '交期';
       case 'remark':
-        return 'Remark';
+        return '备注';
       case 'template_id':
-        return 'Template';
+        return '工艺模板';
       case 'process_codes':
-        return 'Process Codes';
+        return '工序路线';
       case 'process_steps':
-        return 'Process Steps';
+        return '工序步骤';
       case 'step_order':
-        return 'Step Order';
+        return '步骤顺序';
       case 'stage_id':
-        return 'Stage';
+        return '工段';
       case 'process_id':
-        return 'Process';
+        return '小工序';
       case 'new_template_name':
-        return 'Template Name';
+        return '新模板名称';
       case 'new_template_set_default':
-        return 'Set Default';
+        return '设为默认模板';
       case 'order_process_id':
         return 'Order Process';
       case 'pipeline_instance_id':

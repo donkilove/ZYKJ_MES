@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.models.daily_verification_code import DailyVerificationCode
 from app.models.first_article_disposition import FirstArticleDisposition
 from app.models.first_article_disposition_history import FirstArticleDispositionHistory
+from app.models.first_article_participant import FirstArticleParticipant
 from app.models.first_article_record import FirstArticleRecord
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
@@ -938,6 +939,10 @@ def get_first_article_by_id(
                 ),
                 selectinload(FirstArticleRecord.order_process),
                 selectinload(FirstArticleRecord.operator),
+                selectinload(FirstArticleRecord.template),
+                selectinload(FirstArticleRecord.participants).selectinload(
+                    FirstArticleParticipant.user
+                ),
             )
         )
         .scalars()
@@ -949,6 +954,7 @@ def get_first_article_by_id(
     order = row.order
     process_row = row.order_process
     operator = row.operator
+    template = row.template
     product = order.product if order else None
 
     # 查询处置记录
@@ -988,6 +994,18 @@ def get_first_article_by_id(
         "result": row.result,
         "verification_date": row.verification_date,
         "verification_code": row.verification_code,
+        "template_id": row.template_id,
+        "template_name": template.template_name if template else None,
+        "check_content": row.check_content,
+        "test_value": row.test_value,
+        "participants": [
+            {
+                "user_id": participant.user_id,
+                "username": participant.user.username if participant.user else "",
+                "full_name": participant.user.full_name if participant.user else None,
+            }
+            for participant in row.participants
+        ],
         "remark": row.remark,
         "created_at": row.created_at,
         "disposition_id": disposition.id if disposition else None,

@@ -6,7 +6,9 @@ import '../models/app_session.dart';
 import '../models/production_models.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
+import '../widgets/unified_list_table_header_style.dart';
 
 class ProductionAssistApprovalPage extends StatefulWidget {
   const ProductionAssistApprovalPage({
@@ -346,13 +348,13 @@ class _ProductionAssistApprovalPageState
         children: [
           Row(
             children: [
-              Text(
-                '代班记录',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: CrudPageHeader(
+                  title: '代班记录',
+                  onRefresh: _loading ? null : _loadRows,
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               SizedBox(
                 width: 180,
                 child: DropdownButtonFormField<String?>(
@@ -394,12 +396,6 @@ class _ProductionAssistApprovalPageState
                           _loadRows();
                         },
                 ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadRows,
-                icon: const Icon(Icons.refresh),
               ),
             ],
           ),
@@ -523,84 +519,79 @@ class _ProductionAssistApprovalPageState
               ),
             ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无代班记录'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('订单号')),
-                          DataColumn(label: Text('工序')),
-                          DataColumn(label: Text('目标操作员')),
-                          DataColumn(label: Text('发起人')),
-                          DataColumn(label: Text('代班人')),
-                          DataColumn(label: Text('状态')),
-                          DataColumn(label: Text('审批人')),
-                          DataColumn(label: Text('审批时间')),
-                          DataColumn(label: Text('创建时间')),
-                          DataColumn(label: Text('操作')),
-                        ],
-                        rows: _items.map((item) {
-                          final isPending = item.status == 'pending';
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(item.orderCode)),
-                              DataCell(Text(item.processName)),
-                              DataCell(Text(item.targetOperatorUsername)),
-                              DataCell(Text(item.requesterUsername)),
-                              DataCell(Text(item.helperUsername)),
-                              DataCell(
-                                Text(
-                                  assistAuthorizationStatusLabel(item.status),
-                                ),
+            child: CrudListTableSection(
+              cardKey: const ValueKey('productionAssistApprovalListCard'),
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无代班记录',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: [
+                  UnifiedListTableHeaderStyle.column(context, '订单号'),
+                  UnifiedListTableHeaderStyle.column(context, '工序'),
+                  UnifiedListTableHeaderStyle.column(context, '目标操作员'),
+                  UnifiedListTableHeaderStyle.column(context, '发起人'),
+                  UnifiedListTableHeaderStyle.column(context, '代班人'),
+                  UnifiedListTableHeaderStyle.column(context, '状态'),
+                  UnifiedListTableHeaderStyle.column(context, '审批人'),
+                  UnifiedListTableHeaderStyle.column(context, '审批时间'),
+                  UnifiedListTableHeaderStyle.column(context, '创建时间'),
+                  UnifiedListTableHeaderStyle.column(context, '操作'),
+                ],
+                rows: _items.map((item) {
+                  final isPending = item.status == 'pending';
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(item.orderCode)),
+                      DataCell(Text(item.processName)),
+                      DataCell(Text(item.targetOperatorUsername)),
+                      DataCell(Text(item.requesterUsername)),
+                      DataCell(Text(item.helperUsername)),
+                      DataCell(
+                        Text(assistAuthorizationStatusLabel(item.status)),
+                      ),
+                      DataCell(Text(item.reviewerUsername ?? '-')),
+                      DataCell(
+                        Text(
+                          item.reviewedAt != null
+                              ? _formatDateTime(item.reviewedAt!)
+                              : '-',
+                        ),
+                      ),
+                      DataCell(Text(_formatDateTime(item.createdAt))),
+                      DataCell(
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton(
+                              onPressed: () => _showDetail(context, item),
+                              child: const Text('详情'),
+                            ),
+                            if (isPending && widget.canReview) ...[
+                              const SizedBox(width: 4),
+                              TextButton(
+                                onPressed: () => _reviewRow(item, true),
+                                child: const Text('通过'),
                               ),
-                              DataCell(Text(item.reviewerUsername ?? '-')),
-                              DataCell(
-                                Text(
-                                  item.reviewedAt != null
-                                      ? _formatDateTime(item.reviewedAt!)
-                                      : '-',
+                              const SizedBox(width: 4),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.error,
                                 ),
-                              ),
-                              DataCell(Text(_formatDateTime(item.createdAt))),
-                              DataCell(
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          _showDetail(context, item),
-                                      child: const Text('详情'),
-                                    ),
-                                    if (isPending && widget.canReview) ...[
-                                      const SizedBox(width: 4),
-                                      TextButton(
-                                        onPressed: () => _reviewRow(item, true),
-                                        child: const Text('通过'),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      TextButton(
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: Theme.of(
-                                            context,
-                                          ).colorScheme.error,
-                                        ),
-                                        onPressed: () =>
-                                            _reviewRow(item, false),
-                                        child: const Text('拒绝'),
-                                      ),
-                                    ],
-                                  ],
-                                ),
+                                onPressed: () => _reviewRow(item, false),
+                                child: const Text('拒绝'),
                               ),
                             ],
-                          );
-                        }).toList(),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
           ),
         ],
       ),

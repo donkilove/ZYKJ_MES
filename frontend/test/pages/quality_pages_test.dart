@@ -315,20 +315,79 @@ void main() {
     expect(find.textContaining('维修详情'), findsOneWidget);
     expect(find.text('缺陷现象'), findsOneWidget);
   });
+
+  testWidgets('质量页透传首件消息后展示新增首件字段', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QualityPage(
+            session: session,
+            onLogout: () {},
+            visibleTabCodes: const [firstArticleManagementTabCode],
+            capabilityCodes: const {
+              'quality.first_articles.detail',
+              'quality.first_articles.disposition',
+            },
+            preferredTabCode: firstArticleManagementTabCode,
+            routePayloadJson: '{"action":"detail","record_id":12}',
+            firstArticleService: _FakeQualityService(
+              firstArticleDetail: FirstArticleDetail(
+                id: 12,
+                verificationCode: 'Q-12',
+                productionOrderId: 33,
+                productionOrderCode: 'PO-12',
+                productId: 9,
+                productCode: 'P-12',
+                productName: '产品首件',
+                processId: 4,
+                processName: '装配',
+                operatorUserId: 7,
+                operatorUsername: 'worker_a',
+                checkResult: 'failed',
+                defectDescription: '尺寸偏差',
+                checkAt: DateTime(2026, 3, 5, 8),
+                templateId: 100,
+                templateName: '品质模板A',
+                checkContent: '外观、尺寸复核',
+                testValue: '10.2',
+                participants: const [
+                  FirstArticleParticipantItem(
+                    userId: 8,
+                    username: 'worker_b',
+                    fullName: '李四',
+                  ),
+                ],
+                dispositionHistory: const [],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('首件详情 #12'), findsOneWidget);
+    expect(find.text('品质模板A'), findsOneWidget);
+    expect(find.text('外观、尺寸复核'), findsOneWidget);
+    expect(find.text('10.2'), findsOneWidget);
+    expect(find.text('worker_b (李四)'), findsOneWidget);
+  });
 }
 
 class _FakeQualityService extends QualityService {
   _FakeQualityService({
     this.firstArticleResult,
+    this.firstArticleDetail,
     this.overviewResult,
     this.processItems,
     this.operatorItems,
     this.productItems,
     this.trendItems,
-  })
-    : super(AppSession(baseUrl: 'http://localhost', accessToken: 'token'));
+  }) : super(AppSession(baseUrl: 'http://localhost', accessToken: 'token'));
 
   final FirstArticleListResult? firstArticleResult;
+  final FirstArticleDetail? firstArticleDetail;
   final QualityStatsOverview? overviewResult;
   final List<QualityProcessStatItem>? processItems;
   final List<QualityOperatorStatItem>? operatorItems;
@@ -359,6 +418,35 @@ class _FakeQualityService extends QualityService {
   }
 
   @override
+  Future<FirstArticleDetail> getFirstArticleDetail(int recordId) async {
+    return firstArticleDetail ??
+        FirstArticleDetail(
+          id: recordId,
+          verificationCode: 'FA-$recordId',
+          productionOrderId: 1,
+          productionOrderCode: 'PO-$recordId',
+          productId: 1,
+          productCode: 'P-$recordId',
+          productName: '产品A',
+          processId: 1,
+          processName: '检验',
+          operatorUserId: 1,
+          operatorUsername: 'worker',
+          checkResult: 'failed',
+          defectDescription: '默认缺陷',
+          checkAt: DateTime(2026, 3, 5, 8),
+          dispositionHistory: const [],
+        );
+  }
+
+  @override
+  Future<FirstArticleDetail> getFirstArticleDispositionDetail(
+    int recordId,
+  ) async {
+    return getFirstArticleDetail(recordId);
+  }
+
+  @override
   Future<QualityStatsOverview> getQualityOverview({
     DateTime? startDate,
     DateTime? endDate,
@@ -368,19 +456,20 @@ class _FakeQualityService extends QualityService {
     String? result,
   }) async {
     overviewCallCount += 1;
-    return overviewResult ?? QualityStatsOverview(
-      firstArticleTotal: 0,
-      passedTotal: 0,
-      failedTotal: 0,
-      passRatePercent: 0,
-      defectTotal: 0,
-      scrapTotal: 0,
-      repairTotal: 0,
-      coveredOrderCount: 0,
-      coveredProcessCount: 0,
-      coveredOperatorCount: 0,
-      latestFirstArticleAt: null,
-    );
+    return overviewResult ??
+        QualityStatsOverview(
+          firstArticleTotal: 0,
+          passedTotal: 0,
+          failedTotal: 0,
+          passRatePercent: 0,
+          defectTotal: 0,
+          scrapTotal: 0,
+          repairTotal: 0,
+          coveredOrderCount: 0,
+          coveredProcessCount: 0,
+          coveredOperatorCount: 0,
+          latestFirstArticleAt: null,
+        );
   }
 
   @override
@@ -546,14 +635,14 @@ class _FakeQualityRepairScrapService extends _FakeQualityService {
   }) async {
     return ScrapStatisticsListResult(
       total: 1,
-      items: [
-        await getScrapStatisticsDetail(scrapId: 21),
-      ],
+      items: [await getScrapStatisticsDetail(scrapId: 21)],
     );
   }
 
   @override
-  Future<ScrapStatisticsItem> getScrapStatisticsDetail({required int scrapId}) async {
+  Future<ScrapStatisticsItem> getScrapStatisticsDetail({
+    required int scrapId,
+  }) async {
     return ScrapStatisticsItem.fromJson({
       'id': scrapId,
       'order_code': 'PO-21',
@@ -612,7 +701,9 @@ class _FakeQualityRepairScrapService extends _FakeQualityService {
   }
 
   @override
-  Future<RepairOrderDetailItem> getRepairOrderDetail({required int repairOrderId}) {
+  Future<RepairOrderDetailItem> getRepairOrderDetail({
+    required int repairOrderId,
+  }) {
     return _FakeProductionService().getRepairOrderDetail(
       repairOrderId: repairOrderId,
     );
@@ -624,9 +715,7 @@ class _FakeQualityRepairScrapService extends _FakeQualityService {
   }) async {
     return RepairOrderPhenomenaSummaryResult(
       repairOrderId: repairOrderId,
-      items: [
-        RepairOrderPhenomenonSummaryItem(phenomenon: '虚焊', quantity: 3),
-      ],
+      items: [RepairOrderPhenomenonSummaryItem(phenomenon: '虚焊', quantity: 3)],
     );
   }
 

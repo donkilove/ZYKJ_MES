@@ -9,7 +9,8 @@ import 'production_scrap_statistics_detail_page.dart';
 import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../services/repair_scrap_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 class ProductionScrapStatisticsPage extends StatefulWidget {
@@ -276,7 +277,10 @@ class _ProductionScrapStatisticsPageState
     );
   }
 
-  Future<void> _showDetailById({required int scrapId, String? orderCode}) async {
+  Future<void> _showDetailById({
+    required int scrapId,
+    String? orderCode,
+  }) async {
     if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -327,20 +331,9 @@ class _ProductionScrapStatisticsPageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '报废统计',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: _loading ? null : _loadItems,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          CrudPageHeader(
+            title: '报废统计',
+            onRefresh: _loading ? null : _loadItems,
           ),
           Wrap(
             runSpacing: 8,
@@ -445,61 +438,48 @@ class _ProductionScrapStatisticsPageState
             ),
           const SizedBox(height: 8),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无报废统计数据'))
-                : Card(
-                    child: UnifiedListTableHeaderStyle.wrap(
-                      theme: theme,
-                      child: AdaptiveTableContainer(
-                        child: DataTable(
-                          columns: [
-                            UnifiedListTableHeaderStyle.column(context, '订单号'),
-                            UnifiedListTableHeaderStyle.column(context, '产品'),
-                            UnifiedListTableHeaderStyle.column(context, '工序'),
-                            UnifiedListTableHeaderStyle.column(context, '报废原因'),
-                            UnifiedListTableHeaderStyle.column(context, '数量'),
-                            UnifiedListTableHeaderStyle.column(context, '进度'),
-                            UnifiedListTableHeaderStyle.column(
-                              context,
-                              '最近报废时间',
+            child: CrudListTableSection(
+              cardKey: const ValueKey('productionScrapStatisticsListCard'),
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无报废统计数据',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: [
+                  UnifiedListTableHeaderStyle.column(context, '订单号'),
+                  UnifiedListTableHeaderStyle.column(context, '产品'),
+                  UnifiedListTableHeaderStyle.column(context, '工序'),
+                  UnifiedListTableHeaderStyle.column(context, '报废原因'),
+                  UnifiedListTableHeaderStyle.column(context, '数量'),
+                  UnifiedListTableHeaderStyle.column(context, '进度'),
+                  UnifiedListTableHeaderStyle.column(context, '最近报废时间'),
+                  UnifiedListTableHeaderStyle.column(context, '处理时间'),
+                  UnifiedListTableHeaderStyle.column(context, '操作'),
+                ],
+                rows: _items
+                    .map(
+                      (item) => DataRow(
+                        cells: [
+                          DataCell(Text(item.orderCode ?? '-')),
+                          DataCell(Text(item.productName ?? '-')),
+                          DataCell(Text(item.processName ?? '-')),
+                          DataCell(Text(item.scrapReason)),
+                          DataCell(Text('${item.scrapQuantity}')),
+                          DataCell(Text(scrapProgressLabel(item.progress))),
+                          DataCell(Text(_formatDateTime(item.lastScrapTime))),
+                          DataCell(Text(_formatDateTime(item.appliedAt))),
+                          DataCell(
+                            TextButton(
+                              onPressed: () => _showDetail(item),
+                              child: const Text('详情'),
                             ),
-                            UnifiedListTableHeaderStyle.column(context, '处理时间'),
-                            UnifiedListTableHeaderStyle.column(context, '操作'),
-                          ],
-                          rows: _items
-                              .map(
-                                (item) => DataRow(
-                                  cells: [
-                                    DataCell(Text(item.orderCode ?? '-')),
-                                    DataCell(Text(item.productName ?? '-')),
-                                    DataCell(Text(item.processName ?? '-')),
-                                    DataCell(Text(item.scrapReason)),
-                                    DataCell(Text('${item.scrapQuantity}')),
-                                    DataCell(
-                                      Text(scrapProgressLabel(item.progress)),
-                                    ),
-                                    DataCell(
-                                      Text(_formatDateTime(item.lastScrapTime)),
-                                    ),
-                                    DataCell(
-                                      Text(_formatDateTime(item.appliedAt)),
-                                    ),
-                                    DataCell(
-                                      TextButton(
-                                        onPressed: () => _showDetail(item),
-                                        child: const Text('详情'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                        ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ),
+                    )
+                    .toList(),
+              ),
+            ),
           ),
         ],
       ),

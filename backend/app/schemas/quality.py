@@ -71,6 +71,11 @@ class FirstArticleDetail(BaseModel):
     result: str
     verification_date: date
     verification_code: str | None = None
+    template_id: int | None = None
+    template_name: str | None = None
+    check_content: str | None = None
+    test_value: str | None = None
+    participants: list["FirstArticleParticipantItem"] = Field(default_factory=list)
     remark: str | None = None
     created_at: datetime
     # 处置信息（如有）
@@ -206,6 +211,12 @@ class FirstArticleDispositionHistoryItem(BaseModel):
     disposition_at: datetime | None = None
     recheck_result: str | None = None
     final_judgment: str
+
+
+class FirstArticleParticipantItem(BaseModel):
+    user_id: int
+    username: str
+    full_name: str | None = None
 
 
 class DefectTopItem(BaseModel):

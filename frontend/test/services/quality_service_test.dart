@@ -62,6 +62,13 @@ void main() {
                   'operator_username': 'worker',
                   'result': 'failed',
                   'verification_code': 'V1',
+                  'template_id': 5,
+                  'template_name': '品质模板A',
+                  'check_content': '外观确认',
+                  'test_value': '9.86',
+                  'participants': [
+                    {'user_id': 4, 'username': 'worker', 'full_name': '操作员甲'},
+                  ],
                   'remark': '存在毛刺',
                   'created_at': '2026-03-05T10:00:01Z',
                 },
@@ -85,6 +92,12 @@ void main() {
                   'operator_username': 'worker',
                   'result': 'failed',
                   'verification_code': 'V1',
+                  'template_name': '品质模板A',
+                  'check_content': '外观确认',
+                  'test_value': '9.86',
+                  'participants': [
+                    {'user_id': 5, 'username': 'assistant'},
+                  ],
                   'disposition_opinion': '返工处理',
                   'created_at': '2026-03-05T10:00:01Z',
                 },
@@ -187,7 +200,12 @@ void main() {
         expect(overview.passRatePercent, 80);
         expect(processStats.single.processCode, '01-01');
         expect(detail.productionOrderCode, 'PO-1');
+        expect(detail.templateName, '品质模板A');
+        expect(detail.checkContent, '外观确认');
+        expect(detail.participants.single.displayName, 'worker (操作员甲)');
         expect(dispositionDetail.disposition?.dispositionOpinion, '返工处理');
+        expect(dispositionDetail.testValue, '9.86');
+        expect(dispositionDetail.participants.single.displayName, 'assistant');
         expect(operatorStats.single.operatorUsername, 'worker');
       },
     );

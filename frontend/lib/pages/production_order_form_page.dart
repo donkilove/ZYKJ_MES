@@ -568,7 +568,6 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
       );
       processCodes.add(process.code);
     }
-
     final quantity = int.parse(_quantityController.text.trim());
     final normalizedTemplateName = _newTemplateNameController.text.trim();
 

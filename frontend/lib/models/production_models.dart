@@ -421,6 +421,7 @@ class MyOrderItem {
     required this.orderCode,
     required this.productId,
     required this.productName,
+    required this.supplierName,
     required this.quantity,
     required this.orderStatus,
     required this.currentProcessId,
@@ -448,6 +449,8 @@ class MyOrderItem {
     required this.maxProducibleQuantity,
     required this.canFirstArticle,
     required this.canEndProduction,
+    required this.dueDate,
+    required this.remark,
     required this.updatedAt,
   });
 
@@ -455,6 +458,7 @@ class MyOrderItem {
   final String orderCode;
   final int productId;
   final String productName;
+  final String? supplierName;
   final int quantity;
   final String orderStatus;
   final int currentProcessId;
@@ -482,6 +486,8 @@ class MyOrderItem {
   final int maxProducibleQuantity;
   final bool canFirstArticle;
   final bool canEndProduction;
+  final DateTime? dueDate;
+  final String? remark;
   final DateTime updatedAt;
 
   factory MyOrderItem.fromJson(Map<String, dynamic> json) {
@@ -490,6 +496,7 @@ class MyOrderItem {
       orderCode: (json['order_code'] as String?) ?? '',
       productId: (json['product_id'] as int?) ?? 0,
       productName: (json['product_name'] as String?) ?? '',
+      supplierName: json['supplier_name'] as String?,
       quantity: (json['quantity'] as int?) ?? 0,
       orderStatus: (json['order_status'] as String?) ?? 'pending',
       currentProcessId: (json['current_process_id'] as int?) ?? 0,
@@ -518,6 +525,8 @@ class MyOrderItem {
       maxProducibleQuantity: (json['max_producible_quantity'] as int?) ?? 0,
       canFirstArticle: (json['can_first_article'] as bool?) ?? false,
       canEndProduction: (json['can_end_production'] as bool?) ?? false,
+      dueDate: _parseDateOrNull(json['due_date']),
+      remark: json['remark'] as String?,
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
   }
@@ -543,6 +552,207 @@ class MyOrderContextResult {
           ? MyOrderItem.fromJson(json['item'] as Map<String, dynamic>)
           : null,
     );
+  }
+}
+
+class FirstArticleTemplateItem {
+  FirstArticleTemplateItem({
+    required this.id,
+    required this.productId,
+    required this.processCode,
+    required this.templateName,
+    required this.checkContent,
+    required this.testValue,
+  });
+
+  final int id;
+  final int productId;
+  final String processCode;
+  final String templateName;
+  final String? checkContent;
+  final String? testValue;
+
+  String get displayLabel {
+    final process = processCode.trim();
+    if (process.isEmpty) {
+      return templateName;
+    }
+    return '$templateName ($process)';
+  }
+
+  factory FirstArticleTemplateItem.fromJson(Map<String, dynamic> json) {
+    return FirstArticleTemplateItem(
+      id: (json['id'] as int?) ?? 0,
+      productId: (json['product_id'] as int?) ?? 0,
+      processCode: (json['process_code'] as String?) ?? '',
+      templateName: (json['template_name'] as String?) ?? '',
+      checkContent: json['check_content'] as String?,
+      testValue: json['test_value'] as String?,
+    );
+  }
+}
+
+class FirstArticleTemplateListResult {
+  FirstArticleTemplateListResult({required this.total, required this.items});
+
+  final int total;
+  final List<FirstArticleTemplateItem> items;
+}
+
+class FirstArticleParticipantOptionItem {
+  FirstArticleParticipantOptionItem({
+    required this.id,
+    required this.username,
+    required this.fullName,
+  });
+
+  final int id;
+  final String username;
+  final String? fullName;
+
+  String get displayName {
+    final normalized = (fullName ?? '').trim();
+    if (normalized.isEmpty) {
+      return username;
+    }
+    return '$username ($normalized)';
+  }
+
+  factory FirstArticleParticipantOptionItem.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return FirstArticleParticipantOptionItem(
+      id: (json['id'] as int?) ?? 0,
+      username: (json['username'] as String?) ?? '',
+      fullName: json['full_name'] as String?,
+    );
+  }
+}
+
+class FirstArticleParticipantOptionListResult {
+  FirstArticleParticipantOptionListResult({
+    required this.total,
+    required this.items,
+  });
+
+  final int total;
+  final List<FirstArticleParticipantOptionItem> items;
+}
+
+class FirstArticleParameterItem {
+  FirstArticleParameterItem({
+    required this.name,
+    required this.category,
+    required this.type,
+    required this.value,
+    required this.description,
+    required this.sortOrder,
+    required this.isPreset,
+  });
+
+  final String name;
+  final String category;
+  final String type;
+  final String value;
+  final String description;
+  final int sortOrder;
+  final bool isPreset;
+
+  factory FirstArticleParameterItem.fromJson(Map<String, dynamic> json) {
+    return FirstArticleParameterItem(
+      name: (json['name'] as String?) ?? '',
+      category: (json['category'] as String?) ?? '',
+      type: (json['type'] as String?) ?? '',
+      value: (json['value'] as String?) ?? '',
+      description: (json['description'] as String?) ?? '',
+      sortOrder: (json['sort_order'] as int?) ?? 0,
+      isPreset: (json['is_preset'] as bool?) ?? false,
+    );
+  }
+}
+
+class FirstArticleParameterListResult {
+  FirstArticleParameterListResult({
+    required this.productId,
+    required this.productName,
+    required this.parameterScope,
+    required this.version,
+    required this.versionLabel,
+    required this.lifecycleStatus,
+    required this.total,
+    required this.items,
+  });
+
+  final int productId;
+  final String productName;
+  final String parameterScope;
+  final int version;
+  final String versionLabel;
+  final String lifecycleStatus;
+  final int total;
+  final List<FirstArticleParameterItem> items;
+
+  factory FirstArticleParameterListResult.fromJson(Map<String, dynamic> json) {
+    return FirstArticleParameterListResult(
+      productId: (json['product_id'] as int?) ?? 0,
+      productName: (json['product_name'] as String?) ?? '',
+      parameterScope: (json['parameter_scope'] as String?) ?? '',
+      version: (json['version'] as int?) ?? 0,
+      versionLabel: (json['version_label'] as String?) ?? '',
+      lifecycleStatus: (json['lifecycle_status'] as String?) ?? '',
+      total: (json['total'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map(
+            (entry) => FirstArticleParameterItem.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class FirstArticleSubmitRequestInput {
+  const FirstArticleSubmitRequestInput({
+    required this.orderProcessId,
+    required this.templateId,
+    required this.checkContent,
+    required this.testValue,
+    required this.result,
+    required this.participantUserIds,
+    required this.verificationCode,
+    this.pipelineInstanceId,
+    this.remark,
+    this.effectiveOperatorUserId,
+    this.assistAuthorizationId,
+  });
+
+  final int orderProcessId;
+  final int? pipelineInstanceId;
+  final int? templateId;
+  final String checkContent;
+  final String testValue;
+  final String result;
+  final List<int> participantUserIds;
+  final String verificationCode;
+  final String? remark;
+  final int? effectiveOperatorUserId;
+  final int? assistAuthorizationId;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'order_process_id': orderProcessId,
+      'pipeline_instance_id': pipelineInstanceId,
+      'template_id': templateId,
+      'check_content': checkContent,
+      'test_value': testValue,
+      'result': result,
+      'participant_user_ids': participantUserIds,
+      'verification_code': verificationCode,
+      'remark': remark,
+      'effective_operator_user_id': effectiveOperatorUserId,
+      'assist_authorization_id': assistAuthorizationId,
+    };
   }
 }
 

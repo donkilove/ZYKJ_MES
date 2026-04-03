@@ -24,7 +24,9 @@ from app.models.first_article_disposition import FirstArticleDisposition  # noqa
 from app.models.first_article_disposition_history import (  # noqa: E402
     FirstArticleDispositionHistory,
 )
+from app.models.first_article_participant import FirstArticleParticipant  # noqa: E402
 from app.models.first_article_record import FirstArticleRecord  # noqa: E402
+from app.models.first_article_template import FirstArticleTemplate  # noqa: E402
 from app.models.message import Message  # noqa: E402
 from app.models.message_recipient import MessageRecipient  # noqa: E402
 from app.models.process import Process  # noqa: E402
@@ -65,6 +67,7 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.repair_cause_ids: list[int] = []
         self.message_ids: list[int] = []
         self.user_ids: list[int] = []
+        self.template_ids: list[int] = []
         self.token = self._login()
         self.admin_user = (
             self.db.execute(select(User).where(User.username == "admin"))
@@ -109,10 +112,18 @@ class QualityModuleIntegrationTest(unittest.TestCase):
                 self.db.query(FirstArticleDisposition).filter(
                     FirstArticleDisposition.first_article_record_id == record_id
                 ).delete()
+                self.db.query(FirstArticleParticipant).filter(
+                    FirstArticleParticipant.record_id == record_id
+                ).delete()
                 record = self.db.get(FirstArticleRecord, record_id)
                 if record is not None:
                     self.db.delete(record)
                 self.db.commit()
+            for template_id in reversed(self.template_ids):
+                row = self.db.get(FirstArticleTemplate, template_id)
+                if row is not None:
+                    self.db.delete(row)
+                    self.db.commit()
             for order_process_id in reversed(self.order_process_ids):
                 row = self.db.get(ProductionOrderProcess, order_process_id)
                 if row is not None:
@@ -290,6 +301,27 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.db.commit()
         self.db.refresh(row)
         self.user_ids.append(int(row.id))
+        return row
+
+    def _create_first_article_template(
+        self,
+        *,
+        product: Product,
+        process_code: str,
+        token: str,
+    ) -> FirstArticleTemplate:
+        row = FirstArticleTemplate(
+            product_id=product.id,
+            process_code=process_code,
+            template_name=f"品质首件模板-{token}",
+            check_content=f"模板检验内容-{token}",
+            test_value=f"模板测试值-{token}",
+            is_enabled=True,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        self.template_ids.append(int(row.id))
         return row
 
     def _create_repair_order(
@@ -591,6 +623,36 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             message.target_route_payload_json,
             f'{{"action": "detail", "record_id": {record.id}}}',
         )
+
+    def test_first_article_detail_includes_rich_fields(self) -> None:
+        record = self._create_first_article_record(result="failed")
+        order = self.db.get(ProductionOrder, record.order_id)
+        order_process = self.db.get(ProductionOrderProcess, record.order_process_id)
+        self.assertIsNotNone(order)
+        self.assertIsNotNone(order_process)
+        assert order is not None and order_process is not None
+
+        template = self._create_first_article_template(
+            product=order.product,
+            process_code=order_process.process_code,
+            token=f"{self._suffix}-template",
+        )
+        participant = self._create_operator_user(token=f"{self._suffix}-participant")
+
+        record.template_id = template.id
+        record.check_content = "首件内容-品质详情"
+        record.test_value = "首件测试值-品质详情"
+        self.db.add(FirstArticleParticipant(record_id=record.id, user_id=participant.id))
+        self.db.commit()
+
+        detail = get_first_article_by_id(self.db, record_id=record.id)
+        assert detail is not None
+        self.assertEqual(detail["template_id"], template.id)
+        self.assertEqual(detail["template_name"], template.template_name)
+        self.assertEqual(detail["check_content"], "首件内容-品质详情")
+        self.assertEqual(detail["test_value"], "首件测试值-品质详情")
+        self.assertEqual(len(detail["participants"]), 1)
+        self.assertEqual(detail["participants"][0]["user_id"], participant.id)
 
     def test_defect_analysis_returns_top_reasons_and_product_quality_comparison(
         self,

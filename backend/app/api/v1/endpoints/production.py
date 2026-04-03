@@ -53,6 +53,7 @@ from app.core.rbac import (
     ROLE_SYSTEM_ADMIN,
 )
 from app.db.session import get_db
+from app.models.first_article_template import FirstArticleTemplate
 from app.models.order_event_log import OrderEventLog
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
@@ -71,7 +72,13 @@ from app.schemas.production import (
     AssistUserOptionItem,
     AssistUserOptionListResult,
     EndProductionRequest,
+    FirstArticleParameterItem,
+    FirstArticleParameterListResult,
+    FirstArticleParticipantOptionItem,
+    FirstArticleParticipantOptionListResult,
     FirstArticleRequest,
+    FirstArticleTemplateItem,
+    FirstArticleTemplateListResult,
     MyOrderContextResult,
     MyOrderItem,
     MyOrderListResult,
@@ -114,6 +121,12 @@ from app.schemas.production import (
     ProductionRecordItem,
     ProductionStatsOverview,
     ProductionSubOrderItem,
+)
+from app.services.product_service import (
+    get_current_revision,
+    get_effective_product_parameters,
+    get_product_by_id,
+    get_product_version_parameters,
 )
 from app.services.assist_authorization_service import (
     create_assist_authorization,
@@ -811,6 +824,36 @@ def get_my_order_context_api(
     return success_response(MyOrderContextResult(found=True, item=MyOrderItem(**item)))
 
 
+def _get_first_article_order_context(
+    db: Session,
+    *,
+    order_id: int,
+    order_process_id: int,
+) -> tuple[ProductionOrder, ProductionOrderProcess]:
+    order = db.get(ProductionOrder, order_id)
+    if order is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found",
+        )
+    process_row = (
+        db.execute(
+            select(ProductionOrderProcess).where(
+                ProductionOrderProcess.id == order_process_id,
+                ProductionOrderProcess.order_id == order_id,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if process_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order process not found",
+        )
+    return order, process_row
+
+
 @router.post(
     "/orders/{order_id}/first-article",
     response_model=ApiResponse[OrderActionResult],
@@ -827,6 +870,11 @@ def submit_first_article_api(
             order_id=order_id,
             order_process_id=payload.order_process_id,
             pipeline_instance_id=payload.pipeline_instance_id,
+            template_id=payload.template_id,
+            check_content=payload.check_content,
+            test_value=payload.test_value,
+            result=payload.result,
+            participant_user_ids=payload.participant_user_ids,
             verification_code=payload.verification_code,
             remark=payload.remark,
             operator=current_user,
@@ -842,6 +890,164 @@ def submit_first_article_api(
             message="First article submitted",
         ),
         message="first_article_submitted",
+    )
+
+
+@router.get(
+    "/orders/{order_id}/first-article/templates",
+    response_model=ApiResponse[FirstArticleTemplateListResult],
+)
+def list_first_article_templates_api(
+    order_id: int,
+    order_process_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
+) -> ApiResponse[FirstArticleTemplateListResult]:
+    order, process_row = _get_first_article_order_context(
+        db,
+        order_id=order_id,
+        order_process_id=order_process_id,
+    )
+    rows = (
+        db.execute(
+            select(FirstArticleTemplate)
+            .where(
+                FirstArticleTemplate.product_id == order.product_id,
+                FirstArticleTemplate.process_code == process_row.process_code,
+                FirstArticleTemplate.is_enabled.is_(True),
+            )
+            .order_by(
+                FirstArticleTemplate.template_name.asc(),
+                FirstArticleTemplate.id.asc(),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return success_response(
+        FirstArticleTemplateListResult(
+            total=len(rows),
+            items=[
+                FirstArticleTemplateItem(
+                    id=row.id,
+                    product_id=row.product_id,
+                    process_code=row.process_code,
+                    template_name=row.template_name,
+                    check_content=row.check_content,
+                    test_value=row.test_value,
+                )
+                for row in rows
+            ],
+        )
+    )
+
+
+@router.get(
+    "/orders/{order_id}/first-article/participant-users",
+    response_model=ApiResponse[FirstArticleParticipantOptionListResult],
+)
+def list_first_article_participant_users_api(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
+) -> ApiResponse[FirstArticleParticipantOptionListResult]:
+    order = db.get(ProductionOrder, order_id)
+    if order is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found",
+        )
+    rows = (
+        db.execute(
+            select(User)
+            .where(User.is_active.is_(True), User.is_deleted.is_(False))
+            .order_by(User.username.asc(), User.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    return success_response(
+        FirstArticleParticipantOptionListResult(
+            total=len(rows),
+            items=[
+                FirstArticleParticipantOptionItem(
+                    id=row.id,
+                    username=row.username,
+                    full_name=row.full_name,
+                )
+                for row in rows
+            ],
+        )
+    )
+
+
+@router.get(
+    "/orders/{order_id}/first-article/parameters",
+    response_model=ApiResponse[FirstArticleParameterListResult],
+)
+def get_first_article_parameters_api(
+    order_id: int,
+    order_process_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
+) -> ApiResponse[FirstArticleParameterListResult]:
+    order, _ = _get_first_article_order_context(
+        db,
+        order_id=order_id,
+        order_process_id=order_process_id,
+    )
+    product = get_product_by_id(db, order.product_id)
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
+    parameter_scope = "effective"
+    try:
+        revision, parameters = get_effective_product_parameters(db, product=product)
+    except ValueError:
+        current_revision = get_current_revision(db, product=product)
+        if current_revision is None:
+            return success_response(
+                FirstArticleParameterListResult(
+                    product_id=product.id,
+                    product_name=product.name,
+                    parameter_scope="version",
+                    version=0,
+                    version_label="-",
+                    lifecycle_status=product.lifecycle_status,
+                    total=0,
+                    items=[],
+                )
+            )
+        parameter_scope = "version"
+        revision, parameters = get_product_version_parameters(
+            db,
+            product=product,
+            version=current_revision.version,
+        )
+    return success_response(
+        FirstArticleParameterListResult(
+            product_id=product.id,
+            product_name=product.name,
+            parameter_scope=parameter_scope,
+            version=revision.version,
+            version_label=revision.version_label,
+            lifecycle_status=revision.lifecycle_status,
+            total=len(parameters),
+            items=[
+                FirstArticleParameterItem(
+                    name=row.param_key,
+                    category=row.param_category,
+                    type=row.param_type,
+                    value=row.param_value,
+                    description=row.param_description or "",
+                    sort_order=row.sort_order,
+                    is_preset=row.is_preset,
+                )
+                for row in parameters
+            ],
+        )
     )
 
 

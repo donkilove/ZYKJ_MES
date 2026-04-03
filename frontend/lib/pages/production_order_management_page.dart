@@ -7,8 +7,10 @@ import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/production_service.dart';
 import '../services/quality_supplier_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/unified_list_table_header_style.dart';
 import 'production_order_detail_page.dart';
 import 'production_order_form_page.dart';
 import 'production_pipeline_instances_page.dart';
@@ -541,21 +543,9 @@ class _ProductionOrderManagementPageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '生产订单管理',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadOrders,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          CrudPageHeader(
+            title: '生产订单管理',
+            onRefresh: _loading ? null : _loadOrders,
           ),
           const SizedBox(height: 12),
           Row(
@@ -654,131 +644,123 @@ class _ProductionOrderManagementPageState
               ),
             ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无生产订单。'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('订单编号')),
-                          DataColumn(label: Text('产品名称')),
-                          DataColumn(label: Text('供应商')),
-                          DataColumn(label: Text('数量')),
-                          DataColumn(label: Text('交货日期')),
-                          DataColumn(label: Text('状态')),
-                          DataColumn(label: Text('当前工序')),
-                          DataColumn(label: Text('备注')),
-                          DataColumn(label: Text('操作')),
-                        ],
-                        rows: _items.map((item) {
-                          final supplierName = item.supplierName?.trim();
-                          final remark = item.remark?.trim();
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(item.orderCode)),
-                              DataCell(Text(item.productName)),
-                              DataCell(
-                                Text(
-                                  supplierName == null || supplierName.isEmpty
-                                      ? '-'
-                                      : supplierName,
-                                ),
-                              ),
-                              DataCell(Text('${item.quantity}')),
-                              DataCell(Text(_formatDate(item.dueDate))),
-                              DataCell(
-                                Text(productionOrderStatusLabel(item.status)),
-                              ),
-                              DataCell(Text(item.currentProcessName ?? '-')),
-                              DataCell(
-                                Text(
-                                  remark == null || remark.isEmpty
-                                      ? '-'
-                                      : remark,
-                                ),
-                              ),
-                              DataCell(
-                                PopupMenuButton<String>(
-                                  tooltip: '操作',
-                                  icon: const Icon(Icons.more_vert),
-                                  onSelected: (action) async {
-                                    switch (action) {
-                                      case 'detail':
-                                        await _openOrderDetailPage(item);
-                                        break;
-                                      case 'edit':
-                                        await _showOrderDialog(existing: item);
-                                        break;
-                                      case 'delete':
-                                        await _deleteOrder(item);
-                                        break;
-                                      case 'complete':
-                                        await _completeOrder(item);
-                                        break;
-                                      case 'pipeline':
-                                        await _showPipelineModeDialog(item);
-                                        break;
-                                      case 'pipeline_instances':
-                                        await Navigator.of(context).push(
-                                          MaterialPageRoute<void>(
-                                            builder: (_) =>
-                                                ProductionPipelineInstancesPage(
-                                                  session: widget.session,
-                                                  onLogout: widget.onLogout,
-                                                  orderId: item.id,
-                                                  orderCode: item.orderCode,
-                                                  service: _service,
-                                                ),
-                                          ),
-                                        );
-                                        break;
-                                    }
-                                  },
-                                  itemBuilder: (context) => [
-                                    const PopupMenuItem(
-                                      value: 'detail',
-                                      child: Text('查看详情'),
-                                    ),
-                                    if (item.pipelineEnabled)
-                                      const PopupMenuItem(
-                                        value: 'pipeline_instances',
-                                        child: Text('查看并行实例'),
-                                      ),
-                                    if (widget.canEditOrder &&
-                                        item.status == 'pending')
-                                      const PopupMenuItem(
-                                        value: 'edit',
-                                        child: Text('编辑订单'),
-                                      ),
-                                    if (widget.canCompleteOrder &&
-                                        item.status == 'in_progress')
-                                      const PopupMenuItem(
-                                        value: 'complete',
-                                        child: Text('手工完工'),
-                                      ),
-                                    if (widget.canUpdatePipelineMode &&
-                                        item.status != 'completed')
-                                      const PopupMenuItem(
-                                        value: 'pipeline',
-                                        child: Text('并行模式设置'),
-                                      ),
-                                    if (widget.canDeleteOrder &&
-                                        item.status == 'pending')
-                                      const PopupMenuItem(
-                                        value: 'delete',
-                                        child: Text('删除订单'),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+            child: CrudListTableSection(
+              cardKey: const ValueKey('productionOrderManagementListCard'),
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无生产订单。',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: [
+                  UnifiedListTableHeaderStyle.column(context, '订单编号'),
+                  UnifiedListTableHeaderStyle.column(context, '产品名称'),
+                  UnifiedListTableHeaderStyle.column(context, '供应商'),
+                  UnifiedListTableHeaderStyle.column(context, '数量'),
+                  UnifiedListTableHeaderStyle.column(context, '交货日期'),
+                  UnifiedListTableHeaderStyle.column(context, '状态'),
+                  UnifiedListTableHeaderStyle.column(context, '当前工序'),
+                  UnifiedListTableHeaderStyle.column(context, '备注'),
+                  UnifiedListTableHeaderStyle.column(context, '操作'),
+                ],
+                rows: _items.map((item) {
+                  final supplierName = item.supplierName?.trim();
+                  final remark = item.remark?.trim();
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(item.orderCode)),
+                      DataCell(Text(item.productName)),
+                      DataCell(
+                        Text(
+                          supplierName == null || supplierName.isEmpty
+                              ? '-'
+                              : supplierName,
+                        ),
                       ),
-                    ),
-                  ),
+                      DataCell(Text('${item.quantity}')),
+                      DataCell(Text(_formatDate(item.dueDate))),
+                      DataCell(Text(productionOrderStatusLabel(item.status))),
+                      DataCell(Text(item.currentProcessName ?? '-')),
+                      DataCell(
+                        Text(remark == null || remark.isEmpty ? '-' : remark),
+                      ),
+                      DataCell(
+                        PopupMenuButton<String>(
+                          tooltip: '操作',
+                          icon: const Icon(Icons.more_vert),
+                          onSelected: (action) async {
+                            switch (action) {
+                              case 'detail':
+                                await _openOrderDetailPage(item);
+                                break;
+                              case 'edit':
+                                await _showOrderDialog(existing: item);
+                                break;
+                              case 'delete':
+                                await _deleteOrder(item);
+                                break;
+                              case 'complete':
+                                await _completeOrder(item);
+                                break;
+                              case 'pipeline':
+                                await _showPipelineModeDialog(item);
+                                break;
+                              case 'pipeline_instances':
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        ProductionPipelineInstancesPage(
+                                          session: widget.session,
+                                          onLogout: widget.onLogout,
+                                          orderId: item.id,
+                                          orderCode: item.orderCode,
+                                          service: _service,
+                                        ),
+                                  ),
+                                );
+                                break;
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'detail',
+                              child: Text('查看详情'),
+                            ),
+                            if (item.pipelineEnabled)
+                              const PopupMenuItem(
+                                value: 'pipeline_instances',
+                                child: Text('查看并行实例'),
+                              ),
+                            if (widget.canEditOrder && item.status == 'pending')
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Text('编辑订单'),
+                              ),
+                            if (widget.canCompleteOrder &&
+                                item.status == 'in_progress')
+                              const PopupMenuItem(
+                                value: 'complete',
+                                child: Text('手工完工'),
+                              ),
+                            if (widget.canUpdatePipelineMode &&
+                                item.status != 'completed')
+                              const PopupMenuItem(
+                                value: 'pipeline',
+                                child: Text('并行模式设置'),
+                              ),
+                            if (widget.canDeleteOrder &&
+                                item.status == 'pending')
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text('删除订单'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
           ),
         ],
       ),

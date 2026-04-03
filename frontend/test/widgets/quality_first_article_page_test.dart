@@ -89,6 +89,18 @@ class _FakeQualityService extends QualityService {
       checkResult: 'failed',
       defectDescription: '尺寸偏差',
       checkAt: DateTime(2026, 3, 21, 8, 0),
+      templateId: 501,
+      templateName: '默认首件模板',
+      checkContent: '外观、尺寸、装配确认',
+      testValue: '9.86',
+      participants: const [
+        FirstArticleParticipantItem(
+          userId: 41,
+          username: 'helper_a',
+          fullName: '张三',
+        ),
+        FirstArticleParticipantItem(userId: 42, username: 'helper_b'),
+      ],
       disposition: const FirstArticleDispositionInfo(
         dispositionOpinion: '已复核',
         dispositionUsername: 'quality',
@@ -151,6 +163,10 @@ void main() {
 
     expect(find.text('首件详情 #1'), findsOneWidget);
     expect(find.text('首件基础信息'), findsOneWidget);
+    expect(find.text('默认首件模板'), findsOneWidget);
+    expect(find.text('外观、尺寸、装配确认'), findsOneWidget);
+    expect(find.text('9.86'), findsOneWidget);
+    expect(find.text('helper_a (张三)、helper_b'), findsOneWidget);
     expect(find.text('提交处置'), findsNothing);
   });
 
@@ -164,6 +180,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('首件处置 #1'), findsOneWidget);
+    expect(find.text('默认首件模板'), findsOneWidget);
+    expect(find.text('helper_a (张三)、helper_b'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '提交处置'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, '提交处置'));
@@ -202,6 +220,7 @@ void main() {
 
     expect(find.text('首件详情 #1'), findsOneWidget);
     expect(find.text('首件基础信息'), findsOneWidget);
+    expect(find.text('默认首件模板'), findsOneWidget);
     expect(find.text('提交处置'), findsNothing);
   });
 }

@@ -4,6 +4,8 @@ import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/production_models.dart';
 import 'package:mes_client/pages/production_pipeline_instances_page.dart';
 import 'package:mes_client/services/production_service.dart';
+import 'package:mes_client/widgets/crud_list_table_section.dart';
+import 'package:mes_client/widgets/crud_page_header.dart';
 
 class _FakeProductionPipelineInstancesService extends ProductionService {
   _FakeProductionPipelineInstancesService()
@@ -130,6 +132,8 @@ void main() {
     expect(find.widgetWithText(TextField, '工序'), findsOneWidget);
     expect(find.widgetWithText(TextField, '子订单ID'), findsOneWidget);
     expect(find.widgetWithText(TextField, '实例编号'), findsOneWidget);
+    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.text('21'), findsWidgets);
     expect(find.text('切割 (CUT-01)'), findsNWidgets(2));
     expect(find.text('焊接 (WELD-01)'), findsNWidgets(2));
@@ -157,9 +161,7 @@ void main() {
 
     expect(find.text('订单详情 - PO-TRACE-001'), findsOneWidget);
 
-    Navigator.of(
-      tester.element(find.text('订单详情 - PO-TRACE-001')),
-    ).pop();
+    Navigator.of(tester.element(find.text('订单详情 - PO-TRACE-001'))).pop();
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('查看订单').first);
