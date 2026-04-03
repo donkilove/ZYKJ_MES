@@ -189,3 +189,28 @@
 - 2026-04-02 审查问题修复后独立复核结论：`PASS`。
 - 2026-04-02 追加后端 pytest 回归：已安装 `pytest` 运行器，并执行 `backend/tests/test_production_module_integration.py`、`backend/tests/test_quality_module_integration.py`、`backend/tests/test_page_catalog_unit.py`。
 - 2026-04-02 pytest 期间发现并修复一处既有日期敏感测试问题：`test_manual_production_export_uses_chinese_order_status_label` 固定查询 2026-03，但测试记录时间依赖数据库当前时间；现已将测试记录时间显式固定到查询区间内，相关 pytest 集合 `25 passed`。
+- 2026-04-03 用户反馈创建订单页出现英文错误 `Process Codes: Value error, Process codes cannot contain duplicates`。
+- 2026-04-03 根因确认：工序路线中重复选择了相同小工序，后端 `process_codes` 重复校验原本返回英文，前端又将字段标签映射成英文，导致最终提示为英文串。
+- 2026-04-03 已完成修复：
+  1. 创建订单页提交前直接拦截重复小工序，并提示中文 `工序路线中不能重复选择相同的小工序。`
+  2. 后端生产订单 `process_codes` 重复校验文案改为中文。
+  3. 前端生产模块 422 校验字段标签改为中文，并清理 `Value error, ` 英文前缀。
+- 2026-04-03 独立验证结论：`PASS`。目标 `flutter test`、`flutter analyze` 与后端目标文件编译通过，不再出现 `Process Codes: Value error, ...` 英文提示。
+- 2026-04-03 用户追加业务规则：允许同一小工序在订单工序路线中重复出现。
+- 2026-04-03 当前执行策略调整：撤销“重复小工序必须拦截”的前后端限制，改为允许重复工序路线，并补充相应回归验证。
+- 2026-04-03 用户追加 UI 统一要求：生产模块以下页面统一改为使用公共页面组件风格：订单管理、订单查询、代班记录、生产数据、报废统计、维修订单、并行实例追踪。
+- 2026-04-03 代码事实：仓库现成公共组件为 `CrudPageHeader`、`CrudListTableSection`、`AdaptiveTableContainer`、`UnifiedListTableHeaderStyle`、`SimplePaginationBar`；其中订单管理/查询、代班记录、报废统计、维修订单、并行实例追踪可直接收口，生产数据页需保留统计卡片与 Tab，但页头和表格区可统一到同一套组件。
+- 2026-04-03 指挥官拆分：
+  1. 原子任务 D1：将订单管理、订单查询、代班记录、报废统计、维修订单统一到 `CrudPageHeader + CrudListTableSection + UnifiedListTableHeaderStyle`。
+  2. 原子任务 D2：在不破坏特殊结构前提下，将生产数据查询、并行实例追踪局部统一到公共页面组件。
+- 2026-04-03 任务 D1 执行结果：5 个标准生产列表页已统一接入 `CrudPageHeader`、`CrudListTableSection` 与统一表头样式，相关 widget tests 与 `flutter analyze` 通过，待独立验证。
+- 2026-04-03 任务 D1 独立验证结论：`PASS`。5 个标准列表页已实际切换到公共页头、公共列表容器和统一表头样式，目标 widget tests 与 `flutter analyze` 全通过，允许进入 D2。
+- 2026-04-03 任务 D2 执行结果：`生产数据查询` 与 `并行实例追踪` 已在保留概览卡片、Tab、链路追踪卡片与双模式结构前提下，局部接入公共页头与公共表格容器；目标 widget tests 与 `flutter analyze` 通过，待独立验证。
+- 2026-04-03 任务 D2 独立验证结论：`PASS`。生产数据页已统一页头与纯表格区，并保留概览卡片、5 个 Tab 与统计图表；并行实例追踪页已统一明细表格区，并保留链路追踪卡片与独立/嵌入双模式结构。
+- 2026-04-03 补充 UI 微调：按用户要求移除 `生产订单查询` 页头右侧“每 12 秒自动刷新”提示文案，仅保留刷新能力本身，不改变自动轮询逻辑。
+- 2026-04-03 用户追加订单查询页列表列要求：仅保留 `订单编号、产品型号、供应商、工序、数量概况、状态、交货日期、操作、备注`，且 `操作` 在 `备注` 前。
+- 2026-04-03 代码事实：当前 `生产订单查询` 的前端 `MyOrderItem` 与后端 `MyOrderItem` 契约尚未包含 `supplier_name`、`due_date`、`remark`，因此本次需要前后端联动，不能只改前端表头。
+- 2026-04-03 执行结果：`生产订单查询` 已完成列表列裁剪与 `MyOrderItem` 契约同步，后端补齐 `supplier_name`、`due_date`、`remark`，前端列表只保留 9 列且 `操作` 在 `备注` 前，目标后端定向回归、Flutter tests 与 `flutter analyze` 通过，待独立验证。
+- 2026-04-03 独立验证结论：`PASS`。`生产订单查询` 列表当前已只保留 `订单编号、产品型号、供应商、工序、数量概况、状态、交货日期、操作、备注` 9 列，且 `操作` 确实位于 `备注` 前；前后端契约同步与目标回归验证通过。
+- 2026-04-03 用户追加 UI 顺序调整：要求在 `生产订单查询` 列表中交换 `备注` 与 `操作` 两列位置，以最新需求为准。
+- 2026-04-03 执行与独立验证结论：`生产订单查询` 列表已完成 `备注/操作` 列顺序互换，当前顺序为 `订单编号、产品型号、供应商、工序、数量概况、状态、交货日期、备注、操作`；目标 widget test 与 `flutter analyze` 通过。
