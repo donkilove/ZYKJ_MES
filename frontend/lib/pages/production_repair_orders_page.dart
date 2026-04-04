@@ -109,7 +109,7 @@ class _ProductionRepairOrdersPageState
   List<RepairOrderItem> _items = const [];
   String? _lastHandledJumpPayloadJson;
 
-  static const int _pageSize = 500;
+  static const int _pageSize = 30;
 
   @override
   void initState() {
