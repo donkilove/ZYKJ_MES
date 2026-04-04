@@ -61,17 +61,23 @@ from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
 
 
-def _message_recipient_user_ids_for_order(db: Session, *, order: ProductionOrder) -> list[int]:
-    rows = db.execute(
-        select(User.id)
-        .join(User.roles)
-        .where(
-            User.is_deleted.is_(False),
-            User.is_active.is_(True),
-            Role.code.in_((ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN)),
+def _message_recipient_user_ids_for_order(
+    db: Session, *, order: ProductionOrder
+) -> list[int]:
+    rows = (
+        db.execute(
+            select(User.id)
+            .join(User.roles)
+            .where(
+                User.is_deleted.is_(False),
+                User.is_active.is_(True),
+                Role.code.in_((ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN)),
+            )
+            .distinct()
         )
-        .distinct()
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     recipient_ids = {int(user_id) for user_id in rows}
     if order.created_by_user_id is not None:
         recipient_ids.add(int(order.created_by_user_id))
@@ -615,13 +621,55 @@ def ensure_sub_orders_visible_quantity(
     return changed
 
 
+def _backfill_historical_release_quantity(
+    db: Session,
+    *,
+    process_row: ProductionOrderProcess,
+) -> bool:
+    if process_row.process_order <= 1:
+        return False
+
+    order = process_row.order
+    if order is None:
+        return False
+
+    previous_process_row = (
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(
+                ProductionOrderProcess.order_id == process_row.order_id,
+                ProductionOrderProcess.process_order == process_row.process_order - 1,
+            )
+            .order_by(ProductionOrderProcess.id.asc())
+        )
+        .scalars()
+        .first()
+    )
+    if previous_process_row is None:
+        return False
+
+    released_visible_quantity = min(
+        previous_process_row.completed_quantity, order.quantity
+    )
+    target_visible_quantity = max(
+        process_row.completed_quantity,
+        released_visible_quantity,
+    )
+    if target_visible_quantity <= process_row.visible_quantity:
+        return False
+
+    process_row.visible_quantity = target_visible_quantity
+    db.flush()
+    return True
+
+
 def _backfill_operator_sub_orders(
     db: Session,
     *,
-    current_user: User,
+    operator_user: User,
 ) -> bool:
     process_codes = _normalize_process_codes(
-        process.code for process in current_user.processes
+        process.code for process in operator_user.processes
     )
     if not process_codes:
         return False
@@ -645,6 +693,8 @@ def _backfill_operator_sub_orders(
 
     changed = False
     for process_row in process_rows:
+        if _backfill_historical_release_quantity(db, process_row=process_row):
+            changed = True
         if ensure_sub_orders_visible_quantity(
             db,
             process_row=process_row,
@@ -788,9 +838,13 @@ def _create_pipeline_instances_for_order(
             ProductionSubOrder.id.asc(),
         )
     ).all()
-    grouped_by_process: dict[int, list[tuple[ProductionSubOrder, ProductionOrderProcess]]] = {}
+    grouped_by_process: dict[
+        int, list[tuple[ProductionSubOrder, ProductionOrderProcess]]
+    ] = {}
     for sub_order, process_row in sub_rows:
-        grouped_by_process.setdefault(int(process_row.id), []).append((sub_order, process_row))
+        grouped_by_process.setdefault(int(process_row.id), []).append(
+            (sub_order, process_row)
+        )
 
     link_ids_by_seq: dict[int, str] = {}
     max_pipeline_seq = 0
@@ -803,7 +857,9 @@ def _create_pipeline_instances_for_order(
         ]
         max_pipeline_seq = max(max_pipeline_seq, len(process_rows))
     for pipeline_seq in range(1, max_pipeline_seq + 1):
-        link_ids_by_seq[pipeline_seq] = f"PL{order.id}-{pipeline_seq}-{uuid4().hex[:10]}"
+        link_ids_by_seq[pipeline_seq] = (
+            f"PL{order.id}-{pipeline_seq}-{uuid4().hex[:10]}"
+        )
 
     created = 0
     for process_code in selected_codes:
@@ -814,9 +870,7 @@ def _create_pipeline_instances_for_order(
             if item[1].process_code == process_code
         ]
         for pipeline_seq, (sub_order, process_row) in enumerate(process_rows, start=1):
-            pipeline_no = (
-                f"P{order.id}-{process_row.process_order}-{pipeline_seq}-{uuid4().hex[:6]}"
-            )
+            pipeline_no = f"P{order.id}-{process_row.process_order}-{pipeline_seq}-{uuid4().hex[:6]}"
             db.add(
                 OrderSubOrderPipelineInstance(
                     pipeline_link_id=link_ids_by_seq[pipeline_seq],
@@ -861,7 +915,9 @@ def get_active_pipeline_instance_for_process_sequence(
     if not rows:
         return None
     if len(rows) > 1:
-        raise RuntimeError("Multiple active pipeline instances found for same process sequence")
+        raise RuntimeError(
+            "Multiple active pipeline instances found for same process sequence"
+        )
     return rows[0]
 
 
@@ -1825,6 +1881,12 @@ def _collect_my_order_items(
             raise PermissionError("Current user has no permission for proxy view")
         if proxy_operator_user_id is None:
             raise ValueError("proxy_operator_user_id is required for proxy view")
+        proxy_operator = db.get(User, proxy_operator_user_id)
+        if proxy_operator is None:
+            raise ValueError("proxy_operator_user_id is invalid")
+        # 代理视角需要按目标操作员的工序范围执行同一套历史放行回填。
+        if _backfill_operator_sub_orders(db, operator_user=proxy_operator):
+            db.commit()
         stmt = (
             select(ProductionSubOrder)
             .join(ProductionSubOrder.order_process)
@@ -1981,7 +2043,7 @@ def _collect_my_order_items(
             )
     else:
         # Historical orders may have missing sub-order rows if operators were added later.
-        if _backfill_operator_sub_orders(db, current_user=current_user):
+        if _backfill_operator_sub_orders(db, operator_user=current_user):
             db.commit()
 
         stmt = (
@@ -2099,9 +2161,7 @@ def _my_order_quantity_summary(item: dict[str, object]) -> str:
         else process_completed_quantity
     )
     if user_assigned_quantity is not None:
-        return (
-            f"可见{visible_quantity} / 分配{int(user_assigned_quantity)} / 完成{completed_quantity}"
-        )
+        return f"可见{visible_quantity} / 分配{int(user_assigned_quantity)} / 完成{completed_quantity}"
     return f"可见{visible_quantity} / 完成{completed_quantity}"
 
 
@@ -2248,14 +2308,20 @@ def export_orders_csv(
     ]
     csv_rows = []
     for row in rows:
-        process_rows = sorted(row.processes, key=lambda item: (item.process_order, item.id))
+        process_rows = sorted(
+            row.processes, key=lambda item: (item.process_order, item.id)
+        )
         current_process = next(
             (item for item in process_rows if item.status != PROCESS_STATUS_COMPLETED),
             None,
         )
         if current_process is None and row.current_process_code:
             current_process = next(
-                (item for item in process_rows if item.process_code == row.current_process_code),
+                (
+                    item
+                    for item in process_rows
+                    if item.process_code == row.current_process_code
+                ),
                 None,
             )
         csv_rows.append(

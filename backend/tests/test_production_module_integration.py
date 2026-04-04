@@ -384,6 +384,149 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 409, response.text)
         self.assertIn("Max producible quantity is 6", response.text)
 
+    def test_end_production_releases_partial_completed_quantity_to_next_process(
+        self,
+    ) -> None:
+        stage_a = self._create_stage("SEQ1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="SEQ1"
+        )
+        stage_b = self._create_stage("SEQ2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="SEQ2"
+        )
+        product = self._create_product("顺序放行")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                },
+                {
+                    "step_order": 2,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                },
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            assert order_row is not None
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert admin is not None
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(process_rows), 2)
+            first_process, second_process = process_rows
+
+            order_row.quantity = 1000
+            order_row.status = "in_progress"
+            order_row.current_process_code = first_process.process_code
+
+            first_process.status = "in_progress"
+            first_process.visible_quantity = 1000
+            first_process.completed_quantity = 0
+
+            second_process.status = "pending"
+            second_process.visible_quantity = 0
+            second_process.completed_quantity = 0
+
+            first_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == first_process.id,
+                    ProductionSubOrder.operator_user_id == admin.id,
+                )
+                .first()
+            )
+            if first_sub_order is None:
+                first_sub_order = ProductionSubOrder(
+                    order_process_id=first_process.id,
+                    operator_user_id=admin.id,
+                    assigned_quantity=1000,
+                    completed_quantity=0,
+                    status="in_progress",
+                    is_visible=True,
+                )
+                db.add(first_sub_order)
+            else:
+                first_sub_order.assigned_quantity = 1000
+                first_sub_order.completed_quantity = 0
+                first_sub_order.status = "in_progress"
+                first_sub_order.is_visible = True
+
+            second_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == second_process.id,
+                    ProductionSubOrder.operator_user_id == admin.id,
+                )
+                .first()
+            )
+            if second_sub_order is None:
+                second_sub_order = ProductionSubOrder(
+                    order_process_id=second_process.id,
+                    operator_user_id=admin.id,
+                    assigned_quantity=0,
+                    completed_quantity=0,
+                    status="done",
+                    is_visible=False,
+                )
+                db.add(second_sub_order)
+            else:
+                second_sub_order.assigned_quantity = 0
+                second_sub_order.completed_quantity = 0
+                second_sub_order.status = "done"
+                second_sub_order.is_visible = False
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/end-production",
+            headers=self._headers(),
+            json={
+                "order_process_id": first_process.id,
+                "quantity": 500,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        db = SessionLocal()
+        try:
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(process_rows), 2)
+            first_process, second_process = process_rows
+            second_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(ProductionSubOrder.order_process_id == second_process.id)
+                .first()
+            )
+            self.assertIsNotNone(second_sub_order)
+            assert second_sub_order is not None
+
+            self.assertEqual(first_process.completed_quantity, 500)
+            self.assertEqual(first_process.status, "partial")
+            self.assertEqual(second_process.visible_quantity, 500)
+            self.assertEqual(second_sub_order.assigned_quantity, 500)
+            self.assertTrue(second_sub_order.is_visible)
+        finally:
+            db.close()
+
     def test_create_order_requires_valid_supplier(self) -> None:
         stage = self._create_stage("SUP0")
         process = self._create_process(
@@ -989,6 +1132,223 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(len(list_items), 1)
         self.assertEqual(list_items[0]["order_id"], order["id"])
         self.assertEqual(list_items[0]["current_process_name"], process["name"])
+
+    def test_my_orders_backfills_historical_release_visibility_on_query(self) -> None:
+        stage_a = self._create_stage("MYBF1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="MYBF1"
+        )
+        stage_b = self._create_stage("MYBF2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="MYBF2"
+        )
+        product = self._create_product("历史放行回填")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                },
+                {
+                    "step_order": 2,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                },
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            assert order_row is not None
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert admin is not None
+            second_process = db.get(Process, int(process_b["id"]))
+            assert second_process is not None
+            if all(row.id != second_process.id for row in admin.processes):
+                admin.processes.append(second_process)
+
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(process_rows), 2)
+            first_process_row = process_rows[0]
+            second_process_row = process_rows[1]
+            first_process_row.completed_quantity = 5
+            first_process_row.status = "partial"
+            second_process_row.visible_quantity = 0
+            second_process_row.completed_quantity = 0
+            second_process_row.status = "pending"
+
+            db.add(
+                ProductionSubOrder(
+                    order_process_id=second_process_row.id,
+                    operator_user_id=admin.id,
+                    assigned_quantity=0,
+                    completed_quantity=0,
+                    status="done",
+                    is_visible=False,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        list_response = self.client.get(
+            "/api/v1/production/my-orders",
+            headers=self._headers(),
+            params={"keyword": order["order_code"]},
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        list_items = list_response.json()["data"]["items"]
+        self.assertEqual(len(list_items), 1)
+        self.assertEqual(list_items[0]["order_id"], order["id"])
+        self.assertEqual(list_items[0]["current_process_code"], process_b["code"])
+        self.assertEqual(list_items[0]["visible_quantity"], 5)
+        self.assertEqual(list_items[0]["user_assigned_quantity"], 5)
+
+        db = SessionLocal()
+        try:
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            second_process_row = process_rows[1]
+            self.assertEqual(second_process_row.visible_quantity, 5)
+            second_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == second_process_row.id,
+                    ProductionSubOrder.operator_user_id == admin.id,
+                )
+                .first()
+            )
+            assert second_sub_order is not None
+            self.assertEqual(second_sub_order.assigned_quantity, 5)
+            self.assertTrue(second_sub_order.is_visible)
+            self.assertEqual(second_sub_order.status, "pending")
+        finally:
+            db.close()
+
+    def test_my_orders_proxy_backfills_historical_release_visibility_on_query(
+        self,
+    ) -> None:
+        stage_a = self._create_stage("MYPX1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="MYPX1"
+        )
+        stage_b = self._create_stage("MYPX2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="MYPX2"
+        )
+        product = self._create_product("代理历史放行回填")
+        self._activate_product(product)
+        proxy_operator = self._create_active_user("proxy_backfill")
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                },
+                {
+                    "step_order": 2,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                },
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            assert order_row is not None
+            proxy_operator_row = db.get(User, int(proxy_operator.id))
+            assert proxy_operator_row is not None
+            second_process = db.get(Process, int(process_b["id"]))
+            assert second_process is not None
+            if all(row.id != second_process.id for row in proxy_operator_row.processes):
+                proxy_operator_row.processes.append(second_process)
+
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(process_rows), 2)
+            first_process_row = process_rows[0]
+            second_process_row = process_rows[1]
+            first_process_row.completed_quantity = 5
+            first_process_row.status = "partial"
+            second_process_row.visible_quantity = 0
+            second_process_row.completed_quantity = 0
+            second_process_row.status = "pending"
+
+            db.add(
+                ProductionSubOrder(
+                    order_process_id=second_process_row.id,
+                    operator_user_id=int(proxy_operator.id),
+                    assigned_quantity=0,
+                    completed_quantity=0,
+                    status="done",
+                    is_visible=False,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        list_response = self.client.get(
+            "/api/v1/production/my-orders",
+            headers=self._headers(),
+            params={
+                "keyword": order["order_code"],
+                "view_mode": "proxy",
+                "proxy_operator_user_id": int(proxy_operator.id),
+            },
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        list_items = list_response.json()["data"]["items"]
+        self.assertEqual(len(list_items), 1)
+        self.assertEqual(list_items[0]["order_id"], order["id"])
+        self.assertEqual(list_items[0]["current_process_code"], process_b["code"])
+        self.assertEqual(list_items[0]["visible_quantity"], 5)
+        self.assertEqual(list_items[0]["user_assigned_quantity"], 5)
+
+        db = SessionLocal()
+        try:
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            second_process_row = process_rows[1]
+            self.assertEqual(second_process_row.visible_quantity, 5)
+            second_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == second_process_row.id,
+                    ProductionSubOrder.operator_user_id == int(proxy_operator.id),
+                )
+                .first()
+            )
+            assert second_sub_order is not None
+            self.assertEqual(second_sub_order.assigned_quantity, 5)
+            self.assertTrue(second_sub_order.is_visible)
+            self.assertEqual(second_sub_order.status, "pending")
+        finally:
+            db.close()
 
     def test_complete_repair_order_accepts_multiple_return_allocations(self) -> None:
         stage_a = self._create_stage("C1")

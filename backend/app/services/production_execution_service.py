@@ -55,11 +55,15 @@ def _get_today_verification_code(
     operator_user_id: int,
 ) -> DailyVerificationCode:
     today = date.today()
-    row = db.execute(
-        select(DailyVerificationCode)
-        .where(DailyVerificationCode.verify_date == today)
-        .with_for_update()
-    ).scalars().first()
+    row = (
+        db.execute(
+            select(DailyVerificationCode)
+            .where(DailyVerificationCode.verify_date == today)
+            .with_for_update()
+        )
+        .scalars()
+        .first()
+    )
     if row:
         return row
     row = DailyVerificationCode(
@@ -86,20 +90,30 @@ def _lock_order_and_process(
     order_id: int,
     order_process_id: int,
 ) -> tuple[ProductionOrder, ProductionOrderProcess]:
-    order = db.execute(
-        select(ProductionOrder).where(ProductionOrder.id == order_id).with_for_update()
-    ).scalars().first()
+    order = (
+        db.execute(
+            select(ProductionOrder)
+            .where(ProductionOrder.id == order_id)
+            .with_for_update()
+        )
+        .scalars()
+        .first()
+    )
     if not order:
         raise ValueError("Order not found")
 
-    process_row = db.execute(
-        select(ProductionOrderProcess)
-        .where(
-            ProductionOrderProcess.id == order_process_id,
-            ProductionOrderProcess.order_id == order_id,
+    process_row = (
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(
+                ProductionOrderProcess.id == order_process_id,
+                ProductionOrderProcess.order_id == order_id,
+            )
+            .with_for_update()
         )
-        .with_for_update()
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if not process_row:
         raise ValueError("Order process not found")
     return order, process_row
@@ -111,14 +125,18 @@ def _lock_sub_order(
     order_process_id: int,
     operator_user_id: int,
 ) -> ProductionSubOrder:
-    row = db.execute(
-        select(ProductionSubOrder)
-        .where(
-            ProductionSubOrder.order_process_id == order_process_id,
-            ProductionSubOrder.operator_user_id == operator_user_id,
+    row = (
+        db.execute(
+            select(ProductionSubOrder)
+            .where(
+                ProductionSubOrder.order_process_id == order_process_id,
+                ProductionSubOrder.operator_user_id == operator_user_id,
+            )
+            .with_for_update()
         )
-        .with_for_update()
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if not row:
         raise ValueError("Sub-order assignment not found for current user")
     if not row.is_visible:
@@ -157,14 +175,18 @@ def _lock_previous_process(
 ) -> ProductionOrderProcess | None:
     if process_order <= 1:
         return None
-    return db.execute(
-        select(ProductionOrderProcess)
-        .where(
-            ProductionOrderProcess.order_id == order_id,
-            ProductionOrderProcess.process_order == process_order - 1,
+    return (
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(
+                ProductionOrderProcess.order_id == order_id,
+                ProductionOrderProcess.process_order == process_order - 1,
+            )
+            .with_for_update()
         )
-        .with_for_update()
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
 
 
 def _get_required_pipeline_instance(
@@ -191,7 +213,9 @@ def _get_required_pipeline_instance(
     if current_instance is None:
         raise RuntimeError("Current process has no active pipeline instance")
     if current_instance.id != pipeline_instance_id:
-        raise RuntimeError("Pipeline instance binding does not match current executable task")
+        raise RuntimeError(
+            "Pipeline instance binding does not match current executable task"
+        )
     return current_instance
 
 
@@ -248,7 +272,9 @@ def _ensure_pipeline_sequence_gate(
     if previous_sub_order is None:
         raise RuntimeError("Previous process linked sub-order is missing")
     if previous_sub_order.completed_quantity <= 0:
-        raise RuntimeError("Current process is blocked by previous pipeline instance progress")
+        raise RuntimeError(
+            "Current process is blocked by previous pipeline instance progress"
+        )
 
 
 def _is_start_gate_allowed(
@@ -300,7 +326,10 @@ def _refresh_order_status(db: Session, *, order: ProductionOrder) -> None:
         db.execute(
             select(ProductionOrderProcess)
             .where(ProductionOrderProcess.order_id == order.id)
-            .order_by(ProductionOrderProcess.process_order.asc(), ProductionOrderProcess.id.asc())
+            .order_by(
+                ProductionOrderProcess.process_order.asc(),
+                ProductionOrderProcess.id.asc(),
+            )
             .with_for_update()
         )
         .scalars()
@@ -355,14 +384,18 @@ def _get_first_article_template(
     product_id: int,
     process_code: str,
 ) -> FirstArticleTemplate:
-    row = db.execute(
-        select(FirstArticleTemplate).where(
-            FirstArticleTemplate.id == template_id,
-            FirstArticleTemplate.product_id == product_id,
-            FirstArticleTemplate.process_code == process_code,
-            FirstArticleTemplate.is_enabled.is_(True),
+    row = (
+        db.execute(
+            select(FirstArticleTemplate).where(
+                FirstArticleTemplate.id == template_id,
+                FirstArticleTemplate.product_id == product_id,
+                FirstArticleTemplate.process_code == process_code,
+                FirstArticleTemplate.is_enabled.is_(True),
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if row is None:
         raise ValueError("First article template not found")
     return row
@@ -386,15 +419,21 @@ def _normalize_participant_user_ids(
     if not normalized_ids:
         return []
 
-    rows = db.execute(
-        select(User.id).where(
-            User.id.in_(normalized_ids),
-            User.is_active.is_(True),
-            User.is_deleted.is_(False),
+    rows = (
+        db.execute(
+            select(User.id).where(
+                User.id.in_(normalized_ids),
+                User.is_active.is_(True),
+                User.is_deleted.is_(False),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     found_ids = {int(row_id) for row_id in rows}
-    missing_ids = [str(user_id) for user_id in normalized_ids if user_id not in found_ids]
+    missing_ids = [
+        str(user_id) for user_id in normalized_ids if user_id not in found_ids
+    ]
     if missing_ids:
         raise ValueError(
             f"Participant users not found or inactive: {', '.join(missing_ids)}"
@@ -443,7 +482,9 @@ def submit_first_article(
                 operation=ASSIST_OP_FIRST_ARTICLE,
             )
         elif not _can_proxy_cross_user_operation(db, operator=operator):
-            raise ValueError("Assist authorization is required for cross-user operation")
+            raise ValueError(
+                "Assist authorization is required for cross-user operation"
+            )
 
     sub_order = _lock_sub_order(
         db,
@@ -467,7 +508,9 @@ def submit_first_article(
         current_instance=pipeline_instance,
     )
 
-    process_remaining = max(process_row.visible_quantity - process_row.completed_quantity, 0)
+    process_remaining = max(
+        process_row.visible_quantity - process_row.completed_quantity, 0
+    )
     sub_remaining = max(sub_order.assigned_quantity - sub_order.completed_quantity, 0)
     if min(process_remaining, sub_remaining) <= 0:
         raise ValueError("No producible quantity available for current user")
@@ -491,7 +534,9 @@ def submit_first_article(
     normalized_test_value = _normalize_optional_text(test_value)
     if template_row is not None:
         if normalized_check_content is None:
-            normalized_check_content = _normalize_optional_text(template_row.check_content)
+            normalized_check_content = _normalize_optional_text(
+                template_row.check_content
+            )
         if normalized_test_value is None:
             normalized_test_value = _normalize_optional_text(template_row.test_value)
     normalized_participant_user_ids = _normalize_participant_user_ids(
@@ -627,7 +672,9 @@ def end_production(
                 operation=ASSIST_OP_END_PRODUCTION,
             )
         elif not _can_proxy_cross_user_operation(db, operator=operator):
-            raise ValueError("Assist authorization is required for cross-user operation")
+            raise ValueError(
+                "Assist authorization is required for cross-user operation"
+            )
 
     sub_order = _lock_sub_order(
         db,
@@ -651,7 +698,9 @@ def end_production(
         current_instance=pipeline_instance,
     )
 
-    process_remaining = max(process_row.visible_quantity - process_row.completed_quantity, 0)
+    process_remaining = max(
+        process_row.visible_quantity - process_row.completed_quantity, 0
+    )
     sub_remaining = max(sub_order.assigned_quantity - sub_order.completed_quantity, 0)
     max_producible = min(process_remaining, sub_remaining)
     if max_producible <= 0:
@@ -690,24 +739,29 @@ def end_production(
         sub_order.status = SUB_ORDER_STATUS_PENDING
         sub_order.is_visible = True
 
-    next_process = db.execute(
-        select(ProductionOrderProcess)
-        .where(
-            ProductionOrderProcess.order_id == order.id,
-            ProductionOrderProcess.process_order == process_row.process_order + 1,
+    next_process = (
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(
+                ProductionOrderProcess.order_id == order.id,
+                ProductionOrderProcess.process_order == process_row.process_order + 1,
+            )
+            .with_for_update()
         )
-        .with_for_update()
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if next_process:
         parallel_edge = is_pipeline_parallel_edge_for_processes(
             order=order,
             previous_process_code=process_row.process_code,
             current_process_code=next_process.process_code,
         )
+        released_visible_quantity = min(process_row.completed_quantity, order.quantity)
         if parallel_edge:
-            target_visible = min(process_row.completed_quantity, order.quantity)
-        elif process_row.status == PROCESS_STATUS_COMPLETED:
-            target_visible = order.quantity
+            target_visible = released_visible_quantity
+        elif process_row.status in {PROCESS_STATUS_PARTIAL, PROCESS_STATUS_COMPLETED}:
+            target_visible = released_visible_quantity
         else:
             target_visible = next_process.visible_quantity
         if target_visible > next_process.visible_quantity:
@@ -771,7 +825,9 @@ def end_production(
             "assist_authorization_id": assist_row.id if assist_row else None,
             "production_record_id": record_row.id,
             "pipeline_instance_id": pipeline_instance.id if pipeline_instance else None,
-            "pipeline_link_id": pipeline_instance.pipeline_link_id if pipeline_instance else None,
+            "pipeline_link_id": pipeline_instance.pipeline_link_id
+            if pipeline_instance
+            else None,
             "pipeline_instance_no": pipeline_instance.pipeline_sub_order_no
             if pipeline_instance
             else None,
