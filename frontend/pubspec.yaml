@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   http: ^1.5.0
   shared_preferences: ^2.5.3
   file_selector: ^1.0.3

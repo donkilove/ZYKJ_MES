@@ -15,6 +15,8 @@ const String productionOrderManagementTabCode = 'production_order_management';
 const String productionOrderQueryTabCode = 'production_order_query';
 const String productionAssistRecordsTabCode = 'production_assist_records';
 const String productionDataQueryTabCode = 'production_data_query';
+const String productionTodayRealtimeTabCode = 'production_today_realtime';
+const String productionOperatorStatsTabCode = 'production_operator_stats';
 const String productionScrapStatisticsTabCode = 'production_scrap_statistics';
 const String productionRepairOrdersTabCode = 'production_repair_orders';
 const String productionPipelineInstancesTabCode =
@@ -25,6 +27,8 @@ const List<String> _defaultTabOrder = [
   productionOrderQueryTabCode,
   productionAssistRecordsTabCode,
   productionDataQueryTabCode,
+  productionTodayRealtimeTabCode,
+  productionOperatorStatsTabCode,
   productionScrapStatisticsTabCode,
   productionRepairOrdersTabCode,
   productionPipelineInstancesTabCode,
@@ -87,6 +91,10 @@ class _ProductionPageState extends State<ProductionPage>
 
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
     final visibleSet = tabCodes.toSet();
+    if (visibleSet.contains(productionDataQueryTabCode)) {
+      visibleSet.add(productionTodayRealtimeTabCode);
+      visibleSet.add(productionOperatorStatsTabCode);
+    }
     final ordered = <String>[];
     for (final code in _defaultTabOrder) {
       if (visibleSet.remove(code)) {
@@ -138,7 +146,11 @@ class _ProductionPageState extends State<ProductionPage>
       case productionAssistRecordsTabCode:
         return '代班记录';
       case productionDataQueryTabCode:
-        return '生产数据';
+        return '工序统计';
+      case productionTodayRealtimeTabCode:
+        return '今日实时产量';
+      case productionOperatorStatsTabCode:
+        return '人员统计';
       case productionScrapStatisticsTabCode:
         return '报废统计';
       case productionRepairOrdersTabCode:
@@ -211,9 +223,19 @@ class _ProductionPageState extends State<ProductionPage>
         return ProductionDataPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canExport: _hasPermission(
-            ProductionFeaturePermissionCodes.dataExportUse,
-          ),
+          section: ProductionDataSection.processStats,
+        );
+      case productionTodayRealtimeTabCode:
+        return ProductionDataPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          section: ProductionDataSection.todayRealtime,
+        );
+      case productionOperatorStatsTabCode:
+        return ProductionDataPage(
+          session: widget.session,
+          onLogout: widget.onLogout,
+          section: ProductionDataSection.operatorStats,
         );
       case productionScrapStatisticsTabCode:
         return ProductionScrapStatisticsPage(

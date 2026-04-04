@@ -40,13 +40,90 @@ class _FakeHttpClientRequest implements HttpClientRequest {
 
   @override
   Future<HttpClientResponse> close() async {
-    final isAssistRecords = url.path == '/production/assist-authorizations';
+    final path = url.path;
+    final isAssistRecords = path == '/production/assist-authorizations';
+    final isOverview = path == '/production/stats/overview';
+    final isProcessStats = path == '/production/stats/processes';
+    final isOperatorStats = path == '/production/stats/operators';
+    final isTodayRealtime = path == '/production/data/today-realtime';
     return _FakeHttpClientResponse(
-      statusCode: isAssistRecords ? 200 : 404,
+      statusCode:
+          isAssistRecords ||
+              isOverview ||
+              isProcessStats ||
+              isOperatorStats ||
+              isTodayRealtime
+          ? 200
+          : 404,
       body: jsonEncode(
         isAssistRecords
             ? {
                 'data': {'total': 0, 'items': <Object>[]},
+              }
+            : isOverview
+            ? {
+                'data': {
+                  'total_orders': 5,
+                  'pending_orders': 2,
+                  'in_progress_orders': 2,
+                  'completed_orders': 1,
+                  'total_quantity': 100,
+                  'finished_quantity': 40,
+                },
+              }
+            : isProcessStats
+            ? {
+                'data': {
+                  'items': [
+                    {
+                      'process_code': '01-01',
+                      'process_name': '切割',
+                      'total_orders': 5,
+                      'pending_orders': 2,
+                      'in_progress_orders': 2,
+                      'partial_orders': 0,
+                      'completed_orders': 1,
+                      'total_visible_quantity': 100,
+                      'total_completed_quantity': 40,
+                    },
+                  ],
+                },
+              }
+            : isOperatorStats
+            ? {
+                'data': {
+                  'items': [
+                    {
+                      'operator_user_id': 8,
+                      'operator_username': 'worker',
+                      'process_code': '01-01',
+                      'process_name': '切割',
+                      'production_records': 3,
+                      'production_quantity': 40,
+                      'last_production_at': '2026-03-01T00:00:00Z',
+                    },
+                  ],
+                },
+              }
+            : isTodayRealtime
+            ? {
+                'data': {
+                  'stat_mode': 'main_order',
+                  'summary': {'total_products': 1, 'total_quantity': 10},
+                  'table_rows': [
+                    {
+                      'product_id': 1,
+                      'product_name': '产品A',
+                      'quantity': 10,
+                      'latest_time': '2026-03-01T00:00:00Z',
+                      'latest_time_text': '2026-03-01 08:00:00',
+                    },
+                  ],
+                  'chart_data': [
+                    {'label': '产品A', 'value': 10},
+                  ],
+                  'query_signature': '{"view":"today_realtime"}',
+                },
               }
             : {'detail': 'not found'},
       ),
@@ -197,6 +274,45 @@ void main() {
         find.byKey(const ValueKey('productionAssistRecordsListCard')),
         findsOneWidget,
       );
+    }, createHttpClient: (_) => _FakeHttpClient());
+  });
+
+  testWidgets('production page expands production data into dedicated tabs', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await HttpOverrides.runZoned(() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ProductionPage(
+              session: AppSession(
+                baseUrl: 'http://example.test',
+                accessToken: 'test-token',
+              ),
+              onLogout: () {},
+              visibleTabCodes: const <String>[productionDataQueryTabCode],
+              capabilityCodes: const <String>{},
+              preferredTabCode: productionDataQueryTabCode,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('工序统计'), findsWidgets);
+      expect(find.text('今日实时产量'), findsOneWidget);
+      expect(find.text('人员统计'), findsOneWidget);
+      expect(find.text('手动筛选'), findsNothing);
+      expect(find.text('未完工进度'), findsNothing);
     }, createHttpClient: (_) => _FakeHttpClient());
   });
 }

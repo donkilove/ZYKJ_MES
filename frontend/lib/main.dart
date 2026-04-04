@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'models/app_session.dart';
 import 'pages/force_change_password_page.dart';
@@ -19,6 +20,13 @@ class MesClientApp extends StatelessWidget {
     return MaterialApp(
       title: 'ZYKJ MES 系统',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('zh', 'CN')],
+      locale: const Locale('zh', 'CN'),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF006A67)),
         useMaterial3: true,

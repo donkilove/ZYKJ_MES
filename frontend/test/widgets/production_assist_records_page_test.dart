@@ -93,43 +93,6 @@ class _FakeAssistRecordsService extends ProductionService {
 }
 
 void main() {
-  testWidgets('assist records uses historical pending label in filter', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1600, 1200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ProductionAssistRecordsPage(
-            session: AppSession(baseUrl: '', accessToken: ''),
-            onLogout: () {},
-            canViewRecords: true,
-            service: _FakeAssistRecordsService(),
-          ),
-        ),
-      ),
-    );
-
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(
-      find.byKey(const ValueKey('productionAssistRecordsListCard')),
-      findsOneWidget,
-    );
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
-    await tester.pumpAndSettle();
-
-    expect(find.text('待处理（历史）'), findsWidgets);
-    expect(find.text('已生效'), findsWidgets);
-  });
-
   testWidgets('assist records consumes payload and auto opens detail', (
     tester,
   ) async {
@@ -190,7 +153,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('代班审批已取消，发起后将直接生效。本页仅用于记录查询与详情查看。'), findsOneWidget);
+    expect(find.text('状态筛选'), findsNothing);
+    expect(find.text('代班审批已取消，发起后将直接生效。本页仅用于记录查询与详情查看。'), findsNothing);
     expect(find.widgetWithText(TextButton, '详情'), findsOneWidget);
     expect(find.widgetWithText(TextButton, '通过'), findsNothing);
     expect(find.widgetWithText(TextButton, '拒绝'), findsNothing);

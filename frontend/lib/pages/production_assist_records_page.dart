@@ -38,7 +38,6 @@ class _ProductionAssistRecordsPageState
 
   bool _loading = false;
   String _message = '';
-  String? _statusFilter;
   int _page = 1;
   int _total = 0;
   List<AssistAuthorizationItem> _items = const [];
@@ -198,11 +197,6 @@ class _ProductionAssistRecordsPageState
       }
       _lastHandledRoutePayloadJson = rawPayload;
       _pendingDetailAuthorizationId = authorizationId;
-      if (_statusFilter != null) {
-        setState(() {
-          _statusFilter = null;
-        });
-      }
       _loadRows(page: 1);
     } catch (_) {}
   }
@@ -237,7 +231,6 @@ class _ProductionAssistRecordsPageState
       final result = await _service.listAssistAuthorizations(
         page: targetPage,
         pageSize: _pageSize,
-        status: _statusFilter,
         orderCode: _orderCodeController.text.trim().isEmpty
             ? null
             : _orderCodeController.text.trim(),
@@ -302,69 +295,7 @@ class _ProductionAssistRecordsPageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: CrudPageHeader(
-                  title: '代班记录',
-                  onRefresh: _loading ? null : _loadRows,
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<String?>(
-                  key: ValueKey<String?>(_statusFilter),
-                  initialValue: _statusFilter,
-                  decoration: const InputDecoration(
-                    labelText: '状态筛选',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: const [
-                    DropdownMenuItem<String?>(value: null, child: Text('全部')),
-                    DropdownMenuItem<String?>(
-                      value: 'pending',
-                      child: Text('待处理（历史）'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'approved',
-                      child: Text('已生效'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'rejected',
-                      child: Text('已拒绝'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'consumed',
-                      child: Text('已消耗'),
-                    ),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          if (value == _statusFilter) {
-                            return;
-                          }
-                          setState(() {
-                            _statusFilter = value;
-                          });
-                          _loadRows(page: 1);
-                        },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Text('代班审批已取消，发起后将直接生效。本页仅用于记录查询与详情查看。'),
-          ),
+          CrudPageHeader(title: '代班记录', onRefresh: _loading ? null : _loadRows),
           const SizedBox(height: 12),
           Row(
             children: [
