@@ -233,7 +233,7 @@ PAGE_CATALOG = [
         "page_type": PAGE_TYPE_SIDEBAR,
         "parent_code": None,
         "always_visible": False,
-        "sort_order": 50,
+        "sort_order": 60,
     },
     {
         "code": PAGE_PRODUCTION_ORDER_MANAGEMENT,
@@ -297,7 +297,7 @@ PAGE_CATALOG = [
         "page_type": PAGE_TYPE_SIDEBAR,
         "parent_code": None,
         "always_visible": False,
-        "sort_order": 60,
+        "sort_order": 50,
     },
     {
         "code": PAGE_FIRST_ARTICLE_MANAGEMENT,
