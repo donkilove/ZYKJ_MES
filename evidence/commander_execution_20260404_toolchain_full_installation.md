@@ -5,9 +5,9 @@
 - 任务名称：为 `ZYKJ_MES` 项目补齐指挥官模式所需工具链
 - 执行日期：2026-04-04
 - 执行方式：指挥官模式安装与独立验证
-- 当前状态：进行中
+- 当前状态：已完成
 - 指挥模式：主 agent 拆解调度，子 agent 执行，独立子 agent 验证
-- 工具能力边界：当前会话可用 `Task`、`TodoWrite`、文件读写、终端命令；`Sequential Thinking MCP`、`Serena MCP`、`Context7 MCP` 当前未接通
+- 工具能力边界：当前会话可用 `Task`、`TodoWrite`、文件读写、终端命令；本轮安装前 `Sequential Thinking MCP`、`Serena MCP`、`Context7 MCP`、`Playwright MCP` 均未接通；安装后已由 OpenCode CLI 独立验证为 `connected`
 
 ## 2. 输入来源
 
@@ -50,7 +50,13 @@
 | 证据编号 | 来源 | 形成时间 | 适用结论 | 记录责任 |
 | --- | --- | --- | --- | --- |
 | E1 | `evidence/commander_execution_20260404_commander_tool_availability_audit.md` | 2026-04-04 | 当前缺失工具基线 | 主 agent |
-| E2 | 本日志第 10.1 节降级记录 | 2026-04-04 | `Sequential Thinking MCP` 当前不可用，先以书面拆解代偿 | 主 agent |
+| E2 | 本日志第 10.1 节降级记录 | 2026-04-04 | `Sequential Thinking MCP` 初始不可用，先以书面拆解代偿 | 主 agent |
+| E3 | `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe debug paths` 与 `debug config` 输出 | 2026-04-04 | 实际生效配置目录为 `C:\Users\Donki\.config\opencode`，项目级 `opencode.json` 已被合并 | 主 agent |
+| E4 | `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe mcp list` 输出 | 2026-04-04 | `sequential_thinking`、`context7`、`serena`、`playwright`、`postgres` 全部 `connected` | 主 agent |
+| E5 | `winget install` 批量安装输出 | 2026-04-04 | `gh`、`trivy`、`syft`、`mitmproxy`、Fiddler Everywhere、FlaUInspect、Bruno GUI、`uv` 全部安装成功 | 主 agent |
+| E6 | `gh --version`、`trivy --version`、`syft version`、`mitmdump --version`、`uv --version`、`uvx --version` 输出 | 2026-04-04 | 缺失 CLI 工具均已可执行 | 主 agent |
+| E7 | `winget list --id Bruno.Bruno`、`winget list --id Telerik.Fiddler.Everywhere`、`winget list --id FlaUI.FlaUInspect` 输出 | 2026-04-04 | GUI 工具均已安装 | 主 agent |
+| E8 | 验证子 agent `reverify-installed-commander-tools` 输出 | 2026-04-04 | 独立复检通过 | evidence 代记 |
 
 ## 5. 指挥拆解结果
 
@@ -58,10 +64,10 @@
 
 | 序号 | 原子任务 | 目标 | 执行子 agent | 验证子 agent | 验收标准 | 当前状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 核对安装目标与配置落点 | 明确应安装对象、OpenCode 配置位置、可复用途径 | 已创建 | 待创建 | 形成明确安装清单与落点 | 进行中 |
-| 2 | 安装核心 MCP 工具链 | 接通 `Sequential Thinking`、`Serena`、`Context7`、`Playwright` | 待创建 | 待创建 | `opencode mcp list` 能列出对应服务 | 待开始 |
-| 3 | 安装本机辅助工具 | 补齐 `gh`、`trivy`、`syft`、`mitmproxy`、Fiddler Everywhere、FlaUInspect、Bruno GUI、`uv` | 待创建 | 待创建 | 命令或安装记录可验证 | 待开始 |
-| 4 | 全量独立验证 | 对所有目标工具做最小可用性验证并收口 | 待创建 | 待创建 | 验证结论完整且通过 | 待开始 |
+| 1 | 核对安装目标与配置落点 | 明确应安装对象、OpenCode 配置位置、可复用途径 | 已降级为主 agent 终端执行 | 已完成 | 形成明确安装清单与落点 | 已完成 |
+| 2 | 安装核心 MCP 工具链 | 接通 `Sequential Thinking`、`Serena`、`Context7`、`Playwright`、`postgres` | 已降级为主 agent 终端与最小配置执行 | 已完成 | `opencode mcp list` 能列出对应服务且全部连接 | 已完成 |
+| 3 | 安装本机辅助工具 | 补齐 `gh`、`trivy`、`syft`、`mitmproxy`、Fiddler Everywhere、FlaUInspect、Bruno GUI、`uv` | 已降级为主 agent 终端执行 | 已完成 | 命令或安装记录可验证 | 已完成 |
+| 4 | 全量独立验证 | 对所有目标工具做最小可用性验证并收口 | 已完成 | 已完成 | 验证结论完整且通过 | 已完成 |
 
 ### 5.2 排序依据
 
@@ -80,20 +86,65 @@
 - 风险提示：
   - 若 OpenCode CLI 配置路径判断错误，会导致“已写配置但当前 CLI 仍看不到”。
 
+### 6.2 执行子 agent
+
+#### 原子任务 1：核对安装目标与配置落点
+
+- 处理范围：OpenCode CLI 调试命令、用户配置目录、项目根目录配置落点
+- 核心改动：
+  - 通过 `opencode-cli.exe debug paths` 与 `debug config` 确认项目根目录 `opencode.json` 会被当前仓库会话合并读取
+- 执行子 agent 自测：
+  - `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe debug paths`：通过
+  - `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe debug config`：通过
+- 未决项：无
+
+#### 原子任务 2：安装核心 MCP 工具链
+
+- 处理范围：项目根目录 `opencode.json`
+- 核心改动：
+  - `opencode.json`：新增 `sequential_thinking`、`context7`、`serena`、`playwright`、`postgres` 的 MCP 配置
+- 执行子 agent 自测：
+  - `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe mcp list`：五项均为 `connected`
+- 未决项：无
+
+#### 原子任务 3：安装本机辅助工具
+
+- 处理范围：Windows 主机 `winget` 包管理与用户级命令路径
+- 核心改动：
+  - 使用 `winget` 成功安装 `GitHub.cli`、`AquaSecurity.Trivy`、`Anchore.Syft`、`mitmproxy.mitmproxy`、`Telerik.Fiddler.Everywhere`、`FlaUI.FlaUInspect`、`Bruno.Bruno`、`astral-sh.uv`
+- 执行子 agent 自测：
+  - `gh --version`、`trivy --version`、`syft version`、`mitmdump --version`、`uv --version`、`uvx --version`：均通过
+- 未决项：无
+
+#### 原子任务 4：全量独立验证
+
+- 处理范围：MCP 连接状态、CLI 命令、GUI 工具安装状态
+- 核心改动：
+  - 首轮验证因旧 `PATH` 导致误判，已按流程重派新的验证子 agent
+  - 新验证子 agent 使用绝对路径与重建后的 `PATH` 完成独立复检
+- 执行子 agent 自测：
+  - 见第 7 节与第 8 节
+- 未决项：无
+
 ## 7. 验证结果
 
 ### 7.1 验证结论总览
 
 | 原子任务 | 验证命令 | 结果 | 结论 | 验证子 agent 备注 |
 | --- | --- | --- | --- | --- |
-| 核对安装目标与配置落点 | 待补 | 待补 | 待补 | 待补 |
-| 安装核心 MCP 工具链 | 待补 | 待补 | 待补 | 待补 |
-| 安装本机辅助工具 | 待补 | 待补 | 待补 | 待补 |
-| 全量独立验证 | 待补 | 待补 | 待补 | 待补 |
+| 核对安装目标与配置落点 | `opencode-cli.exe debug paths`；`opencode-cli.exe debug config` | 通过 | 通过 | 已确认项目根目录 `opencode.json` 被合并读取 |
+| 安装核心 MCP 工具链 | `opencode-cli.exe mcp list` | 通过 | 通过 | `sequential_thinking`、`context7`、`serena`、`playwright`、`postgres` 全部 `connected` |
+| 安装本机辅助工具 | `winget install ...`；CLI 版本检查；`winget list --id ...` | 通过 | 通过 | 目标 CLI 与 GUI 工具均已安装 |
+| 全量独立验证 | 验证子 agent `reverify-installed-commander-tools` | 通过 | 通过 | 独立复检通过 |
 
 ### 7.2 详细验证留痕
 
-- 待补。
+- `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe debug paths`：`config` 指向 `C:\Users\Donki\.config\opencode`
+- `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe debug config`：可见项目级 `mcp` 段已合并
+- `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe mcp list`：五个 MCP server 均为 `connected`
+- `$env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')` 后执行 `gh --version`、`trivy --version`、`syft version`、`mitmdump --version`、`uv --version`、`uvx --version`：全部通过
+- `winget list --id Bruno.Bruno`、`winget list --id Telerik.Fiddler.Everywhere`、`winget list --id FlaUI.FlaUInspect`：全部命中已安装版本
+- 最后验证日期：2026-04-04
 
 ## 8. 失败重试记录
 
@@ -101,26 +152,28 @@
 
 | 轮次 | 原子任务 | 失败现象 | 根因判断 | 修复动作 | 复检结果 |
 | --- | --- | --- | --- | --- | --- |
-| 无 | 无 | 无 | 无 | 无 | 无 |
+| 1 | 全量独立验证 | 首轮验证子 agent 结论为未通过，声称 `opencode` 与 `gh/trivy/syft/mitmdump/uv/uvx` 不可用 | 验证子 agent 使用旧 shell 的 `PATH`，且 MCP 校验使用了未刷新的 `opencode` 命令名而非绝对路径 | 重派新的验证子 agent，要求使用 `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe` 绝对路径并先重建 `PATH` 后再验证 | 通过 |
 
 ### 8.2 收口结论
 
-- 待补。
+- 本轮安装经重派验证后已完成闭环；首轮误判已定位为环境变量刷新问题，不影响最终可交付结论。
 
 ## 9. 实际改动
 
-- `evidence/commander_execution_20260404_toolchain_full_installation.md`：建立本轮主日志。
+- `opencode.json`：新增项目级 MCP 配置，接通 `sequential_thinking`、`context7`、`serena`、`playwright`、`postgres`
+- `evidence/commander_execution_20260404_toolchain_full_installation.md`：记录本轮主日志与闭环结果
+- `evidence/commander_tooling_validation_20260404_toolchain_full_installation.md`：记录工具化验证闭环
 
 ## 10. 工具降级、硬阻塞与限制
 
 ### 10.1 工具降级记录
 
-- 不可用工具：`Sequential Thinking MCP`
-- 降级原因：当前会话工具集中不存在该工具，且当前 OpenCode CLI 未配置 MCP server
+- 不可用工具：`Sequential Thinking MCP`（安装前）；`Task` 执行子 agent 输出异常
+- 降级原因：安装启动时核心 MCP 未接通；另外两次 `Task` 执行子 agent 返回空内容，无法作为有效执行证据
 - 触发时间：2026-04-04
-- 替代工具或替代流程：由主 agent 以书面拆解 + `TodoWrite` + 任务日志执行等效拆解
-- 影响范围：无法以仓库规定的 MCP 方式完成顺序思考
-- 补偿措施：将任务拆分、排序依据、验收标准、风险与后续验证全部写入主日志并持续更新
+- 替代工具或替代流程：先由主 agent 以书面拆解 + `TodoWrite` + 任务日志执行等效拆解；执行环节改由主 agent 终端命令直接完成；验证环节仍保留独立验证子 agent
+- 影响范围：执行环节未能完整获得子 agent 文字摘要；顺序思考未以本轮会话内建工具直接执行
+- 补偿措施：将任务拆分、排序依据、验收标准、安装命令、验证命令、失败重试与最终独立复检全部写入主日志；同时在安装完成后补通 `Sequential Thinking MCP`
 
 ### 10.2 evidence 代记说明
 
@@ -137,24 +190,27 @@
 
 ### 10.4 已知限制
 
-- 当前仅完成安装前拆解与留痕，具体安装与验证仍在执行中。
+- 当前 API 会话并不会自动热加载新接通的 MCP；因此“已安装并接通”的结论以 `opencode-cli.exe` 与独立验证子 agent 的结果为准。
 
 ## 11. 交付判断
 
 - 已完成项：
   - 建立本轮主日志
   - 明确原子任务与验收标准
+  - 创建项目级 `opencode.json` 并接通 5 个 MCP server
+  - 安装 `gh`、`trivy`、`syft`、`mitmproxy`、Fiddler Everywhere、FlaUInspect、Bruno GUI、`uv`
+  - 完成独立复检并通过
 - 未完成项：
-  - 安装核心 MCP 工具链
-  - 安装本机辅助工具
-  - 完成独立验证
-- 是否满足任务目标：否
-- 主 agent 最终结论：继续执行中
+  - 无
+- 是否满足任务目标：是
+- 主 agent 最终结论：可交付
 
 ## 12. 输出文件
 
 - `evidence/commander_execution_20260404_toolchain_full_installation.md`
 - `evidence/commander_execution_20260404_commander_tool_availability_audit.md`
+- `evidence/commander_tooling_validation_20260404_toolchain_full_installation.md`
+- `opencode.json`
 
 ## 13. 迁移说明
 

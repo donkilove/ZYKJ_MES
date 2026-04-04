@@ -74,3 +74,31 @@
 - 每一批提交信息需与文件范围一致。
 - 任何批次不得混入排除项。
 - 提交完成后需由独立验证子 agent 复核提交顺序与剩余工作区状态。
+
+## 12. 执行结果
+1. `976ed54 feat: 打通生产工单查询导出与代理筛选能力`
+   - 范围：生产工单查询前后端、权限、接口、导出、上下文与相关测试/evidence。
+2. `ea61cec feat: 为生产多页面补齐统一分页交互`
+   - 范围：生产多页面统一分页交互、对应测试与分页留痕。
+3. `3e99c59 fix: 修复维护计划时区回退在缺失 zoneinfo 时失效`
+   - 范围：维护计划时区回退、`tzdata` 依赖、单测与回归留痕。
+4. `a114b99 feat: 调整品质与生产模块侧边栏顺序`
+   - 范围：后端与前端页面目录排序同步调整。
+5. `956c29c chore: 收敛指挥官工具链并移除 opencode 配置依赖`
+   - 范围：`.opencode` 技能删除、`opencode.json` 移除、流程文档、治理脚本与相关 evidence。
+
+## 13. 验证子 agent 复核摘要
+- 首轮结论：发现可能残留 `.gitignore` 策略改动，判定暂不通过。
+- 主 agent 复核：`git diff -- .gitignore` 为空，误报排除。
+- 二次状态复核：
+  - `git -c core.quotepath=false status --short` 仅剩 `?? opencode.json`
+  - `git status --short --ignored` 显示 `evidence/opencode_instructions_lab/` 与 `evidence/opencode_instructions_live_fix/` 为忽略目录
+  - `git log --oneline -5` 与预期 5 个提交一致
+
+## 14. 最终结论
+- 本轮“项目相关改动分批提交”已完成。
+- 剩余未提交项说明：
+  - `opencode.json`：在删除后被本地工具再次生成，属于本地运行态配置，不纳入本轮提交。
+  - `evidence/opencode_instructions_lab/**`：实验性注入/抓包产物，已忽略，不纳入本轮提交。
+  - `evidence/opencode_instructions_live_fix/**`：现场排查日志/数据库/快照产物，已忽略，不纳入本轮提交。
+- 无迁移，直接替换。
