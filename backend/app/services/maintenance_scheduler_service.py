@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.config import settings
@@ -16,15 +16,26 @@ from app.services.user_service import get_active_user_ids_by_role
 logger = logging.getLogger(__name__)
 
 
-def _resolve_timezone() -> ZoneInfo:
+def _timezone_label(tz: tzinfo) -> str:
+    return getattr(tz, "key", None) or tz.tzname(None) or str(tz)
+
+
+def _resolve_timezone() -> tzinfo:
+    timezone_name = settings.maintenance_auto_generate_timezone.strip() or "UTC"
     try:
-        return ZoneInfo(settings.maintenance_auto_generate_timezone)
-    except ZoneInfoNotFoundError:
-        logger.warning(
-            "[MAINT_SCHED] Invalid timezone '%s', fallback to UTC.",
-            settings.maintenance_auto_generate_timezone,
+        return ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        fallback_timezone = (
+            timezone(timedelta(hours=8), name="Asia/Shanghai")
+            if timezone_name.lower() == "asia/shanghai"
+            else timezone.utc
         )
-        return ZoneInfo("UTC")
+        logger.warning(
+            "[MAINT_SCHED] Invalid timezone '%s', fallback to %s.",
+            timezone_name,
+            _timezone_label(fallback_timezone),
+        )
+        return fallback_timezone
 
 
 def _resolve_target_clock() -> tuple[int, int]:
@@ -63,7 +74,7 @@ async def run_maintenance_auto_generate_loop() -> None:
         "[MAINT_SCHED] Auto generation loop started at %02d:%02d %s.",
         hour,
         minute,
-        tz.key,
+        _timezone_label(tz),
     )
 
     while True:
