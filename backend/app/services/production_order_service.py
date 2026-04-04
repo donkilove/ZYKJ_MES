@@ -28,7 +28,6 @@ from app.core.production_constants import (
 from app.core.product_lifecycle import PRODUCT_LIFECYCLE_ACTIVE
 from app.core.authz_catalog import (
     PERM_PROD_MY_ORDERS_PROXY,
-    PERM_PROD_MY_ORDERS_VIEW_ALL,
     PERM_PROD_ORDERS_DETAIL_ALL,
     PERM_PROD_ORDERS_PIPELINE_MODE_UPDATE,
     PERM_PROD_ORDERS_PIPELINE_MODE_VIEW_ALL,
@@ -1732,6 +1731,28 @@ def _build_my_order_item(
         can_end_production = can_end_production_override
         pipeline_end_allowed = can_end_production_override
 
+    can_apply_assist = False
+    can_create_manual_repair = False
+    if is_operator_context and sub_order is not None and sub_order.is_visible:
+        can_create_manual_repair = (
+            sub_order.status in {SUB_ORDER_STATUS_PENDING, SUB_ORDER_STATUS_IN_PROGRESS}
+            and max_producible > 0
+        )
+        can_apply_assist = (
+            assist_authorization_id is None
+            and sub_order.status
+            in {SUB_ORDER_STATUS_PENDING, SUB_ORDER_STATUS_IN_PROGRESS}
+            and (
+                max_producible > 0
+                or sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
+                or (
+                    pipeline_mode_enabled
+                    and sub_order.status == SUB_ORDER_STATUS_PENDING
+                    and pipeline_start_allowed
+                )
+            )
+        )
+
     return {
         "order_id": order.id,
         "order_code": order.order_code,
@@ -1769,6 +1790,8 @@ def _build_my_order_item(
         "max_producible_quantity": max_producible,
         "can_first_article": can_first_article,
         "can_end_production": can_end_production,
+        "can_apply_assist": can_apply_assist,
+        "can_create_manual_repair": can_create_manual_repair,
         "due_date": order.due_date,
         "remark": order.remark,
         "updated_at": order.updated_at,
@@ -1790,11 +1813,6 @@ def _collect_my_order_items(
     if view_mode not in {"own", "proxy", "assist"}:
         raise ValueError("Invalid work view mode")
 
-    is_admin_context = has_permission(
-        db,
-        user=current_user,
-        permission_code=PERM_PROD_MY_ORDERS_VIEW_ALL,
-    )
     can_proxy_view = has_permission(
         db,
         user=current_user,
@@ -1837,6 +1855,9 @@ def _collect_my_order_items(
                 or_(
                     ProductionOrder.order_code.ilike(like_pattern),
                     Product.name.ilike(like_pattern),
+                    ProductionOrder.supplier_name.ilike(like_pattern),
+                    ProductionOrderProcess.process_code.ilike(like_pattern),
+                    ProductionOrderProcess.process_name.ilike(like_pattern),
                 )
             )
         sub_orders = db.execute(stmt).scalars().all()
@@ -1853,8 +1874,6 @@ def _collect_my_order_items(
                     sub_order=sub_order,
                     is_operator_context=True,
                     work_view="proxy",
-                    can_first_article_override=False,
-                    can_end_production_override=False,
                 )
             )
     elif view_mode == "assist":
@@ -1915,6 +1934,9 @@ def _collect_my_order_items(
                     key
                     and key not in order.order_code.lower()
                     and key not in (order.product.name if order.product else "").lower()
+                    and key not in (order.supplier_name or "").lower()
+                    and key not in (process_row.process_code or "").lower()
+                    and key not in (process_row.process_name or "").lower()
                 ):
                     continue
 
@@ -1957,59 +1979,6 @@ def _collect_my_order_items(
                     can_end_production_override=can_end_production,
                 )
             )
-    elif is_admin_context:
-        stmt = (
-            select(ProductionOrder)
-            .where(ProductionOrder.status != ORDER_STATUS_COMPLETED)
-            .options(
-                selectinload(ProductionOrder.product),
-                selectinload(ProductionOrder.processes),
-            )
-            .order_by(ProductionOrder.updated_at.desc(), ProductionOrder.id.desc())
-        )
-        if exact_order_id is not None:
-            stmt = stmt.where(ProductionOrder.id == exact_order_id)
-        if keyword:
-            like_pattern = f"%{keyword.strip()}%"
-            stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
-                or_(
-                    ProductionOrder.order_code.ilike(like_pattern),
-                    Product.name.ilike(like_pattern),
-                )
-            )
-        orders = db.execute(stmt).scalars().all()
-        for order in orders:
-            process_rows = sorted(
-                order.processes, key=lambda row: (row.process_order, row.id)
-            )
-            if exact_order_process_id is not None:
-                current_process = next(
-                    (row for row in process_rows if row.id == exact_order_process_id),
-                    None,
-                )
-            else:
-                current_process = next(
-                    (
-                        row
-                        for row in process_rows
-                        if row.status != PROCESS_STATUS_COMPLETED
-                    ),
-                    None,
-                )
-            if current_process is None:
-                continue
-            if current_process.status == PROCESS_STATUS_COMPLETED:
-                continue
-            items.append(
-                _build_my_order_item(
-                    db,
-                    order=order,
-                    process_row=current_process,
-                    sub_order=None,
-                    is_operator_context=False,
-                    work_view="own",
-                )
-            )
     else:
         # Historical orders may have missing sub-order rows if operators were added later.
         if _backfill_operator_sub_orders(db, current_user=current_user):
@@ -2044,6 +2013,9 @@ def _collect_my_order_items(
                 or_(
                     ProductionOrder.order_code.ilike(like_pattern),
                     Product.name.ilike(like_pattern),
+                    ProductionOrder.supplier_name.ilike(like_pattern),
+                    ProductionOrderProcess.process_code.ilike(like_pattern),
+                    ProductionOrderProcess.process_name.ilike(like_pattern),
                 )
             )
         sub_orders = db.execute(stmt).scalars().all()
@@ -2116,6 +2088,31 @@ def list_my_orders(
     return total, items[offset : offset + page_size]
 
 
+def _my_order_quantity_summary(item: dict[str, object]) -> str:
+    visible_quantity = int(item.get("visible_quantity") or 0)
+    process_completed_quantity = int(item.get("process_completed_quantity") or 0)
+    user_assigned_quantity = item.get("user_assigned_quantity")
+    user_completed_quantity = item.get("user_completed_quantity")
+    completed_quantity = (
+        int(user_completed_quantity)
+        if user_completed_quantity is not None
+        else process_completed_quantity
+    )
+    if user_assigned_quantity is not None:
+        return (
+            f"可见{visible_quantity} / 分配{int(user_assigned_quantity)} / 完成{completed_quantity}"
+        )
+    return f"可见{visible_quantity} / 完成{completed_quantity}"
+
+
+def _my_order_work_view_label(work_view: str | None) -> str:
+    if work_view == "proxy":
+        return "代理操作员视角"
+    if work_view == "assist":
+        return "我的代班工单"
+    return "我的工单"
+
+
 def get_my_order_context(
     db: Session,
     *,
@@ -2137,6 +2134,76 @@ def get_my_order_context(
     if not items:
         return None
     return items[0]
+
+
+def export_my_orders_csv(
+    db: Session,
+    *,
+    current_user: User,
+    keyword: str | None = None,
+    view_mode: str = "own",
+    proxy_operator_user_id: int | None = None,
+    order_status: str | None = None,
+    current_process_id: int | None = None,
+) -> dict[str, object]:
+    items = _collect_my_order_items(
+        db,
+        current_user=current_user,
+        keyword=keyword,
+        view_mode=view_mode,
+        proxy_operator_user_id=proxy_operator_user_id,
+        order_status=order_status,
+        current_process_id=current_process_id,
+        exact_order_id=None,
+        exact_order_process_id=None,
+    )
+    headers = [
+        "订单编号",
+        "产品型号",
+        "供应商",
+        "工序",
+        "数量概况",
+        "状态",
+        "交货日期",
+        "备注",
+        "工单视角",
+        "操作员",
+        "更新时间",
+    ]
+    csv_rows: list[list[str]] = []
+    for item in items:
+        due_date = item.get("due_date")
+        updated_at = item.get("updated_at")
+        csv_rows.append(
+            [
+                str(item.get("order_code") or ""),
+                str(item.get("product_name") or ""),
+                str(item.get("supplier_name") or ""),
+                str(item.get("current_process_name") or ""),
+                _my_order_quantity_summary(item),
+                order_status_label(str(item.get("order_status") or "")),
+                str(due_date) if due_date else "",
+                str(item.get("remark") or ""),
+                _my_order_work_view_label(str(item.get("work_view") or "own")),
+                str(item.get("operator_username") or ""),
+                updated_at.strftime("%Y-%m-%d %H:%M:%S") if updated_at else "",
+            ]
+        )
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    for row in csv_rows:
+        writer.writerow(row)
+    content_b64 = base64.b64encode(output.getvalue().encode("utf-8-sig")).decode(
+        "ascii"
+    )
+    file_name = f"my_orders_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.csv"
+    return {
+        "file_name": file_name,
+        "mime_type": "text/csv",
+        "content_base64": content_b64,
+        "exported_count": len(csv_rows),
+    }
 
 
 def export_orders_csv(

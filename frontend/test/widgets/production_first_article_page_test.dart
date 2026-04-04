@@ -126,6 +126,8 @@ MyOrderItem _buildOrder() {
     maxProducibleQuantity: 5,
     canFirstArticle: true,
     canEndProduction: true,
+    canApplyAssist: true,
+    canCreateManualRepair: true,
     dueDate: DateTime.parse('2026-03-10T00:00:00Z'),
     remark: '备注',
     updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),

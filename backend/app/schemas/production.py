@@ -240,6 +240,8 @@ class MyOrderItem(BaseModel):
     max_producible_quantity: int
     can_first_article: bool
     can_end_production: bool
+    can_apply_assist: bool = False
+    can_create_manual_repair: bool = False
     due_date: date | None = None
     remark: str | None = None
     updated_at: datetime
@@ -688,6 +690,14 @@ class RepairOrdersExportRequest(BaseModel):
     status: str | None = Field(default="all", max_length=32)
     start_date: date | None = None
     end_date: date | None = None
+
+
+class MyOrdersExportRequest(BaseModel):
+    keyword: str | None = Field(default=None, max_length=128)
+    view_mode: str = Field(default="own", max_length=32)
+    proxy_operator_user_id: int | None = Field(default=None, gt=0)
+    order_status: str | None = Field(default=None, max_length=32)
+    current_process_id: int | None = Field(default=None, gt=0)
 
 
 class ProductionExportResult(BaseModel):

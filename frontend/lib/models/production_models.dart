@@ -449,6 +449,8 @@ class MyOrderItem {
     required this.maxProducibleQuantity,
     required this.canFirstArticle,
     required this.canEndProduction,
+    required this.canApplyAssist,
+    required this.canCreateManualRepair,
     required this.dueDate,
     required this.remark,
     required this.updatedAt,
@@ -486,6 +488,8 @@ class MyOrderItem {
   final int maxProducibleQuantity;
   final bool canFirstArticle;
   final bool canEndProduction;
+  final bool canApplyAssist;
+  final bool canCreateManualRepair;
   final DateTime? dueDate;
   final String? remark;
   final DateTime updatedAt;
@@ -525,6 +529,9 @@ class MyOrderItem {
       maxProducibleQuantity: (json['max_producible_quantity'] as int?) ?? 0,
       canFirstArticle: (json['can_first_article'] as bool?) ?? false,
       canEndProduction: (json['can_end_production'] as bool?) ?? false,
+      canApplyAssist: (json['can_apply_assist'] as bool?) ?? false,
+      canCreateManualRepair:
+          (json['can_create_manual_repair'] as bool?) ?? false,
       dueDate: _parseDateOrNull(json['due_date']),
       remark: json['remark'] as String?,
       updatedAt: DateTime.parse(json['updated_at'] as String),

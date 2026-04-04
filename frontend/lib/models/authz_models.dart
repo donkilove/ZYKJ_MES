@@ -1005,6 +1005,7 @@ class ProductionPermissionCodes {
       'production.orders.pipeline_mode.view';
 
   static const String myOrdersProxy = 'production.my_orders.proxy';
+  static const String myOrdersExport = 'production.my_orders.export';
   static const String executionFirstArticle =
       'production.execution.first_article';
   static const String executionEndProduction =
@@ -1292,6 +1293,8 @@ class ProductionFeaturePermissionCodes {
   static const String orderQueryExecute =
       'feature.production.order_query.execute';
   static const String orderQueryProxy = 'feature.production.order_query.proxy';
+  static const String orderQueryExport =
+      'feature.production.order_query.export';
   static const String assistLaunch = 'feature.production.assist.launch';
   static const String assistRecordsView =
       'feature.production.assist.records.view';

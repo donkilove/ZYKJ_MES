@@ -130,6 +130,8 @@ MyOrderItem _buildMyOrderItem() {
     maxProducibleQuantity: 5,
     canFirstArticle: true,
     canEndProduction: true,
+    canApplyAssist: true,
+    canCreateManualRepair: true,
     dueDate: DateTime.parse('2026-03-10T00:00:00Z'),
     remark: '查询备注',
     updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
@@ -137,6 +139,40 @@ MyOrderItem _buildMyOrderItem() {
 }
 
 void main() {
+  testWidgets('query detail page supports configurable initial history tab', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProductionOrderQueryDetailPage(
+          session: AppSession(baseUrl: '', accessToken: ''),
+          onLogout: () {},
+          orderId: 1,
+          canFirstArticle: true,
+          canEndProduction: true,
+          canCreateManualRepairOrder: true,
+          canCreateAssistAuthorization: true,
+          initialOrderContext: _buildMyOrderItem(),
+          service: _FakeProductionOrderQueryDetailService(),
+          initialTab: ProductionOrderQueryDetailTab.event,
+          onSubmitFirstArticle: (_) async => false,
+          onEndProduction: (_) async => false,
+          onCreateManualRepair: (_) async => false,
+          onApplyAssist: (_) async => false,
+          onRefreshOrderContext: (_) async =>
+              MyOrderContextResult(found: true, item: _buildMyOrderItem()),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final tabContext = tester.element(find.byType(TabBar));
+    expect(DefaultTabController.of(tabContext).index, 3);
+    expect(find.text('创建订单'), findsOneWidget);
+  });
+
   testWidgets('production query detail page renders tabs and action buttons', (
     tester,
   ) async {
@@ -182,6 +218,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    final tabContext = tester.element(find.byType(TabBar));
+    expect(DefaultTabController.of(tabContext).index, 0);
     expect(find.text('首件'), findsOneWidget);
     expect(find.text('报工'), findsOneWidget);
     expect(find.text('手工送修建单'), findsOneWidget);

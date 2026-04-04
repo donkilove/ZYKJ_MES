@@ -660,6 +660,25 @@ void main() {
               },
             );
           },
+          'POST /production/my-orders/export': (request) {
+            final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+            expect(body['keyword'], 'mine');
+            expect(body['view_mode'], 'proxy');
+            expect(body['proxy_operator_user_id'], 8);
+            expect(body['order_status'], 'in_progress');
+            expect(body['current_process_id'], 11);
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'file_name': 'my-orders.csv',
+                  'mime_type': 'text/csv',
+                  'content_base64': 'YWJj',
+                  'exported_count': 2,
+                },
+              },
+            );
+          },
           'POST /production/data/manual/export': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['stat_mode'], 'main_order');
@@ -1010,6 +1029,13 @@ void main() {
           statMode: 'main_order',
           productIds: const [10],
         );
+        final myOrderExport = await service.exportMyOrders(
+          keyword: ' mine ',
+          viewMode: 'proxy',
+          proxyOperatorUserId: 8,
+          orderStatus: 'in_progress',
+          currentProcessId: 11,
+        );
         final productOptions = await service.listProductOptions();
         final processOptions = await service.listProcessOptions();
         final assistUsers = await service.listAssistUserOptions(
@@ -1111,6 +1137,8 @@ void main() {
         expect(unfinishedData.tableRows.single.progressPercent, 40.0);
         expect(manualData.tableRows.single.quantity, 20);
         expect(manualExport.fileName, 'production_manual.csv');
+        expect(myOrderExport.fileName, 'my-orders.csv');
+        expect(myOrderExport.exportedCount, 2);
         expect(productOptions.single.id, 10);
         expect(processOptions.single.code, '01-01');
         expect(assistUsers.items.length, 2);
@@ -1124,7 +1152,7 @@ void main() {
         expect(repairSummary.items.single.phenomenon, '毛刺');
         expect(completedRepair.status, 'completed');
         expect(repairExport.fileName, 'repair.csv');
-        expect(server.requests.length, 37);
+        expect(server.requests.length, 38);
       },
     );
 

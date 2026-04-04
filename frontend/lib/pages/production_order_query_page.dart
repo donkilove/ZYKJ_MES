@@ -1,17 +1,28 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
+import '../models/craft_models.dart';
 import '../models/production_models.dart';
 import '../services/api_exception.dart';
+import '../services/craft_service.dart';
 import '../services/production_service.dart';
 import '../widgets/crud_list_table_section.dart';
 import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 import 'production_first_article_page.dart';
 import 'production_order_query_detail_page.dart';
+
+typedef ProductionOrderQueryExportSaver =
+    Future<String?> Function({
+      required String filename,
+      required String contentBase64,
+    });
 
 class _DefectRowDraft {
   _DefectRowDraft({String? phenomenon, int? quantity})
@@ -59,7 +70,10 @@ class ProductionOrderQueryPage extends StatefulWidget {
     required this.canCreateManualRepairOrder,
     required this.canCreateAssistAuthorization,
     required this.canProxyView,
+    required this.canExportCsv,
     this.service,
+    this.craftService,
+    this.saveExportFile,
     this.pollInterval = const Duration(seconds: 12),
   });
 
@@ -70,7 +84,10 @@ class ProductionOrderQueryPage extends StatefulWidget {
   final bool canCreateManualRepairOrder;
   final bool canCreateAssistAuthorization;
   final bool canProxyView;
+  final bool canExportCsv;
   final ProductionService? service;
+  final CraftService? craftService;
+  final ProductionOrderQueryExportSaver? saveExportFile;
   final Duration pollInterval;
 
   @override
@@ -80,6 +97,7 @@ class ProductionOrderQueryPage extends StatefulWidget {
 
 class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   late final ProductionService _service;
+  late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
   Timer? _pollTimer;
 
@@ -88,18 +106,29 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   String _viewMode = 'own';
   String _orderStatusFilter = 'all';
   int? _currentProcessIdFilter;
+  int? _proxyStageId;
   int? _proxyOperatorUserId;
+  int _page = 1;
   int _total = 0;
   List<MyOrderItem> _items = const [];
   List<AssistUserOptionItem> _proxyOperators = const [];
+  List<AssistUserOptionItem> _proxyViewOperators = const [];
   List<AssistUserOptionItem> _assistUsers = const [];
+  List<CraftStageLightItem> _proxyStages = const [];
+
+  static const int _pageSize = 200;
+
+  int get _totalPages =>
+      _total <= 0 ? 1 : ((_total + _pageSize - 1) ~/ _pageSize);
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? ProductionService(widget.session);
+    _craftService = widget.craftService ?? CraftService(widget.session);
     if (widget.canProxyView) {
       _loadProxyOperators();
+      _loadProxyStages();
     }
     _loadOrders();
     _startPolling();
@@ -138,10 +167,109 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     return '可见${item.visibleQuantity} / 完成$completed';
   }
 
+  Future<String?> _saveExportFile({
+    required String filename,
+    required String contentBase64,
+  }) async {
+    final customSaver = widget.saveExportFile;
+    if (customSaver != null) {
+      return customSaver(filename: filename, contentBase64: contentBase64);
+    }
+    final bytes = base64Decode(contentBase64);
+    final location = await getSaveLocation(
+      suggestedName: filename,
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'CSV', extensions: ['csv']),
+      ],
+    );
+    if (location == null) {
+      return null;
+    }
+    await XFile.fromData(
+      bytes,
+      mimeType: 'text/csv',
+      name: filename,
+    ).saveTo(location.path);
+    return location.path;
+  }
+
+  Future<void> _exportOrders() async {
+    if (!widget.canExportCsv) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前账号无导出权限')));
+      return;
+    }
+    if (_viewMode == 'proxy' &&
+        (_proxyStageId == null || _proxyOperatorUserId == null)) {
+      setState(() {
+        _message = _emptyStateText;
+      });
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _message = '';
+    });
+    try {
+      final result = await _service.exportMyOrders(
+        keyword: _keywordController.text.trim().isEmpty
+            ? null
+            : _keywordController.text.trim(),
+        viewMode: _viewMode,
+        proxyOperatorUserId: _proxyOperatorUserId,
+        orderStatus: _orderStatusFilter,
+        currentProcessId: _currentProcessIdFilter,
+      );
+      if (!mounted) {
+        return;
+      }
+      if (result.contentBase64.isEmpty) {
+        setState(() {
+          _message = '导出失败：服务端返回空数据';
+        });
+        return;
+      }
+      final savedPath = await _saveExportFile(
+        filename: result.fileName,
+        contentBase64: result.contentBase64,
+      );
+      if (!mounted || savedPath == null) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出成功（${result.exportedCount} 条）：$savedPath')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '导出失败：${_errorMessage(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _handleRowAction(String action, MyOrderItem item) async {
     switch (action) {
       case 'detail':
         await _openOrderDetailPage(item);
+        return;
+      case 'history':
+        await _openOrderDetailPage(
+          item,
+          initialTab: ProductionOrderQueryDetailTab.event,
+        );
         return;
       case 'first_article':
         await _openFirstArticlePage(item);
@@ -170,6 +298,45 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         _proxyOperators = result.items;
         if (_proxyOperatorUserId != null &&
             !_proxyOperators.any((item) => item.id == _proxyOperatorUserId)) {
+          _proxyOperatorUserId = null;
+        }
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _loadProxyStages() async {
+    try {
+      final result = await _craftService.listStageLightOptions();
+      if (!mounted) return;
+      setState(() {
+        _proxyStages = result.items;
+        if (_proxyStageId != null &&
+            !_proxyStages.any((item) => item.id == _proxyStageId)) {
+          _proxyStageId = null;
+          _proxyOperatorUserId = null;
+          _proxyViewOperators = const [];
+        }
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _loadProxyViewOperators(int stageId) async {
+    try {
+      final result = await _service.listAssistUserOptions(
+        page: 1,
+        pageSize: 200,
+        roleCode: 'operator',
+        stageId: stageId,
+      );
+      if (!mounted || _proxyStageId != stageId) {
+        return;
+      }
+      setState(() {
+        _proxyViewOperators = result.items;
+        if (_proxyOperatorUserId != null &&
+            !_proxyViewOperators.any(
+              (item) => item.id == _proxyOperatorUserId,
+            )) {
           _proxyOperatorUserId = null;
         }
       });
@@ -207,10 +374,13 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     );
   }
 
-  Future<void> _loadOrders({bool silent = false}) async {
-    if (_viewMode == 'proxy' && _proxyOperatorUserId == null) {
-      if (!silent && mounted) {
+  Future<void> _loadOrders({bool silent = false, int? page}) async {
+    final targetPage = page ?? _page;
+    if (_viewMode == 'proxy' &&
+        (_proxyStageId == null || _proxyOperatorUserId == null)) {
+      if (mounted) {
         setState(() {
+          _page = targetPage;
           _items = const [];
           _total = 0;
           _loading = false;
@@ -227,8 +397,8 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
     try {
       final result = await _service.listMyOrders(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         keyword: _keywordController.text.trim(),
         viewMode: _viewMode,
         proxyOperatorUserId: _proxyOperatorUserId,
@@ -236,7 +406,20 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         currentProcessId: _currentProcessIdFilter,
       );
       if (!mounted) return;
+      final totalPages = result.total <= 0
+          ? 1
+          : ((result.total + _pageSize - 1) ~/ _pageSize);
+      if (result.total > 0 && targetPage > totalPages) {
+        setState(() {
+          _page = totalPages;
+          _total = result.total;
+          _items = const [];
+        });
+        await _loadOrders(silent: silent, page: totalPages);
+        return;
+      }
       setState(() {
+        _page = targetPage;
         _items = result.items;
         _total = result.total;
       });
@@ -258,6 +441,25 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         });
       }
     }
+  }
+
+  String get _emptyStateText {
+    if (_viewMode != 'proxy') {
+      return '暂无可执行生产工单';
+    }
+    if (_proxyStages.isEmpty) {
+      return '暂无可用工段';
+    }
+    if (_proxyStageId == null) {
+      return '请先选择工段，再选择代理操作员查看工单';
+    }
+    if (_proxyViewOperators.isEmpty) {
+      return '当前工段下暂无可代理操作员';
+    }
+    if (_proxyOperatorUserId == null) {
+      return '请先选择代理操作员后查看工单';
+    }
+    return '暂无可执行生产工单';
   }
 
   Future<MyOrderContextResult> _fetchOrderContextInCurrentView(
@@ -284,13 +486,18 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
   }
 
-  Future<void> _openOrderDetailPage(MyOrderItem item) async {
+  Future<void> _openOrderDetailPage(
+    MyOrderItem item, {
+    ProductionOrderQueryDetailTab initialTab =
+        ProductionOrderQueryDetailTab.process,
+  }) async {
     final needsRefresh = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (context) => ProductionOrderQueryDetailPage(
           session: widget.session,
           onLogout: widget.onLogout,
           orderId: item.orderId,
+          service: _service,
           canFirstArticle: widget.canFirstArticle,
           canEndProduction: widget.canEndProduction,
           canCreateManualRepairOrder: widget.canCreateManualRepairOrder,
@@ -305,6 +512,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           onApplyAssist: (target) =>
               _showApplyAssistDialog(target, reloadAfterAction: false),
           onRefreshOrderContext: _fetchOrderContextInCurrentView,
+          initialTab: initialTab,
         ),
       ),
     );
@@ -922,138 +1130,236 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 child: TextField(
                   controller: _keywordController,
                   decoration: const InputDecoration(
-                    labelText: '搜索订单号/产品',
+                    labelText: '搜索订单号/产品/供应商/工序',
                     border: OutlineInputBorder(),
                   ),
-                  onSubmitted: (_) => _loadOrders(),
+                  onSubmitted: (_) => _loadOrders(page: 1),
                 ),
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadOrders,
+                onPressed: _loading ? null : () => _loadOrders(page: 1),
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
               ),
+              if (widget.canExportCsv) ...[
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  onPressed: _loading ? null : _exportOrders,
+                  icon: const Icon(Icons.download),
+                  label: const Text('导出CSV'),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              SizedBox(
-                width: 220,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _viewMode,
-                  decoration: const InputDecoration(
-                    labelText: '工单视角',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: 'own', child: Text('我的工单')),
-                    const DropdownMenuItem(
-                      value: 'assist',
-                      child: Text('我的代班工单'),
-                    ),
-                    if (widget.canProxyView)
-                      const DropdownMenuItem(
-                        value: 'proxy',
-                        child: Text('代理操作员视角'),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null || value == _viewMode) return;
-                    setState(() {
-                      _viewMode = value;
-                      if (_viewMode != 'proxy') _proxyOperatorUserId = null;
-                    });
-                    _loadOrders();
-                  },
-                ),
-              ),
-              if (widget.canProxyView && _viewMode == 'proxy') ...[
-                const SizedBox(width: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
                 SizedBox(
-                  width: 260,
-                  child: DropdownButtonFormField<int>(
-                    initialValue: _proxyOperatorUserId,
+                  width: 220,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _viewMode,
                     decoration: const InputDecoration(
-                      labelText: '选择操作员',
+                      labelText: '工单视角',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    items: _proxyOperators
-                        .map(
-                          (entry) => DropdownMenuItem<int>(
-                            value: entry.id,
-                            child: Text(entry.displayName),
-                          ),
-                        )
-                        .toList(),
+                    items: [
+                      const DropdownMenuItem(value: 'own', child: Text('我的工单')),
+                      const DropdownMenuItem(
+                        value: 'assist',
+                        child: Text('我的代班工单'),
+                      ),
+                      if (widget.canProxyView)
+                        const DropdownMenuItem(
+                          value: 'proxy',
+                          child: Text('代理操作员视角'),
+                        ),
+                    ],
                     onChanged: (value) {
-                      setState(() => _proxyOperatorUserId = value);
-                      _loadOrders();
+                      if (value == null || value == _viewMode) return;
+                      setState(() {
+                        _viewMode = value;
+                        _page = 1;
+                        if (_viewMode != 'proxy') {
+                          _proxyStageId = null;
+                          _proxyOperatorUserId = null;
+                          _proxyViewOperators = const [];
+                        }
+                      });
+                      if (value == 'proxy' && _proxyStages.isEmpty) {
+                        _loadProxyStages();
+                      }
+                      _loadOrders(page: 1);
+                    },
+                  ),
+                ),
+                if (widget.canProxyView && _viewMode == 'proxy') ...[
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 220,
+                    child: DropdownButtonFormField<int?>(
+                      key: ValueKey<int?>(_proxyStageId),
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: '代理工段',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      initialValue: _proxyStageId,
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('请选择工段'),
+                        ),
+                        ..._proxyStages.map(
+                          (entry) => DropdownMenuItem<int?>(
+                            value: entry.id,
+                            child: Text(
+                              entry.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == _proxyStageId) {
+                          return;
+                        }
+                        setState(() {
+                          _proxyStageId = value;
+                          _proxyOperatorUserId = null;
+                          _proxyViewOperators = const [];
+                          _items = const [];
+                          _total = 0;
+                          _page = 1;
+                        });
+                        if (value != null) {
+                          _loadProxyViewOperators(value);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 260,
+                    child: DropdownButtonFormField<int>(
+                      key: ValueKey<String>(
+                        'proxyOperator_${_proxyStageId ?? 0}_${_proxyOperatorUserId ?? 0}',
+                      ),
+                      isExpanded: true,
+                      initialValue: _proxyOperatorUserId,
+                      decoration: const InputDecoration(
+                        labelText: '代理操作员',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: _proxyViewOperators
+                          .map(
+                            (entry) => DropdownMenuItem<int>(
+                              value: entry.id,
+                              child: Text(
+                                entry.displayName,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      selectedItemBuilder: (context) => _proxyViewOperators
+                          .map(
+                            (entry) => Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                entry.displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged:
+                          _proxyStageId == null || _proxyViewOperators.isEmpty
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _proxyOperatorUserId = value;
+                                _page = 1;
+                              });
+                              _loadOrders(page: 1);
+                            },
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 170,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _orderStatusFilter,
+                    decoration: const InputDecoration(
+                      labelText: '状态',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('全部')),
+                      DropdownMenuItem(value: 'pending', child: Text('待生产')),
+                      DropdownMenuItem(
+                        value: 'in_progress',
+                        child: Text('生产中'),
+                      ),
+                      DropdownMenuItem(value: 'completed', child: Text('生产完成')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null || value == _orderStatusFilter) {
+                        return;
+                      }
+                      setState(() {
+                        _orderStatusFilter = value;
+                        _page = 1;
+                      });
+                      _loadOrders(page: 1);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 280,
+                  child: DropdownButtonFormField<int?>(
+                    key: ValueKey<int?>(processDropdownValue),
+                    initialValue: processDropdownValue,
+                    decoration: const InputDecoration(
+                      labelText: '当前工序',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('全部工序'),
+                      ),
+                      ...processFilterOptions.map(
+                        (entry) => DropdownMenuItem<int?>(
+                          value: entry.id,
+                          child: Text('${entry.name} (#${entry.id})'),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == _currentProcessIdFilter) {
+                        return;
+                      }
+                      setState(() {
+                        _currentProcessIdFilter = value;
+                        _page = 1;
+                      });
+                      _loadOrders(page: 1);
                     },
                   ),
                 ),
               ],
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 170,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _orderStatusFilter,
-                  decoration: const InputDecoration(
-                    labelText: '状态',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('全部')),
-                    DropdownMenuItem(value: 'pending', child: Text('待生产')),
-                    DropdownMenuItem(value: 'in_progress', child: Text('生产中')),
-                    DropdownMenuItem(value: 'completed', child: Text('生产完成')),
-                  ],
-                  onChanged: (value) {
-                    if (value == null || value == _orderStatusFilter) {
-                      return;
-                    }
-                    setState(() => _orderStatusFilter = value);
-                    _loadOrders();
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 280,
-                child: DropdownButtonFormField<int?>(
-                  key: ValueKey<int?>(processDropdownValue),
-                  initialValue: processDropdownValue,
-                  decoration: const InputDecoration(
-                    labelText: '当前工序',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('全部工序'),
-                    ),
-                    ...processFilterOptions.map(
-                      (entry) => DropdownMenuItem<int?>(
-                        value: entry.id,
-                        child: Text('${entry.name} (#${entry.id})'),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == _currentProcessIdFilter) {
-                      return;
-                    }
-                    setState(() => _currentProcessIdFilter = value);
-                    _loadOrders();
-                  },
-                ),
-              ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
           Text('总数：$_total', style: theme.textTheme.titleMedium),
@@ -1071,7 +1377,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
               cardKey: const ValueKey('productionOrderQueryListCard'),
               loading: _loading,
               isEmpty: _items.isEmpty,
-              emptyText: '暂无可执行生产工单',
+              emptyText: _emptyStateText,
               enableUnifiedHeaderStyle: true,
               child: DataTable(
                 columns: [
@@ -1118,6 +1424,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                               value: 'detail',
                               child: Text('详情'),
                             ),
+                            const PopupMenuItem<String>(
+                              value: 'history',
+                              child: Text('历史'),
+                            ),
                             if (widget.canFirstArticle && item.canFirstArticle)
                               const PopupMenuItem<String>(
                                 value: 'first_article',
@@ -1147,6 +1457,15 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 }).toList(),
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadOrders(page: _page - 1),
+            onNext: () => _loadOrders(page: _page + 1),
           ),
         ],
       ),

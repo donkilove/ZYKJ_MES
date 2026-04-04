@@ -428,6 +428,45 @@ class ProductionService implements RepairScrapService {
     return MyOrderContextResult.fromJson(data);
   }
 
+  Future<ProductionExportResult> exportMyOrders({
+    String? keyword,
+    String viewMode = 'own',
+    int? proxyOperatorUserId,
+    String? orderStatus,
+    int? currentProcessId,
+  }) async {
+    final payload = <String, dynamic>{'view_mode': viewMode};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      payload['keyword'] = keyword.trim();
+    }
+    if (proxyOperatorUserId != null && proxyOperatorUserId > 0) {
+      payload['proxy_operator_user_id'] = proxyOperatorUserId;
+    }
+    if (orderStatus != null &&
+        orderStatus.trim().isNotEmpty &&
+        orderStatus.trim() != 'all') {
+      payload['order_status'] = orderStatus.trim();
+    }
+    if (currentProcessId != null && currentProcessId > 0) {
+      payload['current_process_id'] = currentProcessId;
+    }
+    final uri = Uri.parse('$_basePath/my-orders/export');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode(payload),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = body['data'] as Map<String, dynamic>;
+    return ProductionExportResult.fromJson(data);
+  }
+
   Future<FirstArticleTemplateListResult> listFirstArticleTemplates({
     required int orderId,
     required int orderProcessId,
@@ -1184,6 +1223,7 @@ class ProductionService implements RepairScrapService {
     required int pageSize,
     String? keyword,
     String? roleCode,
+    int? stageId,
   }) async {
     final query = <String, String>{
       'page': '$page',
@@ -1194,6 +1234,9 @@ class ProductionService implements RepairScrapService {
     }
     if (roleCode != null && roleCode.trim().isNotEmpty) {
       query['role_code'] = roleCode.trim();
+    }
+    if (stageId != null && stageId > 0) {
+      query['stage_id'] = '$stageId';
     }
     final uri = Uri.parse(
       '$_basePath/assist-user-options',

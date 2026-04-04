@@ -19,6 +19,7 @@ from app.core.authz_catalog import (
     PERM_PROD_EXECUTION_END_PRODUCTION,
     PERM_PROD_EXECUTION_FIRST_ARTICLE,
     PERM_PROD_MY_ORDERS_CONTEXT,
+    PERM_PROD_MY_ORDERS_EXPORT,
     PERM_PROD_MY_ORDERS_LIST,
     PERM_PROD_ORDERS_COMPLETE,
     PERM_PROD_ORDERS_CREATE,
@@ -80,6 +81,7 @@ from app.schemas.production import (
     FirstArticleTemplateItem,
     FirstArticleTemplateListResult,
     MyOrderContextResult,
+    MyOrdersExportRequest,
     MyOrderItem,
     MyOrderListResult,
     OrderActionResult,
@@ -141,6 +143,7 @@ from app.services.production_order_service import (
     can_user_access_order_detail,
     can_user_access_order_pipeline_mode,
     complete_order_manually,
+    export_my_orders_csv,
     create_order,
     export_orders_csv,
     get_my_order_context,
@@ -784,6 +787,40 @@ def get_my_orders_api(
             items=[MyOrderItem(**item) for item in items],
         )
     )
+
+
+@router.post(
+    "/my-orders/export",
+    response_model=ApiResponse[ProductionExportResult],
+)
+def export_my_orders_api(
+    payload: MyOrdersExportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_PROD_MY_ORDERS_EXPORT)),
+) -> ApiResponse[ProductionExportResult]:
+    normalized_status: str | None = None
+    if payload.order_status is not None:
+        token = payload.order_status.strip().lower()
+        if token and token != "all":
+            if token not in ORDER_STATUS_ALL:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid order status: {payload.order_status}",
+                )
+            normalized_status = token
+    try:
+        result = export_my_orders_csv(
+            db,
+            current_user=current_user,
+            keyword=payload.keyword,
+            view_mode=payload.view_mode,
+            proxy_operator_user_id=payload.proxy_operator_user_id,
+            order_status=normalized_status,
+            current_process_id=payload.current_process_id,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(ProductionExportResult(**result))
 
 
 @router.get(
@@ -1575,6 +1612,7 @@ def get_assist_user_options_api(
     page_size: int = Query(default=50, ge=1, le=200),
     keyword: str | None = Query(default=None),
     role_code: str | None = Query(default=None),
+    stage_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(PERM_PROD_ASSIST_USER_OPTIONS_LIST)),
 ) -> ApiResponse[AssistUserOptionListResult]:
@@ -1601,6 +1639,8 @@ def get_assist_user_options_api(
     )
     if role_code:
         stmt = stmt.where(Role.code == role_code)
+    if stage_id is not None:
+        stmt = stmt.where(User.stage_id == stage_id)
     if keyword and keyword.strip():
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(

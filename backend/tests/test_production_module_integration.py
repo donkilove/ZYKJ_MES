@@ -246,6 +246,47 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         finally:
             db.close()
 
+    def _ensure_admin_visible_sub_order(self, order_id: int) -> None:
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, order_id)
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and admin is not None
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .first()
+            )
+            assert process_row is not None
+            if process_row.visible_quantity <= 0:
+                process_row.visible_quantity = order_row.quantity
+            if not order_row.current_process_code:
+                order_row.current_process_code = process_row.process_code
+            existing_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == process_row.id,
+                    ProductionSubOrder.operator_user_id == admin.id,
+                    ProductionSubOrder.is_visible.is_(True),
+                )
+                .first()
+            )
+            if existing_sub_order is None:
+                db.add(
+                    ProductionSubOrder(
+                        order_process_id=process_row.id,
+                        operator_user_id=admin.id,
+                        assigned_quantity=order_row.quantity,
+                        completed_quantity=0,
+                        status="pending",
+                        is_visible=True,
+                    )
+                )
+            db.commit()
+        finally:
+            db.close()
+
     def _create_scrap_statistics(
         self,
         *,
@@ -713,6 +754,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(create_response.status_code, 201, create_response.text)
         order = create_response.json()["data"]
         self.order_ids.append(int(order["id"]))
+        self._ensure_admin_visible_sub_order(int(order["id"]))
 
         list_response = self.client.get(
             "/api/v1/production/my-orders",
@@ -736,6 +778,74 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(context_item["supplier_name"], supplier["name"])
         self.assertEqual(context_item["due_date"], due_date)
         self.assertEqual(context_item["remark"], remark)
+
+    def test_my_orders_keyword_matches_supplier_name(self) -> None:
+        stage = self._create_stage("MYSUP")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="MYSUP"
+        )
+        product = self._create_product("供应商搜索")
+        self._activate_product(product)
+        supplier = self._create_supplier(f"关键字供应商{int(time.time() * 1000)}")
+
+        with patch("app.services.production_order_service.create_message_for_users"):
+            create_response = self.client.post(
+                "/api/v1/production/orders",
+                headers=self._headers(),
+                json={
+                    "order_code": f"PO-SUP-{int(time.time() * 1000)}",
+                    "product_id": product["id"],
+                    "supplier_id": supplier["id"],
+                    "quantity": 10,
+                    "process_steps": [
+                        {
+                            "step_order": 1,
+                            "stage_id": stage["id"],
+                            "process_id": process["id"],
+                        }
+                    ],
+                },
+            )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        order = create_response.json()["data"]
+        self.order_ids.append(int(order["id"]))
+        self._ensure_admin_visible_sub_order(int(order["id"]))
+
+        list_response = self.client.get(
+            "/api/v1/production/my-orders",
+            headers=self._headers(),
+            params={"keyword": supplier["name"]},
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        list_items = list_response.json()["data"]["items"]
+        self.assertEqual(len(list_items), 1)
+        self.assertEqual(list_items[0]["order_id"], order["id"])
+
+    def test_my_orders_keyword_matches_current_process_name(self) -> None:
+        stage = self._create_stage("MYPROC")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="MYPROC"
+        )
+        product = self._create_product("工序搜索")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+        self._ensure_admin_visible_sub_order(int(order["id"]))
+
+        list_response = self.client.get(
+            "/api/v1/production/my-orders",
+            headers=self._headers(),
+            params={"keyword": process["name"]},
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        list_items = list_response.json()["data"]["items"]
+        self.assertEqual(len(list_items), 1)
+        self.assertEqual(list_items[0]["order_id"], order["id"])
+        self.assertEqual(list_items[0]["current_process_name"], process["name"])
 
     def test_complete_repair_order_accepts_multiple_return_allocations(self) -> None:
         stage_a = self._create_stage("C1")
@@ -1713,6 +1823,122 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(rows[1][4], "生产中")
         self.assertEqual(rows[1][5], process_b["name"])
         self.assertEqual(rows[1][8], "开启")
+
+    def test_my_order_export_matches_query_filters_and_csv_columns(self) -> None:
+        stage_a = self._create_stage("Q1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="Q1"
+        )
+        stage_b = self._create_stage("Q2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="Q2"
+        )
+        matched_product = self._create_product("查询导出命中")
+        self._activate_product(matched_product)
+        other_product = self._create_product("查询导出未命中")
+        self._activate_product(other_product)
+        matched_order = self._create_order(
+            product_id=matched_product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                }
+            ],
+        )
+        other_order = self._create_order(
+            product_id=other_product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                }
+            ],
+        )
+        self._ensure_admin_visible_sub_order(int(matched_order["id"]))
+        self._ensure_admin_visible_sub_order(int(other_order["id"]))
+
+        db = SessionLocal()
+        try:
+            matched_order_row = db.get(ProductionOrder, int(matched_order["id"]))
+            other_order_row = db.get(ProductionOrder, int(other_order["id"]))
+            assert matched_order_row is not None and other_order_row is not None
+            matched_process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == matched_order_row.id)
+                .first()
+            )
+            other_process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == other_order_row.id)
+                .first()
+            )
+            assert matched_process_row is not None and other_process_row is not None
+
+            matched_order_row.status = "in_progress"
+            matched_order_row.current_process_code = matched_process_row.process_code
+            matched_order_row.due_date = date(2026, 3, 18)
+            matched_order_row.remark = "查询页导出备注"
+            matched_order_row.updated_at = datetime(2026, 3, 5, 9, 30, tzinfo=UTC)
+            matched_process_row.status = "in_progress"
+            matched_process_row.visible_quantity = matched_order_row.quantity
+
+            other_order_row.status = "pending"
+            other_order_row.current_process_code = other_process_row.process_code
+            other_process_row.status = "pending"
+            other_process_row.visible_quantity = other_order_row.quantity
+            db.commit()
+            matched_process_id = int(matched_process_row.id)
+        finally:
+            db.close()
+
+        export_response = self.client.post(
+            "/api/v1/production/my-orders/export",
+            headers=self._headers(),
+            json={
+                "keyword": "PO-IT-",
+                "view_mode": "own",
+                "order_status": "in_progress",
+                "current_process_id": matched_process_id,
+            },
+        )
+        self.assertEqual(export_response.status_code, 200, export_response.text)
+        export_data = export_response.json()["data"]
+        self.assertEqual(export_data["exported_count"], 1)
+
+        csv_text = base64.b64decode(export_data["content_base64"]).decode("utf-8-sig")
+        rows = list(csv.reader(io.StringIO(csv_text)))
+        self.assertEqual(
+            rows[0],
+            [
+                "订单编号",
+                "产品型号",
+                "供应商",
+                "工序",
+                "数量概况",
+                "状态",
+                "交货日期",
+                "备注",
+                "工单视角",
+                "操作员",
+                "更新时间",
+            ],
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1][0], matched_order["order_code"])
+        self.assertEqual(rows[1][1], matched_product["name"])
+        self.assertTrue(rows[1][2])
+        self.assertEqual(rows[1][3], process_a["name"])
+        self.assertEqual(rows[1][4], "可见10 / 分配10 / 完成0")
+        self.assertEqual(rows[1][5], "生产中")
+        self.assertEqual(rows[1][6], "2026-03-18")
+        self.assertEqual(rows[1][7], "查询页导出备注")
+        self.assertEqual(rows[1][8], "我的工单")
+        self.assertEqual(rows[1][9], "admin")
+        self.assertTrue(rows[1][10].startswith("2026-03-05 "))
+        self.assertTrue(rows[1][10].endswith(":30:00"))
 
     def test_scrap_statistics_support_exact_product_and_process_filters(self) -> None:
         stage_a = self._create_stage("E1")

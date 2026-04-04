@@ -58,6 +58,7 @@ PERM_PROD_MY_ORDERS_LIST = "production.my_orders.list"
 PERM_PROD_MY_ORDERS_PROXY = "production.my_orders.proxy"
 PERM_PROD_MY_ORDERS_VIEW_ALL = "production.my_orders.view_all"
 PERM_PROD_MY_ORDERS_CONTEXT = "production.my_orders.context"
+PERM_PROD_MY_ORDERS_EXPORT = "production.my_orders.export"
 PERM_PROD_EXECUTION_FIRST_ARTICLE = "production.execution.first_article"
 PERM_PROD_EXECUTION_END_PRODUCTION = "production.execution.end_production"
 PERM_PROD_STATS_OVERVIEW = "production.stats.overview"
@@ -887,6 +888,12 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     (
         PERM_PROD_MY_ORDERS_CONTEXT,
         "查看工单上下文",
+        AUTHZ_MODULE_PRODUCTION,
+        "production_order_query",
+    ),
+    (
+        PERM_PROD_MY_ORDERS_EXPORT,
+        "导出工单查询结果",
         AUTHZ_MODULE_PRODUCTION,
         "production_order_query",
     ),

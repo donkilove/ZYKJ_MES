@@ -659,6 +659,14 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         ),
     ),
     FeatureDefinition(
+        permission_code="feature.production.order_query.export",
+        permission_name="导出工单查询结果",
+        module_code="production",
+        page_code="production_order_query",
+        action_permission_codes=("production.my_orders.export",),
+        dependency_permission_codes=("feature.production.order_query.execute",),
+    ),
+    FeatureDefinition(
         permission_code="feature.production.assist.launch",
         permission_name="发起代班",
         module_code="production",

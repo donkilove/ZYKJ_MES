@@ -191,6 +191,9 @@ class _ProductionPageState extends State<ProductionPage>
           canProxyView: _hasPermission(
             ProductionFeaturePermissionCodes.orderQueryProxy,
           ),
+          canExportCsv: _hasPermission(
+            ProductionFeaturePermissionCodes.orderQueryExport,
+          ),
         );
       case productionAssistApprovalTabCode:
         return ProductionAssistApprovalPage(

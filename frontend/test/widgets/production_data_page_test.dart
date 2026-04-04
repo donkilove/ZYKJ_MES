@@ -158,6 +158,7 @@ class _FakeProductionService extends ProductionService {
     required int pageSize,
     String? keyword,
     String? roleCode,
+    int? stageId,
   }) async {
     return AssistUserOptionListResult(
       total: 1,

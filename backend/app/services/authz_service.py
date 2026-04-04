@@ -300,6 +300,7 @@ CAPABILITY_NAME_FALLBACK_ZH_BY_CODE = {
     "feature.production.pipeline_mode.manage": "维护并行生产模式",
     "feature.production.order_query.execute": "执行首件与报工",
     "feature.production.order_query.proxy": "代理视角查看工单",
+    "feature.production.order_query.export": "导出工单查询结果",
     "feature.production.assist.launch": "发起代班",
     "feature.production.assist.records.view": "查看代班记录",
     "feature.production.data_query.view": "查看生产数据三视图",
@@ -532,6 +533,11 @@ CAPABILITY_GROUP_META_BY_CODE = {
         "production.execution",
         "生产执行",
         "代理/代班视角查询",
+    ),
+    "feature.production.order_query.export": (
+        "production.execution",
+        "生产执行",
+        "导出当前工单查询结果",
     ),
     "feature.production.assist.launch": ("production.assist", "代班", "发起代班授权"),
     "feature.production.assist.records.view": (

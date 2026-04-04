@@ -5,6 +5,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.authz_catalog import PERM_PROD_MY_ORDERS_PROXY
 from app.core.config import settings
 from app.core.production_constants import (
     ORDER_STATUS_COMPLETED,
@@ -35,6 +36,7 @@ from app.services.assist_authorization_service import (
     get_usable_assist_authorization_for_operation,
     mark_assist_authorization_used,
 )
+from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
 from app.services.production_order_service import (
     ensure_sub_orders_visible_quantity,
@@ -68,6 +70,14 @@ def _get_today_verification_code(
     db.add(row)
     db.flush()
     return row
+
+
+def _can_proxy_cross_user_operation(db: Session, *, operator: User) -> bool:
+    return has_permission(
+        db,
+        user=operator,
+        permission_code=PERM_PROD_MY_ORDERS_PROXY,
+    )
 
 
 def _lock_order_and_process(
@@ -422,17 +432,18 @@ def submit_first_article(
     effective_user_id = effective_operator_user_id or operator.id
     assist_row = None
     if effective_user_id != operator.id:
-        if not assist_authorization_id:
+        if assist_authorization_id:
+            assist_row = get_usable_assist_authorization_for_operation(
+                db,
+                authorization_id=assist_authorization_id,
+                order_id=order_id,
+                order_process_id=order_process_id,
+                target_operator_user_id=effective_user_id,
+                helper_user_id=operator.id,
+                operation=ASSIST_OP_FIRST_ARTICLE,
+            )
+        elif not _can_proxy_cross_user_operation(db, operator=operator):
             raise ValueError("Assist authorization is required for cross-user operation")
-        assist_row = get_usable_assist_authorization_for_operation(
-            db,
-            authorization_id=assist_authorization_id,
-            order_id=order_id,
-            order_process_id=order_process_id,
-            target_operator_user_id=effective_user_id,
-            helper_user_id=operator.id,
-            operation=ASSIST_OP_FIRST_ARTICLE,
-        )
 
     sub_order = _lock_sub_order(
         db,
@@ -605,17 +616,18 @@ def end_production(
     effective_user_id = effective_operator_user_id or operator.id
     assist_row = None
     if effective_user_id != operator.id:
-        if not assist_authorization_id:
+        if assist_authorization_id:
+            assist_row = get_usable_assist_authorization_for_operation(
+                db,
+                authorization_id=assist_authorization_id,
+                order_id=order_id,
+                order_process_id=order_process_id,
+                target_operator_user_id=effective_user_id,
+                helper_user_id=operator.id,
+                operation=ASSIST_OP_END_PRODUCTION,
+            )
+        elif not _can_proxy_cross_user_operation(db, operator=operator):
             raise ValueError("Assist authorization is required for cross-user operation")
-        assist_row = get_usable_assist_authorization_for_operation(
-            db,
-            authorization_id=assist_authorization_id,
-            order_id=order_id,
-            order_process_id=order_process_id,
-            target_operator_user_id=effective_user_id,
-            helper_user_id=operator.id,
-            operation=ASSIST_OP_END_PRODUCTION,
-        )
 
     sub_order = _lock_sub_order(
         db,

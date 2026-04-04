@@ -6,6 +6,8 @@ import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/adaptive_table_container.dart';
 
+enum ProductionOrderQueryDetailTab { process, subOrder, record, event }
+
 class ProductionOrderQueryDetailPage extends StatefulWidget {
   const ProductionOrderQueryDetailPage({
     super.key,
@@ -23,6 +25,7 @@ class ProductionOrderQueryDetailPage extends StatefulWidget {
     required this.onApplyAssist,
     required this.onRefreshOrderContext,
     this.service,
+    this.initialTab = ProductionOrderQueryDetailTab.process,
   });
 
   final AppSession session;
@@ -40,6 +43,7 @@ class ProductionOrderQueryDetailPage extends StatefulWidget {
   final Future<MyOrderContextResult> Function(int orderId)
   onRefreshOrderContext;
   final ProductionService? service;
+  final ProductionOrderQueryDetailTab initialTab;
 
   @override
   State<ProductionOrderQueryDetailPage> createState() =>
@@ -281,6 +285,7 @@ class _ProductionOrderQueryDetailPageState
 
     return DefaultTabController(
       length: 4,
+      initialIndex: widget.initialTab.index,
       child: Column(
         children: [
           const TabBar(
