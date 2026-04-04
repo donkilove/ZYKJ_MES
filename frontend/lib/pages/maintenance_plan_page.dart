@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -9,8 +6,10 @@ import '../models/equipment_models.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/equipment_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class MaintenancePlanPage extends StatefulWidget {
   const MaintenancePlanPage({
@@ -33,13 +32,15 @@ class MaintenancePlanPage extends StatefulWidget {
 }
 
 class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
+  static const int _pageSize = 30;
+
   late final EquipmentService _equipmentService;
   late final CraftService _craftService;
 
   bool _loading = false;
-  bool _exporting = false;
   String _message = '';
   int _total = 0;
+  int _page = 1;
   List<MaintenancePlanItem> _plans = const [];
   List<EquipmentLedgerItem> _equipmentOptions = const [];
   List<MaintenanceItemEntry> _itemOptions = const [];
@@ -78,7 +79,13 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     return '${local.year}-$mm-$dd';
   }
 
-  Future<void> _loadAll({bool reloadOptions = false}) async {
+  int get _totalPages {
+    final pages = (_total + _pageSize - 1) ~/ _pageSize;
+    return pages > 0 ? pages : 1;
+  }
+
+  Future<void> _loadAll({int? page, bool reloadOptions = false}) async {
+    final targetPage = page ?? _page;
     if (!mounted) {
       return;
     }
@@ -128,8 +135,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
       }
 
       final result = await _equipmentService.listMaintenancePlans(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         equipmentId: _equipmentFilterId,
         itemId: _itemFilterId,
         enabled: _enabledFilter,
@@ -140,6 +147,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         return;
       }
       setState(() {
+        _page = targetPage;
         _plans = result.items;
         _total = result.total;
       });
@@ -606,53 +614,6 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     }
   }
 
-  Future<void> _exportCsv() async {
-    setState(() {
-      _exporting = true;
-      _message = '';
-    });
-    try {
-      final csvBase64 = await _equipmentService.exportMaintenancePlans(
-        equipmentId: _equipmentFilterId,
-        itemId: _itemFilterId,
-        enabled: _enabledFilter,
-        executionProcessCode: _executionStageCodeFilter,
-        defaultExecutorUserId: _defaultExecutorFilterId,
-      );
-      if (!mounted) return;
-      if (csvBase64.isEmpty) {
-        setState(() => _message = '导出失败：服务端返回空数据');
-        return;
-      }
-      final bytes = base64Decode(csvBase64);
-      final location = await getSaveLocation(
-        suggestedName: 'maintenance_plans.csv',
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'CSV', extensions: ['csv']),
-        ],
-      );
-      if (location == null || !mounted) return;
-      await XFile.fromData(
-        bytes,
-        mimeType: 'text/csv',
-        name: 'maintenance_plans.csv',
-      ).saveTo(location.path);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      setState(() => _message = '导出失败：${_errorMessage(error)}');
-    } finally {
-      if (mounted) setState(() => _exporting = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -663,27 +624,13 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         children: [
           Row(
             children: [
-              Text(
-                '保养计划',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: CrudPageHeader(
+                  title: '保养计划',
+                  onRefresh: _loading
+                      ? null
+                      : () => _loadAll(page: _page, reloadOptions: true),
                 ),
-              ),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: OutlinedButton.icon(
-                  onPressed: (_loading || _exporting) ? null : _exportCsv,
-                  icon: const Icon(Icons.download),
-                  label: const Text('导出'),
-                ),
-              ),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading
-                    ? null
-                    : () => _loadAll(reloadOptions: true),
-                icon: const Icon(Icons.refresh),
               ),
             ],
           ),
@@ -815,7 +762,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadAll,
+                onPressed: _loading ? null : () => _loadAll(page: 1),
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
               ),
@@ -843,91 +790,94 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               ),
             ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _plans.isEmpty
-                ? const Center(child: Text('暂无保养计划'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('设备')),
-                          DataColumn(label: Text('保养项目')),
-                          DataColumn(label: Text('执行工段')),
-                          DataColumn(label: Text('周期天数')),
-                          DataColumn(label: Text('开始日期')),
-                          DataColumn(label: Text('下次到期日')),
-                          DataColumn(label: Text('默认执行人')),
-                          DataColumn(label: Text('预计时长')),
-                          DataColumn(label: Text('创建时间')),
-                          DataColumn(label: Text('更新时间')),
-                          DataColumn(label: Text('状态')),
-                          DataColumn(label: Text('操作')),
-                        ],
-                        rows: _plans.map((plan) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(plan.equipmentName)),
-                              DataCell(Text(plan.itemName)),
-                              DataCell(Text(plan.executionProcessName)),
-                              DataCell(Text('${plan.cycleDays}')),
-                              DataCell(Text(_formatDate(plan.startDate))),
-                              DataCell(Text(_formatDate(plan.nextDueDate))),
-                              DataCell(
-                                Text(plan.defaultExecutorUsername ?? '-'),
-                              ),
-                              DataCell(
-                                Text(
-                                  plan.estimatedDurationMinutes == null
-                                      ? '-'
-                                      : '${plan.estimatedDurationMinutes} 分钟',
-                                ),
-                              ),
-                              DataCell(Text(_formatDate(plan.createdAt))),
-                              DataCell(Text(_formatDate(plan.updatedAt))),
-                              DataCell(Text(plan.isEnabled ? '启用' : '停用')),
-                              DataCell(
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    TextButton(
-                                      onPressed: widget.canWrite
-                                          ? () =>
-                                                _showPlanEditDialog(plan: plan)
-                                          : null,
-                                      child: const Text('编辑'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      onPressed: widget.canWrite
-                                          ? () => _togglePlan(plan)
-                                          : null,
-                                      child: Text(plan.isEnabled ? '停用' : '启用'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      onPressed: widget.canWrite
-                                          ? () => _deletePlan(plan)
-                                          : null,
-                                      child: const Text('删除'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      onPressed:
-                                          (widget.canWrite && plan.isEnabled)
-                                          ? () => _generateWorkOrder(plan)
-                                          : null,
-                                      child: const Text('生成执行单'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+            child: CrudListTableSection(
+              loading: _loading,
+              isEmpty: _plans.isEmpty,
+              emptyText: '暂无保养计划',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('设备')),
+                  DataColumn(label: Text('保养项目')),
+                  DataColumn(label: Text('执行工段')),
+                  DataColumn(label: Text('周期天数')),
+                  DataColumn(label: Text('开始日期')),
+                  DataColumn(label: Text('下次到期日')),
+                  DataColumn(label: Text('默认执行人')),
+                  DataColumn(label: Text('预计时长')),
+                  DataColumn(label: Text('创建时间')),
+                  DataColumn(label: Text('更新时间')),
+                  DataColumn(label: Text('状态')),
+                  DataColumn(label: Text('操作')),
+                ],
+                rows: _plans.map((plan) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(plan.equipmentName)),
+                      DataCell(Text(plan.itemName)),
+                      DataCell(Text(plan.executionProcessName)),
+                      DataCell(Text('${plan.cycleDays}')),
+                      DataCell(Text(_formatDate(plan.startDate))),
+                      DataCell(Text(_formatDate(plan.nextDueDate))),
+                      DataCell(Text(plan.defaultExecutorUsername ?? '-')),
+                      DataCell(
+                        Text(
+                          plan.estimatedDurationMinutes == null
+                              ? '-'
+                              : '${plan.estimatedDurationMinutes} 分钟',
+                        ),
                       ),
-                    ),
-                  ),
+                      DataCell(Text(_formatDate(plan.createdAt))),
+                      DataCell(Text(_formatDate(plan.updatedAt))),
+                      DataCell(Text(plan.isEnabled ? '启用' : '停用')),
+                      DataCell(
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton(
+                              onPressed: widget.canWrite
+                                  ? () => _showPlanEditDialog(plan: plan)
+                                  : null,
+                              child: const Text('编辑'),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: widget.canWrite
+                                  ? () => _togglePlan(plan)
+                                  : null,
+                              child: Text(plan.isEnabled ? '停用' : '启用'),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: widget.canWrite
+                                  ? () => _deletePlan(plan)
+                                  : null,
+                              child: const Text('删除'),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: (widget.canWrite && plan.isEnabled)
+                                  ? () => _generateWorkOrder(plan)
+                                  : null,
+                              child: const Text('生成执行单'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadAll(page: _page - 1),
+            onNext: () => _loadAll(page: _page + 1),
           ),
         ],
       ),

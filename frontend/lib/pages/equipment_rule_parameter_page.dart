@@ -4,7 +4,9 @@ import '../models/app_session.dart';
 import '../models/equipment_models.dart';
 import '../services/api_exception.dart';
 import '../services/equipment_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class EquipmentRuleParameterPage extends StatefulWidget {
   const EquipmentRuleParameterPage({
@@ -137,19 +139,26 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
     if (tabs.isEmpty || _innerTabController == null) {
       return const Center(child: Text('当前账号没有可访问的规则/参数页面。'));
     }
-    return Column(
-      children: [
-        Material(
-          color: Theme.of(context).colorScheme.surface,
-          child: TabBar(controller: _innerTabController, tabs: tabs),
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _innerTabController,
-            children: children,
+    return Padding(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CrudPageHeader(title: '规则与参数', onRefresh: _loadEquipmentOptions),
+          const SizedBox(height: 12),
+          Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: TabBar(controller: _innerTabController, tabs: tabs),
           ),
-        ),
-      ],
+          const SizedBox(height: 12),
+          Expanded(
+            child: TabBarView(
+              controller: _innerTabController,
+              children: children,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -212,9 +221,12 @@ class _RulesTab extends StatefulWidget {
 }
 
 class _RulesTabState extends State<_RulesTab> {
+  static const int _pageSize = 30;
+
   bool _loading = false;
   String _message = '';
   int _total = 0;
+  int _page = 1;
   bool? _isEnabledFilter;
   int? _equipmentFilterId;
   final _keywordController = TextEditingController();
@@ -255,7 +267,13 @@ class _RulesTabState extends State<_RulesTab> {
     return '${local.year}-$mm-$dd $hh:$min';
   }
 
-  Future<void> _load() async {
+  int get _totalPages {
+    final pages = (_total + _pageSize - 1) ~/ _pageSize;
+    return pages > 0 ? pages : 1;
+  }
+
+  Future<void> _load({int? page}) async {
+    final targetPage = page ?? _page;
     setState(() {
       _loading = true;
       _message = '';
@@ -267,9 +285,12 @@ class _RulesTabState extends State<_RulesTab> {
             ? null
             : _keywordController.text.trim(),
         isEnabled: _isEnabledFilter,
+        page: targetPage,
+        pageSize: _pageSize,
       );
       if (!mounted) return;
       setState(() {
+        _page = targetPage;
         _items = result.items;
         _total = result.total;
       });
@@ -509,7 +530,7 @@ class _RulesTabState extends State<_RulesTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -524,7 +545,7 @@ class _RulesTabState extends State<_RulesTab> {
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _load(),
+                  onSubmitted: (_) => _load(page: 1),
                 ),
               ),
               const SizedBox(width: 12),
@@ -553,7 +574,7 @@ class _RulesTabState extends State<_RulesTab> {
                       ? null
                       : (v) {
                           setState(() => _equipmentFilterId = v);
-                          _load();
+                          _load(page: 1);
                         },
                 ),
               ),
@@ -577,19 +598,19 @@ class _RulesTabState extends State<_RulesTab> {
                       ? null
                       : (v) {
                           setState(() => _isEnabledFilter = v);
-                          _load();
+                          _load(page: 1);
                         },
                 ),
               ),
               const SizedBox(width: 12),
               IconButton(
                 tooltip: '查询',
-                onPressed: _loading ? null : _load,
+                onPressed: _loading ? null : () => _load(page: 1),
                 icon: const Icon(Icons.search),
               ),
               IconButton(
                 tooltip: '刷新',
-                onPressed: _loading ? null : _load,
+                onPressed: _loading ? null : () => _load(page: _page),
                 icon: const Icon(Icons.refresh),
               ),
               const Spacer(),
@@ -613,119 +634,115 @@ class _RulesTabState extends State<_RulesTab> {
             ),
           const SizedBox(height: 8),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无设备规则'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: [
-                          const DataColumn(label: Text('ID')),
-                          const DataColumn(label: Text('适用设备')),
-                          const DataColumn(label: Text('规则编码')),
-                          const DataColumn(label: Text('规则名称')),
-                          const DataColumn(label: Text('规则类型')),
-                          const DataColumn(label: Text('触发条件')),
-                          const DataColumn(label: Text('生效时间')),
-                          const DataColumn(label: Text('备注')),
-                          const DataColumn(label: Text('状态')),
-                          if (widget.canManage || widget.canOpenParameters)
-                            const DataColumn(label: Text('操作')),
-                        ],
-                        rows: _items.map((item) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text('${item.id}')),
-                              DataCell(
-                                Text(
-                                  item.equipmentName?.trim().isNotEmpty == true
-                                      ? item.equipmentName!
-                                      : item.equipmentType?.trim().isNotEmpty ==
-                                            true
-                                      ? item.equipmentType!
-                                      : '未配置',
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  item.ruleCode.isEmpty ? '-' : item.ruleCode,
-                                ),
-                              ),
-                              DataCell(Text(item.ruleName)),
-                              DataCell(
-                                Text(
-                                  item.ruleType.isEmpty ? '-' : item.ruleType,
-                                ),
-                              ),
-                              DataCell(
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 200,
+            child: CrudListTableSection(
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无设备规则',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: [
+                  const DataColumn(label: Text('ID')),
+                  const DataColumn(label: Text('适用设备')),
+                  const DataColumn(label: Text('规则编码')),
+                  const DataColumn(label: Text('规则名称')),
+                  const DataColumn(label: Text('规则类型')),
+                  const DataColumn(label: Text('触发条件')),
+                  const DataColumn(label: Text('生效时间')),
+                  const DataColumn(label: Text('备注')),
+                  const DataColumn(label: Text('状态')),
+                  if (widget.canManage || widget.canOpenParameters)
+                    const DataColumn(label: Text('操作')),
+                ],
+                rows: _items.map((item) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text('${item.id}')),
+                      DataCell(
+                        Text(
+                          item.equipmentName?.trim().isNotEmpty == true
+                              ? item.equipmentName!
+                              : item.equipmentType?.trim().isNotEmpty == true
+                              ? item.equipmentType!
+                              : '未配置',
+                        ),
+                      ),
+                      DataCell(
+                        Text(item.ruleCode.isEmpty ? '-' : item.ruleCode),
+                      ),
+                      DataCell(Text(item.ruleName)),
+                      DataCell(
+                        Text(item.ruleType.isEmpty ? '-' : item.ruleType),
+                      ),
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 200),
+                          child: Text(
+                            item.conditionDesc.isEmpty
+                                ? '-'
+                                : item.conditionDesc,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      DataCell(Text(_formatDateTime(item.effectiveAt))),
+                      DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
+                      DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                      if (widget.canManage || widget.canOpenParameters)
+                        DataCell(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.canOpenParameters)
+                                TextButton(
+                                  key: Key(
+                                    'equipment-rule-open-parameters-${item.id}',
                                   ),
+                                  onPressed: () =>
+                                      widget.onOpenParametersForRule(item),
                                   child: Text(
-                                    item.conditionDesc.isEmpty
-                                        ? '-'
-                                        : item.conditionDesc,
-                                    overflow: TextOverflow.ellipsis,
+                                    widget.canManageParameters
+                                        ? '配置参数'
+                                        : '查看参数',
                                   ),
                                 ),
-                              ),
-                              DataCell(Text(_formatDateTime(item.effectiveAt))),
-                              DataCell(
-                                Text(item.remark.isEmpty ? '-' : item.remark),
-                              ),
-                              DataCell(Text(item.isEnabled ? '启用' : '停用')),
-                              if (widget.canManage || widget.canOpenParameters)
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (widget.canOpenParameters)
-                                        TextButton(
-                                          key: Key(
-                                            'equipment-rule-open-parameters-${item.id}',
-                                          ),
-                                          onPressed: () => widget
-                                              .onOpenParametersForRule(item),
-                                          child: Text(
-                                            widget.canManageParameters
-                                                ? '配置参数'
-                                                : '查看参数',
-                                          ),
-                                        ),
-                                      if (widget.canManage)
-                                        TextButton(
-                                          onPressed: () =>
-                                              _showUpsertDialog(item: item),
-                                          child: const Text('编辑'),
-                                        ),
-                                      if (widget.canManage)
-                                        TextButton(
-                                          onPressed: () => _toggleRule(item),
-                                          child: Text(
-                                            item.isEnabled ? '停用' : '启用',
-                                          ),
-                                        ),
-                                      if (widget.canManage)
-                                        TextButton(
-                                          onPressed: () => _deleteRule(item),
-                                          child: Text(
-                                            '删除',
-                                            style: TextStyle(
-                                              color: theme.colorScheme.error,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
+                              if (widget.canManage)
+                                TextButton(
+                                  onPressed: () =>
+                                      _showUpsertDialog(item: item),
+                                  child: const Text('编辑'),
+                                ),
+                              if (widget.canManage)
+                                TextButton(
+                                  onPressed: () => _toggleRule(item),
+                                  child: Text(item.isEnabled ? '停用' : '启用'),
+                                ),
+                              if (widget.canManage)
+                                TextButton(
+                                  onPressed: () => _deleteRule(item),
+                                  child: Text(
+                                    '删除',
+                                    style: TextStyle(
+                                      color: theme.colorScheme.error,
+                                    ),
                                   ),
                                 ),
                             ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
+                          ),
+                        ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _load(page: _page - 1),
+            onNext: () => _load(page: _page + 1),
           ),
         ],
       ),
@@ -754,9 +771,12 @@ class _ParametersTab extends StatefulWidget {
 }
 
 class _ParametersTabState extends State<_ParametersTab> {
+  static const int _pageSize = 30;
+
   bool _loading = false;
   String _message = '';
   int _total = 0;
+  int _page = 1;
   final _keywordController = TextEditingController();
   final _equipmentTypeController = TextEditingController();
   int? _equipmentFilterId;
@@ -767,21 +787,23 @@ class _ParametersTabState extends State<_ParametersTab> {
   void applyRuleScope(_RuleParameterScope scope) {
     _equipmentTypeController.text = scope.equipmentType?.trim() ?? '';
     setState(() {
+      _page = 1;
       _activeRuleScope = scope;
       _equipmentFilterId = scope.equipmentId;
       _isEnabledFilter = scope.isEnabled;
     });
-    _load();
+    _load(page: 1);
   }
 
   void _clearRuleScope() {
     _equipmentTypeController.clear();
     setState(() {
+      _page = 1;
       _activeRuleScope = null;
       _equipmentFilterId = null;
       _isEnabledFilter = null;
     });
-    _load();
+    _load(page: 1);
   }
 
   void _clearRuleScopeFlag() {
@@ -826,7 +848,13 @@ class _ParametersTabState extends State<_ParametersTab> {
     return '${local.year}-$mm-$dd $hh:$min';
   }
 
-  Future<void> _load() async {
+  int get _totalPages {
+    final pages = (_total + _pageSize - 1) ~/ _pageSize;
+    return pages > 0 ? pages : 1;
+  }
+
+  Future<void> _load({int? page}) async {
+    final targetPage = page ?? _page;
     setState(() {
       _loading = true;
       _message = '';
@@ -841,9 +869,12 @@ class _ParametersTabState extends State<_ParametersTab> {
             ? null
             : _keywordController.text.trim(),
         isEnabled: _isEnabledFilter,
+        page: targetPage,
+        pageSize: _pageSize,
       );
       if (!mounted) return;
       setState(() {
+        _page = targetPage;
         _items = result.items;
         _total = result.total;
       });
@@ -1144,7 +1175,7 @@ class _ParametersTabState extends State<_ParametersTab> {
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _load(),
+                  onSubmitted: (_) => _load(page: 1),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1158,7 +1189,7 @@ class _ParametersTabState extends State<_ParametersTab> {
                     isDense: true,
                   ),
                   onChanged: (_) => _clearRuleScopeFlag(),
-                  onSubmitted: (_) => _load(),
+                  onSubmitted: (_) => _load(page: 1),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1188,7 +1219,7 @@ class _ParametersTabState extends State<_ParametersTab> {
                       : (value) {
                           _clearRuleScopeFlag();
                           setState(() => _equipmentFilterId = value);
-                          _load();
+                          _load(page: 1);
                         },
                 ),
               ),
@@ -1212,19 +1243,19 @@ class _ParametersTabState extends State<_ParametersTab> {
                       : (value) {
                           _clearRuleScopeFlag();
                           setState(() => _isEnabledFilter = value);
-                          _load();
+                          _load(page: 1);
                         },
                 ),
               ),
               const SizedBox(width: 12),
               IconButton(
                 tooltip: '查询',
-                onPressed: _loading ? null : _load,
+                onPressed: _loading ? null : () => _load(page: 1),
                 icon: const Icon(Icons.search),
               ),
               IconButton(
                 tooltip: '刷新',
-                onPressed: _loading ? null : _load,
+                onPressed: _loading ? null : () => _load(page: _page),
                 icon: const Icon(Icons.refresh),
               ),
               const Spacer(),
@@ -1270,89 +1301,87 @@ class _ParametersTabState extends State<_ParametersTab> {
             ),
           const SizedBox(height: 8),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无运行参数'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: [
-                          const DataColumn(label: Text('ID')),
-                          const DataColumn(label: Text('适用设备')),
-                          const DataColumn(label: Text('参数编码')),
-                          const DataColumn(label: Text('参数名称')),
-                          const DataColumn(label: Text('单位')),
-                          const DataColumn(label: Text('默认值')),
-                          const DataColumn(label: Text('上限')),
-                          const DataColumn(label: Text('下限')),
-                          const DataColumn(label: Text('生效时间')),
-                          const DataColumn(label: Text('状态')),
-                          const DataColumn(label: Text('备注')),
-                          if (widget.canManage)
-                            const DataColumn(label: Text('操作')),
-                        ],
-                        rows: _items.map((item) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text('${item.id}')),
-                              DataCell(
-                                Text(
-                                  item.equipmentName?.trim().isNotEmpty == true
-                                      ? item.equipmentName!
-                                      : item.equipmentType?.trim().isNotEmpty ==
-                                            true
-                                      ? item.equipmentType!
-                                      : '未配置',
-                                ),
+            child: CrudListTableSection(
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无运行参数',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: [
+                  const DataColumn(label: Text('ID')),
+                  const DataColumn(label: Text('适用设备')),
+                  const DataColumn(label: Text('参数编码')),
+                  const DataColumn(label: Text('参数名称')),
+                  const DataColumn(label: Text('单位')),
+                  const DataColumn(label: Text('默认值')),
+                  const DataColumn(label: Text('上限')),
+                  const DataColumn(label: Text('下限')),
+                  const DataColumn(label: Text('生效时间')),
+                  const DataColumn(label: Text('状态')),
+                  const DataColumn(label: Text('备注')),
+                  if (widget.canManage) const DataColumn(label: Text('操作')),
+                ],
+                rows: _items.map((item) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text('${item.id}')),
+                      DataCell(
+                        Text(
+                          item.equipmentName?.trim().isNotEmpty == true
+                              ? item.equipmentName!
+                              : item.equipmentType?.trim().isNotEmpty == true
+                              ? item.equipmentType!
+                              : '未配置',
+                        ),
+                      ),
+                      DataCell(Text(item.paramCode)),
+                      DataCell(Text(item.paramName)),
+                      DataCell(Text(item.unit.isEmpty ? '-' : item.unit)),
+                      DataCell(Text(item.standardValue ?? '-')),
+                      DataCell(Text(item.upperLimit ?? '-')),
+                      DataCell(Text(item.lowerLimit ?? '-')),
+                      DataCell(Text(_formatDateTime(item.effectiveAt))),
+                      DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                      DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
+                      if (widget.canManage)
+                        DataCell(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TextButton(
+                                onPressed: () => _showUpsertDialog(item: item),
+                                child: const Text('编辑'),
                               ),
-                              DataCell(Text(item.paramCode)),
-                              DataCell(Text(item.paramName)),
-                              DataCell(
-                                Text(item.unit.isEmpty ? '-' : item.unit),
+                              TextButton(
+                                onPressed: () => _toggleParam(item),
+                                child: Text(item.isEnabled ? '停用' : '启用'),
                               ),
-                              DataCell(Text(item.standardValue ?? '-')),
-                              DataCell(Text(item.upperLimit ?? '-')),
-                              DataCell(Text(item.lowerLimit ?? '-')),
-                              DataCell(Text(_formatDateTime(item.effectiveAt))),
-                              DataCell(Text(item.isEnabled ? '启用' : '停用')),
-                              DataCell(
-                                Text(item.remark.isEmpty ? '-' : item.remark),
-                              ),
-                              if (widget.canManage)
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            _showUpsertDialog(item: item),
-                                        child: const Text('编辑'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => _toggleParam(item),
-                                        child: Text(
-                                          item.isEnabled ? '停用' : '启用',
-                                        ),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => _deleteParam(item),
-                                        child: Text(
-                                          '删除',
-                                          style: TextStyle(
-                                            color: theme.colorScheme.error,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                              TextButton(
+                                onPressed: () => _deleteParam(item),
+                                child: Text(
+                                  '删除',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.error,
                                   ),
                                 ),
+                              ),
                             ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
+                          ),
+                        ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _load(page: _page - 1),
+            onNext: () => _load(page: _page + 1),
           ),
         ],
       ),

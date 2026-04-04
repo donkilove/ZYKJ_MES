@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -10,8 +9,10 @@ import 'maintenance_execution_detail_page.dart';
 import '../services/api_exception.dart';
 import '../services/craft_service.dart';
 import '../services/equipment_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class MaintenanceExecutionPage extends StatefulWidget {
   const MaintenanceExecutionPage({
@@ -37,14 +38,16 @@ class MaintenanceExecutionPage extends StatefulWidget {
 }
 
 class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
+  static const int _pageSize = 30;
+
   late final EquipmentService _equipmentService;
   late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
-  bool _exporting = false;
   String _message = '';
   int _total = 0;
+  int _page = 1;
   List<MaintenanceWorkOrderItem> _items = const [];
   String? _statusFilter;
   bool _mineOnly = false;
@@ -125,6 +128,11 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     return '${local.year}-$mm-$dd';
   }
 
+  int get _totalPages {
+    final pages = (_total + _pageSize - 1) ~/ _pageSize;
+    return pages > 0 ? pages : 1;
+  }
+
   Future<DateTime?> _pickDate({required DateTime initialDate}) async {
     return showDatePicker(
       context: context,
@@ -137,7 +145,8 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     );
   }
 
-  Future<void> _loadItems() async {
+  Future<void> _loadItems({int? page}) async {
+    final targetPage = page ?? _page;
     if (!mounted) {
       return;
     }
@@ -147,8 +156,8 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     });
     try {
       final result = await _equipmentService.listExecutions(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         keyword: _keywordController.text.trim(),
         status: _statusFilter,
         mineOnly: _mineOnly,
@@ -160,6 +169,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         return;
       }
       setState(() {
+        _page = targetPage;
         _items = result.items;
         _total = result.total;
       });
@@ -444,55 +454,6 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     return '${local.year}-$mm-$dd $hh:$min';
   }
 
-  Future<void> _exportCsv() async {
-    setState(() {
-      _exporting = true;
-      _message = '';
-    });
-    try {
-      final csvBase64 = await _equipmentService.exportWorkOrders(
-        status: _statusFilter,
-        keyword: _keywordController.text.trim().isNotEmpty
-            ? _keywordController.text.trim()
-            : null,
-        dueDateStart: _dueDateStart,
-        dueDateEnd: _dueDateEnd,
-        stageCode: _stageCodeFilter,
-      );
-      if (!mounted) return;
-      if (csvBase64.isEmpty) {
-        setState(() => _message = '导出失败：服务端返回空数据');
-        return;
-      }
-      final bytes = base64Decode(csvBase64);
-      final location = await getSaveLocation(
-        suggestedName: 'maintenance_executions.csv',
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'CSV', extensions: ['csv']),
-        ],
-      );
-      if (location == null || !mounted) return;
-      await XFile.fromData(
-        bytes,
-        mimeType: 'text/csv',
-        name: 'maintenance_executions.csv',
-      ).saveTo(location.path);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      setState(() => _message = '导出失败：${_errorMessage(error)}');
-    } finally {
-      if (mounted) setState(() => _exporting = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -503,25 +464,11 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         children: [
           Row(
             children: [
-              Text(
-                '保养执行',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: CrudPageHeader(
+                  title: '保养执行',
+                  onRefresh: _loading ? null : () => _loadItems(page: _page),
                 ),
-              ),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: OutlinedButton.icon(
-                  onPressed: (_loading || _exporting) ? null : _exportCsv,
-                  icon: const Icon(Icons.download),
-                  label: const Text('导出'),
-                ),
-              ),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadItems,
-                icon: const Icon(Icons.refresh),
               ),
             ],
           ),
@@ -535,7 +482,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                     labelText: '搜索设备/项目/结果',
                     border: OutlineInputBorder(),
                   ),
-                  onSubmitted: (_) => _loadItems(),
+                  onSubmitted: (_) => _loadItems(page: 1),
                 ),
               ),
               const SizedBox(width: 12),
@@ -568,7 +515,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadItems,
+                onPressed: _loading ? null : () => _loadItems(page: 1),
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
               ),
@@ -665,7 +612,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                             _dueDateEnd = null;
                             _stageCodeFilter = null;
                           });
-                          _loadItems();
+                          _loadItems(page: 1);
                         },
                   child: const Text('清空筛选'),
                 ),
@@ -685,98 +632,104 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
               ),
             ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无执行单'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('工单编号')),
-                          DataColumn(label: Text('设备')),
-                          DataColumn(label: Text('项目')),
-                          DataColumn(label: Text('到期日期')),
-                          DataColumn(label: Text('状态')),
-                          DataColumn(label: Text('执行人')),
-                          DataColumn(label: Text('开始时间')),
-                          DataColumn(label: Text('完成时间')),
-                          DataColumn(label: Text('结果摘要')),
-                          DataColumn(label: Text('操作')),
-                        ],
-                        rows: _items.map((item) {
-                          final canStart =
-                              widget.canExecute &&
-                              (item.status == 'pending' ||
-                                  item.status == 'overdue');
-                          final canComplete =
-                              widget.canExecute && item.status == 'in_progress';
-                          final canCancel =
-                              widget.canExecute &&
-                              (item.status == 'pending' ||
-                                  item.status == 'overdue' ||
-                                  item.status == 'in_progress');
-                          return DataRow(
-                            cells: [
-                              DataCell(Text('#${item.id}')),
-                              DataCell(Text(item.equipmentName)),
-                              DataCell(Text(item.itemName)),
-                              DataCell(Text(_formatDate(item.dueDate))),
-                              DataCell(Text(_statusLabel(item.status))),
-                              DataCell(Text(item.executorUsername ?? '-')),
-                              DataCell(
-                                Text(
-                                  item.startedAt != null
-                                      ? _formatDateTime(item.startedAt!)
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  item.completedAt != null
-                                      ? _formatDateTime(item.completedAt!)
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(Text(item.resultSummary ?? '-')),
-                              DataCell(
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    TextButton(
-                                      onPressed: canStart
-                                          ? () => _startExecution(item)
-                                          : null,
-                                      child: const Text('开始执行'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      onPressed: canComplete
-                                          ? () => _completeExecution(item)
-                                          : null,
-                                      child: const Text('完成执行'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      onPressed: canCancel
-                                          ? () => _cancelExecution(item)
-                                          : null,
-                                      child: const Text('取消'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      onPressed: () => _showDetail(item),
-                                      child: const Text('详情'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+            child: CrudListTableSection(
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无执行单',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('工单编号')),
+                  DataColumn(label: Text('设备')),
+                  DataColumn(label: Text('项目')),
+                  DataColumn(label: Text('到期日期')),
+                  DataColumn(label: Text('状态')),
+                  DataColumn(label: Text('执行人')),
+                  DataColumn(label: Text('开始时间')),
+                  DataColumn(label: Text('完成时间')),
+                  DataColumn(label: Text('结果摘要')),
+                  DataColumn(label: Text('操作')),
+                ],
+                rows: _items.map((item) {
+                  final canStart =
+                      widget.canExecute &&
+                      (item.status == 'pending' || item.status == 'overdue');
+                  final canComplete =
+                      widget.canExecute && item.status == 'in_progress';
+                  final canCancel =
+                      widget.canExecute &&
+                      (item.status == 'pending' ||
+                          item.status == 'overdue' ||
+                          item.status == 'in_progress');
+                  return DataRow(
+                    cells: [
+                      DataCell(Text('#${item.id}')),
+                      DataCell(Text(item.equipmentName)),
+                      DataCell(Text(item.itemName)),
+                      DataCell(Text(_formatDate(item.dueDate))),
+                      DataCell(Text(_statusLabel(item.status))),
+                      DataCell(Text(item.executorUsername ?? '-')),
+                      DataCell(
+                        Text(
+                          item.startedAt != null
+                              ? _formatDateTime(item.startedAt!)
+                              : '-',
+                        ),
                       ),
-                    ),
-                  ),
+                      DataCell(
+                        Text(
+                          item.completedAt != null
+                              ? _formatDateTime(item.completedAt!)
+                              : '-',
+                        ),
+                      ),
+                      DataCell(Text(item.resultSummary ?? '-')),
+                      DataCell(
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton(
+                              onPressed: canStart
+                                  ? () => _startExecution(item)
+                                  : null,
+                              child: const Text('开始执行'),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: canComplete
+                                  ? () => _completeExecution(item)
+                                  : null,
+                              child: const Text('完成执行'),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: canCancel
+                                  ? () => _cancelExecution(item)
+                                  : null,
+                              child: const Text('取消'),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: () => _showDetail(item),
+                              child: const Text('详情'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadItems(page: _page - 1),
+            onNext: () => _loadItems(page: _page + 1),
           ),
         ],
       ),

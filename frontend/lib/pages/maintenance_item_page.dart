@@ -1,14 +1,13 @@
-import 'dart:convert';
-
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/equipment_models.dart';
 import '../services/api_exception.dart';
 import '../services/equipment_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class MaintenanceItemPage extends StatefulWidget {
   const MaintenanceItemPage({
@@ -29,13 +28,15 @@ class MaintenanceItemPage extends StatefulWidget {
 }
 
 class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
+  static const int _pageSize = 30;
+
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
-  bool _exporting = false;
   String _message = '';
   int _total = 0;
+  int _page = 1;
   List<MaintenanceItemEntry> _items = const [];
   bool? _enabledFilter;
   String? _categoryFilter;
@@ -75,7 +76,13 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
-  Future<void> _loadItems() async {
+  int get _totalPages {
+    final pages = (_total + _pageSize - 1) ~/ _pageSize;
+    return pages > 0 ? pages : 1;
+  }
+
+  Future<void> _loadItems({int? page}) async {
+    final targetPage = page ?? _page;
     if (!mounted) {
       return;
     }
@@ -85,8 +92,8 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     });
     try {
       final result = await _equipmentService.listMaintenanceItems(
-        page: 1,
-        pageSize: 100,
+        page: targetPage,
+        pageSize: _pageSize,
         keyword: _keywordController.text.trim(),
         enabled: _enabledFilter,
         category: _categoryFilter,
@@ -95,6 +102,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
         return;
       }
       setState(() {
+        _page = targetPage;
         _items = result.items;
         _total = result.total;
       });
@@ -418,51 +426,6 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     }
   }
 
-  Future<void> _exportCsv() async {
-    setState(() {
-      _exporting = true;
-      _message = '';
-    });
-    try {
-      final csvBase64 = await _equipmentService.exportMaintenanceItems(
-        keyword: _keywordController.text.trim(),
-        enabled: _enabledFilter,
-        category: _categoryFilter,
-      );
-      if (!mounted) return;
-      if (csvBase64.isEmpty) {
-        setState(() => _message = '导出失败：服务端返回空数据');
-        return;
-      }
-      final bytes = base64Decode(csvBase64);
-      final location = await getSaveLocation(
-        suggestedName: 'maintenance_items.csv',
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'CSV', extensions: ['csv']),
-        ],
-      );
-      if (location == null || !mounted) return;
-      await XFile.fromData(
-        bytes,
-        mimeType: 'text/csv',
-        name: 'maintenance_items.csv',
-      ).saveTo(location.path);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      setState(() => _message = '导出失败：${_errorMessage(error)}');
-    } finally {
-      if (mounted) setState(() => _exporting = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -473,25 +436,11 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
         children: [
           Row(
             children: [
-              Text(
-                '保养项目',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: CrudPageHeader(
+                  title: '保养项目',
+                  onRefresh: _loading ? null : () => _loadItems(page: _page),
                 ),
-              ),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: OutlinedButton.icon(
-                  onPressed: (_loading || _exporting) ? null : _exportCsv,
-                  icon: const Icon(Icons.download),
-                  label: const Text('导出'),
-                ),
-              ),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadItems,
-                icon: const Icon(Icons.refresh),
               ),
             ],
           ),
@@ -505,7 +454,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
                     labelText: '搜索项目名称',
                     border: OutlineInputBorder(),
                   ),
-                  onSubmitted: (_) => _loadItems(),
+                  onSubmitted: (_) => _loadItems(page: 1),
                 ),
               ),
               const SizedBox(width: 12),
@@ -552,7 +501,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadItems,
+                onPressed: _loading ? null : () => _loadItems(page: 1),
                 icon: const Icon(Icons.search),
                 label: const Text('搜索'),
               ),
@@ -580,74 +529,79 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
               ),
             ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无保养项目'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('项目名称')),
-                          DataColumn(label: Text('项目分类')),
-                          DataColumn(label: Text('默认周期天数')),
-                          DataColumn(label: Text('默认预计时长')),
-                          DataColumn(label: Text('状态')),
-                          DataColumn(label: Text('创建时间')),
-                          DataColumn(label: Text('更新时间')),
-                          DataColumn(label: Text('操作')),
-                        ],
-                        rows: _items.map((item) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(item.name)),
-                              DataCell(
-                                Text(
-                                  item.category.isEmpty ? '-' : item.category,
-                                ),
-                              ),
-                              DataCell(Text('${item.defaultCycleDays}')),
-                              DataCell(
-                                Text(
-                                  item.defaultDurationMinutes > 0
-                                      ? '${item.defaultDurationMinutes} 分钟'
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(Text(item.isEnabled ? '启用' : '停用')),
-                              DataCell(Text(_formatDateTime(item.createdAt))),
-                              DataCell(Text(_formatDateTime(item.updatedAt))),
-                              DataCell(
-                                Wrap(
-                                  spacing: 8,
-                                  children: [
-                                    TextButton(
-                                      onPressed: widget.canWrite
-                                          ? () => _showEditDialog(item: item)
-                                          : null,
-                                      child: const Text('编辑'),
-                                    ),
-                                    TextButton(
-                                      onPressed: widget.canWrite
-                                          ? () => _toggleItem(item)
-                                          : null,
-                                      child: Text(item.isEnabled ? '停用' : '启用'),
-                                    ),
-                                    TextButton(
-                                      onPressed: widget.canWrite
-                                          ? () => _deleteItem(item)
-                                          : null,
-                                      child: const Text('删除'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+            child: CrudListTableSection(
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无保养项目',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('项目名称')),
+                  DataColumn(label: Text('项目分类')),
+                  DataColumn(label: Text('默认周期天数')),
+                  DataColumn(label: Text('默认预计时长')),
+                  DataColumn(label: Text('状态')),
+                  DataColumn(label: Text('创建时间')),
+                  DataColumn(label: Text('更新时间')),
+                  DataColumn(label: Text('操作')),
+                ],
+                rows: _items.map((item) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(item.name)),
+                      DataCell(
+                        Text(item.category.isEmpty ? '-' : item.category),
                       ),
-                    ),
-                  ),
+                      DataCell(Text('${item.defaultCycleDays}')),
+                      DataCell(
+                        Text(
+                          item.defaultDurationMinutes > 0
+                              ? '${item.defaultDurationMinutes} 分钟'
+                              : '-',
+                        ),
+                      ),
+                      DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                      DataCell(Text(_formatDateTime(item.createdAt))),
+                      DataCell(Text(_formatDateTime(item.updatedAt))),
+                      DataCell(
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            TextButton(
+                              onPressed: widget.canWrite
+                                  ? () => _showEditDialog(item: item)
+                                  : null,
+                              child: const Text('编辑'),
+                            ),
+                            TextButton(
+                              onPressed: widget.canWrite
+                                  ? () => _toggleItem(item)
+                                  : null,
+                              child: Text(item.isEnabled ? '停用' : '启用'),
+                            ),
+                            TextButton(
+                              onPressed: widget.canWrite
+                                  ? () => _deleteItem(item)
+                                  : null,
+                              child: const Text('删除'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadItems(page: _page - 1),
+            onNext: () => _loadItems(page: _page + 1),
           ),
         ],
       ),

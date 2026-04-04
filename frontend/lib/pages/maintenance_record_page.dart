@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -8,7 +5,9 @@ import '../models/equipment_models.dart';
 import 'maintenance_record_detail_page.dart';
 import '../services/api_exception.dart';
 import '../services/equipment_service.dart';
-import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class MaintenanceRecordPage extends StatefulWidget {
   const MaintenanceRecordPage({
@@ -29,13 +28,15 @@ class MaintenanceRecordPage extends StatefulWidget {
 }
 
 class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
+  static const int _pageSize = 30;
+
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
-  bool _exporting = false;
   String _message = '';
   int _total = 0;
+  int _page = 1;
   List<MaintenanceRecordItem> _items = const [];
   DateTime? _startDate;
   DateTime? _endDate;
@@ -104,6 +105,11 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
+  int get _totalPages {
+    final pages = (_total + _pageSize - 1) ~/ _pageSize;
+    return pages > 0 ? pages : 1;
+  }
+
   Future<DateTime?> _pickDate({
     required DateTime initialDate,
     DateTime? firstDate,
@@ -120,7 +126,8 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
     );
   }
 
-  Future<void> _loadItems() async {
+  Future<void> _loadItems({int? page}) async {
+    final targetPage = page ?? _page;
     setState(() {
       _loading = true;
       _message = '';
@@ -130,8 +137,8 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
           ? _keywordController.text.trim()
           : null;
       final result = await _equipmentService.listRecords(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         keyword: keyword,
         executorId: _executorIdFilter,
         startDate: _startDate,
@@ -143,6 +150,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
         return;
       }
       setState(() {
+        _page = targetPage;
         _items = result.items;
         _total = result.total;
       });
@@ -178,56 +186,6 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
     );
   }
 
-  Future<void> _exportCsv() async {
-    setState(() {
-      _exporting = true;
-      _message = '';
-    });
-    try {
-      final csvBase64 = await _equipmentService.exportMaintenanceRecords(
-        keyword: _keywordController.text.trim().isNotEmpty
-            ? _keywordController.text.trim()
-            : null,
-        executorId: _executorIdFilter,
-        startDate: _startDate,
-        endDate: _endDate,
-        resultSummary: _resultSummaryFilter,
-        equipmentId: _equipmentIdFilter,
-      );
-      if (!mounted) return;
-      if (csvBase64.isEmpty) {
-        setState(() => _message = '导出失败：服务端返回空数据');
-        return;
-      }
-      final bytes = base64Decode(csvBase64);
-      final location = await getSaveLocation(
-        suggestedName: 'maintenance_records.csv',
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'CSV', extensions: ['csv']),
-        ],
-      );
-      if (location == null || !mounted) return;
-      await XFile.fromData(
-        bytes,
-        mimeType: 'text/csv',
-        name: 'maintenance_records.csv',
-      ).saveTo(location.path);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      setState(() => _message = '导出失败：${_errorMessage(error)}');
-    } finally {
-      if (mounted) setState(() => _exporting = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -238,25 +196,11 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
         children: [
           Row(
             children: [
-              Text(
-                '保养记录',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: CrudPageHeader(
+                  title: '保养记录',
+                  onRefresh: _loading ? null : () => _loadItems(page: _page),
                 ),
-              ),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: OutlinedButton.icon(
-                  onPressed: (_loading || _exporting) ? null : _exportCsv,
-                  icon: const Icon(Icons.download),
-                  label: const Text('导出'),
-                ),
-              ),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadItems,
-                icon: const Icon(Icons.refresh),
               ),
             ],
           ),
@@ -270,7 +214,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                     labelText: '搜索设备/项目/结果',
                     border: OutlineInputBorder(),
                   ),
-                  onSubmitted: (_) => _loadItems(),
+                  onSubmitted: (_) => _loadItems(page: 1),
                 ),
               ),
               const SizedBox(width: 12),
@@ -340,7 +284,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadItems,
+                onPressed: _loading ? null : () => _loadItems(page: 1),
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
               ),
@@ -356,7 +300,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
                           _equipmentIdFilter = null;
                           _resultSummaryFilter = null;
                         });
-                        _loadItems();
+                        _loadItems(page: 1);
                       },
                 child: const Text('清空筛选'),
               ),
@@ -429,58 +373,65 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
               ),
             ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无保养记录'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('记录编号')),
-                          DataColumn(label: Text('工单编号')),
-                          DataColumn(label: Text('设备')),
-                          DataColumn(label: Text('项目')),
-                          DataColumn(label: Text('到期日期')),
-                          DataColumn(label: Text('执行人')),
-                          DataColumn(label: Text('完成时间')),
-                          DataColumn(label: Text('结果摘要')),
-                          DataColumn(label: Text('备注')),
-                          DataColumn(label: Text('附件')),
-                          DataColumn(label: Text('操作')),
-                        ],
-                        rows: _items.map((item) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text('#${item.id}')),
-                              DataCell(Text('#${item.workOrderId}')),
-                              DataCell(Text(item.equipmentName)),
-                              DataCell(Text(item.itemName)),
-                              DataCell(Text(_formatDate(item.dueDate))),
-                              DataCell(Text(item.executorUsername ?? '-')),
-                              DataCell(Text(_formatDateTime(item.completedAt))),
-                              DataCell(Text(item.resultSummary)),
-                              DataCell(Text(item.resultRemark ?? '-')),
-                              DataCell(
-                                MaintenanceAttachmentAction(
-                                  attachmentLink: item.attachmentLink,
-                                  attachmentName: item.attachmentName,
-                                  onOpen: widget.onOpenAttachment,
-                                  showAttachmentName: false,
-                                ),
-                              ),
-                              DataCell(
-                                TextButton(
-                                  onPressed: () => _showDetail(item),
-                                  child: const Text('详情'),
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+            child: CrudListTableSection(
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无保养记录',
+              enableUnifiedHeaderStyle: true,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('记录编号')),
+                  DataColumn(label: Text('工单编号')),
+                  DataColumn(label: Text('设备')),
+                  DataColumn(label: Text('项目')),
+                  DataColumn(label: Text('到期日期')),
+                  DataColumn(label: Text('执行人')),
+                  DataColumn(label: Text('完成时间')),
+                  DataColumn(label: Text('结果摘要')),
+                  DataColumn(label: Text('备注')),
+                  DataColumn(label: Text('附件')),
+                  DataColumn(label: Text('操作')),
+                ],
+                rows: _items.map((item) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text('#${item.id}')),
+                      DataCell(Text('#${item.workOrderId}')),
+                      DataCell(Text(item.equipmentName)),
+                      DataCell(Text(item.itemName)),
+                      DataCell(Text(_formatDate(item.dueDate))),
+                      DataCell(Text(item.executorUsername ?? '-')),
+                      DataCell(Text(_formatDateTime(item.completedAt))),
+                      DataCell(Text(item.resultSummary)),
+                      DataCell(Text(item.resultRemark ?? '-')),
+                      DataCell(
+                        MaintenanceAttachmentAction(
+                          attachmentLink: item.attachmentLink,
+                          attachmentName: item.attachmentName,
+                          onOpen: widget.onOpenAttachment,
+                          showAttachmentName: false,
+                        ),
                       ),
-                    ),
-                  ),
+                      DataCell(
+                        TextButton(
+                          onPressed: () => _showDetail(item),
+                          child: const Text('详情'),
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadItems(page: _page - 1),
+            onNext: () => _loadItems(page: _page + 1),
           ),
         ],
       ),
