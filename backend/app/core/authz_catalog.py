@@ -37,7 +37,7 @@ PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE = "authz.role_permissions.update"
 PERM_PAGE_PRODUCTION_VIEW = "page.production.view"
 PERM_PAGE_PRODUCTION_ORDER_MANAGEMENT_VIEW = "page.production_order_management.view"
 PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW = "page.production_order_query.view"
-PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW = "page.production_assist_approval.view"
+PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW = "page.production_assist_records.view"
 PERM_PAGE_PRODUCTION_DATA_QUERY_VIEW = "page.production_data_query.view"
 PERM_PAGE_PRODUCTION_SCRAP_STATISTICS_VIEW = "page.production_scrap_statistics.view"
 PERM_PAGE_PRODUCTION_REPAIR_ORDERS_VIEW = "page.production_repair_orders.view"
@@ -77,7 +77,6 @@ PERM_PROD_REPAIR_ORDERS_COMPLETE = "production.repair_orders.complete"
 PERM_PROD_REPAIR_ORDERS_EXPORT = "production.repair_orders.export"
 PERM_PROD_ASSIST_AUTHORIZATIONS_LIST = "production.assist_authorizations.list"
 PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE = "production.assist_authorizations.create"
-PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW = "production.assist_authorizations.review"
 PERM_PROD_ASSIST_USER_OPTIONS_LIST = "production.assist_user_options.list"
 PERM_PROD_ORDERS_EXPORT = "production.orders.export"
 PERM_PROD_PIPELINE_INSTANCES_LIST = "production.pipeline_instances.list"
@@ -93,9 +92,7 @@ PERM_QUALITY_SUPPLIERS_UPDATE = "quality.suppliers.update"
 PERM_QUALITY_SUPPLIERS_DELETE = "quality.suppliers.delete"
 PERM_QUALITY_REPAIR_ORDERS_LIST = "quality.repair_orders.list"
 PERM_QUALITY_REPAIR_ORDERS_DETAIL = "quality.repair_orders.detail"
-PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY = (
-    "quality.repair_orders.phenomena_summary"
-)
+PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY = "quality.repair_orders.phenomena_summary"
 PERM_QUALITY_REPAIR_ORDERS_COMPLETE = "quality.repair_orders.complete"
 PERM_QUALITY_REPAIR_ORDERS_EXPORT = "quality.repair_orders.export"
 
@@ -134,7 +131,7 @@ PAGE_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("production", "生产模块", AUTHZ_MODULE_PRODUCTION, None),
     ("production_order_management", "订单管理", AUTHZ_MODULE_PRODUCTION, "production"),
     ("production_order_query", "订单查询", AUTHZ_MODULE_PRODUCTION, "production"),
-    ("production_assist_approval", "代班记录", AUTHZ_MODULE_PRODUCTION, "production"),
+    ("production_assist_records", "代班记录", AUTHZ_MODULE_PRODUCTION, "production"),
     ("production_data_query", "生产数据", AUTHZ_MODULE_PRODUCTION, "production"),
     ("production_scrap_statistics", "报废统计", AUTHZ_MODULE_PRODUCTION, "production"),
     ("production_repair_orders", "维修订单", AUTHZ_MODULE_PRODUCTION, "production"),
@@ -174,7 +171,7 @@ PRODUCTION_PAGE_PERMISSION_BY_PAGE_CODE: dict[str, str] = {
     "production": PERM_PAGE_PRODUCTION_VIEW,
     "production_order_management": PERM_PAGE_PRODUCTION_ORDER_MANAGEMENT_VIEW,
     "production_order_query": PERM_PAGE_PRODUCTION_ORDER_QUERY_VIEW,
-    "production_assist_approval": PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW,
+    "production_assist_records": PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW,
     "production_data_query": PERM_PAGE_PRODUCTION_DATA_QUERY_VIEW,
     "production_scrap_statistics": PERM_PAGE_PRODUCTION_SCRAP_STATISTICS_VIEW,
     "production_repair_orders": PERM_PAGE_PRODUCTION_REPAIR_ORDERS_VIEW,
@@ -352,7 +349,12 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         AUTHZ_MODULE_PRODUCT,
         "product_management",
     ),
-    ("product.products.export", "导出产品列表", AUTHZ_MODULE_PRODUCT, "product_management"),
+    (
+        "product.products.export",
+        "导出产品列表",
+        AUTHZ_MODULE_PRODUCT,
+        "product_management",
+    ),
     (
         "product.versions.list",
         "查看产品版本列表",
@@ -997,19 +999,13 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         PERM_PROD_ASSIST_AUTHORIZATIONS_LIST,
         "查看代班记录",
         AUTHZ_MODULE_PRODUCTION,
-        "production_assist_approval",
+        "production_assist_records",
     ),
     (
         PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE,
         "发起代班",
         AUTHZ_MODULE_PRODUCTION,
         "production_order_query",
-    ),
-    (
-        PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW,
-        "审批代班（兼容）",
-        AUTHZ_MODULE_PRODUCTION,
-        "production_assist_approval",
     ),
     (
         PERM_PROD_ASSIST_USER_OPTIONS_LIST,

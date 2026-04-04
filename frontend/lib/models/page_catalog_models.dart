@@ -380,7 +380,7 @@ const fallbackPageCatalog = <PageCatalogItem>[
   ),
 
   PageCatalogItem(
-    code: 'production_assist_approval',
+    code: 'production_assist_records',
 
     name: '代班记录',
 

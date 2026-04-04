@@ -45,6 +45,7 @@ _MESSAGE_DELIVERY_RETRY_DELAYS = (5, 30, 120)
 _MESSAGE_RETENTION_DAYS = 30
 _MESSAGE_STATUS_SOURCE_UNAVAILABLE = "src_unavailable"
 
+
 @dataclass(frozen=True)
 class _MessageSourceRegistryEntry:
     model: type
@@ -53,9 +54,7 @@ class _MessageSourceRegistryEntry:
 
 _HIGH_PRIORITY_LEVELS = {"urgent", "important"}
 
-_MESSAGE_SOURCE_MODEL_REGISTRY: dict[
-    tuple[str, str], _MessageSourceRegistryEntry
-] = {
+_MESSAGE_SOURCE_MODEL_REGISTRY: dict[tuple[str, str], _MessageSourceRegistryEntry] = {
     ("user", "registration_request"): _MessageSourceRegistryEntry(RegistrationRequest),
     ("user", "user_disable"): _MessageSourceRegistryEntry(User),
     ("user", "force_offline"): _MessageSourceRegistryEntry(
@@ -92,7 +91,9 @@ _PUBLIC_FAILURE_REASON_HINTS: dict[str, str] = {
 def _next_retry_time(attempt_count: int, *, now: datetime) -> datetime | None:
     if attempt_count <= 0 or attempt_count > _MESSAGE_DELIVERY_MAX_RETRY:
         return None
-    delay_seconds = _MESSAGE_DELIVERY_RETRY_DELAYS[min(attempt_count, len(_MESSAGE_DELIVERY_RETRY_DELAYS)) - 1]
+    delay_seconds = _MESSAGE_DELIVERY_RETRY_DELAYS[
+        min(attempt_count, len(_MESSAGE_DELIVERY_RETRY_DELAYS)) - 1
+    ]
     return now.replace(microsecond=0) + timedelta(seconds=delay_seconds)
 
 
@@ -143,17 +144,21 @@ def _is_high_priority(priority: str | None) -> bool:
 def _list_active_user_ids_by_role_codes(db: Session, role_codes: set[str]) -> list[int]:
     if not role_codes:
         return []
-    rows = db.execute(
-        select(User.id)
-        .join(User.roles)
-        .where(
-            User.is_active.is_(True),
-            User.is_deleted.is_(False),
-            Role.code.in_(sorted(role_codes)),
+    rows = (
+        db.execute(
+            select(User.id)
+            .join(User.roles)
+            .where(
+                User.is_active.is_(True),
+                User.is_deleted.is_(False),
+                Role.code.in_(sorted(role_codes)),
+            )
+            .distinct()
+            .order_by(User.id.asc())
         )
-        .distinct()
-        .order_by(User.id.asc())
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     result: list[int] = []
     for row in rows:
         raw_value = getattr(row, "id", row)
@@ -164,7 +169,9 @@ def _list_active_user_ids_by_role_codes(db: Session, role_codes: set[str]) -> li
     return result
 
 
-def _message_recipient_user_ids_for_order(db: Session, *, order: ProductionOrder) -> list[int]:
+def _message_recipient_user_ids_for_order(
+    db: Session, *, order: ProductionOrder
+) -> list[int]:
     recipient_ids = set(
         _list_active_user_ids_by_role_codes(
             db,
@@ -180,11 +187,15 @@ def _sync_pending_registration_request_messages(db: Session) -> None:
     recipient_user_ids = _list_active_user_ids_by_role_codes(db, {ROLE_SYSTEM_ADMIN})
     if not recipient_user_ids:
         return
-    rows = db.execute(
-        select(RegistrationRequest)
-        .where(RegistrationRequest.status == "pending")
-        .order_by(RegistrationRequest.id.asc())
-    ).scalars().all()
+    rows = (
+        db.execute(
+            select(RegistrationRequest)
+            .where(RegistrationRequest.status == "pending")
+            .order_by(RegistrationRequest.id.asc())
+        )
+        .scalars()
+        .all()
+    )
     for row in rows:
         create_message_for_users(
             db,
@@ -198,48 +209,10 @@ def _sync_pending_registration_request_messages(db: Session) -> None:
             source_code=row.account,
             target_page_code="user",
             target_tab_code="registration_approval",
-            target_route_payload_json=(
-                '{"action":"detail","request_id":%s}' % row.id
-            ),
+            target_route_payload_json=('{"action":"detail","request_id":%s}' % row.id),
             recipient_user_ids=recipient_user_ids,
             dedupe_key=f"registration_request_pending_{row.id}",
             created_by_user_id=row.reviewed_by_user_id,
-        )
-
-
-def _sync_pending_assist_authorization_messages(db: Session) -> None:
-    recipient_user_ids = _list_active_user_ids_by_role_codes(
-        db,
-        {ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN},
-    )
-    if not recipient_user_ids:
-        return
-    rows = db.execute(
-        select(ProductionAssistAuthorization)
-        .where(ProductionAssistAuthorization.status == "pending")
-        .order_by(ProductionAssistAuthorization.id.asc())
-    ).scalars().all()
-    for row in rows:
-        order_code = getattr(row, "order_code", None) or ""
-        process_name = getattr(row, "process_name", None) or ""
-        create_message_for_users(
-            db,
-            message_type="todo",
-            priority="important",
-            title=f"代班审批待处理：{order_code} / {process_name}",
-            summary="存在新的代班申请，请进入代班审批列表完成审核。",
-            source_module="production",
-            source_type="assist_authorization",
-            source_id=str(row.id),
-            source_code=order_code or str(row.id),
-            target_page_code="production",
-            target_tab_code="production_assist_approval",
-            target_route_payload_json=(
-                '{"action":"detail","authorization_id":%s}' % row.id
-            ),
-            recipient_user_ids=recipient_user_ids,
-            dedupe_key=f"assist_authorization_pending_{row.id}",
-            created_by_user_id=row.requester_user_id,
         )
 
 
@@ -250,13 +223,19 @@ def _sync_failed_first_article_messages(db: Session) -> None:
     )
     if not recipient_user_ids:
         return
-    rows = db.execute(
-        select(FirstArticleRecord)
-        .where(FirstArticleRecord.result == "failed")
-        .order_by(FirstArticleRecord.id.asc())
-    ).scalars().all()
+    rows = (
+        db.execute(
+            select(FirstArticleRecord)
+            .where(FirstArticleRecord.result == "failed")
+            .order_by(FirstArticleRecord.id.asc())
+        )
+        .scalars()
+        .all()
+    )
     for row in rows:
-        order_code = getattr(row.order, "order_code", "") if getattr(row, "order", None) else ""
+        order_code = (
+            getattr(row.order, "order_code", "") if getattr(row, "order", None) else ""
+        )
         process_name = (
             getattr(row.order_process, "process_name", "")
             if getattr(row, "order_process", None)
@@ -287,15 +266,19 @@ def _sync_overdue_production_order_messages(
     current_time: datetime,
 ) -> None:
     today = current_time.date()
-    rows = db.execute(
-        select(ProductionOrder)
-        .where(
-            ProductionOrder.due_date.is_not(None),
-            ProductionOrder.due_date < today,
-            ProductionOrder.status != "completed",
+    rows = (
+        db.execute(
+            select(ProductionOrder)
+            .where(
+                ProductionOrder.due_date.is_not(None),
+                ProductionOrder.due_date < today,
+                ProductionOrder.status != "completed",
+            )
+            .order_by(ProductionOrder.due_date.asc(), ProductionOrder.id.asc())
         )
-        .order_by(ProductionOrder.due_date.asc(), ProductionOrder.id.asc())
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for row in rows:
         recipient_user_ids = _message_recipient_user_ids_for_order(db, order=row)
         if not recipient_user_ids:
@@ -398,7 +381,9 @@ def _mark_recipient_delivery_result(
         else:
             recipient.delivery_status = "failed"
             recipient.delivered_at = None
-            recipient.last_failure_reason = (failure_reason or "push_failed").strip()[:255]
+            recipient.last_failure_reason = (failure_reason or "push_failed").strip()[
+                :255
+            ]
             recipient.next_retry_at = _next_retry_time(attempt_count, now=pushed_at)
         _write_delivery_audit_log(
             db,
@@ -449,7 +434,9 @@ def _schedule_message_retry_if_possible(
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
-    loop.create_task(_retry_message_delivery_after_delay(message_id, user_id, next_retry_at))
+    loop.create_task(
+        _retry_message_delivery_after_delay(message_id, user_id, next_retry_at)
+    )
 
 
 async def _push_message_created_for_recipients(
@@ -829,7 +816,9 @@ def get_message_detail(
 ) -> MessageDetailResult | None:
     now = datetime.now(UTC)
     run_message_maintenance(db, now=now)
-    row = _get_message_and_recipient_for_user(db, user_id=user_id, message_id=message_id)
+    row = _get_message_and_recipient_for_user(
+        db, user_id=user_id, message_id=message_id
+    )
     if row is None:
         return None
     msg, recipient = row
@@ -860,7 +849,9 @@ def get_message_jump_target(
 ) -> MessageJumpResult | None:
     now = datetime.now(UTC)
     run_message_maintenance(db, now=now)
-    row = _get_message_and_recipient_for_user(db, user_id=user_id, message_id=message_id)
+    row = _get_message_and_recipient_for_user(
+        db, user_id=user_id, message_id=message_id
+    )
     if row is None:
         return None
     msg, _recipient = row
@@ -996,7 +987,6 @@ def run_message_maintenance(
 ) -> dict[str, int]:
     current_time = now or datetime.now(UTC)
     _sync_pending_registration_request_messages(db)
-    _sync_pending_assist_authorization_messages(db)
     _sync_failed_first_article_messages(db)
     _sync_overdue_production_order_messages(db, current_time=current_time)
     stats = {

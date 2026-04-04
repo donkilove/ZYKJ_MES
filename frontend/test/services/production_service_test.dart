@@ -776,13 +776,18 @@ void main() {
               },
             );
           },
-          'POST /production/assist-authorizations/99/review': (request) {
+          'POST /production/orders/1/complete': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
-            expect(body['approve'], true);
-            expect(body['review_remark'], 'ok');
+            expect(body['password'], 'Admin@123456');
             return TestResponse.json(
-              409,
-              body: {'detail': '代班流程已改为发起即生效，无需审批'},
+              200,
+              body: {
+                'data': {
+                  'order_id': 1,
+                  'status': 'completed',
+                  'message': '订单已结束',
+                },
+              },
             );
           },
           'GET /production/scrap-statistics': (request) {
@@ -940,7 +945,10 @@ void main() {
           remark: 'updated',
         );
         await service.deleteOrder(orderId: 1);
-        final complete = await service.completeOrder(orderId: 1);
+        final complete = await service.completeOrder(
+          orderId: 1,
+          password: 'Admin@123456',
+        );
         final detail = await service.getOrderDetail(orderId: 1);
         final pipelineMode = await service.getOrderPipelineMode(orderId: 1);
         final pipelineUpdated = await service.updateOrderPipelineMode(
@@ -1054,18 +1062,6 @@ void main() {
           helperUserId: 9,
           reason: 'need assist',
         );
-        await expectLater(
-          () => service.reviewAssistAuthorization(
-            authorizationId: 99,
-            approve: true,
-            reviewRemark: 'ok',
-          ),
-          throwsA(
-            isA<ApiException>()
-                .having((e) => e.statusCode, 'statusCode', 409)
-                .having((e) => e.message, 'message', contains('发起即生效')),
-          ),
-        );
         final scrapStats = await service.getScrapStatistics(
           page: 1,
           pageSize: 20,
@@ -1152,7 +1148,7 @@ void main() {
         expect(repairSummary.items.single.phenomenon, '毛刺');
         expect(completedRepair.status, 'completed');
         expect(repairExport.fileName, 'repair.csv');
-        expect(server.requests.length, 38);
+        expect(server.requests.length, 37);
       },
     );
 

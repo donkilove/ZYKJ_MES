@@ -5,7 +5,6 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import select
@@ -32,9 +31,6 @@ from app.api.v1.endpoints.craft import (  # noqa: E402
 )
 from app.api.v1.endpoints.products import (  # noqa: E402
     _notify_product_version_activated,
-)
-from app.services.assist_authorization_service import (  # noqa: E402
-    review_assist_authorization,
 )
 from app.services.message_service import (  # noqa: E402
     _push_message_created_for_recipient,
@@ -315,7 +311,9 @@ class MessageModuleIntegrationTest(unittest.TestCase):
             '{"action":"detail","request_id":%s}' % request_row.id,
         )
 
-    def test_message_detail_and_jump_target_endpoint_return_delivery_context(self) -> None:
+    def test_message_detail_and_jump_target_endpoint_return_delivery_context(
+        self,
+    ) -> None:
         db = SessionLocal()
         try:
             message = create_message_for_users(
@@ -337,9 +335,15 @@ class MessageModuleIntegrationTest(unittest.TestCase):
                 created_by_user_id=1,
             )
             self.message_ids.append(message.id)
-            recipient = db.execute(
-                select(MessageRecipient).where(MessageRecipient.message_id == message.id)
-            ).scalars().first()
+            recipient = (
+                db.execute(
+                    select(MessageRecipient).where(
+                        MessageRecipient.message_id == message.id
+                    )
+                )
+                .scalars()
+                .first()
+            )
             recipient.delivery_status = "failed"
             recipient.delivery_attempt_count = 2
             recipient.last_failure_reason = "no_active_connection"
@@ -521,61 +525,6 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(list_resp.status_code, 200, list_resp.text)
         titles = [item["title"] for item in list_resp.json()["data"]["items"]]
         self.assertIn("全员公告", titles)
-
-    def test_assist_review_message_targets_assist_approval_detail(self) -> None:
-        row = SimpleNamespace(
-            id=321,
-            status="pending",
-            requester_user_id=88,
-            order_id=12,
-            order_code="PO-ASSIST-321",
-            process_name="切割",
-            review_remark=None,
-            reviewer_user_id=None,
-            reviewed_at=None,
-            helper=SimpleNamespace(username="helper-a"),
-            requester=SimpleNamespace(username="requester-a"),
-        )
-        db = MagicMock()
-        db.execute.return_value.scalars.return_value.first.return_value = row
-        reviewer = SimpleNamespace(id=7, username="reviewer-a")
-
-        with (
-            patch(
-                "app.services.assist_authorization_service.add_order_event_log",
-            ),
-            patch(
-                "app.services.assist_authorization_service.create_message_for_users",
-            ) as create_message_mock,
-        ):
-            result = review_assist_authorization(
-                db,
-                authorization_id=row.id,
-                approve=False,
-                reviewer=cast(User, reviewer),
-                review_remark="排班冲突",
-            )
-
-        self.assertIs(result, row)
-        self.assertEqual(row.status, "rejected")
-        self.assertEqual(row.review_remark, "排班冲突")
-        create_message_mock.assert_called_once_with(
-            db,
-            message_type="notice",
-            priority="normal",
-            title="代班申请已拒绝：PO-ASSIST-321 / 切割",
-            summary="reviewer-a 拒绝代班申请，原因：排班冲突",
-            source_module="production",
-            source_type="assist_authorization",
-            source_id="321",
-            source_code="PO-ASSIST-321",
-            target_page_code="production",
-            target_tab_code="production_assist_approval",
-            target_route_payload_json='{"action":"detail","authorization_id":321}',
-            recipient_user_ids=[88],
-            dedupe_key="assist_auth_review_321",
-            created_by_user_id=7,
-        )
 
     def test_registration_approval_message_targets_change_password_section(
         self,

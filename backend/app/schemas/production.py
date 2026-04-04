@@ -186,6 +186,10 @@ class OrderActionResult(BaseModel):
     message: str
 
 
+class CompleteOrderRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+
+
 class OrderPipelineModeItem(BaseModel):
     order_id: int
     enabled: bool
@@ -360,11 +364,6 @@ class AssistAuthorizationCreateRequest(BaseModel):
     target_operator_user_id: int = Field(gt=0)
     helper_user_id: int = Field(gt=0)
     reason: str | None = Field(default=None, max_length=1024)
-
-
-class AssistAuthorizationReviewRequest(BaseModel):
-    approve: bool
-    review_remark: str | None = Field(default=None, max_length=1024)
 
 
 class AssistAuthorizationItem(BaseModel):

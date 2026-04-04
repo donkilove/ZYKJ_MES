@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
 import '../models/authz_models.dart';
-import 'production_assist_approval_page.dart';
+import 'production_assist_records_page.dart';
 import 'production_data_page.dart';
 import 'production_order_management_page.dart';
 import 'production_order_query_page.dart';
@@ -13,7 +13,7 @@ import 'production_scrap_statistics_page.dart';
 
 const String productionOrderManagementTabCode = 'production_order_management';
 const String productionOrderQueryTabCode = 'production_order_query';
-const String productionAssistApprovalTabCode = 'production_assist_approval';
+const String productionAssistRecordsTabCode = 'production_assist_records';
 const String productionDataQueryTabCode = 'production_data_query';
 const String productionScrapStatisticsTabCode = 'production_scrap_statistics';
 const String productionRepairOrdersTabCode = 'production_repair_orders';
@@ -23,7 +23,7 @@ const String productionPipelineInstancesTabCode =
 const List<String> _defaultTabOrder = [
   productionOrderManagementTabCode,
   productionOrderQueryTabCode,
-  productionAssistApprovalTabCode,
+  productionAssistRecordsTabCode,
   productionDataQueryTabCode,
   productionScrapStatisticsTabCode,
   productionRepairOrdersTabCode,
@@ -135,7 +135,7 @@ class _ProductionPageState extends State<ProductionPage>
         return '订单管理';
       case productionOrderQueryTabCode:
         return '订单查询';
-      case productionAssistApprovalTabCode:
+      case productionAssistRecordsTabCode:
         return '代班记录';
       case productionDataQueryTabCode:
         return '生产数据';
@@ -195,15 +195,15 @@ class _ProductionPageState extends State<ProductionPage>
             ProductionFeaturePermissionCodes.orderQueryExport,
           ),
         );
-      case productionAssistApprovalTabCode:
-        return ProductionAssistApprovalPage(
+      case productionAssistRecordsTabCode:
+        return ProductionAssistRecordsPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canReview: _hasPermission(
+          canViewRecords: _hasPermission(
             ProductionFeaturePermissionCodes.assistRecordsView,
           ),
           routePayloadJson:
-              widget.preferredTabCode == productionAssistApprovalTabCode
+              widget.preferredTabCode == productionAssistRecordsTabCode
               ? widget.routePayloadJson
               : null,
         );

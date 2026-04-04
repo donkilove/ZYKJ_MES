@@ -32,7 +32,7 @@ class _FakeMessageService extends MessageService {
       'source_type': 'assist_authorization',
       'source_code': 'PO-ASSIST-1',
       'target_page_code': 'production',
-      'target_tab_code': 'production_assist_approval',
+      'target_tab_code': 'production_assist_records',
       'target_route_payload_json': '{"action":"detail","authorization_id":101}',
       'status': 'active',
       'published_at': '2026-03-19T08:00:00Z',
@@ -511,7 +511,7 @@ void main() {
     await tester.tap(find.text('跳转').first);
     await tester.pumpAndSettle();
     expect(navigatedPage, 'production');
-    expect(navigatedTab, 'production_assist_approval');
+    expect(navigatedTab, 'production_assist_records');
     expect(
       navigatedRoutePayloadJson,
       '{"action":"detail","authorization_id":101}',

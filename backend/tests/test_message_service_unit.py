@@ -84,7 +84,9 @@ class MessageServiceUnitTest(unittest.TestCase):
         pushed_at = datetime.now(UTC)
 
         with (
-            patch.object(message_service, "SessionLocal", return_value=_FakeSessionContext(db)),
+            patch.object(
+                message_service, "SessionLocal", return_value=_FakeSessionContext(db)
+            ),
             patch.object(message_service, "write_audit_log") as write_audit_log,
         ):
             message_service._mark_recipient_delivery_result(
@@ -136,8 +138,9 @@ class MessageServiceUnitTest(unittest.TestCase):
 
         with (
             patch.object(message_service, "write_audit_log") as write_audit_log,
-            patch.object(message_service, "_sync_pending_registration_request_messages"),
-            patch.object(message_service, "_sync_pending_assist_authorization_messages"),
+            patch.object(
+                message_service, "_sync_pending_registration_request_messages"
+            ),
             patch.object(message_service, "_sync_failed_first_article_messages"),
             patch.object(message_service, "_sync_overdue_production_order_messages"),
         ):
@@ -157,9 +160,15 @@ class MessageServiceUnitTest(unittest.TestCase):
         retry_db = MagicMock()
 
         with (
-            patch.object(message_service, "SessionLocal", return_value=_FakeSessionContext(retry_db)),
+            patch.object(
+                message_service,
+                "SessionLocal",
+                return_value=_FakeSessionContext(retry_db),
+            ),
             patch.object(message_service, "get_unread_count", return_value=4),
-            patch.object(message_service, "_mark_recipient_delivery_result") as mark_result,
+            patch.object(
+                message_service, "_mark_recipient_delivery_result"
+            ) as mark_result,
             patch(
                 "app.services.message_push_service.push_message_created",
                 new=AsyncMock(return_value=(True, None, datetime.now(UTC))),
@@ -323,7 +332,9 @@ class MessageServiceUnitTest(unittest.TestCase):
             source_id="sid-1001",
         )
         db = MagicMock()
-        db.execute.return_value = _FakeScalarResult(one=SimpleNamespace(is_deleted=False))
+        db.execute.return_value = _FakeScalarResult(
+            one=SimpleNamespace(is_deleted=False)
+        )
 
         result = message_service._source_record_exists(db, msg)
 

@@ -2,16 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/production_models.dart';
-import 'package:mes_client/pages/production_assist_approval_page.dart';
+import 'package:mes_client/pages/production_assist_records_page.dart';
 import 'package:mes_client/services/production_service.dart';
 
-class _FakeAssistApprovalService extends ProductionService {
-  _FakeAssistApprovalService()
-    : super(AppSession(baseUrl: '', accessToken: ''));
+class _FakeAssistRecordsService extends ProductionService {
+  _FakeAssistRecordsService() : super(AppSession(baseUrl: '', accessToken: ''));
 
-  int? lastAuthorizationId;
-  bool? lastApprove;
-  String? lastReviewRemark;
   String? lastOrderCode;
   final List<String?> listStatusHistory = <String?>[];
   final List<int> listPageHistory = <int>[];
@@ -94,125 +90,10 @@ class _FakeAssistApprovalService extends ProductionService {
       ],
     );
   }
-
-  @override
-  Future<AssistAuthorizationItem> reviewAssistAuthorization({
-    required int authorizationId,
-    required bool approve,
-    String? reviewRemark,
-  }) async {
-    lastAuthorizationId = authorizationId;
-    lastApprove = approve;
-    lastReviewRemark = reviewRemark;
-    return AssistAuthorizationItem(
-      id: authorizationId,
-      orderId: 100,
-      orderCode: 'PO-ASSIST-1',
-      orderProcessId: 11,
-      processCode: '01-01',
-      processName: '切割',
-      targetOperatorUserId: 8,
-      targetOperatorUsername: 'operator-a',
-      requesterUserId: 9,
-      requesterUsername: 'requester',
-      helperUserId: 10,
-      helperUsername: 'helper',
-      status: approve ? 'approved' : 'rejected',
-      reason: '需要代班',
-      reviewRemark: reviewRemark,
-      reviewerUserId: 1,
-      reviewerUsername: 'admin',
-      reviewedAt: DateTime(2026, 3, 1, 9),
-      firstArticleUsedAt: null,
-      endProductionUsedAt: null,
-      consumedAt: null,
-      createdAt: DateTime(2026, 3, 1, 8),
-      updatedAt: DateTime(2026, 3, 1, 9),
-    );
-  }
 }
 
 void main() {
-  testWidgets('assist approval uses approved label in filter', (tester) async {
-    tester.view.physicalSize = const Size(1600, 1200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ProductionAssistApprovalPage(
-            session: AppSession(baseUrl: '', accessToken: ''),
-            onLogout: () {},
-            canReview: true,
-            service: _FakeAssistApprovalService(),
-          ),
-        ),
-      ),
-    );
-
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(
-      find.byKey(const ValueKey('productionAssistApprovalListCard')),
-      findsOneWidget,
-    );
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
-    await tester.pumpAndSettle();
-
-    expect(find.text('已审批'), findsWidgets);
-    expect(find.text('已生效'), findsNothing);
-  });
-
-  testWidgets('assist approval keeps remark after confirm', (tester) async {
-    tester.view.physicalSize = const Size(1600, 1200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
-    final service = _FakeAssistApprovalService();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ProductionAssistApprovalPage(
-            session: AppSession(baseUrl: '', accessToken: ''),
-            onLogout: () {},
-            canReview: true,
-            service: service,
-          ),
-        ),
-      ),
-    );
-
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.text('PO-ASSIST-1'), findsOneWidget);
-
-    final approveButton = find.widgetWithText(TextButton, '通过').first;
-    await tester.ensureVisible(approveButton);
-    await tester.tap(approveButton);
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byType(TextField).last, '  请尽快处理  ');
-    await tester.tap(find.widgetWithText(FilledButton, '通过'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(service.lastAuthorizationId, 1);
-    expect(service.lastApprove, isTrue);
-    expect(service.lastReviewRemark, '请尽快处理');
-    expect(find.text('已审批通过。'), findsOneWidget);
-  });
-
-  testWidgets('assist approval consumes payload and auto opens detail', (
+  testWidgets('assist records uses historical pending label in filter', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1600, 1200);
@@ -222,15 +103,52 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    final service = _FakeAssistApprovalService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionAssistRecordsPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canViewRecords: true,
+            service: _FakeAssistRecordsService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.byKey(const ValueKey('productionAssistRecordsListCard')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byType(DropdownButtonFormField<String?>));
+    await tester.pumpAndSettle();
+
+    expect(find.text('待处理（历史）'), findsWidgets);
+    expect(find.text('已生效'), findsWidgets);
+  });
+
+  testWidgets('assist records consumes payload and auto opens detail', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final service = _FakeAssistRecordsService();
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ProductionAssistApprovalPage(
+          body: ProductionAssistRecordsPage(
             session: AppSession(baseUrl: '', accessToken: ''),
             onLogout: () {},
-            canReview: true,
+            canViewRecords: true,
             routePayloadJson: '{"action":"detail","authorization_id":2}',
             service: service,
           ),
@@ -242,16 +160,43 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
-    expect(
-      service.listStatusHistory,
-      containsAllInOrder(<String?>['pending', null]),
-    );
-    expect(find.text('代班申请详情'), findsOneWidget);
+    expect(service.listStatusHistory, <String?>[null, null]);
+    expect(find.text('代班记录详情'), findsOneWidget);
     expect(find.text('PO-ASSIST-2'), findsWidgets);
-    expect(find.text('已审批'), findsWidgets);
+    expect(find.text('已生效'), findsWidgets);
   });
 
-  testWidgets('assist approval pagination changes page and query resets', (
+  testWidgets('assist records page only keeps detail action', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionAssistRecordsPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canViewRecords: true,
+            service: _FakeAssistRecordsService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('代班审批已取消，发起后将直接生效。本页仅用于记录查询与详情查看。'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '详情'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '通过'), findsNothing);
+    expect(find.widgetWithText(TextButton, '拒绝'), findsNothing);
+  });
+
+  testWidgets('assist records pagination changes page and query resets', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1600, 1200);
@@ -261,15 +206,15 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    final service = _FakeAssistApprovalService();
+    final service = _FakeAssistRecordsService();
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ProductionAssistApprovalPage(
+          body: ProductionAssistRecordsPage(
             session: AppSession(baseUrl: '', accessToken: ''),
             onLogout: () {},
-            canReview: true,
+            canViewRecords: true,
             service: service,
           ),
         ),

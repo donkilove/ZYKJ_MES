@@ -10,7 +10,6 @@ from app.api.deps import require_permission
 from app.core.authz_catalog import (
     PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE,
     PERM_PROD_ASSIST_AUTHORIZATIONS_LIST,
-    PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW,
     PERM_PROD_ASSIST_USER_OPTIONS_LIST,
     PERM_PROD_DATA_MANUAL,
     PERM_PROD_DATA_MANUAL_EXPORT,
@@ -47,6 +46,7 @@ from app.core.authz_catalog import (
 from app.core.production_constants import (
     ORDER_STATUS_ALL,
 )
+from app.core.security import verify_password
 from app.core.rbac import (
     ROLE_OPERATOR,
     ROLE_PRODUCTION_ADMIN,
@@ -69,9 +69,9 @@ from app.schemas.production import (
     AssistAuthorizationCreateRequest,
     AssistAuthorizationItem,
     AssistAuthorizationListResult,
-    AssistAuthorizationReviewRequest,
     AssistUserOptionItem,
     AssistUserOptionListResult,
+    CompleteOrderRequest,
     EndProductionRequest,
     FirstArticleParameterItem,
     FirstArticleParameterListResult,
@@ -133,7 +133,6 @@ from app.services.product_service import (
 from app.services.assist_authorization_service import (
     create_assist_authorization,
     list_assist_authorizations,
-    review_assist_authorization,
 )
 from app.services.production_execution_service import (
     end_production,
@@ -712,6 +711,7 @@ def search_order_events_api(
 )
 def complete_order_api(
     order_id: int,
+    payload: CompleteOrderRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_PROD_ORDERS_COMPLETE)),
 ) -> ApiResponse[OrderActionResult]:
@@ -720,15 +720,18 @@ def complete_order_api(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Order not found"
         )
+    if not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前登录密码错误，无法结束订单",
+        )
     try:
         row = complete_order_manually(db, order=order, operator=current_user)
     except Exception as error:
         _raise_service_error(error)
     return success_response(
-        OrderActionResult(
-            order_id=row.id, status=row.status, message="Order completed"
-        ),
-        message="completed",
+        OrderActionResult(order_id=row.id, status=row.status, message="订单已结束"),
+        message="order_completed",
     )
 
 
@@ -1572,34 +1575,6 @@ def create_assist_authorization_api(
     return success_response(
         _to_assist_authorization_item(row),
         message="created",
-    )
-
-
-@router.post(
-    "/assist-authorizations/{authorization_id}/review",
-    response_model=ApiResponse[AssistAuthorizationItem],
-)
-def review_assist_authorization_api(
-    authorization_id: int,
-    payload: AssistAuthorizationReviewRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW)
-    ),
-) -> ApiResponse[AssistAuthorizationItem]:
-    try:
-        row = review_assist_authorization(
-            db,
-            authorization_id=authorization_id,
-            approve=payload.approve,
-            reviewer=current_user,
-            review_remark=payload.review_remark,
-        )
-    except Exception as error:
-        _raise_service_error(error)
-    return success_response(
-        _to_assist_authorization_item(row),
-        message="reviewed",
     )
 
 

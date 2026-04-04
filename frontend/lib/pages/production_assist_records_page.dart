@@ -11,34 +11,34 @@ import '../widgets/crud_page_header.dart';
 import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
-class ProductionAssistApprovalPage extends StatefulWidget {
-  const ProductionAssistApprovalPage({
+class ProductionAssistRecordsPage extends StatefulWidget {
+  const ProductionAssistRecordsPage({
     super.key,
     required this.session,
     required this.onLogout,
-    required this.canReview,
+    required this.canViewRecords,
     this.routePayloadJson,
     this.service,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
-  final bool canReview;
+  final bool canViewRecords;
   final String? routePayloadJson;
   final ProductionService? service;
 
   @override
-  State<ProductionAssistApprovalPage> createState() =>
-      _ProductionAssistApprovalPageState();
+  State<ProductionAssistRecordsPage> createState() =>
+      _ProductionAssistRecordsPageState();
 }
 
-class _ProductionAssistApprovalPageState
-    extends State<ProductionAssistApprovalPage> {
+class _ProductionAssistRecordsPageState
+    extends State<ProductionAssistRecordsPage> {
   late final ProductionService _service;
 
   bool _loading = false;
   String _message = '';
-  String? _statusFilter = 'pending';
+  String? _statusFilter;
   int _page = 1;
   int _total = 0;
   List<AssistAuthorizationItem> _items = const [];
@@ -65,7 +65,7 @@ class _ProductionAssistApprovalPageState
   }
 
   @override
-  void didUpdateWidget(covariant ProductionAssistApprovalPage oldWidget) {
+  void didUpdateWidget(covariant ProductionAssistRecordsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.routePayloadJson != oldWidget.routePayloadJson) {
       _consumeRoutePayload(widget.routePayloadJson);
@@ -124,7 +124,7 @@ class _ProductionAssistApprovalPageState
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('代班申请详情'),
+        title: const Text('代班记录详情'),
         content: SizedBox(
           width: 400,
           child: Table(
@@ -140,14 +140,14 @@ class _ProductionAssistApprovalPageState
               _detailRow('代班人', item.helperUsername),
               _detailRow('状态', assistAuthorizationStatusLabel(item.status)),
               _detailRow('申请原因', item.reason ?? '-'),
-              _detailRow('审批人', item.reviewerUsername ?? '-'),
+              _detailRow('处理人', item.reviewerUsername ?? '-'),
               _detailRow(
-                '审批时间',
+                '处理时间',
                 item.reviewedAt != null
                     ? _formatDateTime(item.reviewedAt!)
                     : '-',
               ),
-              _detailRow('审批备注', item.reviewRemark ?? '-'),
+              _detailRow('处理备注', item.reviewRemark ?? '-'),
               _detailRow('创建时间', _formatDateTime(item.createdAt)),
             ],
           ),
@@ -225,71 +225,6 @@ class _ProductionAssistApprovalPageState
       }
       _showDetail(context, matchedItem);
     });
-  }
-
-  Future<void> _reviewRow(AssistAuthorizationItem item, bool approve) async {
-    var draftRemark = '';
-    final reviewRemark = await showDialog<String?>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(approve ? '审批通过' : '审批拒绝'),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '代班申请：${item.orderCode} / ${item.processName}\n'
-                '代班人：${item.helperUsername}',
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                decoration: const InputDecoration(
-                  labelText: '审批备注（可选）',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 2,
-                onChanged: (value) {
-                  draftRemark = value;
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(draftRemark.trim()),
-            child: Text(approve ? '通过' : '拒绝'),
-          ),
-        ],
-      ),
-    );
-    if (reviewRemark == null || !mounted) return;
-    try {
-      await _service.reviewAssistAuthorization(
-        authorizationId: item.id,
-        approve: approve,
-        reviewRemark: reviewRemark.isEmpty ? null : reviewRemark,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(approve ? '已审批通过。' : '已拒绝。')));
-      await _loadRows();
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-    }
   }
 
   Future<void> _loadRows({int? page}) async {
@@ -390,11 +325,11 @@ class _ProductionAssistApprovalPageState
                     DropdownMenuItem<String?>(value: null, child: Text('全部')),
                     DropdownMenuItem<String?>(
                       value: 'pending',
-                      child: Text('待审批'),
+                      child: Text('待处理（历史）'),
                     ),
                     DropdownMenuItem<String?>(
                       value: 'approved',
-                      child: Text('已审批'),
+                      child: Text('已生效'),
                     ),
                     DropdownMenuItem<String?>(
                       value: 'rejected',
@@ -421,6 +356,16 @@ class _ProductionAssistApprovalPageState
             ],
           ),
           const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text('代班审批已取消，发起后将直接生效。本页仅用于记录查询与详情查看。'),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               SizedBox(
@@ -529,7 +474,7 @@ class _ProductionAssistApprovalPageState
                 ),
               ),
             ),
-          if (!widget.canReview)
+          if (!widget.canViewRecords)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(
@@ -541,7 +486,7 @@ class _ProductionAssistApprovalPageState
             ),
           Expanded(
             child: CrudListTableSection(
-              cardKey: const ValueKey('productionAssistApprovalListCard'),
+              cardKey: const ValueKey('productionAssistRecordsListCard'),
               loading: _loading,
               isEmpty: _items.isEmpty,
               emptyText: '暂无代班记录',
@@ -554,13 +499,12 @@ class _ProductionAssistApprovalPageState
                   UnifiedListTableHeaderStyle.column(context, '发起人'),
                   UnifiedListTableHeaderStyle.column(context, '代班人'),
                   UnifiedListTableHeaderStyle.column(context, '状态'),
-                  UnifiedListTableHeaderStyle.column(context, '审批人'),
-                  UnifiedListTableHeaderStyle.column(context, '审批时间'),
+                  UnifiedListTableHeaderStyle.column(context, '处理人'),
+                  UnifiedListTableHeaderStyle.column(context, '处理时间'),
                   UnifiedListTableHeaderStyle.column(context, '创建时间'),
                   UnifiedListTableHeaderStyle.column(context, '操作'),
                 ],
                 rows: _items.map((item) {
-                  final isPending = item.status == 'pending';
                   return DataRow(
                     cells: [
                       DataCell(Text(item.orderCode)),
@@ -588,23 +532,6 @@ class _ProductionAssistApprovalPageState
                               onPressed: () => _showDetail(context, item),
                               child: const Text('详情'),
                             ),
-                            if (isPending && widget.canReview) ...[
-                              const SizedBox(width: 4),
-                              TextButton(
-                                onPressed: () => _reviewRow(item, true),
-                                child: const Text('通过'),
-                              ),
-                              const SizedBox(width: 4),
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Theme.of(
-                                    context,
-                                  ).colorScheme.error,
-                                ),
-                                onPressed: () => _reviewRow(item, false),
-                                child: const Text('拒绝'),
-                              ),
-                            ],
                           ],
                         ),
                       ),

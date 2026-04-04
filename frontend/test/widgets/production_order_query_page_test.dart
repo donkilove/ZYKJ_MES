@@ -580,7 +580,7 @@ void main() {
     expect(find.text('PO-QUERY-001'), findsOneWidget);
   });
 
-  testWidgets('订单查询页首件入口跳转到独立首件录入页', (tester) async {
+  testWidgets('订单查询页开始首件入口跳转到独立首件录入页', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
     await tester.binding.setSurfaceSize(const Size(1600, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -610,7 +610,7 @@ void main() {
     await tester.ensureVisible(find.byType(PopupMenuButton<String>));
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('首件').last);
+    await tester.tap(find.text('开始首件').last);
     await tester.pumpAndSettle();
 
     expect(find.byType(ProductionFirstArticlePage), findsOneWidget);

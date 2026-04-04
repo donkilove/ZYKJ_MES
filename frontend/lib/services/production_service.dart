@@ -281,9 +281,16 @@ class ProductionService implements RepairScrapService {
     }
   }
 
-  Future<ProductionActionResult> completeOrder({required int orderId}) async {
+  Future<ProductionActionResult> completeOrder({
+    required int orderId,
+    required String password,
+  }) async {
     final uri = Uri.parse('$_basePath/orders/$orderId/complete');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'password': password}),
+    );
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1185,30 +1192,6 @@ class ProductionService implements RepairScrapService {
     );
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
-      throw ApiException(
-        _extractErrorMessage(body, response.statusCode),
-        response.statusCode,
-      );
-    }
-    final data = body['data'] as Map<String, dynamic>;
-    return AssistAuthorizationItem.fromJson(data);
-  }
-
-  Future<AssistAuthorizationItem> reviewAssistAuthorization({
-    required int authorizationId,
-    required bool approve,
-    String? reviewRemark,
-  }) async {
-    final uri = Uri.parse(
-      '$_basePath/assist-authorizations/$authorizationId/review',
-    );
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({'approve': approve, 'review_remark': reviewRemark}),
-    );
-    final body = _decodeBody(response);
-    if (response.statusCode != 200) {
       throw ApiException(
         _extractErrorMessage(body, response.statusCode),
         response.statusCode,

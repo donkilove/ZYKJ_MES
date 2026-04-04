@@ -53,9 +53,9 @@ String productionSubOrderStatusLabel(String status) {
 String assistAuthorizationStatusLabel(String status) {
   switch (status) {
     case 'pending':
-      return '待审批';
+      return '待处理（历史）';
     case 'approved':
-      return '已审批';
+      return '已生效';
     case 'rejected':
       return '已拒绝';
     case 'consumed':

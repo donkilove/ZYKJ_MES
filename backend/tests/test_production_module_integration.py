@@ -26,6 +26,9 @@ from app.models.order_sub_order_pipeline_instance import (  # noqa: E402
 from app.models.order_event_log import OrderEventLog  # noqa: E402
 from app.models.process import Process  # noqa: E402
 from app.models.process_stage import ProcessStage  # noqa: E402
+from app.models.production_assist_authorization import (  # noqa: E402
+    ProductionAssistAuthorization,
+)
 from app.models.production_order import ProductionOrder  # noqa: E402
 from app.models.production_order_process import ProductionOrderProcess  # noqa: E402
 from app.models.production_record import ProductionRecord  # noqa: E402
@@ -397,7 +400,11 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 "product_id": product["id"],
                 "quantity": 10,
                 "process_steps": [
-                    {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+                    {
+                        "step_order": 1,
+                        "stage_id": stage["id"],
+                        "process_id": process["id"],
+                    }
                 ],
             },
         )
@@ -412,7 +419,11 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 "supplier_id": 999999,
                 "quantity": 10,
                 "process_steps": [
-                    {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+                    {
+                        "step_order": 1,
+                        "stage_id": stage["id"],
+                        "process_id": process["id"],
+                    }
                 ],
             },
         )
@@ -467,6 +478,128 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(trace_items[0]["event_type"], "order_deleted")
         self.assertEqual(trace_items[0]["operator_username"], "admin")
         self.order_ids.remove(int(order["id"]))
+
+    def test_complete_order_requires_current_user_password(self) -> None:
+        stage = self._create_stage("CMP1")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="CMP1"
+        )
+        product = self._create_product("结束订单密码")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/complete",
+            headers=self._headers(),
+            json={"password": "bad-password"},
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("当前登录密码错误", response.text)
+
+    def test_complete_order_succeeds_with_current_user_password(self) -> None:
+        stage = self._create_stage("CMP2")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="CMP2"
+        )
+        product = self._create_product("结束订单成功")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/complete",
+            headers=self._headers(),
+            json={"password": "Admin@123456"},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["data"]["status"], "completed")
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            self.assertIsNotNone(order_row)
+            assert order_row is not None
+            self.assertEqual(order_row.status, "completed")
+        finally:
+            db.close()
+
+    def test_create_assist_authorization_effective_immediately(self) -> None:
+        stage = self._create_stage("AST1")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="AST1"
+        )
+        product = self._create_product("代班即时生效")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert admin is not None
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            assert process_row is not None
+            sub_order = ProductionSubOrder(
+                order_process_id=process_row.id,
+                operator_user_id=admin.id,
+                assigned_quantity=10,
+                completed_quantity=0,
+                status="in_progress",
+                is_visible=True,
+            )
+            db.add(sub_order)
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/assist-authorizations",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_row.id,
+                "target_operator_user_id": admin.id,
+                "helper_user_id": admin.id,
+                "reason": "临时代班",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["data"]["status"], "approved")
+
+        db = SessionLocal()
+        try:
+            row = (
+                db.query(ProductionAssistAuthorization)
+                .filter(ProductionAssistAuthorization.order_id == int(order["id"]))
+                .order_by(ProductionAssistAuthorization.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(row)
+            assert row is not None
+            self.assertEqual(row.status, "approved")
+            self.assertIsNone(row.reviewed_at)
+            self.assertIsNone(row.reviewer_user_id)
+        finally:
+            db.close()
 
     def test_create_and_update_order_allow_duplicate_process_codes(self) -> None:
         stage = self._create_stage("DUP0")
@@ -562,7 +695,11 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                     "supplier_id": supplier["id"],
                     "quantity": 10,
                     "process_steps": [
-                        {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+                        {
+                            "step_order": 1,
+                            "stage_id": stage["id"],
+                            "process_id": process["id"],
+                        }
                     ],
                 },
             )
@@ -595,7 +732,11 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                     "supplier_id": supplier["id"],
                     "quantity": 10,
                     "process_steps": [
-                        {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+                        {
+                            "step_order": 1,
+                            "stage_id": stage["id"],
+                            "process_id": process["id"],
+                        }
                     ],
                 },
             )
@@ -607,7 +748,11 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         rename_response = self.client.put(
             f"/api/v1/quality/suppliers/{supplier['id']}",
             headers=self._headers(),
-            json={"name": f"{original_name}-已改名", "remark": "生产集成测试", "is_enabled": True},
+            json={
+                "name": f"{original_name}-已改名",
+                "remark": "生产集成测试",
+                "is_enabled": True,
+            },
         )
         self.assertEqual(rename_response.status_code, 200, rename_response.text)
 
@@ -637,9 +782,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         )
         product = self._create_product("停用供应商保留")
         self._activate_product(product)
-        current_supplier = self._create_supplier(
-            f"当前供应商{int(time.time() * 1000)}"
-        )
+        current_supplier = self._create_supplier(f"当前供应商{int(time.time() * 1000)}")
         other_disabled_supplier = self._create_supplier(
             f"其他停用供应商{int(time.time() * 1000)}",
             is_enabled=False,
@@ -1082,7 +1225,9 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         scrap_payload = scrap_response.json()["data"]
         self.assertEqual(scrap_payload["progress"], "applied")
         self.assertIsNotNone(scrap_payload["applied_at"])
-        self.assertEqual(scrap_payload["related_repair_orders"][0]["status"], "completed")
+        self.assertEqual(
+            scrap_payload["related_repair_orders"][0]["status"], "completed"
+        )
 
         repair_response = self.client.get(
             f"/api/v1/production/repair-orders/{repair_order_id}/detail",
@@ -1092,9 +1237,12 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         repair_payload = repair_response.json()["data"]
         self.assertEqual(repair_payload["status"], "completed")
         self.assertEqual(
-            repair_payload["defect_rows"][0]["production_record_id"], production_record_id
+            repair_payload["defect_rows"][0]["production_record_id"],
+            production_record_id,
         )
-        self.assertEqual(repair_payload["defect_rows"][0]["production_record_quantity"], 6)
+        self.assertEqual(
+            repair_payload["defect_rows"][0]["production_record_quantity"], 6
+        )
 
     def test_pipeline_instances_support_business_filters_and_process_name(self) -> None:
         stage_a = self._create_stage("D1")
@@ -1204,7 +1352,9 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(len(sub_order_items), 1)
         self.assertEqual(sub_order_items[0]["sub_order_id"], sub_order_id)
 
-    def test_pipeline_execution_requires_explicit_instance_binding_and_sequence(self) -> None:
+    def test_pipeline_execution_requires_explicit_instance_binding_and_sequence(
+        self,
+    ) -> None:
         stage_a = self._create_stage("P1")
         process_a = self._create_process(
             stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="P1"
@@ -1296,7 +1446,9 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         second_instance = next(
             item for item in items if item["process_code"] == process_b["code"]
         )
-        self.assertEqual(first_instance["pipeline_link_id"], second_instance["pipeline_link_id"])
+        self.assertEqual(
+            first_instance["pipeline_link_id"], second_instance["pipeline_link_id"]
+        )
 
         missing_binding_response = self.client.post(
             f"/api/v1/production/orders/{order['id']}/first-article",
@@ -1307,7 +1459,9 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(missing_binding_response.status_code, 400)
-        self.assertIn("Pipeline instance binding is required", missing_binding_response.text)
+        self.assertIn(
+            "Pipeline instance binding is required", missing_binding_response.text
+        )
 
         blocked_response = self.client.post(
             f"/api/v1/production/orders/{order['id']}/first-article",
@@ -1345,7 +1499,8 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             previous_instance = (
                 db.query(OrderSubOrderPipelineInstance)
                 .filter(
-                    OrderSubOrderPipelineInstance.order_process_id == previous_process.id,
+                    OrderSubOrderPipelineInstance.order_process_id
+                    == previous_process.id,
                     OrderSubOrderPipelineInstance.pipeline_seq
                     == int(second_instance["pipeline_seq"]),
                 )
@@ -1383,7 +1538,8 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             previous_instance = (
                 db.query(OrderSubOrderPipelineInstance)
                 .filter(
-                    OrderSubOrderPipelineInstance.order_process_id == previous_process.id,
+                    OrderSubOrderPipelineInstance.order_process_id
+                    == previous_process.id,
                     OrderSubOrderPipelineInstance.pipeline_seq
                     == int(second_instance["pipeline_seq"]),
                 )
@@ -1404,7 +1560,9 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 "verification_code": "code-1",
             },
         )
-        self.assertEqual(first_article_response.status_code, 200, first_article_response.text)
+        self.assertEqual(
+            first_article_response.status_code, 200, first_article_response.text
+        )
 
         missing_report_binding = self.client.post(
             f"/api/v1/production/orders/{order['id']}/end-production",
@@ -1415,7 +1573,9 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(missing_report_binding.status_code, 400)
-        self.assertIn("Pipeline instance binding is required", missing_report_binding.text)
+        self.assertIn(
+            "Pipeline instance binding is required", missing_report_binding.text
+        )
 
         report_response = self.client.post(
             f"/api/v1/production/orders/{order['id']}/end-production",
@@ -1480,7 +1640,9 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 200, response.text)
-        csv_text = base64.b64decode(response.json()["data"]["content_base64"]).decode("utf-8-sig")
+        csv_text = base64.b64decode(response.json()["data"]["content_base64"]).decode(
+            "utf-8-sig"
+        )
         rows = list(csv.reader(io.StringIO(csv_text)))
         self.assertEqual(rows[1][9], "生产中")
 
@@ -1561,13 +1723,17 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             params={"order_process_id": process_id},
         )
         self.assertEqual(template_response.status_code, 200, template_response.text)
-        self.assertEqual(template_response.json()["data"]["items"][0]["id"], template_id)
+        self.assertEqual(
+            template_response.json()["data"]["items"][0]["id"], template_id
+        )
 
         participant_response = self.client.get(
             f"/api/v1/production/orders/{order['id']}/first-article/participant-users",
             headers=self._headers(),
         )
-        self.assertEqual(participant_response.status_code, 200, participant_response.text)
+        self.assertEqual(
+            participant_response.status_code, 200, participant_response.text
+        )
         participant_ids = {
             int(item["id"]) for item in participant_response.json()["data"]["items"]
         }

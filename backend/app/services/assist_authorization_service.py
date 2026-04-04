@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
-from app.core.authz_catalog import PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW
-from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
+from app.core.authz_catalog import PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW
 from app.core.production_constants import (
     ORDER_STATUS_COMPLETED,
     PROCESS_STATUS_COMPLETED,
@@ -19,8 +17,6 @@ from app.models.production_sub_order import ProductionSubOrder
 from app.models.user import User
 from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
-from app.services.message_service import create_message_for_users
-from app.services.user_service import get_active_user_ids_by_role
 
 ASSIST_STATUS_PENDING = "pending"
 ASSIST_STATUS_APPROVED = "approved"
@@ -151,7 +147,7 @@ def create_assist_authorization(
         target_operator_user_id=target_operator_user_id,
         requester_user_id=requester.id,
         helper_user_id=helper_user_id,
-        status=ASSIST_STATUS_PENDING,
+        status=ASSIST_STATUS_APPROVED,
         reason=(reason or "").strip() or None,
     )
     db.add(row)
@@ -161,8 +157,8 @@ def create_assist_authorization(
         db,
         order_id=order.id,
         event_type="assist_authorization_created",
-        event_title="代班申请发起",
-        event_detail=f"{requester.username} 发起 {helper.username} 代班执行 {process_row.process_name}，等待审批",
+        event_title="代班已生效",
+        event_detail=f"{requester.username} 发起 {helper.username} 代班执行 {process_row.process_name}，发起后立即生效",
         operator_user_id=requester.id,
         payload={
             "assist_authorization_id": row.id,
@@ -174,37 +170,6 @@ def create_assist_authorization(
     )
     db.commit()
     db.refresh(row)
-    approver_user_ids = sorted(
-        {
-            *get_active_user_ids_by_role(db, ROLE_PRODUCTION_ADMIN),
-            *get_active_user_ids_by_role(db, ROLE_SYSTEM_ADMIN),
-        }
-    )
-    if approver_user_ids:
-        create_message_for_users(
-            db,
-            message_type="todo",
-            priority="important",
-            title=f"代班审批待处理：{row.order_code or ''} / {row.process_name or ''}",
-            summary="存在新的代班申请，请进入代班审批页面处理。",
-            source_module="production",
-            source_type="assist_authorization",
-            source_id=str(row.id),
-            source_code=row.order_code,
-            target_page_code="production",
-            target_tab_code="production_assist_approval",
-            target_route_payload_json=json.dumps(
-                {
-                    "action": "detail",
-                    "authorization_id": row.id,
-                },
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ),
-            recipient_user_ids=approver_user_ids,
-            dedupe_key=f"assist_authorization_pending_{row.id}",
-            created_by_user_id=requester.id,
-        )
     return row
 
 
@@ -273,7 +238,7 @@ def list_assist_authorizations(
     can_view_all = has_permission(
         db,
         user=current_user,
-        permission_code=PERM_PROD_ASSIST_AUTHORIZATIONS_REVIEW,
+        permission_code=PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW,
     )
     if not can_view_all:
         stmt = stmt.where(
@@ -287,112 +252,6 @@ def list_assist_authorizations(
     total = len(rows)
     offset = (page - 1) * page_size
     return total, rows[offset : offset + page_size]
-
-
-def review_assist_authorization(
-    db: Session,
-    *,
-    authorization_id: int,
-    approve: bool,
-    reviewer: User,
-    review_remark: str | None,
-) -> ProductionAssistAuthorization:
-    row = (
-        db.execute(
-            select(ProductionAssistAuthorization)
-            .where(ProductionAssistAuthorization.id == authorization_id)
-            .options(
-                selectinload(ProductionAssistAuthorization.order),
-                selectinload(ProductionAssistAuthorization.order_process),
-                selectinload(ProductionAssistAuthorization.helper),
-                selectinload(ProductionAssistAuthorization.requester),
-            )
-            .with_for_update()
-        )
-        .scalars()
-        .first()
-    )
-    if row is None:
-        raise ValueError("Assist authorization not found")
-    if row.status != ASSIST_STATUS_PENDING:
-        raise ValueError(
-            f"Only pending authorizations can be reviewed, current status: {row.status}"
-        )
-
-    now = datetime.now(timezone.utc)
-    row.reviewer_user_id = reviewer.id
-    row.reviewed_at = now
-    row.review_remark = (review_remark or "").strip() or None
-
-    if approve:
-        row.status = ASSIST_STATUS_APPROVED
-        event_type = "assist_authorization_approved"
-        event_title = "代班审批通过"
-        event_detail = f"{reviewer.username} 审批通过 {row.helper.username if row.helper else ''} 代班申请"
-    else:
-        row.status = ASSIST_STATUS_REJECTED
-        event_type = "assist_authorization_rejected"
-        event_title = "代班审批拒绝"
-        event_detail = (
-            f"{reviewer.username} 拒绝代班申请，原因：{row.review_remark or '无'}"
-        )
-
-    add_order_event_log(
-        db,
-        order_id=row.order_id,
-        event_type=event_type,
-        event_title=event_title,
-        event_detail=event_detail,
-        operator_user_id=reviewer.id,
-        payload={
-            "assist_authorization_id": row.id,
-            "approve": approve,
-            "review_remark": row.review_remark,
-        },
-    )
-    db.commit()
-    db.refresh(row)
-
-    # 通知申请人审批结果
-    if row.requester_user_id:
-        if approve:
-            msg_title = (
-                f"代班申请已通过：{row.order_code or ''} / {row.process_name or ''}"
-            )
-            msg_summary = f"{reviewer.username} 审批通过，{row.helper.username if row.helper else ''} 可代班执行"
-        else:
-            msg_title = (
-                f"代班申请已拒绝：{row.order_code or ''} / {row.process_name or ''}"
-            )
-            msg_summary = (
-                f"{reviewer.username} 拒绝代班申请，原因：{row.review_remark or '无'}"
-            )
-        create_message_for_users(
-            db,
-            message_type="todo" if approve else "notice",
-            priority="normal",
-            title=msg_title,
-            summary=msg_summary,
-            source_module="production",
-            source_type="assist_authorization",
-            source_id=str(row.id),
-            source_code=row.order_code,
-            target_page_code="production",
-            target_tab_code="production_assist_approval",
-            target_route_payload_json=json.dumps(
-                {
-                    "action": "detail",
-                    "authorization_id": row.id,
-                },
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ),
-            recipient_user_ids=[row.requester_user_id],
-            dedupe_key=f"assist_auth_review_{row.id}",
-            created_by_user_id=reviewer.id,
-        )
-
-    return row
 
 
 def get_usable_assist_authorization_for_operation(

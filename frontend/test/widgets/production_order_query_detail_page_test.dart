@@ -138,6 +138,51 @@ MyOrderItem _buildMyOrderItem() {
   );
 }
 
+MyOrderItem _buildMyOrderItemWithRuntimeActions({
+  required bool canCreateManualRepair,
+  required bool canApplyAssist,
+}) {
+  return MyOrderItem(
+    orderId: 1,
+    orderCode: 'PO-1',
+    productId: 1,
+    productName: '产品A',
+    supplierName: '供应商甲',
+    quantity: 10,
+    orderStatus: 'in_progress',
+    currentProcessId: 11,
+    currentStageId: 1,
+    currentStageCode: '01',
+    currentStageName: '切割段',
+    currentProcessCode: '01-01',
+    currentProcessName: '切割',
+    currentProcessOrder: 1,
+    processStatus: 'in_progress',
+    visibleQuantity: 10,
+    processCompletedQuantity: 5,
+    userSubOrderId: 21,
+    userAssignedQuantity: 10,
+    userCompletedQuantity: 5,
+    operatorUserId: 8,
+    operatorUsername: 'worker',
+    workView: 'own',
+    assistAuthorizationId: null,
+    pipelineInstanceId: 501,
+    pipelineInstanceNo: 'P1-21-1-PIPE0501',
+    pipelineModeEnabled: false,
+    pipelineStartAllowed: true,
+    pipelineEndAllowed: true,
+    maxProducibleQuantity: 5,
+    canFirstArticle: true,
+    canEndProduction: true,
+    canApplyAssist: canApplyAssist,
+    canCreateManualRepair: canCreateManualRepair,
+    dueDate: DateTime.parse('2026-03-10T00:00:00Z'),
+    remark: '查询备注',
+    updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+  );
+}
+
 void main() {
   testWidgets('query detail page supports configurable initial history tab', (
     tester,
@@ -220,8 +265,8 @@ void main() {
 
     final tabContext = tester.element(find.byType(TabBar));
     expect(DefaultTabController.of(tabContext).index, 0);
-    expect(find.text('首件'), findsOneWidget);
-    expect(find.text('报工'), findsOneWidget);
+    expect(find.text('开始首件'), findsOneWidget);
+    expect(find.text('结束生产'), findsOneWidget);
     expect(find.text('手工送修建单'), findsOneWidget);
     expect(find.text('发起代班'), findsOneWidget);
     expect(find.text('工序'), findsOneWidget);
@@ -237,11 +282,11 @@ void main() {
     expect(find.text('创建人：admin'), findsOneWidget);
     expect(find.textContaining('创建时间：2026-03-01'), findsOneWidget);
 
-    await tester.tap(find.text('首件'));
+    await tester.tap(find.text('开始首件'));
     await tester.pumpAndSettle();
     expect(firstCalled, isTrue);
 
-    await tester.tap(find.text('报工'));
+    await tester.tap(find.text('结束生产'));
     await tester.pumpAndSettle();
     expect(endCalled, isTrue);
 
@@ -290,15 +335,53 @@ void main() {
 
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(find.text('首件'));
+      await tester.tap(find.text('开始首件'));
       await tester.pumpAndSettle();
 
       expect(firstCalled, isTrue);
       expect(find.textContaining('仅保留详情查看'), findsOneWidget);
       final firstButton = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, '首件'),
+        find.widgetWithText(FilledButton, '开始首件'),
       );
       expect(firstButton.onPressed, isNull);
+    },
+  );
+
+  testWidgets(
+    'query detail page hides runtime-disabled repair and assist actions',
+    (tester) async {
+      final contextItem = _buildMyOrderItemWithRuntimeActions(
+        canCreateManualRepair: false,
+        canApplyAssist: false,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProductionOrderQueryDetailPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            orderId: 1,
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            initialOrderContext: contextItem,
+            service: _FakeProductionOrderQueryDetailService(),
+            onSubmitFirstArticle: (_) async => false,
+            onEndProduction: (_) async => false,
+            onCreateManualRepair: (_) async => false,
+            onApplyAssist: (_) async => false,
+            onRefreshOrderContext: (_) async =>
+                MyOrderContextResult(found: true, item: contextItem),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('手工送修建单'), findsNothing);
+      expect(find.text('发起代班'), findsNothing);
     },
   );
 }

@@ -988,7 +988,7 @@ class ProductionPermissionCodes {
       'page.production_order_management.view';
   static const String pageOrderQueryView = 'page.production_order_query.view';
   static const String pageAssistRecordsView =
-      'page.production_assist_approval.view';
+      'page.production_assist_records.view';
   static const String pageDataQueryView = 'page.production_data_query.view';
   static const String pageScrapStatisticsView =
       'page.production_scrap_statistics.view';

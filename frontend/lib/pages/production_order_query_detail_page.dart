@@ -210,9 +210,13 @@ class _ProductionOrderQueryDetailPageState
         !_acting &&
         (contextItem?.canEndProduction ?? false);
     final canCreateManualRepair =
-        widget.canCreateManualRepairOrder && !_acting && contextItem != null;
+        widget.canCreateManualRepairOrder &&
+        !_acting &&
+        (contextItem?.canCreateManualRepair ?? false);
     final canCreateAssist =
-        widget.canCreateAssistAuthorization && !_acting && contextItem != null;
+        widget.canCreateAssistAuthorization &&
+        !_acting &&
+        (contextItem?.canApplyAssist ?? false);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,29 +230,27 @@ class _ProductionOrderQueryDetailPageState
                   ? () => _executeAction(widget.onSubmitFirstArticle)
                   : null,
               icon: const Icon(Icons.verified_outlined),
-              label: const Text('首件'),
+              label: const Text('开始首件'),
             ),
             FilledButton.icon(
               onPressed: canEndProduction
                   ? () => _executeAction(widget.onEndProduction)
                   : null,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('报工'),
+              label: const Text('结束生产'),
             ),
-            FilledButton.icon(
-              onPressed: canCreateManualRepair
-                  ? () => _executeAction(widget.onCreateManualRepair)
-                  : null,
-              icon: const Icon(Icons.build_outlined),
-              label: const Text('手工送修建单'),
-            ),
-            FilledButton.icon(
-              onPressed: canCreateAssist
-                  ? () => _executeAction(widget.onApplyAssist)
-                  : null,
-              icon: const Icon(Icons.how_to_reg_outlined),
-              label: const Text('发起代班'),
-            ),
+            if (canCreateManualRepair)
+              FilledButton.icon(
+                onPressed: () => _executeAction(widget.onCreateManualRepair),
+                icon: const Icon(Icons.build_outlined),
+                label: const Text('手工送修建单'),
+              ),
+            if (canCreateAssist)
+              FilledButton.icon(
+                onPressed: () => _executeAction(widget.onApplyAssist),
+                icon: const Icon(Icons.how_to_reg_outlined),
+                label: const Text('发起代班'),
+              ),
           ],
         ),
         if (contextItem == null)

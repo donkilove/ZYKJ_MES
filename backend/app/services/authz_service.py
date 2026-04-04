@@ -238,7 +238,7 @@ PAGE_NAME_FALLBACK_ZH_BY_CODE = {
     "production": "生产模块",
     "production_order_management": "订单管理",
     "production_order_query": "订单查询",
-    "production_assist_approval": "代班记录",
+    "production_assist_records": "代班记录",
     "production_data_query": "生产数据",
     "production_scrap_statistics": "报废统计",
     "production_repair_orders": "维修订单",

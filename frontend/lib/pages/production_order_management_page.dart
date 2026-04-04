@@ -296,29 +296,64 @@ class _ProductionOrderManagementPageState
     if (!widget.canCompleteOrder) {
       return false;
     }
-    final confirmed = await showDialog<bool>(
+    final passwordController = TextEditingController();
+    final confirmed = await showLockedFormDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('结束订单'),
-        content: Text('确认将订单 ${order.orderCode} 标记为生产完成吗？'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('确认结束订单 ${order.orderCode} 吗？'),
+              const SizedBox(height: 8),
+              const Text('请输入当前生产管理员登录密码后，才能结束订单。'),
+              const SizedBox(height: 4),
+              const Text('该操作会强制释放相关生产状态。'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: '当前登录密码',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () {
+              if (passwordController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('请输入当前登录密码后再结束订单')),
+                );
+                return;
+              }
+              Navigator.of(context).pop(true);
+            },
             child: const Text('结束'),
           ),
         ],
       ),
     );
     if (confirmed != true) {
+      passwordController.dispose();
       return false;
     }
 
     try {
-      await _service.completeOrder(orderId: order.id);
+      await _service.completeOrder(
+        orderId: order.id,
+        password: passwordController.text,
+      );
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -340,6 +375,8 @@ class _ProductionOrderManagementPageState
         context,
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       return false;
+    } finally {
+      passwordController.dispose();
     }
   }
 

@@ -680,11 +680,8 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         permission_code="feature.production.assist.records.view",
         permission_name="查看代班记录",
         module_code="production",
-        page_code="production_assist_approval",
-        action_permission_codes=(
-            "production.assist_authorizations.list",
-            "production.assist_authorizations.review",
-        ),
+        page_code="production_assist_records",
+        action_permission_codes=("production.assist_authorizations.list",),
     ),
     FeatureDefinition(
         permission_code="feature.production.data_query.view",

@@ -544,7 +544,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('首件提交成功')));
+      ).showSnackBar(const SnackBar(content: Text('开始首件成功')));
       if (reloadAfterAction) {
         await _loadOrders();
       }
@@ -577,7 +577,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         context: context,
         builder: (context) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: const Text('报工'),
+            title: const Text('结束生产'),
             content: SizedBox(
               width: 560,
               child: SingleChildScrollView(
@@ -665,9 +665,9 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 onPressed: () {
                   final qty = int.tryParse(qtyController.text.trim());
                   if (qty == null || qty <= 0) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('请输入有效报工数量')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('请输入有效结束生产数量')),
+                    );
                     return;
                   }
                   final defects = <ProductionDefectItemInput>[];
@@ -701,7 +701,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          '报工数量与异常数量合计不能超过当前可生产数量 ${item.maxProducibleQuantity}',
+                          '结束生产数量与异常数量合计不能超过当前可生产数量 ${item.maxProducibleQuantity}',
                         ),
                       ),
                     );
@@ -737,7 +737,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('报工成功')));
+      ).showSnackBar(const SnackBar(content: Text('结束生产成功')));
       if (reloadAfterAction) {
         await _loadOrders();
       }
@@ -1062,7 +1062,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('代班已发起，等待审批后生效')));
+      ).showSnackBar(const SnackBar(content: Text('代班已发起并立即生效')));
       if (reloadAfterAction) {
         await _loadOrders();
       }
@@ -1431,20 +1431,22 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                             if (widget.canFirstArticle && item.canFirstArticle)
                               const PopupMenuItem<String>(
                                 value: 'first_article',
-                                child: Text('首件'),
+                                child: Text('开始首件'),
                               ),
                             if (widget.canEndProduction &&
                                 item.canEndProduction)
                               const PopupMenuItem<String>(
                                 value: 'end_production',
-                                child: Text('报工'),
+                                child: Text('结束生产'),
                               ),
-                            if (widget.canCreateManualRepairOrder)
+                            if (widget.canCreateManualRepairOrder &&
+                                item.canCreateManualRepair)
                               const PopupMenuItem<String>(
                                 value: 'manual_repair',
                                 child: Text('送修'),
                               ),
-                            if (widget.canCreateAssistAuthorization)
+                            if (widget.canCreateAssistAuthorization &&
+                                item.canApplyAssist)
                               const PopupMenuItem<String>(
                                 value: 'apply_assist',
                                 child: Text('代班'),
