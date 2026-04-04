@@ -9,6 +9,9 @@ import '../services/api_exception.dart';
 import '../services/export_file_service.dart';
 import '../services/quality_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class QualityDefectAnalysisPage extends StatefulWidget {
   const QualityDefectAnalysisPage({
@@ -34,6 +37,8 @@ class QualityDefectAnalysisPage extends StatefulWidget {
 }
 
 class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
+  static const int _pageSize = 30;
+
   late final QualityService _service;
   final ExportFileService _exportFileService = const ExportFileService();
 
@@ -48,6 +53,13 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
   final _operatorController = TextEditingController();
   final _phenomenonController = TextEditingController();
   bool _exporting = false;
+  int _topReasonsPage = 1;
+  int _topDefectsPage = 1;
+  int _byProcessPage = 1;
+  int _byProductPage = 1;
+  int _productComparisonPage = 1;
+  int _byOperatorPage = 1;
+  int _byDatePage = 1;
 
   @override
   void initState() {
@@ -116,7 +128,16 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
             : _phenomenonController.text.trim(),
       );
       if (!mounted) return;
-      setState(() => _result = result);
+      setState(() {
+        _result = result;
+        _topReasonsPage = 1;
+        _topDefectsPage = 1;
+        _byProcessPage = 1;
+        _byProductPage = 1;
+        _productComparisonPage = 1;
+        _byOperatorPage = 1;
+        _byDatePage = 1;
+      });
     } catch (e) {
       if (!mounted) return;
       if (_isUnauthorized(e)) {
@@ -215,6 +236,26 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: CrudPageHeader(
+                  title: '质量缺陷分析',
+                  onRefresh: _loading ? null : _load,
+                ),
+              ),
+              if (widget.canExport)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: OutlinedButton.icon(
+                    onPressed: (_loading || _exporting) ? null : _export,
+                    icon: const Icon(Icons.download),
+                    label: const Text('导出'),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
           _buildFilterBar(theme),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
@@ -320,12 +361,6 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           onPressed: _loading ? null : _load,
           icon: const Icon(Icons.refresh),
         ),
-        if (widget.canExport)
-          OutlinedButton.icon(
-            onPressed: (_loading || _exporting) ? null : _export,
-            icon: const Icon(Icons.download),
-            label: const Text('导出'),
-          ),
       ],
     );
   }
@@ -396,6 +431,61 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
     );
   }
 
+  int _totalPagesFor(int total) {
+    if (total <= 0) {
+      return 1;
+    }
+    return ((total - 1) ~/ _pageSize) + 1;
+  }
+
+  List<T> _slicePage<T>(List<T> items, int page) {
+    if (items.isEmpty) {
+      return const [];
+    }
+    final safePage = page.clamp(1, _totalPagesFor(items.length));
+    final start = (safePage - 1) * _pageSize;
+    final end = (start + _pageSize).clamp(0, items.length);
+    return items.sublist(start, end);
+  }
+
+  Widget _buildPaginatedTableSection({
+    required Key cardKey,
+    required List<DataColumn> columns,
+    required List<DataRow> rows,
+    required int page,
+    required int total,
+    required ValueChanged<int> onPageChanged,
+    required String emptyText,
+  }) {
+    return SizedBox(
+      height: 320,
+      child: Column(
+        children: [
+          Expanded(
+            child: CrudListTableSection(
+              cardKey: cardKey,
+              loading: _loading,
+              isEmpty: rows.isEmpty,
+              emptyText: emptyText,
+              child: AdaptiveTableContainer(
+                child: DataTable(columns: columns, rows: rows),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: page,
+            totalPages: _totalPagesFor(total),
+            total: total,
+            loading: _loading,
+            onPrevious: () => onPageChanged(page - 1),
+            onNext: () => onPageChanged(page + 1),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildContent(ThemeData theme) {
     final result = _result!;
     return SingleChildScrollView(
@@ -430,25 +520,32 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           if (result.topReasons.isEmpty)
             const Text('暂无数据')
           else
-            Card(
-              child: AdaptiveTableContainer(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('缺陷原因')),
-                    DataColumn(label: Text('数量')),
-                    DataColumn(label: Text('占比 %')),
-                  ],
-                  rows: result.topReasons.map((item) {
-                    return DataRow(
+            _buildPaginatedTableSection(
+              cardKey: const ValueKey('qualityDefectTopReasonsCard'),
+              columns: const [
+                DataColumn(label: Text('缺陷原因')),
+                DataColumn(label: Text('数量')),
+                DataColumn(label: Text('占比 %')),
+              ],
+              rows: _slicePage(result.topReasons, _topReasonsPage)
+                  .map(
+                    (item) => DataRow(
                       cells: [
                         DataCell(Text(item.reason)),
                         DataCell(Text('${item.quantity}')),
                         DataCell(Text('${item.ratio}')),
                       ],
-                    );
-                  }).toList(),
-                ),
-              ),
+                    ),
+                  )
+                  .toList(),
+              page: _topReasonsPage,
+              total: result.topReasons.length,
+              onPageChanged: (page) {
+                setState(() {
+                  _topReasonsPage = page;
+                });
+              },
+              emptyText: '暂无缺陷原因数据',
             ),
           const SizedBox(height: 16),
           Text('Top 缺陷现象', style: theme.textTheme.titleMedium),
@@ -460,25 +557,32 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           if (result.topDefects.isEmpty)
             const Text('暂无数据')
           else
-            Card(
-              child: AdaptiveTableContainer(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('缺陷现象')),
-                    DataColumn(label: Text('数量')),
-                    DataColumn(label: Text('占比 %')),
-                  ],
-                  rows: result.topDefects.map((item) {
-                    return DataRow(
+            _buildPaginatedTableSection(
+              cardKey: const ValueKey('qualityDefectTopDefectsCard'),
+              columns: const [
+                DataColumn(label: Text('缺陷现象')),
+                DataColumn(label: Text('数量')),
+                DataColumn(label: Text('占比 %')),
+              ],
+              rows: _slicePage(result.topDefects, _topDefectsPage)
+                  .map(
+                    (item) => DataRow(
                       cells: [
                         DataCell(Text(item.phenomenon)),
                         DataCell(Text('${item.quantity}')),
                         DataCell(Text('${item.ratio}')),
                       ],
-                    );
-                  }).toList(),
-                ),
-              ),
+                    ),
+                  )
+                  .toList(),
+              page: _topDefectsPage,
+              total: result.topDefects.length,
+              onPageChanged: (page) {
+                setState(() {
+                  _topDefectsPage = page;
+                });
+              },
+              emptyText: '暂无缺陷现象数据',
             ),
           const SizedBox(height: 16),
           Text('按工序分布', style: theme.textTheme.titleMedium),
@@ -486,25 +590,32 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           if (result.byProcess.isEmpty)
             const Text('暂无数据')
           else
-            Card(
-              child: AdaptiveTableContainer(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('工序编码')),
-                    DataColumn(label: Text('工序名称')),
-                    DataColumn(label: Text('不良数量')),
-                  ],
-                  rows: result.byProcess.map((item) {
-                    return DataRow(
+            _buildPaginatedTableSection(
+              cardKey: const ValueKey('qualityDefectByProcessCard'),
+              columns: const [
+                DataColumn(label: Text('工序编码')),
+                DataColumn(label: Text('工序名称')),
+                DataColumn(label: Text('不良数量')),
+              ],
+              rows: _slicePage(result.byProcess, _byProcessPage)
+                  .map(
+                    (item) => DataRow(
                       cells: [
                         DataCell(Text(item.processCode)),
                         DataCell(Text(item.processName ?? '-')),
                         DataCell(Text('${item.quantity}')),
                       ],
-                    );
-                  }).toList(),
-                ),
-              ),
+                    ),
+                  )
+                  .toList(),
+              page: _byProcessPage,
+              total: result.byProcess.length,
+              onPageChanged: (page) {
+                setState(() {
+                  _byProcessPage = page;
+                });
+              },
+              emptyText: '暂无工序分布数据',
             ),
           const SizedBox(height: 16),
           Text('按产品分布', style: theme.textTheme.titleMedium),
@@ -512,23 +623,30 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           if (result.byProduct.isEmpty)
             const Text('暂无数据')
           else
-            Card(
-              child: AdaptiveTableContainer(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('产品')),
-                    DataColumn(label: Text('不良数量')),
-                  ],
-                  rows: result.byProduct.map((item) {
-                    return DataRow(
+            _buildPaginatedTableSection(
+              cardKey: const ValueKey('qualityDefectByProductCard'),
+              columns: const [
+                DataColumn(label: Text('产品')),
+                DataColumn(label: Text('不良数量')),
+              ],
+              rows: _slicePage(result.byProduct, _byProductPage)
+                  .map(
+                    (item) => DataRow(
                       cells: [
                         DataCell(Text(item.productName ?? '未知产品')),
                         DataCell(Text('${item.quantity}')),
                       ],
-                    );
-                  }).toList(),
-                ),
-              ),
+                    ),
+                  )
+                  .toList(),
+              page: _byProductPage,
+              total: result.byProduct.length,
+              onPageChanged: (page) {
+                setState(() {
+                  _byProductPage = page;
+                });
+              },
+              emptyText: '暂无产品分布数据',
             ),
           const SizedBox(height: 16),
           Text('产品质量对比', style: theme.textTheme.titleMedium),
@@ -536,33 +654,44 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           if (result.productQualityComparison.isEmpty)
             const Text('暂无数据')
           else
-            Card(
-              child: AdaptiveTableContainer(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('产品名称')),
-                    DataColumn(label: Text('首件总数')),
-                    DataColumn(label: Text('通过数')),
-                    DataColumn(label: Text('不通过数')),
-                    DataColumn(label: Text('通过率')),
-                    DataColumn(label: Text('报废数')),
-                    DataColumn(label: Text('维修数')),
-                  ],
-                  rows: result.productQualityComparison.map((item) {
-                    return DataRow(
-                      cells: [
-                        DataCell(Text(item.productName)),
-                        DataCell(Text('${item.firstArticleTotal}')),
-                        DataCell(Text('${item.passedTotal}')),
-                        DataCell(Text('${item.failedTotal}')),
-                        DataCell(Text('${item.passRatePercent}%')),
-                        DataCell(Text('${item.scrapTotal}')),
-                        DataCell(Text('${item.repairTotal}')),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
+            _buildPaginatedTableSection(
+              cardKey: const ValueKey('qualityDefectProductComparisonCard'),
+              columns: const [
+                DataColumn(label: Text('产品名称')),
+                DataColumn(label: Text('首件总数')),
+                DataColumn(label: Text('通过数')),
+                DataColumn(label: Text('不通过数')),
+                DataColumn(label: Text('通过率')),
+                DataColumn(label: Text('报废数')),
+                DataColumn(label: Text('维修数')),
+              ],
+              rows:
+                  _slicePage(
+                        result.productQualityComparison,
+                        _productComparisonPage,
+                      )
+                      .map(
+                        (item) => DataRow(
+                          cells: [
+                            DataCell(Text(item.productName)),
+                            DataCell(Text('${item.firstArticleTotal}')),
+                            DataCell(Text('${item.passedTotal}')),
+                            DataCell(Text('${item.failedTotal}')),
+                            DataCell(Text('${item.passRatePercent}%')),
+                            DataCell(Text('${item.scrapTotal}')),
+                            DataCell(Text('${item.repairTotal}')),
+                          ],
+                        ),
+                      )
+                      .toList(),
+              page: _productComparisonPage,
+              total: result.productQualityComparison.length,
+              onPageChanged: (page) {
+                setState(() {
+                  _productComparisonPage = page;
+                });
+              },
+              emptyText: '暂无产品质量对比数据',
             ),
           const SizedBox(height: 16),
           Text('按人员分布', style: theme.textTheme.titleMedium),
@@ -570,23 +699,30 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           if (result.byOperator.isEmpty)
             const Text('暂无数据')
           else
-            Card(
-              child: AdaptiveTableContainer(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('操作员')),
-                    DataColumn(label: Text('不良数量')),
-                  ],
-                  rows: result.byOperator.map((item) {
-                    return DataRow(
+            _buildPaginatedTableSection(
+              cardKey: const ValueKey('qualityDefectByOperatorCard'),
+              columns: const [
+                DataColumn(label: Text('操作员')),
+                DataColumn(label: Text('不良数量')),
+              ],
+              rows: _slicePage(result.byOperator, _byOperatorPage)
+                  .map(
+                    (item) => DataRow(
                       cells: [
                         DataCell(Text(item.operatorUsername ?? '未知人员')),
                         DataCell(Text('${item.quantity}')),
                       ],
-                    );
-                  }).toList(),
-                ),
-              ),
+                    ),
+                  )
+                  .toList(),
+              page: _byOperatorPage,
+              total: result.byOperator.length,
+              onPageChanged: (page) {
+                setState(() {
+                  _byOperatorPage = page;
+                });
+              },
+              emptyText: '暂无人员分布数据',
             ),
           const SizedBox(height: 16),
           Text('按日期趋势', style: theme.textTheme.titleMedium),
@@ -594,23 +730,30 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           if (result.byDate.isEmpty)
             const Text('暂无数据')
           else
-            Card(
-              child: AdaptiveTableContainer(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('日期')),
-                    DataColumn(label: Text('不良数量')),
-                  ],
-                  rows: result.byDate.map((item) {
-                    return DataRow(
+            _buildPaginatedTableSection(
+              cardKey: const ValueKey('qualityDefectByDateCard'),
+              columns: const [
+                DataColumn(label: Text('日期')),
+                DataColumn(label: Text('不良数量')),
+              ],
+              rows: _slicePage(result.byDate, _byDatePage)
+                  .map(
+                    (item) => DataRow(
                       cells: [
                         DataCell(Text(item.date)),
                         DataCell(Text('${item.quantity}')),
                       ],
-                    );
-                  }).toList(),
-                ),
-              ),
+                    ),
+                  )
+                  .toList(),
+              page: _byDatePage,
+              total: result.byDate.length,
+              onPageChanged: (page) {
+                setState(() {
+                  _byDatePage = page;
+                });
+              },
+              emptyText: '暂无日期趋势数据',
             ),
           const SizedBox(height: 16),
         ],

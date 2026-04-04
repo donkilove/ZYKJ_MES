@@ -7,6 +7,7 @@ import '../services/quality_supplier_service.dart';
 import '../widgets/crud_list_table_section.dart';
 import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class QualitySupplierManagementPage extends StatefulWidget {
   const QualitySupplierManagementPage({
@@ -27,12 +28,29 @@ class QualitySupplierManagementPage extends StatefulWidget {
 
 class _QualitySupplierManagementPageState
     extends State<QualitySupplierManagementPage> {
+  static const int _pageSize = 30;
+
   late final QualitySupplierService _service;
 
   bool _loading = false;
+  int _page = 1;
   int _total = 0;
   String _message = '';
   List<QualitySupplierItem> _items = const [];
+
+  int get _totalPages => _total <= 0 ? 1 : ((_total - 1) ~/ _pageSize) + 1;
+
+  List<QualitySupplierItem> get _pagedItems {
+    if (_items.isEmpty) {
+      return const [];
+    }
+    final start = (_page - 1) * _pageSize;
+    if (start >= _items.length) {
+      return const [];
+    }
+    final end = (start + _pageSize).clamp(0, _items.length);
+    return _items.sublist(start, end);
+  }
 
   @override
   void initState() {
@@ -77,6 +95,10 @@ class _QualitySupplierManagementPageState
       setState(() {
         _items = result.items;
         _total = result.total;
+        final resolvedTotalPages = result.total <= 0
+            ? 1
+            : ((result.total - 1) ~/ _pageSize) + 1;
+        _page = _page > resolvedTotalPages ? resolvedTotalPages : _page;
       });
     } catch (error) {
       if (!mounted) {
@@ -297,7 +319,7 @@ class _QualitySupplierManagementPageState
             child: CrudListTableSection(
               cardKey: const ValueKey('qualitySupplierListCard'),
               loading: _loading,
-              isEmpty: _items.isEmpty,
+              isEmpty: _pagedItems.isEmpty,
               emptyText: '暂无供应商数据',
               enableUnifiedHeaderStyle: true,
               child: DataTable(
@@ -308,7 +330,7 @@ class _QualitySupplierManagementPageState
                   DataColumn(label: Text('更新时间')),
                   DataColumn(label: Text('操作')),
                 ],
-                rows: _items
+                rows: _pagedItems
                     .map(
                       (item) => DataRow(
                         cells: [
@@ -344,6 +366,23 @@ class _QualitySupplierManagementPageState
                     .toList(),
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () {
+              setState(() {
+                _page -= 1;
+              });
+            },
+            onNext: () {
+              setState(() {
+                _page += 1;
+              });
+            },
           ),
         ],
       ),

@@ -9,6 +9,9 @@ import '../services/api_exception.dart';
 import '../services/export_file_service.dart';
 import '../services/quality_service.dart';
 import '../widgets/adaptive_table_container.dart';
+import '../widgets/crud_list_table_section.dart';
+import '../widgets/crud_page_header.dart';
+import '../widgets/simple_pagination_bar.dart';
 
 class QualityTrendPage extends StatefulWidget {
   const QualityTrendPage({
@@ -29,6 +32,8 @@ class QualityTrendPage extends StatefulWidget {
 }
 
 class _QualityTrendPageState extends State<QualityTrendPage> {
+  static const int _pageSize = 30;
+
   late final QualityService _service;
   final ExportFileService _exportFileService = const ExportFileService();
   final TextEditingController _productController = TextEditingController();
@@ -46,6 +51,10 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
   List<QualityProductStatItem> _productStats = const [];
   List<QualityProcessStatItem> _processStats = const [];
   List<QualityOperatorStatItem> _operatorStats = const [];
+  int _trendPage = 1;
+  int _productPage = 1;
+  int _processPage = 1;
+  int _operatorPage = 1;
 
   @override
   void initState() {
@@ -155,6 +164,10 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         _productStats = requests[2] as List<QualityProductStatItem>;
         _processStats = requests[3] as List<QualityProcessStatItem>;
         _operatorStats = requests[4] as List<QualityOperatorStatItem>;
+        _trendPage = 1;
+        _productPage = 1;
+        _processPage = 1;
+        _operatorPage = 1;
       });
     } catch (error) {
       if (!mounted) return;
@@ -449,22 +462,39 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
     return trimmed.isEmpty ? fallback : trimmed;
   }
 
+  int _totalPagesFor(int total) {
+    if (total <= 0) {
+      return 1;
+    }
+    return ((total - 1) ~/ _pageSize) + 1;
+  }
+
+  List<T> _slicePage<T>(List<T> items, int page) {
+    if (items.isEmpty) {
+      return const [];
+    }
+    final safePage = page.clamp(1, _totalPagesFor(items.length));
+    final start = (safePage - 1) * _pageSize;
+    final end = (start + _pageSize).clamp(0, items.length);
+    return items.sublist(start, end);
+  }
+
   List<QualityProductStatItem> get _topProducts {
     final items = List<QualityProductStatItem>.from(_productStats);
     items.sort((a, b) => b.firstArticleTotal.compareTo(a.firstArticleTotal));
-    return items.take(5).toList();
+    return items;
   }
 
   List<QualityProcessStatItem> get _topProcesses {
     final items = List<QualityProcessStatItem>.from(_processStats);
     items.sort((a, b) => b.firstArticleTotal.compareTo(a.firstArticleTotal));
-    return items.take(5).toList();
+    return items;
   }
 
   List<QualityOperatorStatItem> get _topOperators {
     final items = List<QualityOperatorStatItem>.from(_operatorStats);
     items.sort((a, b) => b.firstArticleTotal.compareTo(a.firstArticleTotal));
-    return items.take(5).toList();
+    return items;
   }
 
   Widget _buildSummaryCards(BuildContext context) {
@@ -543,37 +573,47 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
 
   Widget _buildStatsCard({
     required String title,
+    required Key cardKey,
     required List<DataColumn> columns,
     required List<DataRow> rows,
+    required int page,
+    required int total,
+    required ValueChanged<int> onPageChanged,
     required String emptyText,
   }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            if (rows.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(emptyText),
-              )
-            else
-              SizedBox(
-                height: 220,
-                child: AdaptiveTableContainer(
-                  child: DataTable(columns: columns, rows: rows),
-                ),
+    return SizedBox(
+      height: 320,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: CrudListTableSection(
+              cardKey: cardKey,
+              loading: _loading,
+              isEmpty: rows.isEmpty,
+              emptyText: emptyText,
+              child: AdaptiveTableContainer(
+                child: DataTable(columns: columns, rows: rows),
               ),
-          ],
-        ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: page,
+            totalPages: _totalPagesFor(total),
+            total: total,
+            loading: _loading,
+            onPrevious: () => onPageChanged(page - 1),
+            onNext: () => onPageChanged(page + 1),
+          ),
+        ],
       ),
     );
   }
@@ -581,6 +621,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
   Widget _buildProductStatsCard() {
     return _buildStatsCard(
       title: '按产品对比',
+      cardKey: const ValueKey('qualityTrendProductStatsCard'),
       emptyText: '暂无产品维度数据',
       columns: const [
         DataColumn(label: Text('产品')),
@@ -589,7 +630,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         DataColumn(label: Text('报废数')),
         DataColumn(label: Text('维修数')),
       ],
-      rows: _topProducts
+      rows: _slicePage(_topProducts, _productPage)
           .map(
             (item) => DataRow(
               cells: [
@@ -604,12 +645,20 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
             ),
           )
           .toList(),
+      page: _productPage,
+      total: _topProducts.length,
+      onPageChanged: (page) {
+        setState(() {
+          _productPage = page;
+        });
+      },
     );
   }
 
   Widget _buildProcessStatsCard() {
     return _buildStatsCard(
       title: '按工序对比',
+      cardKey: const ValueKey('qualityTrendProcessStatsCard'),
       emptyText: '暂无工序维度数据',
       columns: const [
         DataColumn(label: Text('工序')),
@@ -617,7 +666,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         DataColumn(label: Text('不通过数')),
         DataColumn(label: Text('通过率')),
       ],
-      rows: _topProcesses
+      rows: _slicePage(_topProcesses, _processPage)
           .map(
             (item) => DataRow(
               cells: [
@@ -636,12 +685,20 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
             ),
           )
           .toList(),
+      page: _processPage,
+      total: _topProcesses.length,
+      onPageChanged: (page) {
+        setState(() {
+          _processPage = page;
+        });
+      },
     );
   }
 
   Widget _buildOperatorStatsCard() {
     return _buildStatsCard(
       title: '按人员对比',
+      cardKey: const ValueKey('qualityTrendOperatorStatsCard'),
       emptyText: '暂无人员维度数据',
       columns: const [
         DataColumn(label: Text('人员')),
@@ -649,7 +706,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         DataColumn(label: Text('不通过数')),
         DataColumn(label: Text('通过率')),
       ],
-      rows: _topOperators
+      rows: _slicePage(_topOperators, _operatorPage)
           .map(
             (item) => DataRow(
               cells: [
@@ -661,53 +718,81 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
             ),
           )
           .toList(),
+      page: _operatorPage,
+      total: _topOperators.length,
+      onPageChanged: (page) {
+        setState(() {
+          _operatorPage = page;
+        });
+      },
     );
   }
 
   Widget _buildTrendTable() {
-    if (_items.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: Text('暂无趋势数据')),
-        ),
-      );
-    }
-    return Card(
-      child: SizedBox(
-        height: 320,
-        child: AdaptiveTableContainer(
-          child: DataTable(
-            columns: const [
-              DataColumn(label: Text('日期')),
-              DataColumn(label: Text('首件总数')),
-              DataColumn(label: Text('通过数')),
-              DataColumn(label: Text('不通过数')),
-              DataColumn(label: Text('通过率')),
-              DataColumn(label: Text('不良数')),
-              DataColumn(label: Text('报废数')),
-              DataColumn(label: Text('维修数')),
-            ],
-            rows: _items
-                .map(
-                  (item) => DataRow(
-                    cells: [
-                      DataCell(Text(item.date)),
-                      DataCell(Text('${item.firstArticleTotal}')),
-                      DataCell(Text('${item.passedTotal}')),
-                      DataCell(Text('${item.failedTotal}')),
-                      DataCell(
-                        Text('${item.passRatePercent.toStringAsFixed(1)}%'),
-                      ),
-                      DataCell(Text('${item.defectTotal}')),
-                      DataCell(Text('${item.scrapTotal}')),
-                      DataCell(Text('${item.repairTotal}')),
-                    ],
-                  ),
-                )
-                .toList(),
+    return SizedBox(
+      height: 360,
+      child: Column(
+        children: [
+          Expanded(
+            child: CrudListTableSection(
+              cardKey: const ValueKey('qualityTrendTrendTableCard'),
+              loading: _loading,
+              isEmpty: _items.isEmpty,
+              emptyText: '暂无趋势数据',
+              child: AdaptiveTableContainer(
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('日期')),
+                    DataColumn(label: Text('首件总数')),
+                    DataColumn(label: Text('通过数')),
+                    DataColumn(label: Text('不通过数')),
+                    DataColumn(label: Text('通过率')),
+                    DataColumn(label: Text('不良数')),
+                    DataColumn(label: Text('报废数')),
+                    DataColumn(label: Text('维修数')),
+                  ],
+                  rows: _slicePage(_items, _trendPage)
+                      .map(
+                        (item) => DataRow(
+                          cells: [
+                            DataCell(Text(item.date)),
+                            DataCell(Text('${item.firstArticleTotal}')),
+                            DataCell(Text('${item.passedTotal}')),
+                            DataCell(Text('${item.failedTotal}')),
+                            DataCell(
+                              Text(
+                                '${item.passRatePercent.toStringAsFixed(1)}%',
+                              ),
+                            ),
+                            DataCell(Text('${item.defectTotal}')),
+                            DataCell(Text('${item.scrapTotal}')),
+                            DataCell(Text('${item.repairTotal}')),
+                          ],
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _trendPage,
+            totalPages: _totalPagesFor(_items.length),
+            total: _items.length,
+            loading: _loading,
+            onPrevious: () {
+              setState(() {
+                _trendPage -= 1;
+              });
+            },
+            onNext: () {
+              setState(() {
+                _trendPage += 1;
+              });
+            },
+          ),
+        ],
       ),
     );
   }
@@ -722,27 +807,21 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         children: [
           Row(
             children: [
-              Text(
-                '质量趋势',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: CrudPageHeader(
+                  title: '质量趋势',
+                  onRefresh: _loading ? null : _loadTrend,
                 ),
               ),
-              const Spacer(),
               if (widget.canExport)
                 Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.only(left: 8),
                   child: OutlinedButton.icon(
                     onPressed: (_loading || _exporting) ? null : _exportTrend,
                     icon: const Icon(Icons.download),
                     label: const Text('导出'),
                   ),
                 ),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : _loadTrend,
-                icon: const Icon(Icons.refresh),
-              ),
             ],
           ),
           const SizedBox(height: 12),
