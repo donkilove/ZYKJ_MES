@@ -16,6 +16,10 @@ class _FakeRepairAndScrapService extends ProductionService {
   String? lastScrapProductName;
   String? lastScrapProcessCode;
   String lastScrapProgress = 'all';
+  int? lastScrapPage;
+  String? lastRepairKeyword;
+  String lastRepairStatus = 'all';
+  int? lastRepairPage;
 
   @override
   Future<ScrapStatisticsListResult> getScrapStatistics({
@@ -28,17 +32,18 @@ class _FakeRepairAndScrapService extends ProductionService {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
+    lastScrapPage = page;
     lastScrapKeyword = keyword;
     lastScrapProductName = productName;
     lastScrapProcessCode = processCode;
     lastScrapProgress = progress;
     return ScrapStatisticsListResult(
-      total: 1,
+      total: 1001,
       items: [
         ScrapStatisticsItem.fromJson({
-          'id': 1,
+          'id': page,
           'order_id': 1,
-          'order_code': 'PO-1',
+          'order_code': 'PO-$page',
           'product_id': 1,
           'product_name': '产品A',
           'process_id': 11,
@@ -65,12 +70,15 @@ class _FakeRepairAndScrapService extends ProductionService {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
+    lastRepairPage = page;
+    lastRepairKeyword = keyword;
+    lastRepairStatus = status;
     return RepairOrderListResult(
-      total: 1,
+      total: 1001,
       items: [
         RepairOrderItem.fromJson({
-          'id': 1,
-          'repair_order_code': 'RW-1',
+          'id': page,
+          'repair_order_code': 'RW-$page',
           'source_order_id': 1,
           'source_order_code': 'PO-1',
           'product_id': 1,
@@ -263,9 +271,51 @@ void main() {
     expect(service.lastScrapProcessCode, '01-01');
   });
 
+  testWidgets('production scrap statistics pagination updates request page', (
+    tester,
+  ) async {
+    final service = _FakeRepairAndScrapService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionScrapStatisticsPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canExport: true,
+            service: service,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
+    expect(service.lastScrapPage, 1);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('第 2 / 3 页'), findsOneWidget);
+    expect(service.lastScrapPage, 2);
+    expect(find.text('PO-2'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).at(0), 'PO-RESET');
+    await tester.tap(find.text('查询'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.lastScrapKeyword, 'PO-RESET');
+    expect(service.lastScrapPage, 1);
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
+  });
+
   testWidgets('production repair orders page renders list content', (
     tester,
   ) async {
+    final service = _FakeRepairAndScrapService();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -274,7 +324,7 @@ void main() {
             onLogout: () {},
             canComplete: true,
             canExport: true,
-            service: _FakeRepairAndScrapService(),
+            service: service,
           ),
         ),
       ),
@@ -290,6 +340,25 @@ void main() {
     expect(find.text('维修订单'), findsOneWidget);
     expect(find.text('RW-1'), findsOneWidget);
     expect(find.text('切割'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.lastRepairPage, 2);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('已完成').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('查询'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.lastRepairStatus, 'completed');
+    expect(service.lastRepairPage, 1);
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
   });
 
   testWidgets(

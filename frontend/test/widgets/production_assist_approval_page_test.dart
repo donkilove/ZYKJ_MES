@@ -12,7 +12,9 @@ class _FakeAssistApprovalService extends ProductionService {
   int? lastAuthorizationId;
   bool? lastApprove;
   String? lastReviewRemark;
+  String? lastOrderCode;
   final List<String?> listStatusHistory = <String?>[];
+  final List<int> listPageHistory = <int>[];
 
   @override
   Future<AssistAuthorizationListResult> listAssistAuthorizations({
@@ -26,10 +28,12 @@ class _FakeAssistApprovalService extends ProductionService {
     String? processName,
     String? requesterUsername,
   }) async {
+    listPageHistory.add(page);
     listStatusHistory.add(status);
+    lastOrderCode = orderCode;
     if (status == null) {
       return AssistAuthorizationListResult(
-        total: 1,
+        total: 401,
         items: [
           AssistAuthorizationItem(
             id: 2,
@@ -60,12 +64,12 @@ class _FakeAssistApprovalService extends ProductionService {
       );
     }
     return AssistAuthorizationListResult(
-      total: 1,
+      total: 401,
       items: [
         AssistAuthorizationItem(
-          id: 1,
+          id: page == 1 ? 1 : 200 + page,
           orderId: 100,
-          orderCode: 'PO-ASSIST-1',
+          orderCode: page == 1 ? 'PO-ASSIST-1' : 'PO-ASSIST-$page',
           orderProcessId: 11,
           processCode: '01-01',
           processName: '切割',
@@ -245,5 +249,61 @@ void main() {
     expect(find.text('代班申请详情'), findsOneWidget);
     expect(find.text('PO-ASSIST-2'), findsWidgets);
     expect(find.text('已审批'), findsWidgets);
+  });
+
+  testWidgets('assist approval pagination changes page and query resets', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final service = _FakeAssistApprovalService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionAssistApprovalPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canReview: true,
+            service: service,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
+    expect(service.listPageHistory.last, 1);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('第 2 / 3 页'), findsOneWidget);
+    expect(service.listPageHistory.last, 2);
+    expect(find.text('PO-ASSIST-2'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '上一页'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
+    expect(service.listPageHistory.last, 1);
+
+    await tester.enterText(find.byType(TextField).first, 'PO-RESET');
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(service.lastOrderCode, 'PO-RESET');
+    expect(service.listPageHistory.last, 1);
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
   });
 }

@@ -11,12 +11,43 @@ class _FakeProductionOrderManagementService extends ProductionService {
   _FakeProductionOrderManagementService()
     : super(AppSession(baseUrl: '', accessToken: ''));
 
+  final List<int> requestedPages = [];
+  final List<int> requestedPageSizes = [];
   String? lastListKeyword;
   String? lastListProductName;
   DateTime? lastListStartDateFrom;
   DateTime? lastListStartDateTo;
   DateTime? lastListDueDateFrom;
   DateTime? lastListDueDateTo;
+
+  ProductionOrderItem _buildItem(int id) {
+    return ProductionOrderItem(
+      id: id,
+      orderCode: 'PO-$id',
+      productId: 1,
+      productName: '产品$id',
+      supplierId: null,
+      supplierName: null,
+      productVersion: null,
+      quantity: 10,
+      status: 'pending',
+      currentProcessCode: '01-01',
+      currentProcessName: '切割',
+      startDate: DateTime(2026, 3, 1),
+      dueDate: DateTime(2026, 3, 10),
+      remark: null,
+      processTemplateId: null,
+      processTemplateName: null,
+      processTemplateVersion: null,
+      pipelineEnabled: false,
+      pipelineProcessCodes: const [],
+      createdByUserId: 1,
+      createdByUsername: 'admin',
+      createdAt: DateTime(2026, 3, 1),
+      updatedAt: DateTime(2026, 3, 1, 12),
+    );
+  }
+
   @override
   Future<ProductionOrderListResult> listOrders({
     required int page,
@@ -30,42 +61,22 @@ class _FakeProductionOrderManagementService extends ProductionService {
     DateTime? dueDateFrom,
     DateTime? dueDateTo,
   }) async {
+    requestedPages.add(page);
+    requestedPageSizes.add(pageSize);
     lastListKeyword = keyword;
     lastListProductName = productName;
     lastListStartDateFrom = startDateFrom;
     lastListStartDateTo = startDateTo;
     lastListDueDateFrom = dueDateFrom;
     lastListDueDateTo = dueDateTo;
-    return ProductionOrderListResult(
-      total: 1,
-      items: [
-        ProductionOrderItem(
-          id: 1,
-          orderCode: 'PO-1',
-          productId: 1,
-          productName: '产品A',
-          supplierId: null,
-          supplierName: null,
-          productVersion: null,
-          quantity: 10,
-          status: 'pending',
-          currentProcessCode: '01-01',
-          currentProcessName: '切割',
-          startDate: DateTime(2026, 3, 1),
-          dueDate: DateTime(2026, 3, 10),
-          remark: null,
-          processTemplateId: null,
-          processTemplateName: null,
-          processTemplateVersion: null,
-          pipelineEnabled: false,
-          pipelineProcessCodes: const [],
-          createdByUserId: 1,
-          createdByUsername: 'admin',
-          createdAt: DateTime(2026, 3, 1),
-          updatedAt: DateTime(2026, 3, 1, 12),
-        ),
-      ],
-    );
+    final normalizedKeyword = keyword?.trim() ?? '';
+    if (normalizedKeyword.isNotEmpty) {
+      return ProductionOrderListResult(total: 1, items: [_buildItem(99)]);
+    }
+    if (page == 2) {
+      return ProductionOrderListResult(total: 401, items: [_buildItem(2)]);
+    }
+    return ProductionOrderListResult(total: 401, items: [_buildItem(1)]);
   }
 
   @override
@@ -109,68 +120,84 @@ class _FakeCraftService extends CraftService {
 }
 
 void main() {
-  testWidgets(
-    'production order management uses keyword as single search entry',
-    (tester) async {
-      final service = _FakeProductionOrderManagementService();
-      tester.view.physicalSize = const Size(1920, 1400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+  testWidgets('生产订单管理页按分页参数加载并支持上下页与搜索回到第一页', (tester) async {
+    final service = _FakeProductionOrderManagementService();
+    tester.view.physicalSize = const Size(1920, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ProductionOrderManagementPage(
-              session: AppSession(baseUrl: '', accessToken: ''),
-              onLogout: () {},
-              canCreateOrder: true,
-              canEditOrder: true,
-              canDeleteOrder: true,
-              canCompleteOrder: true,
-              canUpdatePipelineMode: true,
-              service: service,
-              craftService: _FakeCraftService(),
-            ),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canCreateOrder: true,
+            canEditOrder: true,
+            canDeleteOrder: true,
+            canCompleteOrder: true,
+            canUpdatePipelineMode: true,
+            service: service,
+            craftService: _FakeCraftService(),
           ),
         ),
-      );
+      ),
+    );
 
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-      expect(
-        find.byKey(const ValueKey('productionOrderManagementListCard')),
-        findsOneWidget,
-      );
-      expect(find.text('总数：1'), findsOneWidget);
-      expect(find.widgetWithText(TextField, '搜索订单号/产品'), findsOneWidget);
-      expect(find.widgetWithText(TextField, '产品名称'), findsNothing);
-      expect(find.text('订单编号'), findsOneWidget);
-      expect(find.text('产品名称'), findsOneWidget);
-      expect(find.text('供应商'), findsOneWidget);
-      expect(find.text('交货日期'), findsOneWidget);
-      expect(find.text('备注'), findsOneWidget);
-      expect(find.text('产品版本'), findsNothing);
-      expect(find.text('模板名称/版本'), findsNothing);
-      expect(find.text('创建人'), findsNothing);
-      expect(find.text('开始日期'), findsNothing);
-      expect(find.text('更新时间'), findsNothing);
-      expect(find.text('-'), findsWidgets);
+    expect(
+      find.byKey(const ValueKey('productionOrderManagementListCard')),
+      findsOneWidget,
+    );
+    expect(service.requestedPages, [1]);
+    expect(service.requestedPageSizes, [200]);
+    expect(find.text('总数：401'), findsWidgets);
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '搜索订单号/产品'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '产品名称'), findsNothing);
+    expect(find.text('订单编号'), findsOneWidget);
+    expect(find.text('产品名称'), findsOneWidget);
+    expect(find.text('供应商'), findsOneWidget);
+    expect(find.text('交货日期'), findsOneWidget);
+    expect(find.text('备注'), findsOneWidget);
+    expect(find.text('产品版本'), findsNothing);
+    expect(find.text('模板名称/版本'), findsNothing);
+    expect(find.text('创建人'), findsNothing);
+    expect(find.text('开始日期'), findsNothing);
+    expect(find.text('更新时间'), findsNothing);
+    expect(find.text('-'), findsWidgets);
 
-      await tester.enterText(find.widgetWithText(TextField, '搜索订单号/产品'), '产品A');
-      await tester.tap(find.widgetWithText(FilledButton, '查询'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-      expect(service.lastListKeyword, '产品A');
-      expect(service.lastListProductName, isNull);
-      expect(service.lastListStartDateFrom, isNull);
-      expect(service.lastListStartDateTo, isNull);
-      expect(service.lastListDueDateFrom, isNull);
-      expect(service.lastListDueDateTo, isNull);
-    },
-  );
+    expect(service.requestedPages, [1, 2]);
+    expect(find.text('第 2 / 3 页'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '上一页'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(service.requestedPages, [1, 2, 1]);
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, '搜索订单号/产品'), '产品A');
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(service.requestedPages, [1, 2, 1, 1]);
+    expect(service.lastListKeyword, '产品A');
+    expect(service.lastListProductName, isNull);
+    expect(service.lastListStartDateFrom, isNull);
+    expect(service.lastListStartDateTo, isNull);
+    expect(service.lastListDueDateFrom, isNull);
+    expect(service.lastListDueDateTo, isNull);
+    expect(find.text('第 1 / 1 页'), findsOneWidget);
+  });
 }

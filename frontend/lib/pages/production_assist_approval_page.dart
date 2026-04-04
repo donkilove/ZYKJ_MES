@@ -8,6 +8,7 @@ import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/crud_list_table_section.dart';
 import '../widgets/crud_page_header.dart';
+import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 class ProductionAssistApprovalPage extends StatefulWidget {
@@ -38,10 +39,13 @@ class _ProductionAssistApprovalPageState
   bool _loading = false;
   String _message = '';
   String? _statusFilter = 'pending';
+  int _page = 1;
   int _total = 0;
   List<AssistAuthorizationItem> _items = const [];
   String? _lastHandledRoutePayloadJson;
   int? _pendingDetailAuthorizationId;
+
+  static const int _pageSize = 200;
 
   final TextEditingController _orderCodeController = TextEditingController();
   final TextEditingController _processNameController = TextEditingController();
@@ -112,6 +116,9 @@ class _ProductionAssistApprovalPageState
     final sec = local.second.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
+
+  int get _totalPages =>
+      _total <= 0 ? 1 : ((_total + _pageSize - 1) ~/ _pageSize);
 
   void _showDetail(BuildContext context, AssistAuthorizationItem item) {
     showDialog<void>(
@@ -196,7 +203,7 @@ class _ProductionAssistApprovalPageState
           _statusFilter = null;
         });
       }
-      _loadRows();
+      _loadRows(page: 1);
     } catch (_) {}
   }
 
@@ -285,15 +292,16 @@ class _ProductionAssistApprovalPageState
     }
   }
 
-  Future<void> _loadRows() async {
+  Future<void> _loadRows({int? page}) async {
+    final targetPage = page ?? _page;
     setState(() {
       _loading = true;
       _message = '';
     });
     try {
       final result = await _service.listAssistAuthorizations(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         status: _statusFilter,
         orderCode: _orderCodeController.text.trim().isEmpty
             ? null
@@ -313,7 +321,20 @@ class _ProductionAssistApprovalPageState
       if (!mounted) {
         return;
       }
+      final totalPages = result.total <= 0
+          ? 1
+          : ((result.total + _pageSize - 1) ~/ _pageSize);
+      if (result.total > 0 && targetPage > totalPages) {
+        setState(() {
+          _page = totalPages;
+          _total = result.total;
+          _items = const [];
+        });
+        await _loadRows(page: totalPages);
+        return;
+      }
       setState(() {
+        _page = targetPage;
         _items = result.items;
         _total = result.total;
       });
@@ -393,7 +414,7 @@ class _ProductionAssistApprovalPageState
                           setState(() {
                             _statusFilter = value;
                           });
-                          _loadRows();
+                          _loadRows(page: 1);
                         },
                 ),
               ),
@@ -411,7 +432,7 @@ class _ProductionAssistApprovalPageState
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadRows(),
+                  onSubmitted: (_) => _loadRows(page: 1),
                 ),
               ),
               const SizedBox(width: 8),
@@ -424,7 +445,7 @@ class _ProductionAssistApprovalPageState
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadRows(),
+                  onSubmitted: (_) => _loadRows(page: 1),
                 ),
               ),
               const SizedBox(width: 8),
@@ -437,7 +458,7 @@ class _ProductionAssistApprovalPageState
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadRows(),
+                  onSubmitted: (_) => _loadRows(page: 1),
                 ),
               ),
               const SizedBox(width: 8),
@@ -450,7 +471,7 @@ class _ProductionAssistApprovalPageState
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadRows(),
+                  onSubmitted: (_) => _loadRows(page: 1),
                 ),
               ),
               const SizedBox(width: 8),
@@ -470,7 +491,7 @@ class _ProductionAssistApprovalPageState
                     _createdAtFrom = from;
                     _createdAtTo = to;
                   });
-                  _loadRows();
+                  _loadRows(page: 1);
                 },
               ),
               if (_createdAtFrom != null || _createdAtTo != null) ...[
@@ -483,13 +504,13 @@ class _ProductionAssistApprovalPageState
                       _createdAtFrom = null;
                       _createdAtTo = null;
                     });
-                    _loadRows();
+                    _loadRows(page: 1);
                   },
                 ),
               ],
               const SizedBox(width: 8),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadRows,
+                onPressed: _loading ? null : () => _loadRows(page: 1),
                 icon: const Icon(Icons.search, size: 16),
                 label: const Text('查询'),
               ),
@@ -592,6 +613,15 @@ class _ProductionAssistApprovalPageState
                 }).toList(),
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadRows(page: _page - 1),
+            onNext: () => _loadRows(page: _page + 1),
           ),
         ],
       ),

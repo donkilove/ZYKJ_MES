@@ -12,6 +12,7 @@ import '../services/repair_scrap_service.dart';
 import '../widgets/crud_list_table_section.dart';
 import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 enum _RepairOrderAction { detail, summary, complete }
@@ -101,11 +102,14 @@ class _ProductionRepairOrdersPageState
   bool _acting = false;
   String _message = '';
   String _status = 'all';
+  int _page = 1;
   DateTime? _startDate;
   DateTime? _endDate;
   int _total = 0;
   List<RepairOrderItem> _items = const [];
   String? _lastHandledJumpPayloadJson;
+
+  static const int _pageSize = 500;
 
   @override
   void initState() {
@@ -161,6 +165,7 @@ class _ProductionRepairOrdersPageState
       } else {
         _endDate = picked;
       }
+      _page = 1;
     });
   }
 
@@ -233,15 +238,19 @@ class _ProductionRepairOrdersPageState
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
-  Future<void> _loadItems() async {
+  int get _totalPages =>
+      _total <= 0 ? 1 : ((_total + _pageSize - 1) ~/ _pageSize);
+
+  Future<void> _loadItems({int? page}) async {
+    final targetPage = page ?? _page;
     setState(() {
       _loading = true;
       _message = '';
     });
     try {
       final result = await _service.getRepairOrders(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         keyword: _keywordController.text.trim(),
         status: _status,
         startDate: _startDate,
@@ -250,7 +259,20 @@ class _ProductionRepairOrdersPageState
       if (!mounted) {
         return;
       }
+      final totalPages = result.total <= 0
+          ? 1
+          : ((result.total + _pageSize - 1) ~/ _pageSize);
+      if (result.total > 0 && targetPage > totalPages) {
+        setState(() {
+          _page = totalPages;
+          _total = result.total;
+          _items = const [];
+        });
+        await _loadItems(page: totalPages);
+        return;
+      }
       setState(() {
+        _page = targetPage;
         _total = result.total;
         _items = result.items;
       });
@@ -799,7 +821,7 @@ class _ProductionRepairOrdersPageState
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadItems(),
+                  onSubmitted: (_) => _loadItems(page: 1),
                 ),
               ),
               SizedBox(
@@ -820,6 +842,7 @@ class _ProductionRepairOrdersPageState
                     if (value == null) return;
                     setState(() {
                       _status = value;
+                      _page = 1;
                     });
                   },
                 ),
@@ -835,7 +858,7 @@ class _ProductionRepairOrdersPageState
                 child: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
               ),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadItems,
+                onPressed: _loading ? null : () => _loadItems(page: 1),
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
               ),
@@ -936,6 +959,15 @@ class _ProductionRepairOrdersPageState
                     .toList(),
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadItems(page: _page - 1),
+            onNext: () => _loadItems(page: _page + 1),
           ),
         ],
       ),

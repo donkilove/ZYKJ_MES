@@ -7,6 +7,7 @@ import '../services/api_exception.dart';
 import '../services/production_service.dart';
 import '../widgets/crud_list_table_section.dart';
 import '../widgets/crud_page_header.dart';
+import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 import 'production_order_detail_page.dart';
 
@@ -39,6 +40,7 @@ class _ProductionPipelineInstancesPageState
 
   bool _loading = false;
   String _message = '';
+  int _page = 1;
   int _total = 0;
   bool? _isActiveFilter;
   final _orderCodeController = TextEditingController();
@@ -49,6 +51,11 @@ class _ProductionPipelineInstancesPageState
 
   /// 独立进入模式（无固定订单）
   bool get _standaloneMode => widget.orderId == null;
+
+  static const int _pageSize = 500;
+
+  int get _totalPages =>
+      _total <= 0 ? 1 : ((_total + _pageSize - 1) ~/ _pageSize);
 
   @override
   void initState() {
@@ -127,7 +134,8 @@ class _ProductionPipelineInstancesPageState
     );
   }
 
-  Future<void> _load() async {
+  Future<void> _load({int? page}) async {
+    final targetPage = page ?? _page;
     final rawSubOrderId = _subOrderIdController.text.trim();
     int? subOrderId;
     if (rawSubOrderId.isNotEmpty) {
@@ -152,9 +160,24 @@ class _ProductionPipelineInstancesPageState
         processKeyword: _processKeywordController.text,
         pipelineSubOrderNo: _pipelineSubOrderNoController.text,
         isActive: _isActiveFilter,
+        page: targetPage,
+        pageSize: _pageSize,
       );
       if (!mounted) return;
+      final totalPages = result.total <= 0
+          ? 1
+          : ((result.total + _pageSize - 1) ~/ _pageSize);
+      if (result.total > 0 && targetPage > totalPages) {
+        setState(() {
+          _page = totalPages;
+          _total = result.total;
+          _items = const [];
+        });
+        await _load(page: totalPages);
+        return;
+      }
       setState(() {
+        _page = targetPage;
         _items = result.items;
         _total = result.total;
       });
@@ -320,7 +343,7 @@ class _ProductionPipelineInstancesPageState
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
-              onSubmitted: (_) => _load(),
+              onSubmitted: (_) => _load(page: 1),
             ),
           ),
         ],
@@ -335,7 +358,7 @@ class _ProductionPipelineInstancesPageState
               border: OutlineInputBorder(),
               isDense: true,
             ),
-            onSubmitted: (_) => _load(),
+            onSubmitted: (_) => _load(page: 1),
           ),
         ),
         SizedBox(
@@ -348,7 +371,7 @@ class _ProductionPipelineInstancesPageState
               border: OutlineInputBorder(),
               isDense: true,
             ),
-            onSubmitted: (_) => _load(),
+            onSubmitted: (_) => _load(page: 1),
           ),
         ),
         SizedBox(
@@ -360,7 +383,7 @@ class _ProductionPipelineInstancesPageState
               border: OutlineInputBorder(),
               isDense: true,
             ),
-            onSubmitted: (_) => _load(),
+            onSubmitted: (_) => _load(page: 1),
           ),
         ),
         SizedBox(
@@ -381,14 +404,17 @@ class _ProductionPipelineInstancesPageState
             onChanged: _loading
                 ? null
                 : (value) {
-                    setState(() => _isActiveFilter = value);
-                    _load();
+                    setState(() {
+                      _isActiveFilter = value;
+                      _page = 1;
+                    });
+                    _load(page: 1);
                   },
           ),
         ),
         IconButton(
           tooltip: '查询',
-          onPressed: _loading ? null : _load,
+          onPressed: _loading ? null : () => _load(page: 1),
           icon: const Icon(Icons.search),
         ),
         IconButton(
@@ -579,6 +605,15 @@ class _ProductionPipelineInstancesPageState
                       );
                     },
                   ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _load(page: _page - 1),
+            onNext: () => _load(page: _page + 1),
           ),
         ],
       ),

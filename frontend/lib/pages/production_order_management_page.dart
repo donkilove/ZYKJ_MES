@@ -10,6 +10,7 @@ import '../services/quality_supplier_service.dart';
 import '../widgets/crud_list_table_section.dart';
 import '../widgets/crud_page_header.dart';
 import '../widgets/locked_form_dialog.dart';
+import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 import 'production_order_detail_page.dart';
 import 'production_order_form_page.dart';
@@ -48,12 +49,15 @@ class ProductionOrderManagementPage extends StatefulWidget {
 
 class _ProductionOrderManagementPageState
     extends State<ProductionOrderManagementPage> {
+  static const int _pageSize = 200;
+
   late final ProductionService _service;
   late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
   String _message = '';
+  int _page = 1;
   int _total = 0;
   String? _statusFilter;
   bool? _pipelineEnabledFilter;
@@ -61,6 +65,13 @@ class _ProductionOrderManagementPageState
   List<ProductionProductOption> _products = const [];
   List<ProductionProcessOption> _processes = const [];
   List<CraftTemplateItem> _templates = const [];
+
+  int get _totalPages {
+    if (_total <= 0) {
+      return 1;
+    }
+    return ((_total - 1) ~/ _pageSize) + 1;
+  }
 
   @override
   void initState() {
@@ -129,15 +140,16 @@ class _ProductionOrderManagementPageState
     }
   }
 
-  Future<void> _loadOrders() async {
+  Future<void> _loadOrders({int? page}) async {
+    final targetPage = page ?? _page;
     setState(() {
       _loading = true;
       _message = '';
     });
     try {
       final result = await _service.listOrders(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         keyword: _keywordController.text.trim(),
         status: _statusFilter,
         pipelineEnabled: _pipelineEnabledFilter,
@@ -145,10 +157,20 @@ class _ProductionOrderManagementPageState
       if (!mounted) {
         return;
       }
+      final resolvedTotalPages = result.total <= 0
+          ? 1
+          : (((result.total - 1) ~/ _pageSize) + 1);
+      final resolvedPage = targetPage > resolvedTotalPages
+          ? resolvedTotalPages
+          : targetPage;
       setState(() {
         _items = result.items;
         _total = result.total;
+        _page = resolvedPage;
       });
+      if (resolvedPage != targetPage) {
+        await _loadOrders(page: resolvedPage);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -167,6 +189,10 @@ class _ProductionOrderManagementPageState
         });
       }
     }
+  }
+
+  Future<void> _searchFromFirstPage() async {
+    await _loadOrders(page: 1);
   }
 
   Future<bool> _showOrderDialog({
@@ -545,7 +571,7 @@ class _ProductionOrderManagementPageState
         children: [
           CrudPageHeader(
             title: '生产订单管理',
-            onRefresh: _loading ? null : _loadOrders,
+            onRefresh: _loading ? null : () => _loadOrders(page: _page),
           ),
           const SizedBox(height: 12),
           Row(
@@ -557,7 +583,7 @@ class _ProductionOrderManagementPageState
                     labelText: '搜索订单号/产品',
                     border: OutlineInputBorder(),
                   ),
-                  onSubmitted: (_) => _loadOrders(),
+                  onSubmitted: (_) => _searchFromFirstPage(),
                 ),
               ),
               const SizedBox(width: 12),
@@ -588,7 +614,7 @@ class _ProductionOrderManagementPageState
                     setState(() {
                       _statusFilter = value;
                     });
-                    _loadOrders();
+                    _searchFromFirstPage();
                   },
                 ),
               ),
@@ -610,13 +636,13 @@ class _ProductionOrderManagementPageState
                     setState(() {
                       _pipelineEnabledFilter = value;
                     });
-                    _loadOrders();
+                    _searchFromFirstPage();
                   },
                 ),
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadOrders,
+                onPressed: _loading ? null : _searchFromFirstPage,
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
               ),
@@ -761,6 +787,15 @@ class _ProductionOrderManagementPageState
                 }).toList(),
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadOrders(page: _page - 1),
+            onNext: () => _loadOrders(page: _page + 1),
           ),
         ],
       ),

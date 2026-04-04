@@ -11,6 +11,7 @@ import '../services/production_service.dart';
 import '../services/repair_scrap_service.dart';
 import '../widgets/crud_list_table_section.dart';
 import '../widgets/crud_page_header.dart';
+import '../widgets/simple_pagination_bar.dart';
 import '../widgets/unified_list_table_header_style.dart';
 
 class ProductionScrapStatisticsPage extends StatefulWidget {
@@ -45,11 +46,14 @@ class _ProductionScrapStatisticsPageState
   bool _exporting = false;
   String _message = '';
   String _progress = 'all';
+  int _page = 1;
   DateTime? _startDate;
   DateTime? _endDate;
   int _total = 0;
   List<ScrapStatisticsItem> _items = const [];
   String? _lastHandledJumpPayloadJson;
+
+  static const int _pageSize = 500;
 
   @override
   void initState() {
@@ -108,6 +112,9 @@ class _ProductionScrapStatisticsPageState
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
+  int get _totalPages =>
+      _total <= 0 ? 1 : ((_total + _pageSize - 1) ~/ _pageSize);
+
   Future<void> _pickDate({required bool isStart}) async {
     final initial =
         (isStart ? _startDate : _endDate) ?? DateTime.now().toLocal();
@@ -129,10 +136,12 @@ class _ProductionScrapStatisticsPageState
       } else {
         _endDate = picked;
       }
+      _page = 1;
     });
   }
 
-  Future<void> _loadItems() async {
+  Future<void> _loadItems({int? page}) async {
+    final targetPage = page ?? _page;
     if (_startDate != null &&
         _endDate != null &&
         _startDate!.isAfter(_endDate!)) {
@@ -147,8 +156,8 @@ class _ProductionScrapStatisticsPageState
     });
     try {
       final result = await _service.getScrapStatistics(
-        page: 1,
-        pageSize: 200,
+        page: targetPage,
+        pageSize: _pageSize,
         keyword: _keywordController.text.trim(),
         productName: _productNameController.text.trim(),
         processCode: _processCodeController.text.trim(),
@@ -159,7 +168,20 @@ class _ProductionScrapStatisticsPageState
       if (!mounted) {
         return;
       }
+      final totalPages = result.total <= 0
+          ? 1
+          : ((result.total + _pageSize - 1) ~/ _pageSize);
+      if (result.total > 0 && targetPage > totalPages) {
+        setState(() {
+          _page = totalPages;
+          _total = result.total;
+          _items = const [];
+        });
+        await _loadItems(page: totalPages);
+        return;
+      }
       setState(() {
+        _page = targetPage;
         _total = result.total;
         _items = result.items;
       });
@@ -349,7 +371,7 @@ class _ProductionScrapStatisticsPageState
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadItems(),
+                  onSubmitted: (_) => _loadItems(page: 1),
                 ),
               ),
               SizedBox(
@@ -361,7 +383,7 @@ class _ProductionScrapStatisticsPageState
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadItems(),
+                  onSubmitted: (_) => _loadItems(page: 1),
                 ),
               ),
               SizedBox(
@@ -374,7 +396,7 @@ class _ProductionScrapStatisticsPageState
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  onSubmitted: (_) => _loadItems(),
+                  onSubmitted: (_) => _loadItems(page: 1),
                 ),
               ),
               SizedBox(
@@ -400,6 +422,7 @@ class _ProductionScrapStatisticsPageState
                     }
                     setState(() {
                       _progress = value;
+                      _page = 1;
                     });
                   },
                 ),
@@ -415,7 +438,7 @@ class _ProductionScrapStatisticsPageState
                 child: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
               ),
               FilledButton.icon(
-                onPressed: _loading ? null : _loadItems,
+                onPressed: _loading ? null : () => _loadItems(page: 1),
                 icon: const Icon(Icons.search),
                 label: const Text('查询'),
               ),
@@ -480,6 +503,15 @@ class _ProductionScrapStatisticsPageState
                     .toList(),
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          SimplePaginationBar(
+            page: _page,
+            totalPages: _totalPages,
+            total: _total,
+            loading: _loading,
+            onPrevious: () => _loadItems(page: _page - 1),
+            onNext: () => _loadItems(page: _page + 1),
           ),
         ],
       ),

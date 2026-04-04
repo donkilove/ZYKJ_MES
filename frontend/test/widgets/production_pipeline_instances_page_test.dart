@@ -14,6 +14,7 @@ class _FakeProductionPipelineInstancesService extends ProductionService {
   String? receivedProcessKeyword;
   String? receivedPipelineSubOrderNo;
   int? receivedSubOrderId;
+  final List<int> requestedPages = <int>[];
 
   @override
   Future<PipelineInstanceListResult> listPipelineInstances({
@@ -27,23 +28,24 @@ class _FakeProductionPipelineInstancesService extends ProductionService {
     int page = 1,
     int pageSize = 200,
   }) async {
+    requestedPages.add(page);
     receivedProcessKeyword = processKeyword;
     receivedPipelineSubOrderNo = pipelineSubOrderNo;
     receivedSubOrderId = subOrderId;
     return PipelineInstanceListResult(
-      total: 2,
+      total: 1001,
       items: [
         PipelineInstanceItem(
-          id: 1,
-          pipelineLinkId: 'PL9-1-ABCDE12345',
-          subOrderId: 21,
+          id: page * 10 + 1,
+          pipelineLinkId: 'PL9-$page-ABCDE12345',
+          subOrderId: page * 100 + 21,
           orderId: 9,
-          orderCode: 'PO-TRACE-001',
+          orderCode: 'PO-TRACE-00$page',
           orderProcessId: 11,
           processCode: 'CUT-01',
           processName: '切割',
           pipelineSeq: 1,
-          pipelineSubOrderNo: 'P9-21-1-ABCD1234',
+          pipelineSubOrderNo: 'P9-${page}21-1-ABCD1234',
           isActive: true,
           invalidReason: null,
           invalidatedAt: null,
@@ -51,16 +53,16 @@ class _FakeProductionPipelineInstancesService extends ProductionService {
           updatedAt: DateTime.utc(2026, 3, 1, 9),
         ),
         PipelineInstanceItem(
-          id: 2,
-          pipelineLinkId: 'PL9-1-ABCDE12345',
-          subOrderId: 22,
+          id: page * 10 + 2,
+          pipelineLinkId: 'PL9-$page-ABCDE12345',
+          subOrderId: page * 100 + 22,
           orderId: 9,
-          orderCode: 'PO-TRACE-001',
+          orderCode: 'PO-TRACE-00$page',
           orderProcessId: 12,
           processCode: 'WELD-01',
           processName: '焊接',
           pipelineSeq: 1,
-          pipelineSubOrderNo: 'P9-22-1-ABCD1234',
+          pipelineSubOrderNo: 'P9-${page}22-1-ABCD1234',
           isActive: true,
           invalidReason: null,
           invalidatedAt: null,
@@ -134,7 +136,7 @@ void main() {
     expect(find.widgetWithText(TextField, '实例编号'), findsOneWidget);
     expect(find.byType(CrudPageHeader), findsOneWidget);
     expect(find.byType(CrudListTableSection), findsOneWidget);
-    expect(find.text('21'), findsWidgets);
+    expect(find.text('121'), findsWidgets);
     expect(find.text('切割 (CUT-01)'), findsNWidgets(2));
     expect(find.text('焊接 (WELD-01)'), findsNWidgets(2));
     expect(find.text('链路追踪视图'), findsOneWidget);
@@ -142,6 +144,7 @@ void main() {
     expect(find.text('链路 PL9-1-ABCDE12345'), findsNWidgets(3));
     expect(find.text('查看订单'), findsNWidgets(4));
     expect(find.text('查看事件日志'), findsNWidgets(4));
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextField, '子订单ID'), '21');
     await tester.enterText(find.widgetWithText(TextField, '工序'), '切割');
@@ -153,6 +156,7 @@ void main() {
     expect(service.receivedSubOrderId, 21);
     expect(service.receivedProcessKeyword, '切割');
     expect(service.receivedPipelineSubOrderNo, 'ABCD1234');
+    expect(service.requestedPages, [1, 1]);
 
     await tester.ensureVisible(find.text('查看事件日志').first);
     await tester.tap(find.text('查看事件日志').first);
@@ -173,5 +177,49 @@ void main() {
     expect(find.text('编辑订单'), findsNothing);
     expect(find.text('删除订单'), findsNothing);
     expect(find.text('结束订单'), findsNothing);
+  });
+
+  testWidgets('并行实例页支持上一页下一页翻页', (tester) async {
+    final service = _FakeProductionPipelineInstancesService();
+    tester.view.physicalSize = const Size(2200, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionPipelineInstancesPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            service: service,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('PO-TRACE-001'), findsWidgets);
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.requestedPages, [1, 2]);
+    expect(find.text('第 2 / 3 页'), findsOneWidget);
+    expect(find.text('PO-TRACE-002'), findsWidgets);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '上一页'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.requestedPages, [1, 2, 1]);
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
+    expect(find.text('PO-TRACE-001'), findsWidgets);
   });
 }
