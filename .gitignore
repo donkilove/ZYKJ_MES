@@ -23,3 +23,6 @@ mes_client/build/
 .codex/
 .github/
 evidence/
+.tmp_t5/
+.serena/
+desktop_tests/

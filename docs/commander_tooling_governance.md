@@ -20,7 +20,7 @@
 | --- | --- | --- | --- | --- | --- |
 | CAT-01 | 后端模型/接口/迁移联动 | FastAPI 模型、Schema、Service、Endpoint、Alembic 变更 | Sequential Thinking、Task、Serena、postgres MCP | postgres MCP、Bruno、openapi-validate、http-probe | 变更文件、迁移影响、接口验证、数据库核对 |
 | CAT-02 | 前后端契约同步 | OpenAPI、后端 Schema、Flutter DTO、接口页面联动 | Sequential Thinking、Task、Serena、Context7 | openapi-validate、Bruno、Playwright、flutter-ui | 契约差异、同步范围、接口与页面回归 |
-| CAT-03 | Flutter CRUD 页面/交互改造 | 列表、筛选、分页、弹窗、提交流程 | Sequential Thinking、Task、Serena、flutter-ui | flutter-ui、Playwright、WinAppDriver、FlaUInspect | 页面改动点、交互结果、桌面控件定位 |
+| CAT-03 | Flutter CRUD 页面/交互改造 | 列表、筛选、分页、弹窗、提交流程 | Sequential Thinking、Task、Serena、flutter-ui | `flutter test`、`integration_test`、flutter-ui、Playwright | 页面改动点、`flutter test` / `integration_test` 结果、按需桌面控件定位 |
 | CAT-04 | RBAC/页面可见性/权限码联动 | 角色、能力码、菜单、Tab、侧边栏、接口保护 | Sequential Thinking、Task、Serena | Bruno、Playwright、flutter-ui、http-probe | 权限矩阵、显隐结果、接口授权验证 |
 | CAT-05 | 本地环境/联调/bootstrap 运行 | 启动链路、NO_PROXY、health、bootstrap、数据库连接 | Sequential Thinking、Task、Serena、postgres MCP | http-probe、Bruno、Playwright、mitmproxy/Fiddler | 启动命令、联调链路、健康检查、抓包证据 |
 | CAT-06 | 编码/中文乱码/文案一致性 | 中文文案、编码格式、接口消息、页面显示 | Sequential Thinking、Task、Serena、Context7 | Playwright、flutter-ui、Bruno | 问题样例、修复位置、显示结果、文案对照 |
@@ -48,8 +48,8 @@
 | openapi-validate | OpenAPI 文档抓取与契约校验 | 验证 |
 | flutter-ui | Flutter 页面、组件、集成测试 | 执行自测、验证 |
 | Playwright | Web 页面行为、接口联动、可视回归 | 验证 |
-| WinAppDriver | Windows 桌面自动化回归 | 验证 |
-| FlaUInspect | Windows 控件树定位与可自动化性确认 | 调研、验证 |
+| WinAppDriver | Windows 桌面系统级特殊场景回归 | 验证 |
+| FlaUInspect | Windows 控件树定位与可自动化性确认（历史保留/按需 fallback） | 调研、验证 |
 | Bruno | API 调试、集合回归、接口重放 | 执行自测、验证 |
 | http-probe | 本地服务健康探测、联调入口确认 | 执行自测、验证 |
 | mitmproxy/Fiddler | 抓包、会话回放、链路归因 | 调研、验证 |
@@ -71,12 +71,14 @@
 
 1. 命中 CAT-01 时：默认补触发 postgres MCP；接口对外暴露时再触发 Bruno 与 openapi-validate。
 2. 命中 CAT-02 时：默认触发 openapi-validate；涉及页面联动时再触发 Playwright 或 flutter-ui。
-3. 命中 CAT-03 时：默认触发 flutter-ui；若为 Windows 管理端交互问题，再补 WinAppDriver 或 FlaUInspect。
-4. 命中 CAT-04 时：默认至少覆盖“接口授权 + 页面显隐”两个验证口径，优先 Bruno + Playwright/flutter-ui 组合。
-5. 命中 CAT-05 时：默认先用 http-probe 确认服务入口；需要定位链路差异时补 mitmproxy/Fiddler；涉及数据库初始化时补 postgres MCP。
-6. 命中 CAT-06 时：默认要求至少一条真实显示验证，优先页面验证工具；仅代码层修字面量不算完成。
-7. 命中 CAT-07 时：默认生成一组可复现请求样本，并保留抓包或会话证据。
-8. 命中 CAT-08 时：默认触发 Syft 与 Trivy；涉及远程协作对象时补 gh。
+3. 命中 CAT-03 时：默认验证主线为 `flutter test` 与 `integration_test`，并可配合 flutter-ui 或 Playwright；仅在 Windows 桌面系统级特殊场景或历史回放时，再按需补 WinAppDriver 或 FlaUInspect。
+4. 命中 `desktop_tests/flaui/` 下的 FlaUI 自动化时：仅视为历史保留/按需 fallback 口径，不再作为默认测试主线；只允许串行执行，禁止并发多进程、并发 `dotnet test` 会话或多桌面会话同时跑同一批 FlaUI 用例。
+5. 命中用户模块变更时：无论起点是后端/API 还是 Flutter 页面，只要涉及用户模块行为、入口、页签、筛选、状态流转或文案边角分支，必须在同一轮任务内同步核对并更新后端/API、Flutter、`integration_test`、`evidence/` 与执行命令口径，禁止拆成“先改主链路，边角下轮再补”但不留规则约束。
+6. 命中 CAT-04 时：默认至少覆盖“接口授权 + 页面显隐”两个验证口径，优先 Bruno + Playwright/flutter-ui 组合。
+7. 命中 CAT-05 时：默认先用 http-probe 确认服务入口；需要定位链路差异时补 mitmproxy/Fiddler；涉及数据库初始化时补 postgres MCP。
+8. 命中 CAT-06 时：默认要求至少一条真实显示验证，优先页面验证工具；仅代码层修字面量不算完成。
+9. 命中 CAT-07 时：默认生成一组可复现请求样本，并保留抓包或会话证据。
+10. 命中 CAT-08 时：默认触发 Syft 与 Trivy；涉及远程协作对象时补 gh。
 
 ### 5.3 复检触发规则
 
@@ -100,7 +102,9 @@
 
 - CAT-01：有数据库变更时，必须同时说明迁移影响与接口影响。
 - CAT-02：有契约变更时，必须同时说明后端与前端是否已收敛。
-- CAT-03：有页面交互改动时，必须留一条真实交互验证结果。
+- CAT-03：有页面交互改动时，默认应优先补 `flutter test` 与 `integration_test` 的真实验证结果，至少留一条真实交互验证结果。
+- FlaUI：仅在历史回放、显式要求或 Windows 桌面系统级特殊场景下作为 fallback 使用，不属于默认测试基线；执行时必须串行，未明确“单进程、单桌面会话、单批次”约束时，不得宣称 FlaUI 回归口径已收敛。
+- 用户模块：边角分支补齐时，必须按“先后端/API 与 Flutter 收敛，再补 `integration_test`，最后补齐 `evidence/` 与命令口径”的节奏完成；任一对象未同步时，不得标记该轮任务完成。
 - CAT-04：有权限联动时，必须留一条授权成功或拒绝的真实证据。
 - CAT-05：有联调或 bootstrap 变更时，必须留一条可访问性或健康检查证据。
 - CAT-06：有中文或编码修复时，必须区分“数据源错误”与“显示链路错误”。
@@ -146,9 +150,9 @@
 
 ### 9.2 示例 B：Flutter CRUD 页面/交互改造
 
-1. 主 agent 将任务归类为 CAT-03，并指定 flutter-ui 为默认验证工具。
-2. 执行子 agent 用 Serena 改页面，用 flutter-ui 做最小自测。
-3. 验证子 agent 用 flutter-ui 复检；若是 Windows 特定控件问题，再用 FlaUInspect 定位控件树，必要时补 WinAppDriver 回归。
+1. 主 agent 将任务归类为 CAT-03，并指定 `flutter test` 与 `integration_test` 为默认验证主线。
+2. 执行子 agent 用 Serena 改页面，并以 `flutter test`、`integration_test` 或 flutter-ui 做最小自测。
+3. 验证子 agent 以前端测试主线复检；若是 Windows 特定控件问题，再用 FlaUInspect 定位控件树，必要时补 WinAppDriver 回归。
 4. evidence 必须留下“页面入口、操作步骤、实际结果、失败重试、最终判定”。
 
 ## 10. 适用结论
