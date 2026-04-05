@@ -176,7 +176,8 @@ void main() {
 
     expect(service.listCalls, 1);
 
-    await tester.tap(find.text('处置'));
+    final disposeButton = find.widgetWithText(TextButton, '处置');
+    tester.widget<TextButton>(disposeButton).onPressed!.call();
     await tester.pumpAndSettle();
 
     expect(find.text('首件处置 #1'), findsOneWidget);

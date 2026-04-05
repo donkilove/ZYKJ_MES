@@ -14,7 +14,11 @@ class PageCatalogUnitTest(unittest.TestCase):
         sidebar_codes = [
             item["code"]
             for item in sorted(
-                (entry for entry in PAGE_CATALOG if entry["page_type"] == PAGE_TYPE_SIDEBAR),
+                (
+                    entry
+                    for entry in PAGE_CATALOG
+                    if entry["page_type"] == PAGE_TYPE_SIDEBAR
+                ),
                 key=lambda entry: entry["sort_order"],
             )
         ]
@@ -26,8 +30,8 @@ class PageCatalogUnitTest(unittest.TestCase):
                 "user",
                 "product",
                 "craft",
-                "production",
                 "quality",
+                "production",
                 "equipment",
                 "message",
             ],

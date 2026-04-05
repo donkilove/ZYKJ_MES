@@ -201,12 +201,6 @@ void main() {
           },
           'DELETE /production/orders/1': (_) =>
               TestResponse.json(200, body: {'data': {}}),
-          'POST /production/orders/1/complete': (_) => TestResponse.json(
-            200,
-            body: {
-              'data': {'order_id': 1, 'status': 'completed', 'message': 'ok'},
-            },
-          ),
           'GET /production/orders/1': (_) => TestResponse.json(
             200,
             body: {

@@ -38,7 +38,7 @@ class _FakeRepairAndScrapService extends ProductionService {
     lastScrapProcessCode = processCode;
     lastScrapProgress = progress;
     return ScrapStatisticsListResult(
-      total: 1001,
+      total: 61,
       items: [
         ScrapStatisticsItem.fromJson({
           'id': page,
@@ -74,7 +74,7 @@ class _FakeRepairAndScrapService extends ProductionService {
     lastRepairKeyword = keyword;
     lastRepairStatus = status;
     return RepairOrderListResult(
-      total: 1001,
+      total: 61,
       items: [
         RepairOrderItem.fromJson({
           'id': page,

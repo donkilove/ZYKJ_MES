@@ -8,13 +8,6 @@ import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/authz_models.dart';
 import 'package:mes_client/pages/production_page.dart';
 
-class _FakeHttpOverrides extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) {
-    return _FakeHttpClient();
-  }
-}
-
 class _FakeHttpClient implements HttpClient {
   @override
   Future<HttpClientRequest> getUrl(Uri url) async =>
@@ -32,7 +25,6 @@ class _FakeHttpClient implements HttpClient {
 class _FakeHttpClientRequest implements HttpClientRequest {
   _FakeHttpClientRequest(this.url);
 
-  @override
   final Uri url;
 
   @override
@@ -192,7 +184,6 @@ class _FakeHttpClientResponse extends Stream<List<int>>
     throw UnsupportedError('detachSocket is not supported in tests');
   }
 
-  @override
   bool get chunkedTransferEncoding => false;
 
   @override

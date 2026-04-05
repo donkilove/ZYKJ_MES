@@ -20,7 +20,7 @@ void main() {
     expect(repairOrderStatusLabel('completed'), isNot('completed'));
     expect(scrapProgressLabel('pending_apply'), isNot('pending_apply'));
     expect(scrapProgressLabel('applied'), isNot('applied'));
-    expect(assistAuthorizationStatusLabel('approved'), '已审批');
+    expect(assistAuthorizationStatusLabel('approved'), '已生效');
     expect(scrapProgressLabel('pending_apply'), '待处理');
     expect(scrapProgressLabel('applied'), '已处理');
   });

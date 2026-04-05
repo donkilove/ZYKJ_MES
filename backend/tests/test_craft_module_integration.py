@@ -21,6 +21,7 @@ from app.models.product import Product  # noqa: E402
 from app.models.product_process_template import ProductProcessTemplate  # noqa: E402
 from app.models.production_order import ProductionOrder  # noqa: E402
 from app.models.production_order_process import ProductionOrderProcess  # noqa: E402
+from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
 
 
@@ -34,6 +35,7 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         self.stage_ids: list[int] = []
         self.process_ids: list[int] = []
         self.product_ids: list[int] = []
+        self.supplier_ids: list[int] = []
         self.order_ids: list[int] = []
         self.user_ids: list[int] = []
 
@@ -42,6 +44,11 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         try:
             for order_id in reversed(self.order_ids):
                 row = db.get(ProductionOrder, order_id)
+                if row is not None:
+                    db.delete(row)
+                    db.commit()
+            for supplier_id in reversed(self.supplier_ids):
+                row = db.get(Supplier, supplier_id)
                 if row is not None:
                     db.delete(row)
                     db.commit()
@@ -182,12 +189,14 @@ class CraftModuleIntegrationTest(unittest.TestCase):
 
     def _create_order_from_template(self, *, product_id: int, template_id: int) -> dict:
         order_code = f"CRAFT-ROLLBACK-{int(time.time() * 1000)}"
+        supplier = self._create_supplier(f"工艺回滚供应商{order_code[-6:]}")
         response = self.client.post(
             "/api/v1/production/orders",
             headers=self._headers(),
             json={
                 "order_code": order_code,
                 "product_id": product_id,
+                "supplier_id": supplier["id"],
                 "quantity": 10,
                 "template_id": template_id,
             },
@@ -195,6 +204,17 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.text)
         row = response.json()["data"]
         self.order_ids.append(int(row["id"]))
+        return row
+
+    def _create_supplier(self, name: str, *, is_enabled: bool = True) -> dict:
+        response = self.client.post(
+            "/api/v1/quality/suppliers",
+            headers=self._headers(),
+            json={"name": name, "remark": "工艺集成测试", "is_enabled": is_enabled},
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        row = response.json()["data"]
+        self.supplier_ids.append(int(row["id"]))
         return row
 
     def test_light_query_and_copy_source_export(self) -> None:
@@ -267,7 +287,9 @@ class CraftModuleIntegrationTest(unittest.TestCase):
             f"/api/v1/craft/templates/{template_id}/versions",
             headers=self._headers(),
         )
-        self.assertEqual(version_list_response.status_code, 200, version_list_response.text)
+        self.assertEqual(
+            version_list_response.status_code, 200, version_list_response.text
+        )
         version_record = version_list_response.json()["data"]["items"][0]
         self.assertEqual(version_record["record_type"], "publish")
         self.assertEqual(version_record["record_title"], "发布记录 P1")
@@ -654,7 +676,9 @@ class CraftModuleIntegrationTest(unittest.TestCase):
             headers=self._headers(),
         )
         self.assertEqual(delete_response.status_code, 400, delete_response.text)
-        self.assertIn("Template is reused by downstream templates", delete_response.text)
+        self.assertIn(
+            "Template is reused by downstream templates", delete_response.text
+        )
 
     def test_disable_and_archive_are_blocked_by_in_progress_orders(self) -> None:
         stage = self._create_stage("R05")
@@ -723,7 +747,9 @@ class CraftModuleIntegrationTest(unittest.TestCase):
             headers=self._headers(),
         )
         self.assertEqual(references_response.status_code, 200, references_response.text)
-        self.assertEqual(references_response.json()["data"]["blocking_reference_count"], 1)
+        self.assertEqual(
+            references_response.json()["data"]["blocking_reference_count"], 1
+        )
         self.assertTrue(references_response.json()["data"]["has_blocking_references"])
 
         disable_response = self.client.post(
@@ -869,7 +895,9 @@ class CraftModuleIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(gap_response.status_code, 400, gap_response.text)
-        self.assertIn("step_order must start at 1 and remain continuous", gap_response.text)
+        self.assertIn(
+            "step_order must start at 1 and remain continuous", gap_response.text
+        )
 
         import_response = self.client.post(
             "/api/v1/craft/templates/import",
@@ -910,7 +938,9 @@ class CraftModuleIntegrationTest(unittest.TestCase):
             "/api/v1/craft/system-master-template",
             headers=self._headers(),
         )
-        self.assertEqual(system_master_response.status_code, 200, system_master_response.text)
+        self.assertEqual(
+            system_master_response.status_code, 200, system_master_response.text
+        )
         system_master_data = system_master_response.json()["data"]
         if system_master_data is None:
             create_master_response = self.client.post(
@@ -930,7 +960,9 @@ class CraftModuleIntegrationTest(unittest.TestCase):
                 create_master_response.status_code, 201, create_master_response.text
             )
             system_master_data = create_master_response.json()["data"]
-            self.process_ids = [item for item in self.process_ids if item != process["id"]]
+            self.process_ids = [
+                item for item in self.process_ids if item != process["id"]
+            ]
             self.stage_ids = [item for item in self.stage_ids if item != stage["id"]]
         source_version = int(system_master_data["version"])
 
@@ -988,7 +1020,9 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(imported_template["source_type"], "system_master")
         self.assertEqual(imported_template["source_template_name"], "系统母版")
-        self.assertEqual(imported_template["source_system_master_version"], source_version)
+        self.assertEqual(
+            imported_template["source_system_master_version"], source_version
+        )
 
 
 if __name__ == "__main__":
