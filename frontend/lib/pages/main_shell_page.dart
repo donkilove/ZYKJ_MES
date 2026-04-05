@@ -83,11 +83,41 @@ class MainShellPage extends StatefulWidget {
     required this.session,
 
     required this.onLogout,
+
+    this.messageWsServiceFactory,
+    this.authService,
+    this.authzService,
+    this.pageCatalogService,
+    this.messageService,
+    this.userPageBuilder,
   });
 
   final AppSession session;
 
   final VoidCallback onLogout;
+
+  final MessageWsService Function({
+    required String baseUrl,
+    required String accessToken,
+    required WsEventCallback onEvent,
+    required void Function() onDisconnected,
+  })?
+  messageWsServiceFactory;
+
+  final AuthService? authService;
+  final AuthzService? authzService;
+  final PageCatalogService? pageCatalogService;
+  final MessageService? messageService;
+  final Widget Function({
+    required AppSession session,
+    required VoidCallback onLogout,
+    required List<String> visibleTabCodes,
+    required Set<String> capabilityCodes,
+    String? preferredTabCode,
+    String? routePayloadJson,
+    VoidCallback? onVisibilityConfigSaved,
+  })?
+  userPageBuilder;
 
   @override
   State<MainShellPage> createState() => _MainShellPageState();
@@ -95,7 +125,7 @@ class MainShellPage extends StatefulWidget {
 
 class _MainShellPageState extends State<MainShellPage>
     with WidgetsBindingObserver {
-  final AuthService _authService = AuthService();
+  late final AuthService _authService;
   late final AuthzService _authzService;
 
   late final PageCatalogService _pageCatalogService;
@@ -140,9 +170,11 @@ class _MainShellPageState extends State<MainShellPage>
 
     WidgetsBinding.instance.addObserver(this);
 
-    _authzService = AuthzService(widget.session);
-    _pageCatalogService = PageCatalogService(widget.session);
-    _messageService = MessageService(widget.session);
+    _authService = widget.authService ?? AuthService();
+    _authzService = widget.authzService ?? AuthzService(widget.session);
+    _pageCatalogService =
+        widget.pageCatalogService ?? PageCatalogService(widget.session);
+    _messageService = widget.messageService ?? MessageService(widget.session);
 
     _loadCurrentUserAndVisibility();
 
@@ -176,12 +208,20 @@ class _MainShellPageState extends State<MainShellPage>
   }
 
   void _initWs() {
-    _wsService = MessageWsService(
-      baseUrl: widget.session.baseUrl,
-      accessToken: widget.session.accessToken,
-      onEvent: _onWsEvent,
-      onDisconnected: () {},
-    );
+    final factory = widget.messageWsServiceFactory;
+    _wsService = factory != null
+        ? factory(
+            baseUrl: widget.session.baseUrl,
+            accessToken: widget.session.accessToken,
+            onEvent: _onWsEvent,
+            onDisconnected: () {},
+          )
+        : MessageWsService(
+            baseUrl: widget.session.baseUrl,
+            accessToken: widget.session.accessToken,
+            onEvent: _onWsEvent,
+            onDisconnected: () {},
+          );
     _wsService!.connect();
   }
 
@@ -558,26 +598,38 @@ class _MainShellPageState extends State<MainShellPage>
         );
 
       case _userPageCode:
-        return UserPage(
-          session: widget.session,
-
-          onLogout: widget.onLogout,
-
-          visibleTabCodes: _visibleUserTabCodes(),
-
-          capabilityCodes: _capabilityCodesForModule('user'),
-
-          preferredTabCode: _selectedPageCode == _userPageCode
-              ? _preferredTabCode
-              : null,
-          routePayloadJson: _selectedPageCode == _userPageCode
-              ? _preferredRoutePayloadJson
-              : null,
-
-          onVisibilityConfigSaved: () {
-            _handleVisibilityConfigSaved();
-          },
-        );
+        final builder = widget.userPageBuilder;
+        return builder != null
+            ? builder(
+                session: widget.session,
+                onLogout: widget.onLogout,
+                visibleTabCodes: _visibleUserTabCodes(),
+                capabilityCodes: _capabilityCodesForModule('user'),
+                preferredTabCode: _selectedPageCode == _userPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _userPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+                onVisibilityConfigSaved: () {
+                  _handleVisibilityConfigSaved();
+                },
+              )
+            : UserPage(
+                session: widget.session,
+                onLogout: widget.onLogout,
+                visibleTabCodes: _visibleUserTabCodes(),
+                capabilityCodes: _capabilityCodesForModule('user'),
+                preferredTabCode: _selectedPageCode == _userPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _userPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+                onVisibilityConfigSaved: () {
+                  _handleVisibilityConfigSaved();
+                },
+              );
 
       case _productPageCode:
         return ProductPage(

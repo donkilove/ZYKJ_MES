@@ -35,12 +35,14 @@ def _ensure_roles(db: Session) -> dict[str, Role]:
         name = item["name"]
         role = roles_by_code.get(code)
         if not role:
-            role = Role(code=code, name=name)
+            role = Role(code=code, name=name, role_type="builtin", is_builtin=True)
             db.add(role)
             db.flush()
             roles_by_code[code] = role
         else:
             role.name = name
+            role.role_type = "builtin"
+            role.is_builtin = True
 
     return roles_by_code
 
@@ -51,7 +53,11 @@ def _ensure_admin_user(
     admin_username: str,
     admin_password: str,
 ) -> tuple[User, bool, bool]:
-    admin_user = db.execute(select(User).where(User.username == admin_username)).scalars().first()
+    admin_user = (
+        db.execute(select(User).where(User.username == admin_username))
+        .scalars()
+        .first()
+    )
     admin_created = False
     role_repaired = False
 

@@ -819,74 +819,97 @@ class _FunctionPermissionConfigPageState
           return a.capabilityName.compareTo(b.capabilityName);
         });
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(
-            title: '功能权限配置',
-            onRefresh: _loading || _saving ? null : _refreshCurrentModule,
-          ),
-          const SizedBox(height: 12),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 260,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedModuleCode,
-                      decoration: const InputDecoration(
-                        labelText: '模块',
-                        border: OutlineInputBorder(),
-                        isDense: true,
+    return Semantics(
+      container: true,
+      label: '功能权限配置主区域',
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CrudPageHeader(
+              title: '功能权限配置',
+              onRefresh: _loading || _saving ? null : _refreshCurrentModule,
+            ),
+            const SizedBox(height: 12),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 260,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _selectedModuleCode,
+                        decoration: const InputDecoration(
+                          labelText: '模块',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _moduleCodes
+                            .map(
+                              (code) => DropdownMenuItem<String>(
+                                value: code,
+                                child: Text(_moduleLabel(code)),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: _saving ? null : _switchModule,
                       ),
-                      items: _moduleCodes
-                          .map(
-                            (code) => DropdownMenuItem<String>(
-                              value: code,
-                              child: Text(_moduleLabel(code)),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: _saving ? null : _switchModule,
                     ),
-                  ),
-                  FilledButton.icon(
-                    onPressed: _saving || !_hasDirty ? null : _save,
-                    icon: const Icon(Icons.save),
-                    label: Text(_saving ? '保存中...' : '保存'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(_message),
-              ),
-            ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth < 1100) {
-                  return Column(
-                    children: [
-                      SizedBox(
-                        height: 220,
-                        child: _buildRoleSelectorCard(role),
+                    Semantics(
+                      container: true,
+                      label: '功能权限配置保存按钮',
+                      button: true,
+                      child: FilledButton.icon(
+                        onPressed: _saving || !_hasDirty ? null : _save,
+                        icon: const Icon(Icons.save),
+                        label: Text(_saving ? '保存中...' : '保存'),
                       ),
-                      const SizedBox(height: 8),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_message.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(_message),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 1100) {
+                    return Column(
+                      children: [
+                        SizedBox(
+                          height: 220,
+                          child: _buildRoleSelectorCard(role),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: _buildCapabilityCard(
+                            role: role,
+                            draft: draft,
+                            readonly: readonly,
+                            capabilityPacks: capabilityPacks,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      SizedBox(width: 340, child: _buildRoleSelectorCard(role)),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _buildCapabilityCard(
                           role: role,
@@ -897,25 +920,11 @@ class _FunctionPermissionConfigPageState
                       ),
                     ],
                   );
-                }
-                return Row(
-                  children: [
-                    SizedBox(width: 340, child: _buildRoleSelectorCard(role)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildCapabilityCard(
-                        role: role,
-                        draft: draft,
-                        readonly: readonly,
-                        capabilityPacks: capabilityPacks,
-                      ),
-                    ),
-                  ],
-                );
-              },
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

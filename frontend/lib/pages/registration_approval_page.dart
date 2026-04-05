@@ -391,6 +391,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                           obscureText: true,
                           decoration: const InputDecoration(
                             labelText: '初始密码',
+                            helperText: '密码规则：至少6位；不能包含连续4位相同字符。',
                             border: OutlineInputBorder(),
                           ),
                           validator: (value) {
@@ -399,6 +400,9 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
                             }
                             if (value.trim().length < 6) {
                               return '密码至少 6 个字符';
+                            }
+                            if (RegExp(r'(.)\1\1\1').hasMatch(value.trim())) {
+                              return '初始密码不能包含连续4位相同字符';
                             }
                             return null;
                           },
@@ -531,8 +535,10 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       },
     );
 
-    accountController.dispose();
-    passwordController.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      accountController.dispose();
+      passwordController.dispose();
+    });
 
     if (approved == true && mounted) {
       setState(() {

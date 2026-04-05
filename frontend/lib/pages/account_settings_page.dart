@@ -806,8 +806,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                       obscureText: true,
                       decoration: const InputDecoration(
                         labelText: '新密码',
-                        helperText:
-                            '密码规则：至少6位；不能与原密码相同；不能包含连续4位相同字符；不能与系统中已有用户密码相同。',
+                        helperText: '密码规则：至少6位；不能包含连续4位相同字符；不能与原密码相同。',
                         helperMaxLines: 3,
                         border: OutlineInputBorder(),
                         isDense: true,
@@ -816,6 +815,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                       validator: (value) {
                         if (value == null || value.length < 6) {
                           return '新密码长度不能少于 6 位';
+                        }
+                        if (RegExp(r'(.)\1\1\1').hasMatch(value)) {
+                          return '新密码不能包含连续4位相同字符';
                         }
                         if (value == _oldPasswordController.text) {
                           return '新密码不能与原密码相同';
@@ -1109,62 +1111,66 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 1080;
           final sideSpacing = isWide ? 20.0 : 0.0;
-          return SingleChildScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CrudPageHeader(title: '个人中心', onRefresh: _loadData),
-                const SizedBox(height: 12),
-                _buildOverviewCard(),
-                const SizedBox(height: 16),
-                if (_message.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.errorContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _message,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onErrorContainer,
+          return Semantics(
+            container: true,
+            label: '个人中心主区域',
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CrudPageHeader(title: '个人中心', onRefresh: _loadData),
+                  const SizedBox(height: 12),
+                  _buildOverviewCard(),
+                  const SizedBox(height: 16),
+                  if (_message.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ),
-                  ),
-                if (isWide)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 5,
-                        child: Column(
-                          children: [
-                            _buildProfileCard(),
-                            if (widget.canViewSession) ...[
-                              const SizedBox(height: 16),
-                              _buildSessionCard(),
-                            ],
-                          ],
+                      child: Text(
+                        _message,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onErrorContainer,
                         ),
                       ),
-                      SizedBox(width: sideSpacing),
-                      Expanded(flex: 4, child: _buildPasswordCard()),
+                    ),
+                  if (isWide)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: Column(
+                            children: [
+                              _buildProfileCard(),
+                              if (widget.canViewSession) ...[
+                                const SizedBox(height: 16),
+                                _buildSessionCard(),
+                              ],
+                            ],
+                          ),
+                        ),
+                        SizedBox(width: sideSpacing),
+                        Expanded(flex: 4, child: _buildPasswordCard()),
+                      ],
+                    )
+                  else ...[
+                    _buildProfileCard(),
+                    if (widget.canViewSession) ...[
+                      const SizedBox(height: 16),
+                      _buildSessionCard(),
                     ],
-                  )
-                else ...[
-                  _buildProfileCard(),
-                  if (widget.canViewSession) ...[
                     const SizedBox(height: 16),
-                    _buildSessionCard(),
+                    _buildPasswordCard(),
                   ],
-                  const SizedBox(height: 16),
-                  _buildPasswordCard(),
                 ],
-              ],
+              ),
             ),
           );
         },

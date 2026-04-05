@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mes_client/services/api_exception.dart';
 import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/craft_models.dart';
 import 'package:mes_client/models/user_models.dart';
@@ -29,6 +30,15 @@ class _FakeUserService extends UserService {
   int? lastListStageId;
   bool? lastListIsOnline;
   bool? lastListIsActive;
+  String? lastExportFormat;
+  Object? listUsersError;
+  Object? listAllRolesError;
+  Object? exportError;
+  UserExportResult exportResult = UserExportResult(
+    filename: 'users.csv',
+    contentType: 'text/csv',
+    contentBase64: 'YQ==',
+  );
 
   @override
   Future<RoleListResult> listRoles({
@@ -36,6 +46,10 @@ class _FakeUserService extends UserService {
     int pageSize = 200,
     String? keyword,
   }) async {
+    final error = listAllRolesError;
+    if (error != null) {
+      throw error;
+    }
     return RoleListResult(
       total: 3,
       items: [
@@ -107,11 +121,20 @@ class _FakeUserService extends UserService {
     bool? isActive,
     bool includeDeleted = false,
   }) async {
+    final error = listUsersError;
+    if (error != null) {
+      throw error;
+    }
     lastListRoleCode = roleCode;
     lastListStageId = stageId;
     lastListIsOnline = isOnline;
     lastListIsActive = isActive;
     return UserListResult(total: initialUsers.length, items: initialUsers);
+  }
+
+  @override
+  Future<RoleListResult> listAllRoles({String? keyword}) {
+    return listRoles(page: 1, pageSize: 200, keyword: keyword);
   }
 
   @override
@@ -181,6 +204,23 @@ class _FakeUserService extends UserService {
   @override
   Future<void> deleteUser({required int userId}) async {
     deleteCalls += 1;
+  }
+
+  @override
+  Future<UserExportResult> exportUsers({
+    String? keyword,
+    String? roleCode,
+    int? stageId,
+    bool? isOnline,
+    bool? isActive,
+    String format = 'csv',
+  }) async {
+    lastExportFormat = format;
+    final error = exportError;
+    if (error != null) {
+      throw error;
+    }
+    return exportResult;
   }
 }
 
@@ -270,6 +310,13 @@ Future<void> _pumpPage(
   bool canResetPassword = true,
   bool canDeleteUser = true,
   bool canExport = true,
+  Future<String?> Function({
+    required String filename,
+    required String contentBase64,
+    required String contentType,
+    required String format,
+  })?
+  saveExportFile,
   VoidCallback? onNavigateToRoleManagement,
   Size surfaceSize = const Size(1920, 1200),
 }) async {
@@ -295,6 +342,7 @@ Future<void> _pumpPage(
           onNavigateToRoleManagement: onNavigateToRoleManagement,
           userService: userService,
           craftService: craftService,
+          saveExportFile: saveExportFile,
         ),
       ),
     ),
@@ -606,6 +654,77 @@ void main() {
       find.byType(EditableText),
     );
     expect(editableTexts.any((item) => item.obscureText), isTrue);
+  });
+
+  testWidgets('用户管理新建弹窗直接展示并校验密码规则', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.text('新建用户'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('不能与系统中已有用户密码相同'), findsNothing);
+    expect(find.text('密码规则：至少6位；不能包含连续4位相同字符。'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'new_user');
+    await tester.enterText(find.byType(TextFormField).at(1), '12345');
+    await tester.tap(find.text('创建'));
+    await tester.pump();
+    expect(find.text('密码至少 6 个字符'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(1), 'aaaaaa');
+    await tester.tap(find.text('创建'));
+    await tester.pump();
+    expect(find.text('密码不能包含连续4位相同字符'), findsOneWidget);
+    expect(userService.createCalls, 0);
+  });
+
+  testWidgets('用户管理重置密码弹窗直接展示并校验密码规则', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 7,
+          username: 'reset_target',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重置密码'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('重置密码：reset_target'), findsOneWidget);
+    expect(find.textContaining('不能与系统中已有用户密码相同'), findsNothing);
+    expect(find.text('密码规则：至少6位；不能包含连续4位相同字符。'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).first, '12345');
+    await tester.tap(find.text('确认重置'));
+    await tester.pump();
+    expect(find.text('密码至少 6 个字符'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).first, 'aaaaaa');
+    await tester.tap(find.text('确认重置'));
+    await tester.pump();
+    expect(find.text('新密码不能包含连续4位相同字符'), findsOneWidget);
+    expect(userService.resetPasswordCalls, 0);
   });
 
   testWidgets('编辑操作员时会携带 stageId 提交', (tester) async {
@@ -939,5 +1058,150 @@ void main() {
     );
 
     expect(find.text('导出用户'), findsNothing);
+  });
+
+  testWidgets('用户管理页 403 时展示无权限提示', (tester) async {
+    final userService = _FakeUserService(initialUsers: const [])
+      ..listAllRolesError = ApiException('禁止访问', 403);
+    final craftService = _FakeCraftService();
+
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.text('当前账号没有用户管理权限，请使用有权限账号登录。'), findsOneWidget);
+  });
+
+  testWidgets('用户管理页 401 时会触发登出回调', (tester) async {
+    final userService = _FakeUserService(initialUsers: const [])
+      ..listAllRolesError = ApiException('登录失效', 401);
+    final craftService = _FakeCraftService();
+    var logoutCalls = 0;
+
+    tester.view.physicalSize = const Size(1920, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: UserManagementPage(
+            session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
+            onLogout: () {
+              logoutCalls += 1;
+            },
+            canCreateUser: true,
+            canEditUser: true,
+            canToggleUser: true,
+            canResetPassword: true,
+            canDeleteUser: true,
+            canExport: true,
+            userService: userService,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(logoutCalls, 1);
+  });
+
+  testWidgets('导出用户成功后提示保存路径', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      saveExportFile:
+          ({
+            required filename,
+            required contentBase64,
+            required contentType,
+            required format,
+          }) async {
+            expect(format, 'csv');
+            return 'C:/exports/$filename';
+          },
+    );
+
+    final exportMenuButton = find.ancestor(
+      of: find.text('导出用户'),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(exportMenuButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导出 CSV').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.lastExportFormat, 'csv');
+    expect(find.text('已导出到 C:/exports/users.csv'), findsOneWidget);
+  });
+
+  testWidgets('导出用户取消保存后提示已取消', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      saveExportFile:
+          ({
+            required filename,
+            required contentBase64,
+            required contentType,
+            required format,
+          }) async => null,
+    );
+
+    final exportMenuButton = find.ancestor(
+      of: find.text('导出用户'),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(exportMenuButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导出 Excel').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.lastExportFormat, 'excel');
+    expect(find.text('已取消导出保存'), findsOneWidget);
+  });
+
+  testWidgets('导出用户失败后提示错误信息', (tester) async {
+    final userService = _FakeUserService(initialUsers: const [])
+      ..exportError = ApiException('导出接口异常', 500);
+    final craftService = _FakeCraftService();
+
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      saveExportFile:
+          ({
+            required filename,
+            required contentBase64,
+            required contentType,
+            required format,
+          }) async => 'C:/exports/$filename',
+    );
+
+    final exportMenuButton = find.ancestor(
+      of: find.text('导出用户'),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(exportMenuButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导出 CSV').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('导出失败：导出接口异常'), findsOneWidget);
   });
 }

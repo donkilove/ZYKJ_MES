@@ -22,9 +22,13 @@ from app.models.process_stage import ProcessStage
 from app.models.registration_request import RegistrationRequest
 from app.models.role import Role
 from app.models.user import User
+from app.models.user_session import UserSession
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.authz_service import get_permission_codes_for_role_codes
-from app.services.role_service import get_role_by_code_case_insensitive, get_roles_by_codes
+from app.services.role_service import (
+    get_role_by_code_case_insensitive,
+    get_roles_by_codes,
+)
 
 
 REG_STATUS_PENDING = "pending"
@@ -32,7 +36,7 @@ REG_STATUS_APPROVED = "approved"
 REG_STATUS_REJECTED = "rejected"
 
 
-def validate_password(password: str, db: Session | None = None, exclude_user_id: int | None = None) -> str | None:
+def validate_password(password: str) -> str | None:
     """校验密码规则，返回错误信息或 None。"""
     if len(password) < 6:
         return "密码长度不能少于6位"
@@ -40,15 +44,6 @@ def validate_password(password: str, db: Session | None = None, exclude_user_id:
     for i in range(len(password) - 3):
         if password[i] == password[i + 1] == password[i + 2] == password[i + 3]:
             return "密码不得包含连续4位相同字符"
-    # 不支持与已有用户相同密码
-    if db is not None:
-        stmt = select(User).where(User.is_deleted.is_(False))
-        if exclude_user_id is not None:
-            stmt = stmt.where(User.id != exclude_user_id)
-        users = db.execute(stmt).scalars().all()
-        for u in users:
-            if verify_password(password, u.password_hash):
-                return "密码不能与系统中已有用户的密码相同"
     return None
 
 
@@ -116,7 +111,9 @@ def query_users(
     return stmt
 
 
-def get_user_by_id(db: Session, user_id: int, *, include_deleted: bool = False) -> User | None:
+def get_user_by_id(
+    db: Session, user_id: int, *, include_deleted: bool = False
+) -> User | None:
     stmt = (
         select(User)
         .options(
@@ -133,15 +130,19 @@ def get_user_by_id(db: Session, user_id: int, *, include_deleted: bool = False) 
 
 def get_active_user_ids_by_role(db: Session, role_code: str) -> list[int]:
     """返回拥有指定角色且处于激活状态的用户 ID 列表"""
-    rows = db.execute(
-        select(User.id)
-        .join(User.roles)
-        .where(
-            Role.code == role_code,
-            User.is_active.is_(True),
-            User.is_deleted.is_(False),
+    rows = (
+        db.execute(
+            select(User.id)
+            .join(User.roles)
+            .where(
+                Role.code == role_code,
+                User.is_active.is_(True),
+                User.is_deleted.is_(False),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -155,13 +156,10 @@ def get_user_by_username(
     normalized = normalize_username(username)
     if not normalized:
         return None
-    stmt = (
-        select(User)
-        .options(
-            selectinload(User.roles),
-            selectinload(User.processes).selectinload(Process.stage),
-            selectinload(User.stage),
-        )
+    stmt = select(User).options(
+        selectinload(User.roles),
+        selectinload(User.processes).selectinload(Process.stage),
+        selectinload(User.stage),
     )
     if case_insensitive:
         stmt = stmt.where(func.lower(User.username) == normalized.lower())
@@ -173,7 +171,11 @@ def get_user_by_username(
 
 
 def list_all_usernames(db: Session) -> list[str]:
-    stmt = select(User.username).where(User.is_deleted.is_(False)).order_by(User.username.asc())
+    stmt = (
+        select(User.username)
+        .where(User.is_deleted.is_(False))
+        .order_by(User.username.asc())
+    )
     usernames = db.execute(stmt).scalars().all()
     return sorted({username for username in usernames if username})
 
@@ -249,7 +251,11 @@ def _resolve_stage(
         return None, "Operator role must be assigned a stage"
     if stage_id is None:
         return None, None
-    stage = db.execute(select(ProcessStage).where(ProcessStage.id == stage_id)).scalars().first()
+    stage = (
+        db.execute(select(ProcessStage).where(ProcessStage.id == stage_id))
+        .scalars()
+        .first()
+    )
     if stage is None:
         return None, "Stage not found"
     if not stage.is_enabled:
@@ -316,7 +322,9 @@ def _pick_highest_priority_role(roles: list[Role]) -> Role | None:
     )
 
 
-def count_active_system_admin_users(db: Session, *, exclude_user_id: int | None = None) -> int:
+def count_active_system_admin_users(
+    db: Session, *, exclude_user_id: int | None = None
+) -> int:
     stmt = (
         select(func.count(User.id))
         .select_from(User)
@@ -451,7 +459,7 @@ def create_user(db: Session, payload: UserCreate) -> tuple[User | None, str | No
     if existing:
         return None, "Username already exists"
 
-    pwd_error = validate_password(payload.password, db=db)
+    pwd_error = validate_password(payload.password)
     if pwd_error:
         return None, pwd_error
 
@@ -489,7 +497,9 @@ def create_user(db: Session, payload: UserCreate) -> tuple[User | None, str | No
     return user, None
 
 
-def get_registration_request_by_id(db: Session, request_id: int) -> RegistrationRequest | None:
+def get_registration_request_by_id(
+    db: Session, request_id: int
+) -> RegistrationRequest | None:
     stmt = select(RegistrationRequest).where(RegistrationRequest.id == request_id)
     return db.execute(stmt).scalars().first()
 
@@ -501,7 +511,9 @@ def get_registration_request_by_account(
     pending_only: bool = False,
 ) -> RegistrationRequest | None:
     normalized = normalize_username(account)
-    stmt = select(RegistrationRequest).where(func.lower(RegistrationRequest.account) == normalized.lower())
+    stmt = select(RegistrationRequest).where(
+        func.lower(RegistrationRequest.account) == normalized.lower()
+    )
     if pending_only:
         stmt = stmt.where(RegistrationRequest.status == REG_STATUS_PENDING)
     stmt = stmt.order_by(RegistrationRequest.id.desc())
@@ -573,10 +585,10 @@ def approve_registration_request(
     if request.status != REG_STATUS_PENDING:
         return None, "Registration request is not pending"
 
-    if not password or len(password.strip()) < 6:
-        return None, "Initial password is required and must be at least 6 characters"
+    if not password:
+        return None, "初始密码不能为空"
 
-    password_error = validate_password(password, db=db)
+    password_error = validate_password(password)
     if password_error:
         return None, password_error
 
@@ -635,14 +647,17 @@ def reject_registration_request(
     request: RegistrationRequest,
     reason: str | None,
     reviewer: User | None,
-) -> RegistrationRequest:
+) -> tuple[RegistrationRequest | None, str | None]:
+    if request.status != REG_STATUS_PENDING:
+        return None, "Registration request is not pending"
+
     request.status = REG_STATUS_REJECTED
     request.rejected_reason = reason.strip() if reason else None
     request.reviewed_by_user_id = reviewer.id if reviewer else None
     request.reviewed_at = _now_utc()
     db.commit()
     db.refresh(request)
-    return request
+    return request, None
 
 
 def update_user(
@@ -661,7 +676,9 @@ def update_user(
         if not account_name:
             return None, "Username is required"
         if account_name.lower() != user.username.lower():
-            operator_role_codes = {role.code for role in operator.roles} if operator else set()
+            operator_role_codes = (
+                {role.code for role in operator.roles} if operator else set()
+            )
             if ROLE_SYSTEM_ADMIN not in operator_role_codes:
                 return None, "Only system administrator can modify username"
             existing = get_user_by_username(db, account_name)
@@ -716,7 +733,12 @@ def update_user(
         user.is_active = payload.is_active
 
     role_code_after = current_role_code
-    if role_code_before == ROLE_SYSTEM_ADMIN and role_code_after != ROLE_SYSTEM_ADMIN and was_active and user.is_active:
+    if (
+        role_code_before == ROLE_SYSTEM_ADMIN
+        and role_code_after != ROLE_SYSTEM_ADMIN
+        and was_active
+        and user.is_active
+    ):
         remaining = count_active_permission_admin_users(db, exclude_user_id=user.id)
         if remaining < 1:
             return None, "必须至少保留一个可进入功能权限配置页面的系统管理员账号"
@@ -752,12 +774,28 @@ def reset_user_password(
     user: User,
     new_password: str,
 ) -> tuple[User | None, str | None]:
-    pwd_error = validate_password(new_password, db=db, exclude_user_id=user.id)
+    pwd_error = validate_password(new_password)
     if pwd_error:
         return None, pwd_error
+    now = _now_utc()
     user.password_hash = get_password_hash(new_password)
     user.must_change_password = True
-    user.password_changed_at = _now_utc()
+    user.password_changed_at = now
+    session_rows = (
+        db.execute(
+            select(UserSession).where(
+                UserSession.user_id == user.id,
+                UserSession.status == "active",
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for session_row in session_rows:
+        session_row.status = "forced_offline"
+        session_row.is_forced_offline = True
+        session_row.logout_time = now
+        session_row.last_active_at = now
     db.commit()
     db.refresh(user)
     return user, None
@@ -772,12 +810,12 @@ def change_user_password(
     confirm_password: str,
 ) -> tuple[bool, str | None]:
     if not verify_password(old_password, user.password_hash):
-        return False, "Original password is incorrect"
+        return False, "原密码不正确"
     if new_password != confirm_password:
-        return False, "New password and confirm password do not match"
+        return False, "新密码与确认密码不一致"
     if old_password == new_password:
-        return False, "New password cannot be the same as original password"
-    pwd_error = validate_password(new_password, db=db, exclude_user_id=user.id)
+        return False, "新密码不能与原密码相同"
+    pwd_error = validate_password(new_password)
     if pwd_error:
         return False, pwd_error
     user.password_hash = get_password_hash(new_password)

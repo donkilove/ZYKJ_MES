@@ -15,11 +15,18 @@ class AuditLogPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     this.userService,
+    this.dateRangePicker,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final UserService? userService;
+  final Future<DateTimeRange?> Function(
+    BuildContext context,
+    DateTime? start,
+    DateTime? end,
+  )?
+  dateRangePicker;
 
   @override
   State<AuditLogPage> createState() => _AuditLogPageState();
@@ -128,15 +135,17 @@ class _AuditLogPageState extends State<AuditLogPage> {
   }
 
   Future<void> _pickDateRange() async {
-    final now = DateTime.now();
-    final range = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: now,
-      initialDateRange: _startTime != null && _endTime != null
-          ? DateTimeRange(start: _startTime!, end: _endTime!)
-          : null,
-    );
+    final picker = widget.dateRangePicker;
+    final range =
+        await (picker?.call(context, _startTime, _endTime) ??
+            showDateRangePicker(
+              context: context,
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now(),
+              initialDateRange: _startTime != null && _endTime != null
+                  ? DateTimeRange(start: _startTime!, end: _endTime!)
+                  : null,
+            ));
     if (range != null) {
       setState(() {
         _startTime = range.start;

@@ -440,12 +440,22 @@ def reject_registration(
         )
 
     account = request_row.account
-    updated = reject_registration_request(
+    updated, error_message = reject_registration_request(
         db,
         request=request_row,
         reason=payload.reason,
         reviewer=current_user,
     )
+    if error_message:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_message,
+        )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reject registration request",
+        )
     write_audit_log(
         db,
         action_code="registration.reject",

@@ -682,6 +682,16 @@ def ensure_role_permission_defaults(db: Session) -> bool:
 
     existing_rows = db.execute(select(RolePermissionGrant)).scalars().all()
     existing_keys = {(row.role_code, row.permission_code) for row in existing_rows}
+    # SessionLocal 关闭了 autoflush，这里要把尚未落库的新授权也纳入幂等去重。
+    existing_keys.update(
+        {
+            (str(row.role_code), str(row.permission_code))
+            for row in db.new
+            if isinstance(row, RolePermissionGrant)
+            and row.role_code
+            and row.permission_code
+        }
+    )
 
     changed = False
     for role_code in role_codes:

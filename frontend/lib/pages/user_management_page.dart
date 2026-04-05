@@ -18,6 +18,14 @@ import '../widgets/unified_list_table_header_style.dart';
 
 enum _UserAction { edit, disable, enable, resetPassword, delete }
 
+typedef UserExportFileSaver =
+    Future<String?> Function({
+      required String filename,
+      required String contentBase64,
+      required String contentType,
+      required String format,
+    });
+
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({
     super.key,
@@ -32,6 +40,7 @@ class UserManagementPage extends StatefulWidget {
     this.onNavigateToRoleManagement,
     this.userService,
     this.craftService,
+    this.saveExportFile,
   });
 
   final AppSession session;
@@ -45,6 +54,7 @@ class UserManagementPage extends StatefulWidget {
   final VoidCallback? onNavigateToRoleManagement;
   final UserService? userService;
   final CraftService? craftService;
+  final UserExportFileSaver? saveExportFile;
 
   @override
   State<UserManagementPage> createState() => _UserManagementPageState();
@@ -185,6 +195,37 @@ class _UserManagementPageState extends State<UserManagementPage> {
           XTypeGroup(label: 'CSV', extensions: ['csv']),
         ];
     }
+  }
+
+  Future<String?> _saveExportFile({
+    required String filename,
+    required String contentBase64,
+    required String contentType,
+    required String format,
+  }) async {
+    final customSaver = widget.saveExportFile;
+    if (customSaver != null) {
+      return customSaver(
+        filename: filename,
+        contentBase64: contentBase64,
+        contentType: contentType,
+        format: format,
+      );
+    }
+    final bytes = base64Decode(contentBase64);
+    final location = await getSaveLocation(
+      suggestedName: filename,
+      acceptedTypeGroups: _exportTypeGroups(format),
+    );
+    if (location == null) {
+      return null;
+    }
+    await XFile.fromData(
+      bytes,
+      mimeType: contentType,
+      name: filename,
+    ).saveTo(location.path);
+    return location.path;
   }
 
   void _startOnlineStatusRefresh() {
@@ -393,13 +434,19 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         TextFormField(
                           controller: passwordController,
                           obscureText: true,
-                          decoration: const InputDecoration(labelText: '密码'),
+                          decoration: const InputDecoration(
+                            labelText: '密码',
+                            helperText: '密码规则：至少6位；不能包含连续4位相同字符。',
+                          ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return '请输入密码';
                             }
                             if (value.length < 6) {
                               return '密码至少 6 个字符';
+                            }
+                            if (RegExp(r'(.)\1\1\1').hasMatch(value)) {
+                              return '密码不能包含连续4位相同字符';
                             }
                             return null;
                           },
@@ -911,11 +958,17 @@ class _UserManagementPageState extends State<UserManagementPage> {
               key: formKey,
               child: TextFormField(
                 controller: passwordController,
-                decoration: const InputDecoration(labelText: '新密码'),
+                decoration: const InputDecoration(
+                  labelText: '新密码',
+                  helperText: '密码规则：至少6位；不能包含连续4位相同字符。',
+                ),
                 obscureText: true,
                 validator: (value) {
                   if (value == null || value.isEmpty) return '请输入新密码';
                   if (value.length < 6) return '密码至少 6 个字符';
+                  if (RegExp(r'(.)\1\1\1').hasMatch(value)) {
+                    return '新密码不能包含连续4位相同字符';
+                  }
                   return null;
                 },
               ),
@@ -979,22 +1032,22 @@ class _UserManagementPageState extends State<UserManagementPage> {
         format: format,
       );
       if (!mounted) return;
-      final bytes = base64Decode(result.contentBase64);
-      final location = await getSaveLocation(
-        suggestedName: result.filename,
-        acceptedTypeGroups: _exportTypeGroups(format),
+      final savedPath = await _saveExportFile(
+        filename: result.filename,
+        contentBase64: result.contentBase64,
+        contentType: result.contentType,
+        format: format,
       );
-      if (location == null || !mounted) return;
-      await XFile.fromData(
-        bytes,
-        mimeType: result.contentType,
-        name: result.filename,
-      ).saveTo(location.path);
-      if (mounted) {
+      if (!mounted) return;
+      if (savedPath == null) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('已导出到 ${location.path}')));
+        ).showSnackBar(const SnackBar(content: Text('已取消导出保存')));
+        return;
       }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已导出到 $savedPath')));
     } catch (error) {
       if (!mounted) return;
       if (_isUnauthorized(error)) {

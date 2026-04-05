@@ -9,10 +9,12 @@ class ForceChangePasswordPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onRequireRelogin,
+    this.userService,
   });
 
   final AppSession session;
   final VoidCallback onRequireRelogin;
+  final UserService? userService;
 
   @override
   State<ForceChangePasswordPage> createState() =>
@@ -32,7 +34,7 @@ class _ForceChangePasswordPageState extends State<ForceChangePasswordPage> {
   @override
   void initState() {
     super.initState();
-    _userService = UserService(widget.session);
+    _userService = widget.userService ?? UserService(widget.session);
   }
 
   @override
@@ -115,11 +117,16 @@ class _ForceChangePasswordPageState extends State<ForceChangePasswordPage> {
                       obscureText: true,
                       decoration: const InputDecoration(
                         labelText: '新密码',
+                        helperText: '密码规则：至少6位；不能包含连续4位相同字符；不能与当前密码相同。',
+                        helperMaxLines: 2,
                         border: OutlineInputBorder(),
                       ),
                       validator: (v) {
                         if (v == null || v.isEmpty) return '请输入新密码';
                         if (v.length < 6) return '密码至少 6 个字符';
+                        if (RegExp(r'(.)\1\1\1').hasMatch(v)) {
+                          return '新密码不能包含连续4位相同字符';
+                        }
                         if (v == _oldPasswordController.text) {
                           return '新密码不能与当前密码相同';
                         }

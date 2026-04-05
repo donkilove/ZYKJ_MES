@@ -255,167 +255,180 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(
-            title: '在线会话',
-            onRefresh: _loadingSessions ? null : () => _loadOnlineSessions(),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: 320,
-                child: TextField(
-                  controller: _sessionKeywordController,
-                  decoration: const InputDecoration(
-                    labelText: '关键词',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadOnlineSessions(page: 1),
-                ),
-              ),
-              OutlinedButton(
-                onPressed: () => _loadOnlineSessions(page: 1),
-                child: const Text('查询'),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+    return Semantics(
+      container: true,
+      label: '登录会话主区域',
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CrudPageHeader(
+              title: '在线会话',
+              onRefresh: _loadingSessions ? null : () => _loadOnlineSessions(),
+            ),
+            const SizedBox(height: 12),
+            Semantics(
+              container: true,
+              label: '登录会话筛选与操作区',
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Checkbox(
-                    value: _allCurrentPageSelected
-                        ? true
-                        : (_someCurrentPageSelected ? null : false),
-                    tristate: true,
-                    onChanged: _hasSelectableSessions
-                        ? _toggleSelectCurrentPage
-                        : null,
+                  SizedBox(
+                    width: 320,
+                    child: TextField(
+                      controller: _sessionKeywordController,
+                      decoration: const InputDecoration(
+                        labelText: '关键词',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onSubmitted: (_) => _loadOnlineSessions(page: 1),
+                    ),
                   ),
-                  const Text('全选当前页'),
+                  OutlinedButton(
+                    onPressed: () => _loadOnlineSessions(page: 1),
+                    child: const Text('查询'),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: _allCurrentPageSelected
+                            ? true
+                            : (_someCurrentPageSelected ? null : false),
+                        tristate: true,
+                        onChanged: _hasSelectableSessions
+                            ? _toggleSelectCurrentPage
+                            : null,
+                      ),
+                      const Text('全选当前页'),
+                    ],
+                  ),
+                  FilledButton(
+                    onPressed:
+                        widget.canForceOffline && _selectedSessionIds.isNotEmpty
+                        ? _forceOfflineBatch
+                        : null,
+                    child: Text('批量强制下线（${_selectedSessionIds.length}）'),
+                  ),
                 ],
               ),
-              FilledButton(
-                onPressed:
-                    widget.canForceOffline && _selectedSessionIds.isNotEmpty
-                    ? _forceOfflineBatch
-                    : null,
-                child: Text('批量强制下线（${_selectedSessionIds.length}）'),
+            ),
+            const SizedBox(height: 12),
+            if (_message.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  _message,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
+            Expanded(
+              child: Semantics(
+                container: true,
+                label: '在线会话列表区域',
+                child: CrudListTableSection(
+                  loading: _loadingSessions,
+                  isEmpty: _onlineSessions.isEmpty,
+                  emptyText: '暂无在线会话',
+                  enableUnifiedHeaderStyle: true,
+                  child: DataTable(
+                    columnSpacing: 16,
+                    dataRowMinHeight: 60,
+                    dataRowMaxHeight: 76,
+                    columns: [
+                      UnifiedListTableHeaderStyle.column(context, '选择'),
+                      UnifiedListTableHeaderStyle.column(context, '用户名'),
+                      UnifiedListTableHeaderStyle.column(context, '角色'),
+                      UnifiedListTableHeaderStyle.column(context, '工段'),
+                      UnifiedListTableHeaderStyle.column(context, '状态'),
+                      UnifiedListTableHeaderStyle.column(context, '登录时间'),
+                      UnifiedListTableHeaderStyle.column(context, '最后活跃'),
+                      UnifiedListTableHeaderStyle.column(context, 'IP 地址'),
+                      UnifiedListTableHeaderStyle.column(context, '终端信息'),
+                      UnifiedListTableHeaderStyle.column(context, '操作'),
+                    ],
+                    rows: _onlineSessions.map((item) {
+                      final checked = _selectedSessionIds.contains(
+                        item.sessionTokenId,
+                      );
+                      final canForceOffline = _canForceOfflineSession(item);
+                      return DataRow(
+                        cells: [
+                          DataCell(
+                            Checkbox(
+                              value: checked,
+                              onChanged: canForceOffline
+                                  ? (value) {
+                                      setState(() {
+                                        if (value ?? false) {
+                                          _selectedSessionIds.add(
+                                            item.sessionTokenId,
+                                          );
+                                        } else {
+                                          _selectedSessionIds.remove(
+                                            item.sessionTokenId,
+                                          );
+                                        }
+                                      });
+                                    }
+                                  : null,
+                            ),
+                          ),
+                          DataCell(Text(item.username)),
+                          DataCell(
+                            Text(
+                              item.roleName?.trim().isNotEmpty == true
+                                  ? item.roleName!
+                                  : '-',
+                            ),
+                          ),
+                          DataCell(Text(item.stageName ?? '-')),
+                          const DataCell(
+                            Text(
+                              '在线',
+                              style: TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          DataCell(Text(_formatDateTime(item.loginTime))),
+                          DataCell(Text(_formatDateTime(item.lastActiveAt))),
+                          DataCell(Text(item.ipAddress ?? '-')),
+                          DataCell(Text(item.terminalInfo ?? '-')),
+                          DataCell(
+                            OutlinedButton(
+                              onPressed: canForceOffline
+                                  ? () =>
+                                        _forceOfflineSingle(item.sessionTokenId)
+                                  : null,
+                              child: const Text('强制下线'),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
             ),
-          Expanded(
-            child: CrudListTableSection(
+            const SizedBox(height: 12),
+            SimplePaginationBar(
+              page: _sessionPage,
+              totalPages: _sessionTotalPages,
+              total: _sessionTotal,
               loading: _loadingSessions,
-              isEmpty: _onlineSessions.isEmpty,
-              emptyText: '暂无在线会话',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columnSpacing: 16,
-                dataRowMinHeight: 60,
-                dataRowMaxHeight: 76,
-                columns: [
-                  UnifiedListTableHeaderStyle.column(context, '选择'),
-                  UnifiedListTableHeaderStyle.column(context, '用户名'),
-                  UnifiedListTableHeaderStyle.column(context, '角色'),
-                  UnifiedListTableHeaderStyle.column(context, '工段'),
-                  UnifiedListTableHeaderStyle.column(context, '状态'),
-                  UnifiedListTableHeaderStyle.column(context, '登录时间'),
-                  UnifiedListTableHeaderStyle.column(context, '最后活跃'),
-                  UnifiedListTableHeaderStyle.column(context, 'IP 地址'),
-                  UnifiedListTableHeaderStyle.column(context, '终端信息'),
-                  UnifiedListTableHeaderStyle.column(context, '操作'),
-                ],
-                rows: _onlineSessions.map((item) {
-                  final checked = _selectedSessionIds.contains(
-                    item.sessionTokenId,
-                  );
-                  final canForceOffline = _canForceOfflineSession(item);
-                  return DataRow(
-                    cells: [
-                      DataCell(
-                        Checkbox(
-                          value: checked,
-                          onChanged: canForceOffline
-                              ? (value) {
-                                  setState(() {
-                                    if (value ?? false) {
-                                      _selectedSessionIds.add(
-                                        item.sessionTokenId,
-                                      );
-                                    } else {
-                                      _selectedSessionIds.remove(
-                                        item.sessionTokenId,
-                                      );
-                                    }
-                                  });
-                                }
-                              : null,
-                        ),
-                      ),
-                      DataCell(Text(item.username)),
-                      DataCell(
-                        Text(
-                          item.roleName?.trim().isNotEmpty == true
-                              ? item.roleName!
-                              : '-',
-                        ),
-                      ),
-                      DataCell(Text(item.stageName ?? '-')),
-                      const DataCell(
-                        Text(
-                          '在线',
-                          style: TextStyle(
-                            color: Colors.green,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      DataCell(Text(_formatDateTime(item.loginTime))),
-                      DataCell(Text(_formatDateTime(item.lastActiveAt))),
-                      DataCell(Text(item.ipAddress ?? '-')),
-                      DataCell(Text(item.terminalInfo ?? '-')),
-                      DataCell(
-                        OutlinedButton(
-                          onPressed: canForceOffline
-                              ? () => _forceOfflineSingle(item.sessionTokenId)
-                              : null,
-                          child: const Text('强制下线'),
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
-              ),
+              onPrevious: () => _loadOnlineSessions(page: _sessionPage - 1),
+              onNext: () => _loadOnlineSessions(page: _sessionPage + 1),
             ),
-          ),
-          const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _sessionPage,
-            totalPages: _sessionTotalPages,
-            total: _sessionTotal,
-            loading: _loadingSessions,
-            onPrevious: () => _loadOnlineSessions(page: _sessionPage - 1),
-            onNext: () => _loadOnlineSessions(page: _sessionPage + 1),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

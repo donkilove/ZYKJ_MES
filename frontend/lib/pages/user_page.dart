@@ -32,6 +32,8 @@ class UserPage extends StatefulWidget {
     this.preferredTabCode,
     this.routePayloadJson,
     this.onVisibilityConfigSaved,
+    this.tabChildBuilder,
+    this.tabPageBuilder,
   });
 
   final AppSession session;
@@ -41,6 +43,8 @@ class UserPage extends StatefulWidget {
   final String? preferredTabCode;
   final String? routePayloadJson;
   final VoidCallback? onVisibilityConfigSaved;
+  final Widget Function(String tabCode)? tabChildBuilder;
+  final Widget Function(String tabCode, Widget child)? tabPageBuilder;
 
   @override
   State<UserPage> createState() => _UserPageState();
@@ -48,6 +52,8 @@ class UserPage extends StatefulWidget {
 
 class _UserPageState extends State<UserPage> {
   int _currentTabIndex = 0;
+
+  String _tabSemanticsLabel(_UserTabItem item) => '${item.title}页签';
 
   @override
   void didUpdateWidget(covariant UserPage oldWidget) {
@@ -112,6 +118,14 @@ class _UserPageState extends State<UserPage> {
       _canViewOnlineSessions &&
       _hasPermission(UserFeaturePermissionCodes.loginSessionForceOffline);
 
+  Widget _buildTabChild(String code, Widget child) {
+    final overridden = widget.tabPageBuilder?.call(code, child);
+    if (overridden != null) {
+      return overridden;
+    }
+    return widget.tabChildBuilder?.call(code) ?? child;
+  }
+
   List<String> _sortedVisibleTabCodes() {
     final visibleSet = widget.visibleTabCodes.toSet();
     visibleSet.add(_accountSettingsTabCode);
@@ -139,20 +153,25 @@ class _UserPageState extends State<UserPage> {
             _UserTabItem(
               code: code,
               title: '用户管理',
-              child: UserManagementPage(
-                session: widget.session,
-                onLogout: widget.onLogout,
-                canCreateUser: _canCreateUser,
-                canEditUser: _canEditUser,
-                canToggleUser: _canToggleUser,
-                canResetPassword: _canResetUserPassword,
-                canDeleteUser: _canDeleteUser,
-                canExport: _canExportUsers,
-                onNavigateToRoleManagement: roleManagementIndex >= 0
-                    ? () {
-                        setState(() => _currentTabIndex = roleManagementIndex);
-                      }
-                    : null,
+              child: _buildTabChild(
+                code,
+                UserManagementPage(
+                  session: widget.session,
+                  onLogout: widget.onLogout,
+                  canCreateUser: _canCreateUser,
+                  canEditUser: _canEditUser,
+                  canToggleUser: _canToggleUser,
+                  canResetPassword: _canResetUserPassword,
+                  canDeleteUser: _canDeleteUser,
+                  canExport: _canExportUsers,
+                  onNavigateToRoleManagement: roleManagementIndex >= 0
+                      ? () {
+                          setState(
+                            () => _currentTabIndex = roleManagementIndex,
+                          );
+                        }
+                      : null,
+                ),
               ),
             ),
           );
@@ -162,11 +181,14 @@ class _UserPageState extends State<UserPage> {
             _UserTabItem(
               code: code,
               title: '注册审批',
-              child: RegistrationApprovalPage(
-                session: widget.session,
-                onLogout: widget.onLogout,
-                canApprove: _canApproveRegistration,
-                canReject: _canRejectRegistration,
+              child: _buildTabChild(
+                code,
+                RegistrationApprovalPage(
+                  session: widget.session,
+                  onLogout: widget.onLogout,
+                  canApprove: _canApproveRegistration,
+                  canReject: _canRejectRegistration,
+                ),
               ),
             ),
           );
@@ -176,13 +198,16 @@ class _UserPageState extends State<UserPage> {
             _UserTabItem(
               code: code,
               title: '角色管理',
-              child: RoleManagementPage(
-                session: widget.session,
-                onLogout: widget.onLogout,
-                canCreateRole: _canCreateRole,
-                canEditRole: _canEditRole,
-                canToggleRole: _canToggleRole,
-                canDeleteRole: _canDeleteRole,
+              child: _buildTabChild(
+                code,
+                RoleManagementPage(
+                  session: widget.session,
+                  onLogout: widget.onLogout,
+                  canCreateRole: _canCreateRole,
+                  canEditRole: _canEditRole,
+                  canToggleRole: _canToggleRole,
+                  canDeleteRole: _canDeleteRole,
+                ),
               ),
             ),
           );
@@ -192,9 +217,12 @@ class _UserPageState extends State<UserPage> {
             _UserTabItem(
               code: code,
               title: '审计日志',
-              child: AuditLogPage(
-                session: widget.session,
-                onLogout: widget.onLogout,
+              child: _buildTabChild(
+                code,
+                AuditLogPage(
+                  session: widget.session,
+                  onLogout: widget.onLogout,
+                ),
               ),
             ),
           );
@@ -204,12 +232,18 @@ class _UserPageState extends State<UserPage> {
             _UserTabItem(
               code: code,
               title: '个人中心',
-              child: AccountSettingsPage(
-                session: widget.session,
-                onLogout: widget.onLogout,
-                canChangePassword: _canChangeMyPassword,
-                canViewSession: _canViewMySession,
-                routePayloadJson: widget.routePayloadJson,
+              child: _buildTabChild(
+                code,
+                AccountSettingsPage(
+                  session: widget.session,
+                  onLogout: widget.onLogout,
+                  canChangePassword: _canChangeMyPassword,
+                  canViewSession: _canViewMySession,
+                  routePayloadJson:
+                      widget.preferredTabCode == _accountSettingsTabCode
+                      ? widget.routePayloadJson
+                      : null,
+                ),
               ),
             ),
           );
@@ -219,11 +253,14 @@ class _UserPageState extends State<UserPage> {
             _UserTabItem(
               code: code,
               title: '登录会话',
-              child: LoginSessionPage(
-                session: widget.session,
-                onLogout: widget.onLogout,
-                canViewOnlineSessions: _canViewOnlineSessions,
-                canForceOffline: _canManageSessions,
+              child: _buildTabChild(
+                code,
+                LoginSessionPage(
+                  session: widget.session,
+                  onLogout: widget.onLogout,
+                  canViewOnlineSessions: _canViewOnlineSessions,
+                  canForceOffline: _canManageSessions,
+                ),
               ),
             ),
           );
@@ -233,14 +270,17 @@ class _UserPageState extends State<UserPage> {
             _UserTabItem(
               code: code,
               title: '功能权限配置',
-              child: FunctionPermissionConfigPage(
-                session: widget.session,
-                onLogout: widget.onLogout,
-                onPermissionsChanged: widget.onVisibilityConfigSaved == null
-                    ? null
-                    : () async {
-                        widget.onVisibilityConfigSaved!();
-                      },
+              child: _buildTabChild(
+                code,
+                FunctionPermissionConfigPage(
+                  session: widget.session,
+                  onLogout: widget.onLogout,
+                  onPermissionsChanged: widget.onVisibilityConfigSaved == null
+                      ? null
+                      : () async {
+                          widget.onVisibilityConfigSaved!();
+                        },
+                ),
               ),
             ),
           );
@@ -293,22 +333,40 @@ class _UserPageState extends State<UserPage> {
                       color: Theme.of(
                         context,
                       ).colorScheme.surfaceContainerHighest,
-                      child: TabBar(
-                        isScrollable: false,
-                        indicatorSize: TabBarIndicatorSize.tab,
-                        labelPadding: EdgeInsets.zero,
-                        tabs: tabs
-                            .map(
-                              (item) => Tab(
-                                child: Text(
-                                  item.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
+                      child: Semantics(
+                        container: true,
+                        label: '用户模块页签栏',
+                        child: TabBar(
+                          isScrollable: false,
+                          indicatorSize: TabBarIndicatorSize.tab,
+                          labelPadding: EdgeInsets.zero,
+                          tabs: tabs
+                              .map(
+                                (item) => Tab(
+                                  child: Semantics(
+                                    container: true,
+                                    label: _tabSemanticsLabel(item),
+                                    button: true,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 6,
+                                      ),
+                                      child: Text(
+                                        item.title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelMedium,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            )
-                            .toList(),
+                              )
+                              .toList(),
+                        ),
                       ),
                     ),
                     Expanded(

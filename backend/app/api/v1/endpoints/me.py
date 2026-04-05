@@ -48,7 +48,9 @@ def change_my_password(
     current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[dict[str, bool]]:
     if payload.new_password != payload.confirm_password:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password and confirm password do not match")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="新密码与确认密码不一致"
+        )
     ok, error = change_user_password(
         db,
         user=current_user,
@@ -57,7 +59,9 @@ def change_my_password(
         confirm_password=payload.confirm_password,
     )
     if not ok:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error or "Failed to change password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error or "修改密码失败"
+        )
 
     sid = None
     try:
@@ -96,11 +100,15 @@ def get_my_session(
     except Exception:
         sid = None
     if not sid:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Current session not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Current session not found"
+        )
 
     row = get_user_current_session(db, session_token_id=sid)
-    if not row or row.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Current session not found")
+    if not row or row.user_id != current_user.id or row.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Current session not found"
+        )
     remaining = max(0, int((row.expires_at - datetime.now(UTC)).total_seconds()))
     return success_response(
         CurrentSessionResult(

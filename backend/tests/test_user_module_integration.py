@@ -1,7 +1,10 @@
+import base64
+from datetime import UTC, datetime, timedelta
 import sys
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
@@ -23,7 +26,11 @@ from app.models.role import Role  # noqa: E402
 from app.models.role_permission_grant import RolePermissionGrant  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.user_session import UserSession  # noqa: E402
-from app.services.user_service import approve_registration_request  # noqa: E402
+from app.core.authz_catalog import PERMISSION_CATALOG  # noqa: E402
+from app.schemas.user import UserUpdate  # noqa: E402
+from app.services.bootstrap_seed_service import seed_initial_data  # noqa: E402
+from app.services.authz_service import ensure_role_permission_defaults  # noqa: E402
+from app.services.user_service import approve_registration_request, update_user  # noqa: E402
 
 
 class UserModuleIntegrationTest(unittest.TestCase):
@@ -41,58 +48,84 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.user_session_id: str | None = None
         self.stage_id: int | None = None
         self.registration_request_id: int | None = None
+        self.extra_role_codes: list[str] = []
+        self.extra_usernames: list[str] = []
+        self.extra_session_ids: list[str] = []
+        self.extra_registration_request_ids: list[int] = []
 
     def tearDown(self) -> None:
         db = SessionLocal()
         try:
-            if self.user_session_id:
+            session_ids = {
+                session_id
+                for session_id in [self.user_session_id, *self.extra_session_ids]
+                if session_id
+            }
+            for session_id in session_ids:
                 db.execute(
                     delete(UserSession).where(
-                        UserSession.session_token_id == self.user_session_id
+                        UserSession.session_token_id == session_id
                     )
                 )
                 db.execute(
-                    delete(LoginLog).where(
-                        LoginLog.session_token_id == self.user_session_id
-                    )
+                    delete(LoginLog).where(LoginLog.session_token_id == session_id)
                 )
-            if self.username:
-                db.execute(
-                    delete(AuditLog).where(AuditLog.target_name == self.username)
-                )
-                db.execute(delete(LoginLog).where(LoginLog.username == self.username))
-                user = (
-                    db.query(User).filter(User.username == self.username).one_or_none()
-                )
+
+            usernames = {
+                username
+                for username in [self.username, *self.extra_usernames]
+                if username
+            }
+            for username in usernames:
+                db.execute(delete(AuditLog).where(AuditLog.target_name == username))
+                db.execute(delete(LoginLog).where(LoginLog.username == username))
+                user = db.query(User).filter(User.username == username).one_or_none()
                 if user is not None:
                     user.roles.clear()
                     db.flush()
                     db.delete(user)
-            if self.role_code:
+
+            role_codes = {
+                role_code
+                for role_code in [self.role_code, *self.extra_role_codes]
+                if role_code
+            }
+            for role_code in role_codes:
                 db.execute(
                     delete(AuthzChangeLogItem).where(
-                        AuthzChangeLogItem.role_code == self.role_code
+                        AuthzChangeLogItem.role_code == role_code
                     )
                 )
                 db.execute(
                     delete(RolePermissionGrant).where(
-                        RolePermissionGrant.role_code == self.role_code
+                        RolePermissionGrant.role_code == role_code
                     )
                 )
-                db.execute(
-                    delete(AuditLog).where(AuditLog.target_name == self.role_code)
-                )
-                role = db.query(Role).filter(Role.code == self.role_code).one_or_none()
+                db.execute(delete(AuditLog).where(AuditLog.target_name == role_code))
+                role = db.query(Role).filter(Role.code == role_code).one_or_none()
                 if role is not None:
                     db.delete(role)
-            if self.registration_request_id is not None:
+
+            registration_request_ids = {
+                request_id
+                for request_id in [
+                    self.registration_request_id,
+                    *self.extra_registration_request_ids,
+                ]
+                if request_id is not None
+            }
+            for request_id in registration_request_ids:
                 db.execute(
                     delete(RegistrationRequest).where(
-                        RegistrationRequest.id == self.registration_request_id
+                        RegistrationRequest.id == request_id
                     )
                 )
             if self.stage_id is not None:
-                stage = db.query(ProcessStage).filter(ProcessStage.id == self.stage_id).one_or_none()
+                stage = (
+                    db.query(ProcessStage)
+                    .filter(ProcessStage.id == self.stage_id)
+                    .one_or_none()
+                )
                 if stage is not None:
                     db.delete(stage)
             db.commit()
@@ -146,6 +179,29 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.user_token = self._login(self.username, "Pwd@123")
         token_payload = decode_access_token(self.user_token)
         self.user_session_id = str(token_payload.get("sid") or "") or None
+
+    def _create_registration_request(
+        self,
+        *,
+        status: str = "pending",
+        rejected_reason: str | None = None,
+    ) -> RegistrationRequest:
+        suffix = str(int(time.time() * 1000) % 100000)
+        request_row = RegistrationRequest(
+            account=f"rg{suffix}",
+            password_hash="mocked-password-hash",
+            status=status,
+            rejected_reason=rejected_reason,
+        )
+        db = SessionLocal()
+        try:
+            db.add(request_row)
+            db.commit()
+            db.refresh(request_row)
+            self.extra_registration_request_ids.append(int(request_row.id))
+            return request_row
+        finally:
+            db.close()
 
     def _create_enabled_stage_without_processes(self) -> int:
         suffix = str(int(time.time() * 1000) % 100000)
@@ -270,6 +326,146 @@ class UserModuleIntegrationTest(unittest.TestCase):
             new_profile_response.status_code, 200, new_profile_response.text
         )
 
+    def test_create_user_rejects_password_with_four_consecutive_identical_chars(
+        self,
+    ) -> None:
+        suffix = str(int(time.time() * 1000) % 100000)
+        self.username = f"pwd4{suffix}"
+
+        response = self.client.post(
+            "/api/v1/users",
+            headers=self._headers(),
+            json={
+                "username": self.username,
+                "password": "Ab1111",
+                "role_code": "production_admin",
+                "is_active": True,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(
+            response.json()["detail"],
+            "密码不得包含连续4位相同字符",
+        )
+
+    def test_create_user_allows_password_matching_existing_user_password(self) -> None:
+        suffix = str(int(time.time() * 1000) % 100000)
+        self.username = f"sp{suffix}"
+
+        response = self.client.post(
+            "/api/v1/users",
+            headers=self._headers(),
+            json={
+                "username": self.username,
+                "password": "Admin@123456",
+                "role_code": "production_admin",
+                "is_active": True,
+            },
+        )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        self.user_id = int(response.json()["data"]["id"])
+
+    def test_users_export_covers_csv_excel_success_and_excel_failure(self) -> None:
+        self._create_role_and_user()
+        assert self.username is not None
+
+        csv_response = self.client.get(
+            f"/api/v1/users/export?keyword={self.username}&format=csv",
+            headers=self._headers(),
+        )
+        self.assertEqual(csv_response.status_code, 200, csv_response.text)
+        csv_data = csv_response.json()["data"]
+        self.assertEqual(csv_data["filename"], "users_export.csv")
+        csv_content = base64.b64decode(csv_data["content_base64"]).decode("utf-8-sig")
+        self.assertIn("用户名", csv_content)
+        self.assertIn(self.username, csv_content)
+
+        excel_response = self.client.get(
+            f"/api/v1/users/export?keyword={self.username}&format=excel",
+            headers=self._headers(),
+        )
+        self.assertEqual(excel_response.status_code, 200, excel_response.text)
+        excel_data = excel_response.json()["data"]
+        self.assertEqual(excel_data["filename"], "users_export.xlsx")
+        self.assertEqual(
+            excel_data["content_type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertTrue(
+            base64.b64decode(excel_data["content_base64"]).startswith(b"PK")
+        )
+
+        with patch("app.api.v1.endpoints.users._build_excel_export", return_value=""):
+            failed_response = self.client.get(
+                f"/api/v1/users/export?keyword={self.username}&format=excel",
+                headers=self._headers(),
+            )
+        self.assertEqual(failed_response.status_code, 500, failed_response.text)
+        self.assertEqual(
+            failed_response.json()["detail"],
+            "Excel export not available (openpyxl not installed)",
+        )
+
+    def test_change_password_keeps_original_password_checks(self) -> None:
+        self._create_role_and_user()
+        assert self.user_token is not None
+
+        wrong_old_password_response = self.client.post(
+            "/api/v1/me/password",
+            headers=self._headers(self.user_token),
+            json={
+                "old_password": "Wrong@123",
+                "new_password": "NewPwd@123",
+                "confirm_password": "NewPwd@123",
+            },
+        )
+        self.assertEqual(
+            wrong_old_password_response.status_code,
+            400,
+            wrong_old_password_response.text,
+        )
+        self.assertEqual(wrong_old_password_response.json()["detail"], "原密码不正确")
+
+        confirm_mismatch_response = self.client.post(
+            "/api/v1/me/password",
+            headers=self._headers(self.user_token),
+            json={
+                "old_password": "Pwd@123",
+                "new_password": "NewPwd@123",
+                "confirm_password": "NewPwd@456",
+            },
+        )
+        self.assertEqual(
+            confirm_mismatch_response.status_code,
+            400,
+            confirm_mismatch_response.text,
+        )
+        self.assertEqual(
+            confirm_mismatch_response.json()["detail"],
+            "新密码与确认密码不一致",
+        )
+
+        same_password_response = self.client.post(
+            "/api/v1/me/password",
+            headers=self._headers(self.user_token),
+            json={
+                "old_password": "Pwd@123",
+                "new_password": "Pwd@123",
+                "confirm_password": "Pwd@123",
+            },
+        )
+        self.assertEqual(
+            same_password_response.status_code,
+            400,
+            same_password_response.text,
+        )
+        self.assertEqual(
+            same_password_response.json()["detail"],
+            "新密码不能与原密码相同",
+        )
+
     def test_update_user_rejects_legacy_password_contract(self) -> None:
         self._create_role_and_user()
         assert self.user_id is not None
@@ -283,6 +479,192 @@ class UserModuleIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 422, response.text)
+
+    def test_user_mutation_negative_matrix_covers_create_update_delete_and_toggle(
+        self,
+    ) -> None:
+        self._create_role_and_user()
+        assert self.username is not None
+        assert self.user_id is not None
+
+        duplicate_create_response = self.client.post(
+            "/api/v1/users",
+            headers=self._headers(),
+            json={
+                "username": self.username,
+                "password": "Pwd@123",
+                "role_code": self.role_code,
+                "is_active": True,
+            },
+        )
+        self.assertEqual(
+            duplicate_create_response.status_code,
+            400,
+            duplicate_create_response.text,
+        )
+        self.assertEqual(
+            duplicate_create_response.json()["detail"], "Username already exists"
+        )
+
+        invalid_role_response = self.client.post(
+            "/api/v1/users",
+            headers=self._headers(),
+            json={
+                "username": f"bad{int(time.time() * 1000) % 100000}",
+                "password": "Pwd@123",
+                "role_code": "missing_role",
+                "is_active": True,
+            },
+        )
+        self.assertEqual(
+            invalid_role_response.status_code, 400, invalid_role_response.text
+        )
+        self.assertEqual(
+            invalid_role_response.json()["detail"],
+            "Role code not found: missing_role",
+        )
+
+        extra_suffix = str(int(time.time() * 1000) % 100000)
+        extra_username = f"ux{extra_suffix}"
+        self.extra_usernames.append(extra_username)
+        second_user_response = self.client.post(
+            "/api/v1/users",
+            headers=self._headers(),
+            json={
+                "username": extra_username,
+                "password": "Pwd@123",
+                "role_code": self.role_code,
+                "is_active": True,
+            },
+        )
+        self.assertEqual(
+            second_user_response.status_code, 201, second_user_response.text
+        )
+        second_user_id = int(second_user_response.json()["data"]["id"])
+
+        duplicate_update_response = self.client.put(
+            f"/api/v1/users/{self.user_id}",
+            headers=self._headers(),
+            json={"username": extra_username},
+        )
+        self.assertEqual(
+            duplicate_update_response.status_code,
+            400,
+            duplicate_update_response.text,
+        )
+        self.assertEqual(
+            duplicate_update_response.json()["detail"], "Username already exists"
+        )
+
+        missing_update_response = self.client.put(
+            "/api/v1/users/999999",
+            headers=self._headers(),
+            json={"remark": "missing user"},
+        )
+        self.assertEqual(
+            missing_update_response.status_code, 404, missing_update_response.text
+        )
+        self.assertEqual(missing_update_response.json()["detail"], "User not found")
+
+        missing_disable_response = self.client.post(
+            "/api/v1/users/999999/disable",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            missing_disable_response.status_code,
+            404,
+            missing_disable_response.text,
+        )
+        self.assertEqual(missing_disable_response.json()["detail"], "User not found")
+
+        missing_delete_response = self.client.delete(
+            "/api/v1/users/999999",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            missing_delete_response.status_code, 404, missing_delete_response.text
+        )
+        self.assertEqual(missing_delete_response.json()["detail"], "User not found")
+
+        delete_response = self.client.delete(
+            f"/api/v1/users/{second_user_id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(delete_response.status_code, 200, delete_response.text)
+
+        enable_deleted_response = self.client.post(
+            f"/api/v1/users/{second_user_id}/enable",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            enable_deleted_response.status_code,
+            400,
+            enable_deleted_response.text,
+        )
+        self.assertEqual(
+            enable_deleted_response.json()["detail"],
+            "Deleted user cannot be enabled",
+        )
+
+    def test_system_admin_guardrails_block_disabling_last_permission_admin(
+        self,
+    ) -> None:
+        db = SessionLocal()
+        try:
+            admin_user = db.query(User).filter(User.username == "admin").one()
+            admin_user_id = int(admin_user.id)
+            other_admins = (
+                db.query(User)
+                .join(User.roles)
+                .filter(Role.code == "system_admin", User.id != admin_user_id)
+                .all()
+            )
+            original_states = {
+                int(user.id): bool(user.is_active) for user in other_admins
+            }
+            for user in other_admins:
+                user.is_active = False
+            db.commit()
+        finally:
+            db.close()
+
+        try:
+            response = self.client.post(
+                f"/api/v1/users/{admin_user_id}/disable",
+                headers=self._headers(),
+            )
+            self.assertEqual(response.status_code, 400, response.text)
+            self.assertEqual(
+                response.json()["detail"],
+                "必须至少保留一个可进入功能权限配置页面的系统管理员账号",
+            )
+        finally:
+            restore_db = SessionLocal()
+            try:
+                for user_id, is_active in original_states.items():
+                    restore_user = (
+                        restore_db.query(User).filter(User.id == user_id).one()
+                    )
+                    restore_user.is_active = is_active
+                restore_db.commit()
+            finally:
+                restore_db.close()
+
+    def test_me_session_returns_404_when_token_sid_is_missing(self) -> None:
+        self._create_role_and_user()
+        assert self.user_token is not None
+
+        with patch(
+            "app.api.v1.endpoints.me.decode_access_token",
+            return_value={"sub": str(self.user_id)},
+        ):
+            response = self.client.get(
+                "/api/v1/me/session",
+                headers=self._headers(self.user_token),
+            )
+
+        self.assertEqual(response.status_code, 404, response.text)
+        self.assertEqual(response.json()["detail"], "Current session not found")
 
     def test_operator_user_flows_accept_stage_without_enabled_processes(self) -> None:
         stage_id = self._create_enabled_stage_without_processes()
@@ -451,6 +833,373 @@ class UserModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(restore_response.status_code, 200, restore_response.text)
 
+    def test_seed_initial_data_repairs_builtin_role_metadata(self) -> None:
+        db = SessionLocal()
+        try:
+            role = (
+                db.query(Role)
+                .filter(Role.code == "maintenance_staff", Role.is_deleted.is_(False))
+                .one()
+            )
+            role.role_type = "custom"
+            role.is_builtin = False
+            db.commit()
+
+            seed_initial_data(
+                db,
+                admin_username="admin",
+                admin_password="Admin@123456",
+            )
+
+            db.refresh(role)
+            self.assertEqual(role.role_type, "builtin")
+            self.assertTrue(role.is_builtin)
+        finally:
+            db.close()
+
+    def test_role_permission_defaults_skip_pending_duplicate_grants(self) -> None:
+        suffix = str(time.time_ns())
+        role_code = f"authz_idempotent_{suffix}"
+        self.extra_role_codes.append(role_code)
+        permission_code = PERMISSION_CATALOG[0].permission_code
+
+        db = SessionLocal()
+        try:
+            role = Role(
+                code=role_code,
+                name=f"幂等角色{suffix}",
+                role_type="custom",
+                is_builtin=False,
+                is_enabled=True,
+                is_deleted=False,
+            )
+            db.add(role)
+            db.commit()
+
+            db.add(
+                RolePermissionGrant(
+                    role_code=role_code,
+                    permission_code=permission_code,
+                    granted=False,
+                )
+            )
+
+            changed = ensure_role_permission_defaults(db)
+
+            self.assertTrue(changed)
+            db.commit()
+            persisted_count = (
+                db.query(RolePermissionGrant)
+                .filter(
+                    RolePermissionGrant.role_code == role_code,
+                    RolePermissionGrant.permission_code == permission_code,
+                )
+                .count()
+            )
+            self.assertEqual(persisted_count, 1)
+        finally:
+            db.close()
+
+    def test_register_requests_support_list_detail_reject_and_pending_guard(
+        self,
+    ) -> None:
+        request_row = self._create_registration_request()
+
+        list_response = self.client.get(
+            f"/api/v1/auth/register-requests?keyword={request_row.account}&status=pending",
+            headers=self._headers(),
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        self.assertEqual(list_response.json()["data"]["total"], 1)
+        self.assertEqual(
+            list_response.json()["data"]["items"][0]["id"],
+            int(request_row.id),
+        )
+
+        detail_response = self.client.get(
+            f"/api/v1/auth/register-requests/{request_row.id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        self.assertEqual(detail_response.json()["data"]["status"], "pending")
+
+        reject_response = self.client.post(
+            f"/api/v1/auth/register-requests/{request_row.id}/reject",
+            headers=self._headers(),
+            json={"reason": "资料不完整"},
+        )
+        self.assertEqual(reject_response.status_code, 200, reject_response.text)
+        reject_data = reject_response.json()["data"]
+        self.assertEqual(reject_data["status"], "rejected")
+        self.assertEqual(reject_data["rejected_reason"], "资料不完整")
+
+        rejected_detail_response = self.client.get(
+            f"/api/v1/auth/register-requests/{request_row.id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            rejected_detail_response.status_code,
+            200,
+            rejected_detail_response.text,
+        )
+        self.assertEqual(
+            rejected_detail_response.json()["data"]["status"],
+            "rejected",
+        )
+
+        rejected_list_response = self.client.get(
+            f"/api/v1/auth/register-requests?keyword={request_row.account}&status=rejected",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            rejected_list_response.status_code,
+            200,
+            rejected_list_response.text,
+        )
+        self.assertEqual(rejected_list_response.json()["data"]["total"], 1)
+
+        second_reject_response = self.client.post(
+            f"/api/v1/auth/register-requests/{request_row.id}/reject",
+            headers=self._headers(),
+            json={"reason": "重复驳回"},
+        )
+        self.assertEqual(
+            second_reject_response.status_code,
+            400,
+            second_reject_response.text,
+        )
+        self.assertEqual(
+            second_reject_response.json()["detail"],
+            "Registration request is not pending",
+        )
+
+    def test_register_request_approve_negative_branches_cover_404_pending_and_conflict(
+        self,
+    ) -> None:
+        missing_response = self.client.post(
+            "/api/v1/auth/register-requests/999999/approve",
+            headers=self._headers(),
+            json={
+                "account": "missing1",
+                "password": "Pwd@123",
+                "role_code": "production_admin",
+                "stage_id": None,
+            },
+        )
+        self.assertEqual(missing_response.status_code, 404, missing_response.text)
+        self.assertEqual(
+            missing_response.json()["detail"], "Registration request not found"
+        )
+
+        non_pending_request = self._create_registration_request(status="approved")
+        non_pending_response = self.client.post(
+            f"/api/v1/auth/register-requests/{non_pending_request.id}/approve",
+            headers=self._headers(),
+            json={
+                "account": non_pending_request.account,
+                "password": "Pwd@123",
+                "role_code": "production_admin",
+                "stage_id": None,
+            },
+        )
+        self.assertEqual(
+            non_pending_response.status_code, 400, non_pending_response.text
+        )
+        self.assertEqual(
+            non_pending_response.json()["detail"],
+            "Registration request is not pending",
+        )
+
+        conflict_request = self._create_registration_request()
+        self._create_role_and_user()
+        assert self.username is not None
+        conflict_response = self.client.post(
+            f"/api/v1/auth/register-requests/{conflict_request.id}/approve",
+            headers=self._headers(),
+            json={
+                "account": self.username,
+                "password": "Pwd@123",
+                "role_code": self.role_code,
+                "stage_id": None,
+            },
+        )
+        self.assertEqual(conflict_response.status_code, 400, conflict_response.text)
+        self.assertEqual(conflict_response.json()["detail"], "Username already exists")
+
+    def test_authz_capability_pack_batch_apply_and_revision_conflict(self) -> None:
+        self._create_role_and_user()
+        assert self.role_code is not None
+
+        catalog_response = self.client.get(
+            "/api/v1/authz/capability-packs/catalog?module=user",
+            headers=self._headers(),
+        )
+        self.assertEqual(catalog_response.status_code, 200, catalog_response.text)
+        module_revision = int(catalog_response.json()["data"]["module_revision"])
+
+        apply_response = self.client.put(
+            "/api/v1/authz/capability-packs/batch-apply",
+            headers=self._headers(),
+            json={
+                "module_code": "user",
+                "expected_revision": module_revision,
+                "remark": "批量配置注册审批能力",
+                "role_items": [
+                    {
+                        "role_code": self.role_code,
+                        "module_enabled": True,
+                        "capability_codes": [
+                            "feature.user.registration_approval.reject"
+                        ],
+                    }
+                ],
+            },
+        )
+        self.assertEqual(apply_response.status_code, 200, apply_response.text)
+        role_result = apply_response.json()["data"]["role_results"][0]
+        self.assertEqual(role_result["role_code"], self.role_code)
+        self.assertGreaterEqual(int(role_result["updated_count"]), 1)
+        self.assertIn(
+            "feature.user.registration_approval.reject",
+            role_result["after_capability_codes"],
+        )
+        self.assertIn(
+            "feature.user.registration_approval.view",
+            role_result["effective_capability_codes"],
+        )
+
+        effective_response = self.client.get(
+            f"/api/v1/authz/capability-packs/effective?role_code={self.role_code}&module=user",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            effective_response.status_code,
+            200,
+            effective_response.text,
+        )
+        effective_data = effective_response.json()["data"]
+        self.assertIn(
+            "feature.user.registration_approval.reject",
+            effective_data["effective_capability_codes"],
+        )
+
+        conflict_response = self.client.put(
+            "/api/v1/authz/capability-packs/batch-apply",
+            headers=self._headers(),
+            json={
+                "module_code": "user",
+                "expected_revision": module_revision,
+                "remark": "使用过期版本号重放",
+                "role_items": [
+                    {
+                        "role_code": self.role_code,
+                        "module_enabled": True,
+                        "capability_codes": [
+                            "feature.user.registration_approval.reject"
+                        ],
+                    }
+                ],
+            },
+        )
+        self.assertEqual(conflict_response.status_code, 409, conflict_response.text)
+        self.assertIn("authz revision conflict", conflict_response.json()["detail"])
+
+    def test_sessions_batch_force_offline_updates_session_status(self) -> None:
+        self._create_role_and_user()
+        assert self.user_session_id is not None
+
+        response = self.client.post(
+            "/api/v1/sessions/force-offline/batch",
+            headers=self._headers(),
+            json={"session_token_ids": [self.user_session_id]},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["data"]["affected"], 1)
+
+        db = SessionLocal()
+        try:
+            session_row = (
+                db.query(UserSession)
+                .filter(UserSession.session_token_id == self.user_session_id)
+                .one_or_none()
+            )
+            self.assertIsNotNone(session_row)
+            assert session_row is not None
+            self.assertEqual(session_row.status, "forced_offline")
+        finally:
+            db.close()
+
+        profile_response = self.client.get(
+            "/api/v1/me/profile",
+            headers=self._headers(self.user_token),
+        )
+        self.assertEqual(profile_response.status_code, 401, profile_response.text)
+
+    def test_sessions_batch_force_offline_denies_user_without_permission(self) -> None:
+        self._create_role_and_user()
+        assert self.user_token is not None
+        assert self.user_session_id is not None
+
+        response = self.client.post(
+            "/api/v1/sessions/force-offline/batch",
+            headers=self._headers(self.user_token),
+            json={"session_token_ids": [self.user_session_id]},
+        )
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(response.json()["detail"], "Access denied")
+
+    def test_sessions_force_offline_boundary_cases_cover_missing_and_mixed_batch(
+        self,
+    ) -> None:
+        self._create_role_and_user()
+        assert self.user_session_id is not None
+
+        missing_single_response = self.client.post(
+            "/api/v1/sessions/force-offline",
+            headers=self._headers(),
+            json={"session_token_id": "missing-session"},
+        )
+        self.assertEqual(
+            missing_single_response.status_code,
+            404,
+            missing_single_response.text,
+        )
+        self.assertEqual(
+            missing_single_response.json()["detail"], "Online session not found"
+        )
+
+        empty_batch_response = self.client.post(
+            "/api/v1/sessions/force-offline/batch",
+            headers=self._headers(),
+            json={"session_token_ids": []},
+        )
+        self.assertEqual(
+            empty_batch_response.status_code, 422, empty_batch_response.text
+        )
+
+        mixed_batch_response = self.client.post(
+            "/api/v1/sessions/force-offline/batch",
+            headers=self._headers(),
+            json={"session_token_ids": [self.user_session_id, "missing-session"]},
+        )
+        self.assertEqual(
+            mixed_batch_response.status_code, 200, mixed_batch_response.text
+        )
+        self.assertEqual(mixed_batch_response.json()["data"]["affected"], 1)
+
+    def test_delete_role_blocks_when_active_users_are_bound(self) -> None:
+        self._create_role_and_user()
+        assert self.role_id is not None
+
+        response = self.client.delete(
+            f"/api/v1/roles/{self.role_id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(
+            response.json()["detail"], "Role has bound users and cannot be deleted"
+        )
+
     def test_user_module_admin_endpoints_cover_core_chains(self) -> None:
         self._create_role_and_user()
         assert self.role_id is not None
@@ -583,6 +1332,491 @@ class UserModuleIntegrationTest(unittest.TestCase):
         audit_items = audit_response.json()["data"]["items"]
         self.assertTrue(
             any(item["target_id"] == self.user_session_id for item in audit_items)
+        )
+
+    def test_auth_bootstrap_accounts_me_and_logout_cover_contracts(self) -> None:
+        self._create_role_and_user()
+        assert self.username is not None
+        assert self.user_token is not None
+
+        accounts_response = self.client.get("/api/v1/auth/accounts")
+        self.assertEqual(accounts_response.status_code, 200, accounts_response.text)
+        self.assertIn(self.username, accounts_response.json()["data"]["accounts"])
+
+        me_response = self.client.get(
+            "/api/v1/auth/me",
+            headers=self._headers(self.user_token),
+        )
+        self.assertEqual(me_response.status_code, 200, me_response.text)
+        me_data = me_response.json()["data"]
+        self.assertEqual(me_data["username"], self.username)
+        self.assertIsNone(me_data["stage_id"])
+
+        logout_response = self.client.post(
+            "/api/v1/auth/logout",
+            headers=self._headers(self.user_token),
+        )
+        self.assertEqual(logout_response.status_code, 200, logout_response.text)
+        self.assertTrue(logout_response.json()["data"]["logged_out"])
+
+        profile_response = self.client.get(
+            "/api/v1/me/profile",
+            headers=self._headers(self.user_token),
+        )
+        self.assertEqual(profile_response.status_code, 401, profile_response.text)
+
+        db = SessionLocal()
+        try:
+            admin_user = db.query(User).filter(User.username == "admin").one()
+            admin_user.roles.clear()
+            admin_user.is_deleted = True
+            admin_user.deleted_at = datetime.now(UTC)
+            db.commit()
+        finally:
+            db.close()
+
+        bootstrap_response = self.client.post("/api/v1/auth/bootstrap-admin")
+        self.assertEqual(bootstrap_response.status_code, 200, bootstrap_response.text)
+        bootstrap_data = bootstrap_response.json()["data"]
+        self.assertEqual(bootstrap_data["username"], "admin")
+        self.assertFalse(bootstrap_data["created"])
+        self.assertTrue(bootstrap_data["role_repaired"])
+
+        restored_admin_token = self._login("admin", "Admin@123456")
+        restored_me_response = self.client.get(
+            "/api/v1/auth/me",
+            headers=self._headers(restored_admin_token),
+        )
+        self.assertEqual(
+            restored_me_response.status_code, 200, restored_me_response.text
+        )
+        self.assertEqual(restored_me_response.json()["data"]["username"], "admin")
+
+    def test_user_guardrails_reset_password_and_export_filters(self) -> None:
+        self._create_role_and_user()
+        assert self.role_code is not None
+        assert self.user_id is not None
+        assert self.username is not None
+        assert self.user_token is not None
+
+        reset_password = f"Reset@{int(time.time() * 1000) % 100000}Aa"
+        reset_response = self.client.post(
+            f"/api/v1/users/{self.user_id}/reset-password",
+            headers=self._headers(),
+            json={"password": reset_password},
+        )
+        self.assertEqual(reset_response.status_code, 200, reset_response.text)
+        self.assertTrue(reset_response.json()["data"]["must_change_password"])
+
+        old_profile_response = self.client.get(
+            "/api/v1/me/profile",
+            headers=self._headers(self.user_token),
+        )
+        self.assertEqual(
+            old_profile_response.status_code, 401, old_profile_response.text
+        )
+
+        relogin_token = self._login(self.username, reset_password)
+        relogin_profile_response = self.client.get(
+            "/api/v1/me/profile",
+            headers=self._headers(relogin_token),
+        )
+        self.assertEqual(
+            relogin_profile_response.status_code,
+            200,
+            relogin_profile_response.text,
+        )
+
+        db = SessionLocal()
+        try:
+            operator = db.query(User).filter(User.id == self.user_id).one()
+            admin_user = db.query(User).filter(User.username == "admin").one()
+            _, rename_error = update_user(
+                db,
+                user=admin_user,
+                payload=UserUpdate(username="adminx"),
+                operator=operator,
+            )
+            self.assertEqual(
+                rename_error, "Only system administrator can modify username"
+            )
+            db.rollback()
+        finally:
+            db.close()
+
+        admin_me_response = self.client.get(
+            "/api/v1/auth/me",
+            headers=self._headers(),
+        )
+        self.assertEqual(admin_me_response.status_code, 200, admin_me_response.text)
+        admin_delete_response = self.client.delete(
+            f"/api/v1/users/{admin_me_response.json()['data']['id']}",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            admin_delete_response.status_code, 400, admin_delete_response.text
+        )
+        self.assertEqual(
+            admin_delete_response.json()["detail"],
+            "Cannot delete current login user",
+        )
+
+        original_states: dict[int, bool] = {}
+        guardrail_db = SessionLocal()
+        try:
+            admin_user = guardrail_db.query(User).filter(User.username == "admin").one()
+            admin_user_id = int(admin_user.id)
+            other_admins = (
+                guardrail_db.query(User)
+                .join(User.roles)
+                .filter(Role.code == "system_admin", User.id != admin_user_id)
+                .all()
+            )
+            original_states = {
+                int(user.id): bool(user.is_active) for user in other_admins
+            }
+            for user in other_admins:
+                user.is_active = False
+            guardrail_db.commit()
+
+            _, role_error = update_user(
+                guardrail_db,
+                user=admin_user,
+                payload=UserUpdate(role_code="production_admin"),
+                operator=admin_user,
+            )
+            self.assertEqual(
+                role_error,
+                "必须至少保留一个可进入功能权限配置页面的系统管理员账号",
+            )
+            guardrail_db.rollback()
+        finally:
+            guardrail_db.close()
+
+        restore_db = SessionLocal()
+        try:
+            for user_id, is_active in original_states.items():
+                restore_user = restore_db.query(User).filter(User.id == user_id).one()
+                restore_user.is_active = is_active
+            restore_db.commit()
+        finally:
+            restore_db.close()
+
+        shared_keyword = self.username[:-1]
+        extra_username = f"{shared_keyword}x"
+        self.extra_usernames.append(extra_username)
+        inactive_response = self.client.post(
+            "/api/v1/users",
+            headers=self._headers(),
+            json={
+                "username": extra_username,
+                "password": "Pwd@123",
+                "role_code": self.role_code,
+                "is_active": False,
+            },
+        )
+        self.assertEqual(inactive_response.status_code, 201, inactive_response.text)
+
+        list_response = self.client.get(
+            f"/api/v1/users?keyword={shared_keyword}&role_code={self.role_code}&is_active=true",
+            headers=self._headers(),
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        listed_usernames = [
+            item["username"] for item in list_response.json()["data"]["items"]
+        ]
+        self.assertIn(self.username, listed_usernames)
+        self.assertNotIn(extra_username, listed_usernames)
+
+        export_response = self.client.get(
+            f"/api/v1/users/export?keyword={shared_keyword}&role_code={self.role_code}&is_active=true&format=csv",
+            headers=self._headers(),
+        )
+        self.assertEqual(export_response.status_code, 200, export_response.text)
+        export_csv = base64.b64decode(
+            export_response.json()["data"]["content_base64"]
+        ).decode("utf-8-sig")
+        self.assertIn(self.username, export_csv)
+        self.assertNotIn(extra_username, export_csv)
+
+    def test_authz_catalog_matrix_hierarchy_and_legacy_entries(self) -> None:
+        self._create_role_and_user()
+        assert self.role_code is not None
+
+        catalog_response = self.client.get(
+            "/api/v1/authz/permissions/catalog?module=user",
+            headers=self._headers(),
+        )
+        self.assertEqual(catalog_response.status_code, 200, catalog_response.text)
+        catalog_items = catalog_response.json()["data"]["items"]
+        self.assertTrue(
+            any(
+                item["permission_code"] == "page.account_settings.view"
+                for item in catalog_items
+            )
+        )
+
+        matrix_response = self.client.get(
+            "/api/v1/authz/role-permissions/matrix?module=user",
+            headers=self._headers(),
+        )
+        self.assertEqual(matrix_response.status_code, 200, matrix_response.text)
+        self.assertEqual(matrix_response.json()["data"]["module_code"], "user")
+
+        matrix_preview_response = self.client.put(
+            "/api/v1/authz/role-permissions/matrix",
+            headers=self._headers(),
+            json={
+                "module_code": "user",
+                "dry_run": True,
+                "role_items": [
+                    {
+                        "role_code": self.role_code,
+                        "granted_permission_codes": ["page.account_settings.view"],
+                    }
+                ],
+            },
+        )
+        self.assertEqual(
+            matrix_preview_response.status_code,
+            200,
+            matrix_preview_response.text,
+        )
+        self.assertTrue(matrix_preview_response.json()["data"]["dry_run"])
+
+        matrix_legacy_response = self.client.put(
+            "/api/v1/authz/role-permissions/matrix",
+            headers=self._headers(),
+            json={
+                "module_code": "user",
+                "dry_run": False,
+                "role_items": [],
+            },
+        )
+        self.assertEqual(
+            matrix_legacy_response.status_code,
+            410,
+            matrix_legacy_response.text,
+        )
+
+        hierarchy_catalog_response = self.client.get(
+            "/api/v1/authz/hierarchy/catalog?module=user",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            hierarchy_catalog_response.status_code,
+            200,
+            hierarchy_catalog_response.text,
+        )
+        self.assertEqual(
+            hierarchy_catalog_response.json()["data"]["module_code"], "user"
+        )
+
+        hierarchy_role_config_response = self.client.get(
+            f"/api/v1/authz/hierarchy/role-config?role_code={self.role_code}&module=user",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            hierarchy_role_config_response.status_code,
+            200,
+            hierarchy_role_config_response.text,
+        )
+        self.assertEqual(
+            hierarchy_role_config_response.json()["data"]["role_code"], self.role_code
+        )
+
+        hierarchy_preview_response = self.client.put(
+            f"/api/v1/authz/hierarchy/role-config/{self.role_code}",
+            headers=self._headers(),
+            json={
+                "module_code": "user",
+                "module_enabled": True,
+                "page_permission_codes": ["page.account_settings.view"],
+                "feature_permission_codes": [
+                    "feature.user.account_settings.profile_view"
+                ],
+                "dry_run": True,
+            },
+        )
+        self.assertEqual(
+            hierarchy_preview_response.status_code,
+            200,
+            hierarchy_preview_response.text,
+        )
+        self.assertTrue(hierarchy_preview_response.json()["data"]["dry_run"])
+
+        hierarchy_legacy_response = self.client.put(
+            f"/api/v1/authz/hierarchy/role-config/{self.role_code}",
+            headers=self._headers(),
+            json={
+                "module_code": "user",
+                "module_enabled": True,
+                "page_permission_codes": [],
+                "feature_permission_codes": [],
+                "dry_run": False,
+            },
+        )
+        self.assertEqual(
+            hierarchy_legacy_response.status_code,
+            410,
+            hierarchy_legacy_response.text,
+        )
+
+    def test_sessions_filters_and_me_session_foreign_or_expired(self) -> None:
+        self._create_role_and_user()
+        assert self.user_id is not None
+        assert self.username is not None
+        assert self.user_token is not None
+        assert self.user_session_id is not None
+        assert self.role_code is not None
+
+        failed_login_response = self.client.post(
+            "/api/v1/auth/login",
+            data={"username": self.username, "password": "Wrong@123"},
+        )
+        self.assertEqual(
+            failed_login_response.status_code, 401, failed_login_response.text
+        )
+
+        success_log_response = self.client.get(
+            f"/api/v1/sessions/login-logs?username={self.username}&success=true",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            success_log_response.status_code, 200, success_log_response.text
+        )
+        self.assertTrue(
+            any(
+                item["success"] is True
+                and item["session_token_id"] == self.user_session_id
+                for item in success_log_response.json()["data"]["items"]
+            )
+        )
+
+        failed_log_response = self.client.get(
+            f"/api/v1/sessions/login-logs?username={self.username}&success=false",
+            headers=self._headers(),
+        )
+        self.assertEqual(failed_log_response.status_code, 200, failed_log_response.text)
+        self.assertTrue(
+            any(
+                item["success"] is False
+                and item["failure_reason"] == "Incorrect username or password"
+                for item in failed_log_response.json()["data"]["items"]
+            )
+        )
+
+        active_online_response = self.client.get(
+            f"/api/v1/sessions/online?keyword={self.username}&status_filter=active",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            active_online_response.status_code,
+            200,
+            active_online_response.text,
+        )
+        self.assertTrue(
+            any(
+                item["session_token_id"] == self.user_session_id
+                for item in active_online_response.json()["data"]["items"]
+            )
+        )
+
+        force_offline_response = self.client.post(
+            "/api/v1/sessions/force-offline",
+            headers=self._headers(),
+            json={"session_token_id": self.user_session_id},
+        )
+        self.assertEqual(
+            force_offline_response.status_code, 200, force_offline_response.text
+        )
+
+        offline_online_response = self.client.get(
+            f"/api/v1/sessions/online?keyword={self.username}&status_filter=offline",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            offline_online_response.status_code,
+            200,
+            offline_online_response.text,
+        )
+        offline_item = next(
+            item
+            for item in offline_online_response.json()["data"]["items"]
+            if item["session_token_id"] == self.user_session_id
+        )
+        self.assertEqual(offline_item["status"], "forced_offline")
+
+        foreign_username = f"f{int(time.time() * 1000) % 100000}"
+        self.extra_usernames.append(foreign_username)
+        foreign_user_response = self.client.post(
+            "/api/v1/users",
+            headers=self._headers(),
+            json={
+                "username": foreign_username,
+                "password": "Pwd@123",
+                "role_code": self.role_code,
+                "is_active": True,
+            },
+        )
+        self.assertEqual(
+            foreign_user_response.status_code, 201, foreign_user_response.text
+        )
+        foreign_token = self._login(foreign_username, "Pwd@123")
+        foreign_sid = str(decode_access_token(foreign_token).get("sid") or "")
+        self.extra_session_ids.append(foreign_sid)
+
+        refreshed_token = self._login(self.username, "Pwd@123")
+        refreshed_sid = str(decode_access_token(refreshed_token).get("sid") or "")
+        if refreshed_sid:
+            self.extra_session_ids.append(refreshed_sid)
+
+        with patch(
+            "app.api.v1.endpoints.me.decode_access_token",
+            return_value={"sub": str(self.user_id), "sid": foreign_sid},
+        ):
+            foreign_session_response = self.client.get(
+                "/api/v1/me/session",
+                headers=self._headers(refreshed_token),
+            )
+        self.assertEqual(
+            foreign_session_response.status_code,
+            404,
+            foreign_session_response.text,
+        )
+        self.assertEqual(
+            foreign_session_response.json()["detail"], "Current session not found"
+        )
+
+        db = SessionLocal()
+        try:
+            session_row = (
+                db.query(UserSession)
+                .filter(UserSession.session_token_id == refreshed_sid)
+                .one()
+            )
+            session_row.status = "active"
+            session_row.is_forced_offline = False
+            session_row.expires_at = datetime.now(UTC) - timedelta(seconds=5)
+            db.commit()
+        finally:
+            db.close()
+
+        with patch(
+            "app.api.deps.touch_session_by_token_id",
+            return_value=type("SessionStub", (), {"status": "active"})(),
+        ):
+            expired_session_response = self.client.get(
+                "/api/v1/me/session",
+                headers=self._headers(refreshed_token),
+            )
+        self.assertEqual(
+            expired_session_response.status_code,
+            404,
+            expired_session_response.text,
+        )
+        self.assertEqual(
+            expired_session_response.json()["detail"], "Current session not found"
         )
 
 

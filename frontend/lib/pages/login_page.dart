@@ -16,11 +16,13 @@ class LoginPage extends StatefulWidget {
     required this.onLoginSuccess,
     this.defaultBaseUrl = _defaultApiBaseUrl,
     this.initialMessage,
+    this.authService,
   });
 
   final ValueChanged<AppSession> onLoginSuccess;
   final String defaultBaseUrl;
   final String? initialMessage;
+  final AuthService? authService;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -58,7 +60,7 @@ class _LoginPageState extends State<LoginPage> {
   late final TextEditingController _baseUrlController;
   final TextEditingController _accountController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final AuthService _authService = AuthService();
+  late final AuthService _authService;
 
   bool _loading = false;
   bool _loadingAccounts = false;
@@ -69,6 +71,7 @@ class _LoginPageState extends State<LoginPage> {
   void initState() {
     super.initState();
     _baseUrlController = TextEditingController(text: widget.defaultBaseUrl);
+    _authService = widget.authService ?? AuthService();
     _message = widget.initialMessage ?? '';
     _loadAccounts();
   }

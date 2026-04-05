@@ -7,10 +7,18 @@ import 'package:mes_client/pages/audit_log_page.dart';
 import 'package:mes_client/pages/function_permission_config_page.dart';
 import 'package:mes_client/pages/login_session_page.dart';
 import 'package:mes_client/pages/role_management_page.dart';
+import 'package:mes_client/services/api_exception.dart';
 import 'package:mes_client/services/authz_service.dart';
 import 'package:mes_client/services/user_service.dart';
 import 'package:mes_client/widgets/crud_page_header.dart';
 import 'package:mes_client/widgets/crud_list_table_section.dart';
+
+Finder _findSemanticsLabel(String label) {
+  return find.byWidgetPredicate(
+    (widget) => widget is Semantics && widget.properties.label == label,
+    description: 'Semantics(label: $label)',
+  );
+}
 
 final AppSession _session = AppSession(baseUrl: '', accessToken: 'token');
 
@@ -30,15 +38,59 @@ final RoleItem _qualityRole = RoleItem(
 class _FakeSupportUserService extends UserService {
   _FakeSupportUserService() : super(_session);
 
+  int listRolesCalls = 0;
   int listOnlineSessionsCalls = 0;
   int listAuditLogsCalls = 0;
+  int? lastRolePage;
+  int? lastRolePageSize;
+  String? lastRoleKeyword;
   int? lastAuditLogPageSize;
+  int? lastAuditLogPage;
+  String? lastAuditOperatorUsername;
+  String? lastAuditActionCode;
+  String? lastAuditTargetType;
+  DateTime? lastAuditStartTime;
+  DateTime? lastAuditEndTime;
   String? lastOnlineSessionStatusFilter;
   int enableRoleCalls = 0;
   int disableRoleCalls = 0;
+  int deleteRoleCalls = 0;
+  int? lastDeletedRoleId;
   String? createdRoleCode;
   String? createdRoleName;
   int createRoleCalls = 0;
+  Object? listRolesError;
+  Object? listAuditLogsError;
+  Object? deleteRoleError;
+  Object? enableRoleError;
+  Object? disableRoleError;
+  List<RoleListResult> roleResponses = [
+    RoleListResult(total: 1, items: [_maintenanceRole]),
+  ];
+  List<AuditLogListResult> auditLogResponses = [
+    AuditLogListResult(
+      total: 1,
+      items: [
+        AuditLogItem(
+          id: 1,
+          occurredAt: DateTime.parse('2026-03-20T08:00:00Z'),
+          operatorUserId: 1,
+          operatorUsername: 'admin',
+          actionCode: 'user.create',
+          actionName: '新建用户',
+          targetType: 'user',
+          targetId: '2',
+          targetName: 'tester',
+          result: 'success',
+          beforeData: const {'username': 'old'},
+          afterData: const {'username': 'tester'},
+          ipAddress: '127.0.0.1',
+          terminalInfo: 'widget-test',
+          remark: '审计日志回归',
+        ),
+      ],
+    ),
+  ];
 
   @override
   Future<RoleListResult> listRoles({
@@ -46,7 +98,18 @@ class _FakeSupportUserService extends UserService {
     int pageSize = 200,
     String? keyword,
   }) async {
-    return RoleListResult(total: 1, items: [_maintenanceRole]);
+    final error = listRolesError;
+    if (error != null) {
+      throw error;
+    }
+    listRolesCalls += 1;
+    lastRolePage = page;
+    lastRolePageSize = pageSize;
+    lastRoleKeyword = keyword;
+    return roleResponses[(listRolesCalls - 1).clamp(
+      0,
+      roleResponses.length - 1,
+    )];
   }
 
   @override
@@ -89,30 +152,22 @@ class _FakeSupportUserService extends UserService {
     DateTime? startTime,
     DateTime? endTime,
   }) async {
+    final error = listAuditLogsError;
+    if (error != null) {
+      throw error;
+    }
     listAuditLogsCalls += 1;
+    lastAuditLogPage = page;
     lastAuditLogPageSize = pageSize;
-    return AuditLogListResult(
-      total: 1,
-      items: [
-        AuditLogItem(
-          id: 1,
-          occurredAt: DateTime.parse('2026-03-20T08:00:00Z'),
-          operatorUserId: 1,
-          operatorUsername: 'admin',
-          actionCode: 'user.create',
-          actionName: '新建用户',
-          targetType: 'user',
-          targetId: '2',
-          targetName: 'tester',
-          result: 'success',
-          beforeData: const {'username': 'old'},
-          afterData: const {'username': 'tester'},
-          ipAddress: '127.0.0.1',
-          terminalInfo: 'widget-test',
-          remark: '审计日志回归',
-        ),
-      ],
-    );
+    lastAuditOperatorUsername = operatorUsername;
+    lastAuditActionCode = actionCode;
+    lastAuditTargetType = targetType;
+    lastAuditStartTime = startTime;
+    lastAuditEndTime = endTime;
+    return auditLogResponses[(listAuditLogsCalls - 1).clamp(
+      0,
+      auditLogResponses.length - 1,
+    )];
   }
 
   @override
@@ -149,19 +204,44 @@ class _FakeSupportUserService extends UserService {
 
   @override
   Future<RoleItem> enableRole({required int roleId}) async {
+    final error = enableRoleError;
+    if (error != null) {
+      throw error;
+    }
     enableRoleCalls += 1;
     return _maintenanceRole;
   }
 
   @override
   Future<RoleItem> disableRole({required int roleId}) async {
+    final error = disableRoleError;
+    if (error != null) {
+      throw error;
+    }
     disableRoleCalls += 1;
     return _maintenanceRole;
+  }
+
+  @override
+  Future<void> deleteRole({required int roleId}) async {
+    final error = deleteRoleError;
+    if (error != null) {
+      throw error;
+    }
+    deleteRoleCalls += 1;
+    lastDeletedRoleId = roleId;
   }
 }
 
 class _FakeSupportAuthzService extends AuthzService {
   _FakeSupportAuthzService() : super(_session);
+
+  int applyCapabilityPacksCalls = 0;
+  String? lastAppliedModuleCode;
+  int? lastExpectedRevision;
+  List<CapabilityPackRoleDraftItem>? lastAppliedRoleItems;
+  Object? applyCapabilityPacksError;
+  Map<String, CapabilityPackRoleConfigResult> roleConfigByRole = {};
 
   @override
   Future<CapabilityPackCatalogResult> loadCapabilityPackCatalog({
@@ -195,6 +275,10 @@ class _FakeSupportAuthzService extends AuthzService {
     required String roleCode,
     required String moduleCode,
   }) async {
+    final overridden = roleConfigByRole[roleCode];
+    if (overridden != null) {
+      return overridden;
+    }
     return CapabilityPackRoleConfigResult(
       roleCode: roleCode,
       roleName: roleCode == 'quality_admin' ? '品质管理员' : '维修员',
@@ -205,6 +289,28 @@ class _FakeSupportAuthzService extends AuthzService {
       effectiveCapabilityCodes: const ['feature.user.role_management.view'],
       effectivePagePermissionCodes: const ['page.role_management.view'],
       autoLinkedDependencies: const [],
+    );
+  }
+
+  @override
+  Future<CapabilityPackPreviewResult> applyCapabilityPacks({
+    required String moduleCode,
+    required List<CapabilityPackRoleDraftItem> roleItems,
+    required int expectedRevision,
+    String? remark,
+  }) async {
+    final error = applyCapabilityPacksError;
+    if (error != null) {
+      throw error;
+    }
+    applyCapabilityPacksCalls += 1;
+    lastAppliedModuleCode = moduleCode;
+    lastExpectedRevision = expectedRevision;
+    lastAppliedRoleItems = List<CapabilityPackRoleDraftItem>.from(roleItems);
+    return const CapabilityPackPreviewResult(
+      moduleCode: 'user',
+      moduleRevision: 2,
+      roleResults: [],
     );
   }
 }
@@ -218,6 +324,19 @@ final RoleItem _maintenanceRole = RoleItem(
   isBuiltin: true,
   isEnabled: true,
   userCount: 2,
+  createdAt: null,
+  updatedAt: null,
+);
+
+final RoleItem _customRole = RoleItem(
+  id: 88,
+  code: 'custom_quality_reviewer',
+  name: '质检复核员',
+  description: '可删除自定义角色',
+  roleType: 'custom',
+  isBuiltin: false,
+  isEnabled: true,
+  userCount: 0,
   createdAt: null,
   updatedAt: null,
 );
@@ -397,6 +516,147 @@ void main() {
     expect(find.text('当前有未保存改动，是否放弃并刷新？'), findsOneWidget);
   });
 
+  testWidgets('function permission config save success triggers callback', (
+    tester,
+  ) async {
+    authzService.applyCapabilityPacksCalls = 0;
+    authzService.applyCapabilityPacksError = null;
+    authzService.lastAppliedRoleItems = null;
+    var callbackCalls = 0;
+
+    await _pumpPage(
+      tester,
+      FunctionPermissionConfigPage(
+        session: _session,
+        onLogout: () {},
+        onPermissionsChanged: () async {
+          callbackCalls += 1;
+        },
+        authzService: authzService,
+        userService: userService,
+      ),
+    );
+
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认保存'));
+    await tester.pumpAndSettle();
+
+    expect(authzService.applyCapabilityPacksCalls, 1);
+    expect(authzService.lastAppliedModuleCode, 'user');
+    expect(authzService.lastAppliedRoleItems, isNotNull);
+    expect(authzService.lastAppliedRoleItems, isNotEmpty);
+    expect(callbackCalls, 1);
+    expect(find.text('保存成功。'), findsOneWidget);
+  });
+
+  testWidgets('function permission config save 409 shows conflict message', (
+    tester,
+  ) async {
+    authzService.applyCapabilityPacksError = ApiException('版本冲突', 409);
+
+    await _pumpPage(
+      tester,
+      FunctionPermissionConfigPage(
+        session: _session,
+        onLogout: () {},
+        authzService: authzService,
+        userService: userService,
+      ),
+    );
+
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('保存失败：当前模块版本已变化，请刷新后重试。'), findsOneWidget);
+    authzService.applyCapabilityPacksError = null;
+  });
+
+  testWidgets('function permission config save 401 triggers logout', (
+    tester,
+  ) async {
+    authzService.applyCapabilityPacksError = ApiException('登录失效', 401);
+    var logoutCalls = 0;
+
+    await _pumpPage(
+      tester,
+      FunctionPermissionConfigPage(
+        session: _session,
+        onLogout: () {
+          logoutCalls += 1;
+        },
+        authzService: authzService,
+        userService: userService,
+      ),
+    );
+
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认保存'));
+    await tester.pumpAndSettle();
+
+    expect(logoutCalls, 1);
+    authzService.applyCapabilityPacksError = null;
+  });
+
+  testWidgets('function permission config readonly role disables editing', (
+    tester,
+  ) async {
+    authzService.roleConfigByRole = {
+      'maintenance_staff': const CapabilityPackRoleConfigResult(
+        roleCode: 'maintenance_staff',
+        roleName: '维修员',
+        readonly: true,
+        moduleCode: 'production',
+        moduleEnabled: true,
+        grantedCapabilityCodes: ['feature.user.role_management.view'],
+        effectiveCapabilityCodes: ['feature.user.role_management.view'],
+        effectivePagePermissionCodes: ['page.role_management.view'],
+        autoLinkedDependencies: [],
+      ),
+    };
+
+    await _pumpPage(
+      tester,
+      FunctionPermissionConfigPage(
+        session: _session,
+        onLogout: () {},
+        authzService: authzService,
+        userService: userService,
+      ),
+    );
+
+    final switchWidget = tester.widget<Switch>(find.byType(Switch).first);
+    expect(switchWidget.onChanged, isNull);
+    expect(find.text('当前角色为只读，权限项不可编辑。'), findsOneWidget);
+    authzService.roleConfigByRole = {};
+  });
+
+  testWidgets('function permission config exposes stable semantics labels', (
+    tester,
+  ) async {
+    await _pumpPage(
+      tester,
+      FunctionPermissionConfigPage(
+        session: _session,
+        onLogout: () {},
+        authzService: authzService,
+        userService: userService,
+      ),
+    );
+
+    expect(_findSemanticsLabel('功能权限配置主区域'), findsOneWidget);
+    expect(_findSemanticsLabel('功能权限配置保存按钮'), findsOneWidget);
+  });
+
   testWidgets('audit log page renders audit rows', (tester) async {
     userService.listAuditLogsCalls = 0;
     userService.lastAuditLogPageSize = null;
@@ -426,6 +686,114 @@ void main() {
     expect(userService.lastAuditLogPageSize, 50);
   });
 
+  testWidgets('audit log page supports filter date range and pagination', (
+    tester,
+  ) async {
+    userService.listAuditLogsCalls = 0;
+    userService.auditLogResponses = [
+      AuditLogListResult(
+        total: 51,
+        items: userService.auditLogResponses.first.items,
+      ),
+      AuditLogListResult(
+        total: 51,
+        items: [
+          AuditLogItem(
+            id: 2,
+            occurredAt: DateTime.parse('2026-03-21T08:00:00Z'),
+            operatorUserId: 2,
+            operatorUsername: 'auditor',
+            actionCode: 'user.disable',
+            actionName: '停用用户',
+            targetType: 'user',
+            targetId: '3',
+            targetName: 'target-user',
+            result: 'success',
+            beforeData: const {'enabled': true},
+            afterData: const {'enabled': false},
+            ipAddress: null,
+            terminalInfo: null,
+            remark: null,
+          ),
+        ],
+      ),
+    ];
+
+    await _pumpPage(
+      tester,
+      AuditLogPage(
+        session: _session,
+        onLogout: () {},
+        userService: userService,
+        dateRangePicker: (context, start, end) async {
+          return DateTimeRange(
+            start: DateTime(2026, 3, 1),
+            end: DateTime(2026, 3, 5),
+          );
+        },
+      ),
+    );
+
+    await tester.enterText(find.widgetWithText(TextField, '操作人账号'), 'admin');
+    await tester.enterText(
+      find.widgetWithText(TextField, '操作编码'),
+      'user.create',
+    );
+    await tester.enterText(find.widgetWithText(TextField, '目标类型'), 'user');
+    await tester.tap(find.widgetWithText(OutlinedButton, '选择时间范围'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
+    await tester.pumpAndSettle();
+
+    expect(userService.lastAuditLogPage, 1);
+    expect(userService.lastAuditOperatorUsername, 'admin');
+    expect(userService.lastAuditActionCode, 'user.create');
+    expect(userService.lastAuditTargetType, 'user');
+    expect(userService.lastAuditStartTime, DateTime(2026, 3, 1));
+    expect(userService.lastAuditEndTime, DateTime(2026, 3, 5, 23, 59, 59));
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('停用用户'), findsOneWidget);
+    expect(find.text('第 2 / 2 页'), findsOneWidget);
+  });
+
+  testWidgets('audit log page handles 401', (tester) async {
+    var logoutCalls = 0;
+    userService.listAuditLogsError = ApiException('登录失效', 401);
+
+    await _pumpPage(
+      tester,
+      AuditLogPage(
+        session: _session,
+        onLogout: () {
+          logoutCalls += 1;
+        },
+        userService: userService,
+      ),
+    );
+
+    expect(logoutCalls, 1);
+
+    userService.listAuditLogsError = null;
+  });
+
+  testWidgets('audit log page shows failure message', (tester) async {
+    userService.listAuditLogsError = ApiException('查询失败', 500);
+    await _pumpPage(
+      tester,
+      AuditLogPage(
+        session: _session,
+        onLogout: () {},
+        userService: userService,
+      ),
+    );
+
+    expect(find.text('加载审计日志失败：查询失败'), findsOneWidget);
+    userService.listAuditLogsError = null;
+  });
+
   testWidgets('login session page renders', (tester) async {
     userService.listOnlineSessionsCalls = 0;
     userService.lastOnlineSessionStatusFilter = null;
@@ -449,6 +817,85 @@ void main() {
     expect(find.text('全选当前页'), findsOneWidget);
     expect(userService.listOnlineSessionsCalls, 1);
     expect(userService.lastOnlineSessionStatusFilter, 'active');
+  });
+
+  testWidgets('role management supports pagination query delete and failure', (
+    tester,
+  ) async {
+    userService.listRolesCalls = 0;
+    userService.roleResponses = [
+      RoleListResult(total: 51, items: [_customRole]),
+      RoleListResult(total: 51, items: [_maintenanceRole]),
+      RoleListResult(total: 1, items: [_customRole]),
+      RoleListResult(total: 1, items: [_customRole]),
+    ];
+    userService.deleteRoleCalls = 0;
+    userService.deleteRoleError = null;
+
+    await _pumpPage(
+      tester,
+      RoleManagementPage(
+        session: _session,
+        onLogout: () {},
+        canCreateRole: true,
+        canEditRole: true,
+        canToggleRole: true,
+        canDeleteRole: true,
+        userService: userService,
+      ),
+    );
+
+    expect(find.text('质检复核员'), findsOneWidget);
+    expect(userService.lastRolePage, 1);
+    expect(userService.lastRolePageSize, 50);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+    await tester.pumpAndSettle();
+    expect(find.text('第 2 / 2 页'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, '关键词'), '复核');
+    await tester.tap(find.widgetWithText(OutlinedButton, '查询'));
+    await tester.pumpAndSettle();
+    expect(userService.lastRolePage, 1);
+    expect(userService.lastRoleKeyword, '复核');
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '删除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+    expect(userService.deleteRoleCalls, 1);
+    expect(userService.lastDeletedRoleId, _customRole.id);
+
+    userService.deleteRoleError = ApiException('角色已被绑定，无法删除', 409);
+    await tester.tap(find.widgetWithText(OutlinedButton, '删除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+    expect(find.text('角色已被绑定，无法删除'), findsOneWidget);
+    userService.deleteRoleError = null;
+  });
+
+  testWidgets('role management toggle failure shows snackbar', (tester) async {
+    userService.disableRoleError = ApiException('停用失败', 500);
+
+    await _pumpPage(
+      tester,
+      RoleManagementPage(
+        session: _session,
+        onLogout: () {},
+        canCreateRole: false,
+        canEditRole: true,
+        canToggleRole: true,
+        canDeleteRole: false,
+        userService: userService,
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '停用'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('停用失败'), findsOneWidget);
+    userService.disableRoleError = null;
   });
 
   testWidgets('login session page无在线会话权限时不发起加载', (tester) async {
