@@ -29,4 +29,32 @@ void main() {
     expect(find.byType(Scrollbar), findsNWidgets(2));
     expect(find.byType(SingleChildScrollView), findsNWidgets(2));
   });
+
+  testWidgets('AdaptiveTableContainer supports unbounded height', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: SizedBox(
+              width: 300,
+              child: AdaptiveTableContainer(
+                child: SizedBox(
+                  width: 600,
+                  height: 200,
+                  child: const Text('unbounded-table-body'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('unbounded-table-body'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

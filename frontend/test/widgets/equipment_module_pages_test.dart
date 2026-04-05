@@ -12,21 +12,84 @@ import 'package:mes_client/services/craft_service.dart';
 import 'package:mes_client/services/equipment_service.dart';
 
 class _FakeEquipmentService extends EquipmentService {
-  _FakeEquipmentService()
-    : super(AppSession(baseUrl: '', accessToken: 'token'));
+  _FakeEquipmentService({
+    List<EquipmentOwnerOption>? owners,
+    List<EquipmentLedgerItem>? equipmentItems,
+    List<MaintenanceItemEntry>? maintenanceItems,
+    List<MaintenanceWorkOrderItem>? workOrders,
+  }) : _owners =
+           owners ??
+           [EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null)],
+       _equipmentItems =
+           equipmentItems ??
+           [
+             EquipmentLedgerItem(
+               id: 1,
+               code: 'EQ-001',
+               name: '冲压机-A',
+               model: 'JH21',
+               location: '一车间-A01',
+               ownerName: 'm1',
+               remark: '重点设备',
+               isEnabled: true,
+               createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+               updatedAt: DateTime.parse('2026-03-02T09:30:00Z'),
+             ),
+           ],
+       _maintenanceItems =
+           maintenanceItems ??
+           [
+             MaintenanceItemEntry(
+               id: 2,
+               name: '月度润滑',
+               category: '润滑',
+               defaultCycleDays: 30,
+               defaultDurationMinutes: 45,
+               standardDescription: '按SOP执行',
+               isEnabled: true,
+               createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+               updatedAt: DateTime.parse('2026-03-03T10:00:00Z'),
+             ),
+           ],
+       _workOrders =
+           workOrders ??
+           [
+             MaintenanceWorkOrderItem(
+               id: 4,
+               planId: 3,
+               equipmentId: 1,
+               equipmentName: '冲压机-A',
+               sourceEquipmentCode: 'EQ-001',
+               itemId: 2,
+               itemName: '月度润滑',
+               sourceItemName: '月度润滑',
+               sourceExecutionProcessCode: 'STAMPING',
+               dueDate: DateTime.parse('2026-03-31T00:00:00Z'),
+               status: 'pending',
+               executorUserId: 7,
+               executorUsername: 'm1',
+               startedAt: null,
+               completedAt: null,
+               resultSummary: null,
+               resultRemark: null,
+               attachmentLink: null,
+               attachmentName: null,
+               createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+               updatedAt: DateTime.parse('2026-03-03T10:00:00Z'),
+             ),
+           ],
+       super(AppSession(baseUrl: '', accessToken: 'token'));
 
   int ownersRequestCount = 0;
+  final List<EquipmentOwnerOption> _owners;
+  final List<EquipmentLedgerItem> _equipmentItems;
+  final List<MaintenanceItemEntry> _maintenanceItems;
+  final List<MaintenanceWorkOrderItem> _workOrders;
 
   @override
   Future<List<EquipmentOwnerOption>> listAllOwners() async {
     ownersRequestCount += 1;
-    return [
-      EquipmentOwnerOption(
-        userId: 7,
-        username: 'm1',
-        fullName: null,
-      ),
-    ];
+    return _owners;
   }
 
   @override
@@ -39,21 +102,8 @@ class _FakeEquipmentService extends EquipmentService {
     String? ownerName,
   }) async {
     return EquipmentLedgerListResult(
-      total: 1,
-      items: [
-        EquipmentLedgerItem(
-          id: 1,
-          code: 'EQ-001',
-          name: '冲压机-A',
-          model: 'JH21',
-          location: '一车间-A01',
-          ownerName: 'm1',
-          remark: '重点设备',
-          isEnabled: true,
-          createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
-          updatedAt: DateTime.parse('2026-03-02T09:30:00Z'),
-        ),
-      ],
+      total: _equipmentItems.length,
+      items: _equipmentItems,
     );
   }
 
@@ -66,20 +116,8 @@ class _FakeEquipmentService extends EquipmentService {
     String? category,
   }) async {
     return MaintenanceItemListResult(
-      total: 1,
-      items: [
-        MaintenanceItemEntry(
-          id: 2,
-          name: '月度润滑',
-          category: '润滑',
-          defaultCycleDays: 30,
-          defaultDurationMinutes: 45,
-          standardDescription: '按SOP执行',
-          isEnabled: true,
-          createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
-          updatedAt: DateTime.parse('2026-03-03T10:00:00Z'),
-        ),
-      ],
+      total: _maintenanceItems.length,
+      items: _maintenanceItems,
     );
   }
 
@@ -130,32 +168,8 @@ class _FakeEquipmentService extends EquipmentService {
     String? stageCode,
   }) async {
     return MaintenanceWorkOrderListResult(
-      total: 1,
-      items: [
-        MaintenanceWorkOrderItem(
-          id: 4,
-          planId: 3,
-          equipmentId: 1,
-          equipmentName: '冲压机-A',
-          sourceEquipmentCode: 'EQ-001',
-          itemId: 2,
-          itemName: '月度润滑',
-          sourceItemName: '月度润滑',
-          sourceExecutionProcessCode: 'STAMPING',
-          dueDate: DateTime.parse('2026-03-31T00:00:00Z'),
-          status: 'pending',
-          executorUserId: 7,
-          executorUsername: 'm1',
-          startedAt: null,
-          completedAt: null,
-          resultSummary: null,
-          resultRemark: null,
-          attachmentLink: null,
-          attachmentName: null,
-          createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
-          updatedAt: DateTime.parse('2026-03-03T10:00:00Z'),
-        ),
-      ],
+      total: _workOrders.length,
+      items: _workOrders,
     );
   }
 
@@ -195,7 +209,24 @@ class _FakeEquipmentService extends EquipmentService {
 }
 
 class _FakeCraftService extends CraftService {
-  _FakeCraftService() : super(AppSession(baseUrl: '', accessToken: 'token'));
+  _FakeCraftService({List<CraftStageItem>? stages})
+    : _stages =
+          stages ??
+          [
+            CraftStageItem(
+              id: 9,
+              code: 'STAMPING',
+              name: '冲压工段',
+              sortOrder: 1,
+              isEnabled: true,
+              processCount: 1,
+              createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+              updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+            ),
+          ],
+      super(AppSession(baseUrl: '', accessToken: 'token'));
+
+  final List<CraftStageItem> _stages;
 
   @override
   Future<CraftStageListResult> listStages({
@@ -204,26 +235,99 @@ class _FakeCraftService extends CraftService {
     String? keyword,
     bool? enabled,
   }) async {
-    return CraftStageListResult(
-      total: 1,
-      items: [
-        CraftStageItem(
-          id: 9,
-          code: 'STAMPING',
-          name: '冲压工段',
-          sortOrder: 1,
-          isEnabled: true,
-          processCount: 1,
-          createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-          updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
-        ),
-      ],
-    );
+    return CraftStageListResult(total: _stages.length, items: _stages);
   }
 }
 
-Future<void> _pumpPage(WidgetTester tester, Widget child) async {
-  tester.view.physicalSize = const Size(1920, 1200);
+EquipmentLedgerItem _buildEquipmentLedgerItem({
+  required int id,
+  required String code,
+  required String name,
+}) {
+  return EquipmentLedgerItem(
+    id: id,
+    code: code,
+    name: name,
+    model: 'JH21',
+    location: '一车间-A01',
+    ownerName: 'm1',
+    remark: '重点设备',
+    isEnabled: true,
+    createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+    updatedAt: DateTime.parse('2026-03-02T09:30:00Z'),
+  );
+}
+
+MaintenanceItemEntry _buildMaintenanceItemEntry({
+  required int id,
+  required String name,
+}) {
+  return MaintenanceItemEntry(
+    id: id,
+    name: name,
+    category: '润滑',
+    defaultCycleDays: 30,
+    defaultDurationMinutes: 45,
+    standardDescription: '按SOP执行',
+    isEnabled: true,
+    createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+    updatedAt: DateTime.parse('2026-03-03T10:00:00Z'),
+  );
+}
+
+MaintenanceWorkOrderItem _buildMaintenanceWorkOrderItem({
+  required int id,
+  required String equipmentName,
+  required String itemName,
+}) {
+  return MaintenanceWorkOrderItem(
+    id: id,
+    planId: 3,
+    equipmentId: 1,
+    equipmentName: equipmentName,
+    sourceEquipmentCode: 'EQ-001',
+    itemId: 2,
+    itemName: itemName,
+    sourceItemName: itemName,
+    sourceExecutionProcessCode: 'STAMPING',
+    dueDate: DateTime.parse('2026-03-31T00:00:00Z'),
+    status: 'pending',
+    executorUserId: 7,
+    executorUsername: 'm1',
+    startedAt: null,
+    completedAt: null,
+    resultSummary: null,
+    resultRemark: null,
+    attachmentLink: null,
+    attachmentName: null,
+    createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+    updatedAt: DateTime.parse('2026-03-03T10:00:00Z'),
+  );
+}
+
+CraftStageItem _buildCraftStageItem({
+  required int id,
+  required String code,
+  required String name,
+}) {
+  return CraftStageItem(
+    id: id,
+    code: code,
+    name: name,
+    sortOrder: 1,
+    isEnabled: true,
+    processCount: 1,
+    createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+    updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+  );
+}
+
+Future<void> _pumpPage(
+  WidgetTester tester,
+  Widget child, {
+  Size size = const Size(1920, 1200),
+}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
     tester.view.resetPhysicalSize();
@@ -254,6 +358,58 @@ void main() {
     expect(find.text('创建时间'), findsOneWidget);
     expect(find.text('更新时间'), findsOneWidget);
     expect(find.text('冲压机-A'), findsOneWidget);
+  });
+
+  testWidgets('设备台账页面在窄宽度下工具栏可稳定渲染', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      EquipmentLedgerPage(
+        session: session,
+        onLogout: () {},
+        canWrite: true,
+        equipmentService: equipmentService,
+      ),
+      size: const Size(900, 1200),
+    );
+
+    expect(find.text('搜索设备编号/名称/型号/位置/负责人'), findsOneWidget);
+    expect(find.text('位置筛选'), findsOneWidget);
+    expect(find.text('新增设备'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('设备台账页面负责人长文本下拉展开与选中不抛异常', (tester) async {
+    final equipmentService = _FakeEquipmentService(
+      owners: [
+        EquipmentOwnerOption(
+          userId: 7,
+          username: 'admin',
+          fullName: 'system admin with a very long display name',
+        ),
+      ],
+    );
+    await _pumpPage(
+      tester,
+      EquipmentLedgerPage(
+        session: session,
+        onLogout: () {},
+        canWrite: true,
+        equipmentService: equipmentService,
+      ),
+      size: const Size(900, 1200),
+    );
+
+    await tester.tap(find.byType(DropdownButtonFormField<String?>).first);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.textContaining('admin (system admin').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('admin (system admin'), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('保养项目页面按需求字段展示创建时间与更新时间', (tester) async {
@@ -297,6 +453,80 @@ void main() {
     expect(equipmentService.ownersRequestCount, 1);
   });
 
+  testWidgets('保养计划页面长文本筛选下拉展开与选中不抛异常', (tester) async {
+    final equipmentService = _FakeEquipmentService(
+      owners: [
+        EquipmentOwnerOption(
+          userId: 7,
+          username: 'executor_admin',
+          fullName:
+              'maintenance default executor with a very long display name',
+        ),
+      ],
+      equipmentItems: [
+        _buildEquipmentLedgerItem(
+          id: 1,
+          code: 'EQ-ULTRA-LONG-0001',
+          name: '超长设备名称用于验证保养计划筛选下拉选中态不会出现布局溢出',
+        ),
+      ],
+      maintenanceItems: [
+        _buildMaintenanceItemEntry(
+          id: 2,
+          name: '超长保养项目名称用于验证项目筛选下拉在窄空间中仍能稳定显示',
+        ),
+      ],
+    );
+    final longStageName = '超长执行工段名称用于验证保养计划页面工段筛选下拉不会触发溢出';
+    final customCraftService = _FakeCraftService(
+      stages: [
+        _buildCraftStageItem(id: 9, code: 'STAMPING', name: longStageName),
+      ],
+    );
+
+    await _pumpPage(
+      tester,
+      MaintenancePlanPage(
+        session: session,
+        onLogout: () {},
+        canWrite: true,
+        equipmentService: equipmentService,
+        craftService: customCraftService,
+      ),
+      size: const Size(1500, 1200),
+    );
+
+    await tester.tap(find.byType(DropdownButtonFormField<int?>).first);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.textContaining('EQ-ULTRA-LONG-0001').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<int?>).at(1));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.textContaining('超长保养项目名称').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<String?>).first);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.textContaining('超长执行工段名称').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<int?>).at(2));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.textContaining('executor_admin').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('EQ-ULTRA-LONG-0001'), findsWidgets);
+    expect(find.textContaining('超长保养项目名称'), findsWidgets);
+    expect(find.textContaining('超长执行工段名称'), findsWidgets);
+    expect(find.textContaining('executor_admin'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('保养执行页面展示工单关键字段', (tester) async {
     final equipmentService = _FakeEquipmentService();
     await _pumpPage(
@@ -314,6 +544,50 @@ void main() {
     expect(find.text('到期日期'), findsOneWidget);
     expect(find.text('结果摘要'), findsOneWidget);
     expect(find.text('#4'), findsOneWidget);
+  });
+
+  testWidgets('保养执行页面工段长文本下拉展开与选中不抛异常', (tester) async {
+    final equipmentService = _FakeEquipmentService(
+      workOrders: [
+        _buildMaintenanceWorkOrderItem(
+          id: 4,
+          equipmentName: '冲压机-A',
+          itemName: '月度润滑',
+        ),
+      ],
+    );
+    final customCraftService = _FakeCraftService(
+      stages: [
+        _buildCraftStageItem(
+          id: 9,
+          code: 'STAMPING',
+          name: '超长工段名称用于验证保养执行页面筛选下拉选中态不会出现布局溢出',
+        ),
+      ],
+    );
+
+    await _pumpPage(
+      tester,
+      MaintenanceExecutionPage(
+        session: session,
+        onLogout: () {},
+        canExecute: true,
+        equipmentService: equipmentService,
+        craftService: customCraftService,
+      ),
+      size: const Size(1200, 1200),
+    );
+
+    await tester.tap(find.byType(DropdownButtonFormField<String?>).last);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.textContaining('超长工段名称').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('超长工段名称'), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('保养记录页面展示到期日期字段', (tester) async {

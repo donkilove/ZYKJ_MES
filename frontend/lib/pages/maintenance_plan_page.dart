@@ -79,6 +79,14 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     return '${local.year}-$mm-$dd';
   }
 
+  String _equipmentFilterLabel(EquipmentLedgerItem entry) {
+    return '${entry.code} - ${entry.name}';
+  }
+
+  Widget _buildFilterDropdownText(String text) {
+    return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
+  }
+
   int get _totalPages {
     final pages = (_total + _pageSize - 1) ~/ _pageSize;
     return pages > 0 ? pages : 1;
@@ -640,18 +648,41 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               Expanded(
                 child: DropdownButtonFormField<int?>(
                   initialValue: _equipmentFilterId,
+                  isExpanded: true,
                   items: [
                     const DropdownMenuItem<int?>(
                       value: null,
-                      child: Text('全部设备'),
+                      child: Text(
+                        '全部设备',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     ..._equipmentOptions.map(
                       (entry) => DropdownMenuItem<int?>(
                         value: entry.id,
-                        child: Text('${entry.code} - ${entry.name}'),
+                        child: _buildFilterDropdownText(
+                          _equipmentFilterLabel(entry),
+                        ),
                       ),
                     ),
                   ],
+                  selectedItemBuilder: (context) {
+                    return [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _buildFilterDropdownText('全部设备'),
+                      ),
+                      ..._equipmentOptions.map(
+                        (entry) => Align(
+                          alignment: Alignment.centerLeft,
+                          child: _buildFilterDropdownText(
+                            _equipmentFilterLabel(entry),
+                          ),
+                        ),
+                      ),
+                    ];
+                  },
                   onChanged: (value) {
                     setState(() {
                       _equipmentFilterId = value;
@@ -667,18 +698,37 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               Expanded(
                 child: DropdownButtonFormField<int?>(
                   initialValue: _itemFilterId,
+                  isExpanded: true,
                   items: [
                     const DropdownMenuItem<int?>(
                       value: null,
-                      child: Text('全部项目'),
+                      child: Text(
+                        '全部项目',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     ..._itemOptions.map(
                       (entry) => DropdownMenuItem<int?>(
                         value: entry.id,
-                        child: Text(entry.name),
+                        child: _buildFilterDropdownText(entry.name),
                       ),
                     ),
                   ],
+                  selectedItemBuilder: (context) {
+                    return [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _buildFilterDropdownText('全部项目'),
+                      ),
+                      ..._itemOptions.map(
+                        (entry) => Align(
+                          alignment: Alignment.centerLeft,
+                          child: _buildFilterDropdownText(entry.name),
+                        ),
+                      ),
+                    ];
+                  },
                   onChanged: (value) {
                     setState(() {
                       _itemFilterId = value;
@@ -714,18 +764,37 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               Expanded(
                 child: DropdownButtonFormField<String?>(
                   initialValue: _executionStageCodeFilter,
+                  isExpanded: true,
                   items: [
                     const DropdownMenuItem<String?>(
                       value: null,
-                      child: Text('全部执行工段'),
+                      child: Text(
+                        '全部执行工段',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     ..._stageOptions.map(
                       (entry) => DropdownMenuItem<String?>(
                         value: entry.code,
-                        child: Text(entry.name),
+                        child: _buildFilterDropdownText(entry.name),
                       ),
                     ),
                   ],
+                  selectedItemBuilder: (context) {
+                    return [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _buildFilterDropdownText('全部执行工段'),
+                      ),
+                      ..._stageOptions.map(
+                        (entry) => Align(
+                          alignment: Alignment.centerLeft,
+                          child: _buildFilterDropdownText(entry.name),
+                        ),
+                      ),
+                    ];
+                  },
                   onChanged: (value) {
                     setState(() => _executionStageCodeFilter = value);
                   },
@@ -739,18 +808,37 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               Expanded(
                 child: DropdownButtonFormField<int?>(
                   initialValue: _defaultExecutorFilterId,
+                  isExpanded: true,
                   items: [
                     const DropdownMenuItem<int?>(
                       value: null,
-                      child: Text('全部默认执行人'),
+                      child: Text(
+                        '全部默认执行人',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     ..._ownerOptions.map(
                       (entry) => DropdownMenuItem<int?>(
                         value: entry.userId,
-                        child: Text(entry.displayName),
+                        child: _buildFilterDropdownText(entry.displayName),
                       ),
                     ),
                   ],
+                  selectedItemBuilder: (context) {
+                    return [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _buildFilterDropdownText('全部默认执行人'),
+                      ),
+                      ..._ownerOptions.map(
+                        (entry) => Align(
+                          alignment: Alignment.centerLeft,
+                          child: _buildFilterDropdownText(entry.displayName),
+                        ),
+                      ),
+                    ];
+                  },
                   onChanged: (value) {
                     setState(() => _defaultExecutorFilterId = value);
                   },

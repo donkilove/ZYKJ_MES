@@ -29,6 +29,13 @@ class _AdaptiveTableContainerState extends State<AdaptiveTableContainer> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final verticalConstraints = BoxConstraints(
+          minHeight: constraints.hasBoundedHeight ? constraints.maxHeight : 0,
+        );
+        final horizontalConstraints = BoxConstraints(
+          minWidth: constraints.hasBoundedWidth ? constraints.maxWidth : 0,
+        );
+
         return Scrollbar(
           controller: _verticalController,
           thumbVisibility: true,
@@ -36,7 +43,7 @@ class _AdaptiveTableContainerState extends State<AdaptiveTableContainer> {
             controller: _verticalController,
             padding: widget.padding,
             child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              constraints: verticalConstraints,
               child: Scrollbar(
                 controller: _horizontalController,
                 thumbVisibility: true,
@@ -46,7 +53,7 @@ class _AdaptiveTableContainerState extends State<AdaptiveTableContainer> {
                   controller: _horizontalController,
                   scrollDirection: Axis.horizontal,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    constraints: horizontalConstraints,
                     child: widget.child,
                   ),
                 ),

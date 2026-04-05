@@ -7,6 +7,21 @@ import '../services/equipment_service.dart';
 import '../widgets/crud_list_table_section.dart';
 import '../widgets/crud_page_header.dart';
 import '../widgets/simple_pagination_bar.dart';
+import '../widgets/unified_list_table_header_style.dart';
+
+enum _RuleListAction { openParameters, edit, toggle, delete }
+
+enum _ParameterListAction { edit, toggle, delete }
+
+const double _toolbarSpacing = 12;
+const double _toolbarRunSpacing = 8;
+const double _toolbarWideFieldMinWidth = 280;
+const double _toolbarMediumFieldWidth = 200;
+const double _toolbarNarrowFieldWidth = 140;
+
+Widget _buildEquipmentDropdownText(String text) {
+  return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
+}
 
 class EquipmentRuleParameterPage extends StatefulWidget {
   const EquipmentRuleParameterPage({
@@ -37,6 +52,7 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
     with SingleTickerProviderStateMixin {
   late final EquipmentService _service;
   TabController? _innerTabController;
+  final GlobalKey<_RulesTabState> _rulesTabKey = GlobalKey<_RulesTabState>();
   final GlobalKey<_ParametersTabState> _parametersTabKey =
       GlobalKey<_ParametersTabState>();
   List<EquipmentLedgerItem> _equipmentOptions = const [];
@@ -100,6 +116,16 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
     } catch (_) {}
   }
 
+  Future<void> _refreshCurrentTab() async {
+    await _loadEquipmentOptions();
+    final currentIndex = _innerTabController?.index ?? 0;
+    if (currentIndex == _parametersTabIndex) {
+      await _parametersTabKey.currentState?.refresh();
+      return;
+    }
+    await _rulesTabKey.currentState?.refresh();
+  }
+
   @override
   void dispose() {
     _innerTabController?.dispose();
@@ -114,6 +140,7 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
       tabs.add(const Tab(text: '设备规则'));
       children.add(
         _RulesTab(
+          key: _rulesTabKey,
           service: _service,
           onLogout: widget.onLogout,
           canManage: widget.canManageRules,
@@ -140,11 +167,11 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
       return const Center(child: Text('当前账号没有可访问的规则/参数页面。'));
     }
     return Padding(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CrudPageHeader(title: '规则与参数', onRefresh: _loadEquipmentOptions),
+          CrudPageHeader(title: '规则与参数', onRefresh: _refreshCurrentTab),
           const SizedBox(height: 12),
           Material(
             color: Theme.of(context).colorScheme.surface,
@@ -199,6 +226,7 @@ class _RuleParameterScope {
 
 class _RulesTab extends StatefulWidget {
   const _RulesTab({
+    super.key,
     required this.service,
     required this.onLogout,
     required this.canManage,
@@ -270,6 +298,10 @@ class _RulesTabState extends State<_RulesTab> {
   int get _totalPages {
     final pages = (_total + _pageSize - 1) ~/ _pageSize;
     return pages > 0 ? pages : 1;
+  }
+
+  Future<void> refresh() async {
+    await _load(page: _page);
   }
 
   Future<void> _load({int? page}) async {
@@ -526,174 +558,233 @@ class _RulesTabState extends State<_RulesTab> {
     }
   }
 
+  Widget _buildKeywordField() {
+    return TextField(
+      controller: _keywordController,
+      decoration: const InputDecoration(
+        labelText: '规则名称',
+        border: OutlineInputBorder(),
+      ),
+      onSubmitted: (_) => _load(page: 1),
+    );
+  }
+
+  Widget _buildEquipmentFilter() {
+    return DropdownButtonFormField<int?>(
+      initialValue: _equipmentFilterId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: '适用设备',
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      items: [
+        const DropdownMenuItem<int?>(value: null, child: Text('全部设备')),
+        ...widget.equipmentOptions.map(
+          (entry) => DropdownMenuItem<int?>(
+            value: entry.id,
+            child: _buildEquipmentDropdownText(entry.name),
+          ),
+        ),
+      ],
+      onChanged: _loading
+          ? null
+          : (value) {
+              setState(() => _equipmentFilterId = value);
+            },
+    );
+  }
+
+  Widget _buildStatusFilter() {
+    return DropdownButtonFormField<bool?>(
+      key: ValueKey(_isEnabledFilter),
+      initialValue: _isEnabledFilter,
+      decoration: const InputDecoration(
+        labelText: '状态',
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      items: const [
+        DropdownMenuItem<bool?>(value: null, child: Text('全部')),
+        DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+        DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+      ],
+      onChanged: _loading
+          ? null
+          : (value) {
+              setState(() => _isEnabledFilter = value);
+            },
+    );
+  }
+
+  List<Widget> _buildToolbarButtons() {
+    return [
+      FilledButton.icon(
+        onPressed: _loading ? null : () => _load(page: 1),
+        icon: const Icon(Icons.search),
+        label: const Text('查询规则'),
+      ),
+      if (widget.canManage)
+        FilledButton.icon(
+          onPressed: _loading ? null : () => _showUpsertDialog(),
+          icon: const Icon(Icons.add),
+          label: const Text('新增规则'),
+        ),
+    ];
+  }
+
+  Widget _buildToolbar() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final equipmentFilter = SizedBox(
+          width: _toolbarMediumFieldWidth,
+          child: _buildEquipmentFilter(),
+        );
+        final statusFilter = SizedBox(
+          width: _toolbarNarrowFieldWidth,
+          child: _buildStatusFilter(),
+        );
+        final buttons = _buildToolbarButtons();
+        final desktopToolbarMinWidth =
+            _toolbarWideFieldMinWidth +
+            _toolbarMediumFieldWidth +
+            _toolbarNarrowFieldWidth +
+            (buttons.length * 120) +
+            ((buttons.length + 3) * _toolbarSpacing);
+
+        if (constraints.maxWidth >= desktopToolbarMinWidth) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: _buildKeywordField()),
+              const SizedBox(width: _toolbarSpacing),
+              equipmentFilter,
+              const SizedBox(width: _toolbarSpacing),
+              statusFilter,
+              const SizedBox(width: _toolbarSpacing),
+              Wrap(
+                spacing: _toolbarSpacing,
+                runSpacing: _toolbarRunSpacing,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: buttons,
+              ),
+            ],
+          );
+        }
+
+        return Wrap(
+          spacing: _toolbarSpacing,
+          runSpacing: _toolbarRunSpacing,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(width: constraints.maxWidth, child: _buildKeywordField()),
+            equipmentFilter,
+            statusFilter,
+            ...buttons,
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _handleRuleAction(
+    _RuleListAction action,
+    EquipmentRuleItem item,
+  ) async {
+    switch (action) {
+      case _RuleListAction.openParameters:
+        widget.onOpenParametersForRule(item);
+        return;
+      case _RuleListAction.edit:
+        await _showUpsertDialog(item: item);
+        return;
+      case _RuleListAction.toggle:
+        await _toggleRule(item);
+        return;
+      case _RuleListAction.delete:
+        await _deleteRule(item);
+        return;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 200,
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '规则名称',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _load(page: 1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 200,
-                child: DropdownButtonFormField<int?>(
-                  initialValue: _equipmentFilterId,
-                  decoration: const InputDecoration(
-                    labelText: '适用设备',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('全部设备'),
-                    ),
-                    ...widget.equipmentOptions.map(
-                      (entry) => DropdownMenuItem<int?>(
-                        value: entry.id,
-                        child: Text(entry.name),
-                      ),
-                    ),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (v) {
-                          setState(() => _equipmentFilterId = v);
-                          _load(page: 1);
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<bool?>(
-                  key: ValueKey(_isEnabledFilter),
-                  initialValue: _isEnabledFilter,
-                  decoration: const InputDecoration(
-                    labelText: '状态',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('全部')),
-                    DropdownMenuItem(value: true, child: Text('启用')),
-                    DropdownMenuItem(value: false, child: Text('停用')),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (v) {
-                          setState(() => _isEnabledFilter = v);
-                          _load(page: 1);
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              IconButton(
-                tooltip: '查询',
-                onPressed: _loading ? null : () => _load(page: 1),
-                icon: const Icon(Icons.search),
-              ),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : () => _load(page: _page),
-                icon: const Icon(Icons.refresh),
-              ),
-              const Spacer(),
-              if (widget.canManage)
-                ElevatedButton.icon(
-                  onPressed: _loading ? null : () => _showUpsertDialog(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('新增规则'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _message,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildToolbar(),
+        const SizedBox(height: 12),
+        Text('总数：$_total', style: theme.textTheme.titleMedium),
+        if (_message.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _message,
+              style: TextStyle(color: theme.colorScheme.error),
             ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: CrudListTableSection(
-              loading: _loading,
-              isEmpty: _items.isEmpty,
-              emptyText: '暂无设备规则',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columns: [
-                  const DataColumn(label: Text('ID')),
-                  const DataColumn(label: Text('适用设备')),
-                  const DataColumn(label: Text('规则编码')),
-                  const DataColumn(label: Text('规则名称')),
-                  const DataColumn(label: Text('规则类型')),
-                  const DataColumn(label: Text('触发条件')),
-                  const DataColumn(label: Text('生效时间')),
-                  const DataColumn(label: Text('备注')),
-                  const DataColumn(label: Text('状态')),
-                  if (widget.canManage || widget.canOpenParameters)
-                    const DataColumn(label: Text('操作')),
-                ],
-                rows: _items.map((item) {
-                  return DataRow(
-                    cells: [
-                      DataCell(Text('${item.id}')),
-                      DataCell(
-                        Text(
-                          item.equipmentName?.trim().isNotEmpty == true
-                              ? item.equipmentName!
-                              : item.equipmentType?.trim().isNotEmpty == true
-                              ? item.equipmentType!
-                              : '未配置',
+          ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: CrudListTableSection(
+            loading: _loading,
+            isEmpty: _items.isEmpty,
+            emptyText: '暂无设备规则',
+            enableUnifiedHeaderStyle: true,
+            child: DataTable(
+              columnSpacing: 16,
+              columns: [
+                UnifiedListTableHeaderStyle.column(context, 'ID'),
+                UnifiedListTableHeaderStyle.column(context, '适用设备'),
+                UnifiedListTableHeaderStyle.column(context, '规则编码'),
+                UnifiedListTableHeaderStyle.column(context, '规则名称'),
+                UnifiedListTableHeaderStyle.column(context, '规则类型'),
+                UnifiedListTableHeaderStyle.column(context, '触发条件'),
+                UnifiedListTableHeaderStyle.column(context, '生效时间'),
+                UnifiedListTableHeaderStyle.column(context, '备注'),
+                UnifiedListTableHeaderStyle.column(context, '状态'),
+                if (widget.canManage || widget.canOpenParameters)
+                  UnifiedListTableHeaderStyle.column(context, '操作'),
+              ],
+              rows: _items.map((item) {
+                return DataRow(
+                  cells: [
+                    DataCell(Text('${item.id}')),
+                    DataCell(
+                      Text(
+                        item.equipmentName?.trim().isNotEmpty == true
+                            ? item.equipmentName!
+                            : item.equipmentType?.trim().isNotEmpty == true
+                            ? item.equipmentType!
+                            : '未配置',
+                      ),
+                    ),
+                    DataCell(Text(item.ruleCode.isEmpty ? '-' : item.ruleCode)),
+                    DataCell(Text(item.ruleName)),
+                    DataCell(Text(item.ruleType.isEmpty ? '-' : item.ruleType)),
+                    DataCell(
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 200),
+                        child: Text(
+                          item.conditionDesc.isEmpty ? '-' : item.conditionDesc,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                    ),
+                    DataCell(Text(_formatDateTime(item.effectiveAt))),
+                    DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
+                    DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                    if (widget.canManage || widget.canOpenParameters)
                       DataCell(
-                        Text(item.ruleCode.isEmpty ? '-' : item.ruleCode),
-                      ),
-                      DataCell(Text(item.ruleName)),
-                      DataCell(
-                        Text(item.ruleType.isEmpty ? '-' : item.ruleType),
-                      ),
-                      DataCell(
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 200),
-                          child: Text(
-                            item.conditionDesc.isEmpty
-                                ? '-'
-                                : item.conditionDesc,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      DataCell(Text(_formatDateTime(item.effectiveAt))),
-                      DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
-                      DataCell(Text(item.isEnabled ? '启用' : '停用')),
-                      if (widget.canManage || widget.canOpenParameters)
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (widget.canOpenParameters)
-                                TextButton(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (widget.canOpenParameters)
+                              SizedBox(
+                                height: 28,
+                                child: OutlinedButton(
                                   key: Key(
                                     'equipment-rule-open-parameters-${item.id}',
                                   ),
@@ -705,47 +796,48 @@ class _RulesTabState extends State<_RulesTab> {
                                         : '查看参数',
                                   ),
                                 ),
-                              if (widget.canManage)
-                                TextButton(
-                                  onPressed: () =>
-                                      _showUpsertDialog(item: item),
-                                  child: const Text('编辑'),
-                                ),
-                              if (widget.canManage)
-                                TextButton(
-                                  onPressed: () => _toggleRule(item),
-                                  child: Text(item.isEnabled ? '停用' : '启用'),
-                                ),
-                              if (widget.canManage)
-                                TextButton(
-                                  onPressed: () => _deleteRule(item),
-                                  child: Text(
-                                    '删除',
-                                    style: TextStyle(
-                                      color: theme.colorScheme.error,
-                                    ),
+                              ),
+                            if (widget.canManage)
+                              UnifiedListTableHeaderStyle.actionMenuButton<
+                                _RuleListAction
+                              >(
+                                theme: theme,
+                                onSelected: (action) =>
+                                    _handleRuleAction(action, item),
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: _RuleListAction.edit,
+                                    child: Text('编辑'),
                                   ),
-                                ),
-                            ],
-                          ),
+                                  PopupMenuItem(
+                                    value: _RuleListAction.toggle,
+                                    child: Text(item.isEnabled ? '停用' : '启用'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: _RuleListAction.delete,
+                                    child: Text('删除'),
+                                  ),
+                                ],
+                              ),
+                          ],
                         ),
-                    ],
-                  );
-                }).toList(),
-              ),
+                      ),
+                  ],
+                );
+              }).toList(),
             ),
           ),
-          const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _load(page: _page - 1),
-            onNext: () => _load(page: _page + 1),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        SimplePaginationBar(
+          page: _page,
+          totalPages: _totalPages,
+          total: _total,
+          loading: _loading,
+          onPrevious: () => _load(page: _page - 1),
+          onNext: () => _load(page: _page + 1),
+        ),
+      ],
     );
   }
 }
@@ -851,6 +943,10 @@ class _ParametersTabState extends State<_ParametersTab> {
   int get _totalPages {
     final pages = (_total + _pageSize - 1) ~/ _pageSize;
     return pages > 0 ? pages : 1;
+  }
+
+  Future<void> refresh() async {
+    await _load(page: _page);
   }
 
   Future<void> _load({int? page}) async {
@@ -1156,235 +1252,310 @@ class _ParametersTabState extends State<_ParametersTab> {
     }
   }
 
+  Widget _buildKeywordField() {
+    return TextField(
+      controller: _keywordController,
+      decoration: const InputDecoration(
+        labelText: '参数名称/编码',
+        border: OutlineInputBorder(),
+      ),
+      onSubmitted: (_) => _load(page: 1),
+    );
+  }
+
+  Widget _buildEquipmentTypeField() {
+    return TextField(
+      controller: _equipmentTypeController,
+      decoration: const InputDecoration(
+        labelText: '设备类型',
+        border: OutlineInputBorder(),
+      ),
+      onChanged: (_) => _clearRuleScopeFlag(),
+      onSubmitted: (_) => _load(page: 1),
+    );
+  }
+
+  Widget _buildEquipmentFilter() {
+    return DropdownButtonFormField<int?>(
+      initialValue: _equipmentFilterId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: '适用设备',
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      items: [
+        const DropdownMenuItem<int?>(value: null, child: Text('全部设备')),
+        ...widget.equipmentOptions.map(
+          (entry) => DropdownMenuItem<int?>(
+            value: entry.id,
+            child: _buildEquipmentDropdownText(entry.name),
+          ),
+        ),
+      ],
+      onChanged: _loading
+          ? null
+          : (value) {
+              _clearRuleScopeFlag();
+              setState(() => _equipmentFilterId = value);
+            },
+    );
+  }
+
+  Widget _buildStatusFilter() {
+    return DropdownButtonFormField<bool?>(
+      initialValue: _isEnabledFilter,
+      decoration: const InputDecoration(
+        labelText: '状态',
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      items: const [
+        DropdownMenuItem<bool?>(value: null, child: Text('全部')),
+        DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+        DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+      ],
+      onChanged: _loading
+          ? null
+          : (value) {
+              _clearRuleScopeFlag();
+              setState(() => _isEnabledFilter = value);
+            },
+    );
+  }
+
+  List<Widget> _buildToolbarButtons() {
+    return [
+      FilledButton.icon(
+        onPressed: _loading ? null : () => _load(page: 1),
+        icon: const Icon(Icons.search),
+        label: const Text('查询参数'),
+      ),
+      if (widget.canManage)
+        FilledButton.icon(
+          onPressed: _loading ? null : () => _showUpsertDialog(),
+          icon: const Icon(Icons.add),
+          label: const Text('新增参数'),
+        ),
+    ];
+  }
+
+  Widget _buildToolbar() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final equipmentTypeField = SizedBox(
+          width: 180,
+          child: _buildEquipmentTypeField(),
+        );
+        final equipmentFilter = SizedBox(
+          width: _toolbarMediumFieldWidth,
+          child: _buildEquipmentFilter(),
+        );
+        final statusFilter = SizedBox(
+          width: _toolbarNarrowFieldWidth,
+          child: _buildStatusFilter(),
+        );
+        final buttons = _buildToolbarButtons();
+        final desktopToolbarMinWidth =
+            _toolbarWideFieldMinWidth +
+            180 +
+            _toolbarMediumFieldWidth +
+            _toolbarNarrowFieldWidth +
+            (buttons.length * 120) +
+            ((buttons.length + 4) * _toolbarSpacing);
+
+        if (constraints.maxWidth >= desktopToolbarMinWidth) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: _buildKeywordField()),
+              const SizedBox(width: _toolbarSpacing),
+              equipmentTypeField,
+              const SizedBox(width: _toolbarSpacing),
+              equipmentFilter,
+              const SizedBox(width: _toolbarSpacing),
+              statusFilter,
+              const SizedBox(width: _toolbarSpacing),
+              Wrap(
+                spacing: _toolbarSpacing,
+                runSpacing: _toolbarRunSpacing,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: buttons,
+              ),
+            ],
+          );
+        }
+
+        return Wrap(
+          spacing: _toolbarSpacing,
+          runSpacing: _toolbarRunSpacing,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(width: constraints.maxWidth, child: _buildKeywordField()),
+            equipmentTypeField,
+            equipmentFilter,
+            statusFilter,
+            ...buttons,
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _handleParameterAction(
+    _ParameterListAction action,
+    EquipmentRuntimeParameterItem item,
+  ) async {
+    switch (action) {
+      case _ParameterListAction.edit:
+        await _showUpsertDialog(item: item);
+        return;
+      case _ParameterListAction.toggle:
+        await _toggleParam(item);
+        return;
+      case _ParameterListAction.delete:
+        await _deleteParam(item);
+        return;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 200,
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '参数名称/编码',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _load(page: 1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 180,
-                child: TextField(
-                  controller: _equipmentTypeController,
-                  decoration: const InputDecoration(
-                    labelText: '设备类型',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onChanged: (_) => _clearRuleScopeFlag(),
-                  onSubmitted: (_) => _load(page: 1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 200,
-                child: DropdownButtonFormField<int?>(
-                  initialValue: _equipmentFilterId,
-                  decoration: const InputDecoration(
-                    labelText: '适用设备',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('全部设备'),
-                    ),
-                    ...widget.equipmentOptions.map(
-                      (entry) => DropdownMenuItem<int?>(
-                        value: entry.id,
-                        child: Text(entry.name),
-                      ),
-                    ),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          _clearRuleScopeFlag();
-                          setState(() => _equipmentFilterId = value);
-                          _load(page: 1);
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<bool?>(
-                  initialValue: _isEnabledFilter,
-                  decoration: const InputDecoration(
-                    labelText: '状态',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: const [
-                    DropdownMenuItem<bool?>(value: null, child: Text('全部')),
-                    DropdownMenuItem<bool?>(value: true, child: Text('启用')),
-                    DropdownMenuItem<bool?>(value: false, child: Text('停用')),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          _clearRuleScopeFlag();
-                          setState(() => _isEnabledFilter = value);
-                          _load(page: 1);
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              IconButton(
-                tooltip: '查询',
-                onPressed: _loading ? null : () => _load(page: 1),
-                icon: const Icon(Icons.search),
-              ),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loading ? null : () => _load(page: _page),
-                icon: const Icon(Icons.refresh),
-              ),
-              const Spacer(),
-              if (widget.canManage)
-                ElevatedButton.icon(
-                  onPressed: _loading ? null : () => _showUpsertDialog(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('新增参数'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_activeRuleScope != null)
-            Container(
-              key: const Key('equipment-parameter-scope-banner'),
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text('当前按规则作用范围查看参数：${_activeRuleScope!.summary}'),
-                  ),
-                  TextButton(
-                    onPressed: _loading ? null : _clearRuleScope,
-                    child: const Text('清除范围'),
-                  ),
-                ],
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildToolbar(),
+        const SizedBox(height: 12),
+        if (_activeRuleScope != null)
+          Container(
+            key: const Key('equipment-parameter-scope-banner'),
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(12),
             ),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _message,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
-            ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: CrudListTableSection(
-              loading: _loading,
-              isEmpty: _items.isEmpty,
-              emptyText: '暂无运行参数',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columns: [
-                  const DataColumn(label: Text('ID')),
-                  const DataColumn(label: Text('适用设备')),
-                  const DataColumn(label: Text('参数编码')),
-                  const DataColumn(label: Text('参数名称')),
-                  const DataColumn(label: Text('单位')),
-                  const DataColumn(label: Text('默认值')),
-                  const DataColumn(label: Text('上限')),
-                  const DataColumn(label: Text('下限')),
-                  const DataColumn(label: Text('生效时间')),
-                  const DataColumn(label: Text('状态')),
-                  const DataColumn(label: Text('备注')),
-                  if (widget.canManage) const DataColumn(label: Text('操作')),
-                ],
-                rows: _items.map((item) {
-                  return DataRow(
-                    cells: [
-                      DataCell(Text('${item.id}')),
-                      DataCell(
-                        Text(
-                          item.equipmentName?.trim().isNotEmpty == true
-                              ? item.equipmentName!
-                              : item.equipmentType?.trim().isNotEmpty == true
-                              ? item.equipmentType!
-                              : '未配置',
-                        ),
-                      ),
-                      DataCell(Text(item.paramCode)),
-                      DataCell(Text(item.paramName)),
-                      DataCell(Text(item.unit.isEmpty ? '-' : item.unit)),
-                      DataCell(Text(item.standardValue ?? '-')),
-                      DataCell(Text(item.upperLimit ?? '-')),
-                      DataCell(Text(item.lowerLimit ?? '-')),
-                      DataCell(Text(_formatDateTime(item.effectiveAt))),
-                      DataCell(Text(item.isEnabled ? '启用' : '停用')),
-                      DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
-                      if (widget.canManage)
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TextButton(
-                                onPressed: () => _showUpsertDialog(item: item),
-                                child: const Text('编辑'),
-                              ),
-                              TextButton(
-                                onPressed: () => _toggleParam(item),
-                                child: Text(item.isEnabled ? '停用' : '启用'),
-                              ),
-                              TextButton(
-                                onPressed: () => _deleteParam(item),
-                                child: Text(
-                                  '删除',
-                                  style: TextStyle(
-                                    color: theme.colorScheme.error,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final clearButton = TextButton(
+                  onPressed: _loading ? null : _clearRuleScope,
+                  child: const Text('清除范围'),
+                );
+                final summary = Text(
+                  '当前按规则作用范围查看参数：${_activeRuleScope!.summary}',
+                );
+                if (constraints.maxWidth < 640) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [summary, const SizedBox(height: 8), clearButton],
                   );
-                }).toList(),
-              ),
+                }
+                return Row(
+                  children: [
+                    Expanded(child: summary),
+                    clearButton,
+                  ],
+                );
+              },
             ),
           ),
-          const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _load(page: _page - 1),
-            onNext: () => _load(page: _page + 1),
+        Text('总数：$_total', style: theme.textTheme.titleMedium),
+        if (_message.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _message,
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
           ),
-        ],
-      ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: CrudListTableSection(
+            loading: _loading,
+            isEmpty: _items.isEmpty,
+            emptyText: '暂无运行参数',
+            enableUnifiedHeaderStyle: true,
+            child: DataTable(
+              columnSpacing: 16,
+              columns: [
+                UnifiedListTableHeaderStyle.column(context, 'ID'),
+                UnifiedListTableHeaderStyle.column(context, '适用设备'),
+                UnifiedListTableHeaderStyle.column(context, '参数编码'),
+                UnifiedListTableHeaderStyle.column(context, '参数名称'),
+                UnifiedListTableHeaderStyle.column(context, '单位'),
+                UnifiedListTableHeaderStyle.column(context, '默认值'),
+                UnifiedListTableHeaderStyle.column(context, '上限'),
+                UnifiedListTableHeaderStyle.column(context, '下限'),
+                UnifiedListTableHeaderStyle.column(context, '生效时间'),
+                UnifiedListTableHeaderStyle.column(context, '状态'),
+                UnifiedListTableHeaderStyle.column(context, '备注'),
+                if (widget.canManage)
+                  UnifiedListTableHeaderStyle.column(context, '操作'),
+              ],
+              rows: _items.map((item) {
+                return DataRow(
+                  cells: [
+                    DataCell(Text('${item.id}')),
+                    DataCell(
+                      Text(
+                        item.equipmentName?.trim().isNotEmpty == true
+                            ? item.equipmentName!
+                            : item.equipmentType?.trim().isNotEmpty == true
+                            ? item.equipmentType!
+                            : '未配置',
+                      ),
+                    ),
+                    DataCell(Text(item.paramCode)),
+                    DataCell(Text(item.paramName)),
+                    DataCell(Text(item.unit.isEmpty ? '-' : item.unit)),
+                    DataCell(Text(item.standardValue ?? '-')),
+                    DataCell(Text(item.upperLimit ?? '-')),
+                    DataCell(Text(item.lowerLimit ?? '-')),
+                    DataCell(Text(_formatDateTime(item.effectiveAt))),
+                    DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                    DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
+                    if (widget.canManage)
+                      DataCell(
+                        UnifiedListTableHeaderStyle.actionMenuButton<
+                          _ParameterListAction
+                        >(
+                          theme: theme,
+                          onSelected: (action) =>
+                              _handleParameterAction(action, item),
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: _ParameterListAction.edit,
+                              child: Text('编辑'),
+                            ),
+                            PopupMenuItem(
+                              value: _ParameterListAction.toggle,
+                              child: Text(item.isEnabled ? '停用' : '启用'),
+                            ),
+                            const PopupMenuItem(
+                              value: _ParameterListAction.delete,
+                              child: Text('删除'),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SimplePaginationBar(
+          page: _page,
+          totalPages: _totalPages,
+          total: _total,
+          loading: _loading,
+          onPrevious: () => _load(page: _page - 1),
+          onNext: () => _load(page: _page + 1),
+        ),
+      ],
     );
   }
 }

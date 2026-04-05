@@ -121,6 +121,10 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     }
   }
 
+  Widget _buildStageDropdownText(String text) {
+    return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
+  }
+
   String _formatDate(DateTime value) {
     final local = value.toLocal();
     final mm = local.month.toString().padLeft(2, '0');
@@ -567,18 +571,37 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                   width: 180,
                   child: DropdownButtonFormField<String?>(
                     initialValue: _stageCodeFilter,
+                    isExpanded: true,
                     items: [
                       const DropdownMenuItem<String?>(
                         value: null,
-                        child: Text('全部工段'),
+                        child: Text(
+                          '全部工段',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       ..._stages.map(
                         (s) => DropdownMenuItem<String?>(
                           value: s.code,
-                          child: Text(s.name),
+                          child: _buildStageDropdownText(s.name),
                         ),
                       ),
                     ],
+                    selectedItemBuilder: (context) {
+                      return [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: _buildStageDropdownText('全部工段'),
+                        ),
+                        ..._stages.map(
+                          (s) => Align(
+                            alignment: Alignment.centerLeft,
+                            child: _buildStageDropdownText(s.name),
+                          ),
+                        ),
+                      ];
+                    },
                     onChanged: (value) {
                       setState(() => _stageCodeFilter = value);
                     },

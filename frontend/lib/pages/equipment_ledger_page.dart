@@ -30,6 +30,7 @@ class EquipmentLedgerPage extends StatefulWidget {
 
 class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   static const int _pageSize = 30;
+  static const String _allOwnersLabel = '全部负责人';
 
   late final EquipmentService _equipmentService;
   final TextEditingController _keywordController = TextEditingController();
@@ -79,6 +80,10 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     final min = local.minute.toString().padLeft(2, '0');
     final sec = local.second.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd $hh:$min:$sec';
+  }
+
+  Widget _buildOwnerDropdownText(String text) {
+    return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
   }
 
   int get _totalPages {
@@ -226,14 +231,29 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                           initialValue: selectedOwner.isEmpty
                               ? null
                               : selectedOwner,
+                          isExpanded: true,
                           items: _ownerOptions
                               .map(
                                 (entry) => DropdownMenuItem<String>(
                                   value: entry.username,
-                                  child: Text(entry.displayName),
+                                  child: _buildOwnerDropdownText(
+                                    entry.displayName,
+                                  ),
                                 ),
                               )
                               .toList(),
+                          selectedItemBuilder: (context) {
+                            return _ownerOptions
+                                .map(
+                                  (entry) => Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _buildOwnerDropdownText(
+                                      entry.displayName,
+                                    ),
+                                  ),
+                                )
+                                .toList();
+                          },
                           onChanged: (value) {
                             setInnerState(() {
                               selectedOwner = value ?? '';
@@ -438,6 +458,11 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    const toolbarSpacing = 12.0;
+    const locationFilterWidth = 160.0;
+    const ownerFilterWidth = 180.0;
+    const statusFilterWidth = 140.0;
+    const desktopSearchMinWidth = 320.0;
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -460,21 +485,20 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '搜索设备编号/名称/型号/位置/负责人',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadItems(page: 1),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final keywordField = TextField(
+                controller: _keywordController,
+                decoration: const InputDecoration(
+                  labelText: '搜索设备编号/名称/型号/位置/负责人',
+                  border: OutlineInputBorder(),
                 ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
+                onSubmitted: (_) => _loadItems(page: 1),
+              );
+              final locationFilter = SizedBox(
+                width: constraints.maxWidth < locationFilterWidth
+                    ? constraints.maxWidth
+                    : locationFilterWidth,
                 child: TextField(
                   controller: _locationFilterController,
                   decoration: const InputDecoration(
@@ -483,24 +507,40 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                   ),
                   onSubmitted: (_) => _loadItems(page: 1),
                 ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 180,
+              );
+              final ownerFilter = SizedBox(
+                width: constraints.maxWidth < ownerFilterWidth
+                    ? constraints.maxWidth
+                    : ownerFilterWidth,
                 child: DropdownButtonFormField<String?>(
                   initialValue: _ownerFilterName,
+                  isExpanded: true,
                   items: [
-                    const DropdownMenuItem<String?>(
+                    DropdownMenuItem<String?>(
                       value: null,
-                      child: Text('全部负责人'),
+                      child: _buildOwnerDropdownText(_allOwnersLabel),
                     ),
                     ..._ownerOptions.map(
                       (entry) => DropdownMenuItem<String?>(
                         value: entry.username,
-                        child: Text(entry.displayName),
+                        child: _buildOwnerDropdownText(entry.displayName),
                       ),
                     ),
                   ],
+                  selectedItemBuilder: (context) {
+                    return [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _buildOwnerDropdownText(_allOwnersLabel),
+                      ),
+                      ..._ownerOptions.map(
+                        (entry) => Align(
+                          alignment: Alignment.centerLeft,
+                          child: _buildOwnerDropdownText(entry.displayName),
+                        ),
+                      ),
+                    ];
+                  },
                   onChanged: (value) {
                     setState(() => _ownerFilterName = value);
                   },
@@ -510,10 +550,11 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                     isDense: true,
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 140,
+              );
+              final statusFilter = SizedBox(
+                width: constraints.maxWidth < statusFilterWidth
+                    ? constraints.maxWidth
+                    : statusFilterWidth,
                 child: DropdownButtonFormField<bool?>(
                   initialValue: _enabledFilter,
                   items: const [
@@ -530,22 +571,64 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                     isDense: true,
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadItems(page: 1),
-                icon: const Icon(Icons.search),
-                label: const Text('搜索'),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: (_loading || !widget.canWrite)
-                    ? null
-                    : () => _showEditDialog(),
-                icon: const Icon(Icons.add),
-                label: const Text('新增设备'),
-              ),
-            ],
+              );
+              final toolbarButtons = <Widget>[
+                FilledButton.icon(
+                  onPressed: _loading ? null : () => _loadItems(page: 1),
+                  icon: const Icon(Icons.search),
+                  label: const Text('搜索'),
+                ),
+                FilledButton.icon(
+                  onPressed: (_loading || !widget.canWrite)
+                      ? null
+                      : () => _showEditDialog(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('新增设备'),
+                ),
+              ];
+              final desktopToolbarMinWidth =
+                  desktopSearchMinWidth +
+                  locationFilterWidth +
+                  ownerFilterWidth +
+                  statusFilterWidth +
+                  240 +
+                  (5 * toolbarSpacing);
+
+              if (constraints.maxWidth >= desktopToolbarMinWidth) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: keywordField),
+                    const SizedBox(width: toolbarSpacing),
+                    locationFilter,
+                    const SizedBox(width: toolbarSpacing),
+                    ownerFilter,
+                    const SizedBox(width: toolbarSpacing),
+                    statusFilter,
+                    const SizedBox(width: toolbarSpacing),
+                    Wrap(
+                      spacing: toolbarSpacing,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: toolbarButtons,
+                    ),
+                  ],
+                );
+              }
+
+              return Wrap(
+                spacing: toolbarSpacing,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(width: constraints.maxWidth, child: keywordField),
+                  locationFilter,
+                  ownerFilter,
+                  statusFilter,
+                  ...toolbarButtons,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 12),
           Text('总数: $_total', style: theme.textTheme.titleMedium),
