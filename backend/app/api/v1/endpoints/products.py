@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import logging
+import urllib.parse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -242,10 +243,14 @@ def _to_parameter_list_result(
     )
 
 
-def _build_product_detail_result(*, db: Session, product: Product) -> ProductDetailResult:
+def _build_product_detail_result(
+    *, db: Session, product: Product
+) -> ProductDetailResult:
     from sqlalchemy import select
 
-    latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(product.id)
+    latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(
+        product.id
+    )
     versions = list_product_versions(db, product_id=product.id)
     template_rows = (
         db.execute(
@@ -308,7 +313,9 @@ def _build_product_detail_result(*, db: Session, product: Product) -> ProductDet
                 lifecycle_status=revision.lifecycle_status,
                 parameters=parameters,
             )
-            detail_parameter_message = "当前无生效版本，详情已回退展示当前版本参数快照。"
+            detail_parameter_message = (
+                "当前无生效版本，详情已回退展示当前版本参数快照。"
+            )
 
     history_total, history_rows = list_parameter_history(
         db,
@@ -374,7 +381,9 @@ def _build_product_detail_result(*, db: Session, product: Product) -> ProductDet
         version_total=len(versions),
         versions=[_to_version_item(row) for row in versions],
         history_total=history_total,
-        history_items=[_to_history_item(product=product, row=row) for row in history_rows],
+        history_items=[
+            _to_history_item(product=product, row=row) for row in history_rows
+        ],
         related_info_sections=related_info_sections,
     )
 
@@ -1614,8 +1623,13 @@ def _make_csv_response(rows: list[list[str]], filename: str) -> StreamingRespons
     for row in rows:
         writer.writerow(row)
     buf.seek(0)
+    quoted_filename = urllib.parse.quote(filename)
+    ascii_filename = filename.encode("ascii", "ignore").decode().strip() or "export.csv"
     headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Disposition": (
+            f'attachment; filename="{ascii_filename}"; '
+            f"filename*=UTF-8''{quoted_filename}"
+        ),
         "Content-Type": "text/csv; charset=utf-8-sig",
     }
     return StreamingResponse(
@@ -1631,6 +1645,9 @@ def export_products(
     has_effective_version: bool | None = Query(default=None),
     updated_after: datetime | None = Query(default=None),
     updated_before: datetime | None = Query(default=None),
+    current_version_keyword: str | None = Query(default=None),
+    current_param_name_keyword: str | None = Query(default=None),
+    current_param_category_keyword: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("product.products.export")),
 ) -> StreamingResponse:
@@ -1644,6 +1661,9 @@ def export_products(
         has_effective_version=has_effective_version,
         updated_after=updated_after,
         updated_before=updated_before,
+        current_version_keyword=current_version_keyword,
+        current_param_name_keyword=current_param_name_keyword,
+        current_param_category_keyword=current_param_category_keyword,
     )
     header = [
         "产品名称",

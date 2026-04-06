@@ -17,6 +17,9 @@ from app.core.authz_catalog import (
     PERM_QUALITY_SCRAP_STATISTICS_DETAIL,
     PERM_QUALITY_SCRAP_STATISTICS_EXPORT,
     PERM_QUALITY_SCRAP_STATISTICS_LIST,
+    PERM_QUALITY_SUPPLIERS_CREATE,
+    PERM_QUALITY_SUPPLIERS_DELETE,
+    PERM_QUALITY_SUPPLIERS_UPDATE,
 )
 from app.db.session import get_db
 from app.models.user import User
@@ -214,13 +217,17 @@ def _to_quality_repair_order_detail_item(
                 production_record_type=defect_record_map.get(item.id).record_type
                 if defect_record_map and defect_record_map.get(item.id)
                 else None,
-                production_record_quantity=defect_record_map.get(item.id).production_quantity
+                production_record_quantity=defect_record_map.get(
+                    item.id
+                ).production_quantity
                 if defect_record_map and defect_record_map.get(item.id)
                 else None,
                 production_record_created_at=defect_record_map.get(item.id).created_at
                 if defect_record_map and defect_record_map.get(item.id)
                 else None,
-                production_record_operator_user_id=defect_record_map.get(item.id).operator_user_id
+                production_record_operator_user_id=defect_record_map.get(
+                    item.id
+                ).operator_user_id
                 if defect_record_map and defect_record_map.get(item.id)
                 else None,
             )
@@ -710,17 +717,21 @@ def get_supplier_detail_api(
 ) -> ApiResponse[SupplierItem]:
     row = get_supplier_by_id(db, supplier_id)
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="供应商不存在")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="供应商不存在"
+        )
     return success_response(_to_supplier_item(row))
 
 
-@router.post("/suppliers", response_model=ApiResponse[SupplierItem], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/suppliers",
+    response_model=ApiResponse[SupplierItem],
+    status_code=status.HTTP_201_CREATED,
+)
 def create_supplier_api(
     payload: SupplierCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_permission(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)
-    ),
+    current_user: User = Depends(require_permission(PERM_QUALITY_SUPPLIERS_CREATE)),
 ) -> ApiResponse[SupplierItem]:
     try:
         row = create_supplier(
@@ -737,12 +748,18 @@ def create_supplier_api(
             target_id=str(row.id),
             target_name=row.name,
             operator=current_user,
-            after_data={"name": row.name, "remark": row.remark, "is_enabled": row.is_enabled},
+            after_data={
+                "name": row.name,
+                "remark": row.remark,
+                "is_enabled": row.is_enabled,
+            },
         )
         db.commit()
     except ValueError as exc:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
     except Exception:
         db.rollback()
         raise
@@ -754,13 +771,13 @@ def update_supplier_api(
     supplier_id: int,
     payload: SupplierUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_permission(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)
-    ),
+    current_user: User = Depends(require_permission(PERM_QUALITY_SUPPLIERS_UPDATE)),
 ) -> ApiResponse[SupplierItem]:
     row = get_supplier_by_id(db, supplier_id)
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="供应商不存在")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="供应商不存在"
+        )
     before_data = {"name": row.name, "remark": row.remark, "is_enabled": row.is_enabled}
     try:
         row = update_supplier(
@@ -779,12 +796,18 @@ def update_supplier_api(
             target_name=row.name,
             operator=current_user,
             before_data=before_data,
-            after_data={"name": row.name, "remark": row.remark, "is_enabled": row.is_enabled},
+            after_data={
+                "name": row.name,
+                "remark": row.remark,
+                "is_enabled": row.is_enabled,
+            },
         )
         db.commit()
     except ValueError as exc:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
     except Exception:
         db.rollback()
         raise
@@ -795,13 +818,13 @@ def update_supplier_api(
 def delete_supplier_api(
     supplier_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_permission(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)
-    ),
+    current_user: User = Depends(require_permission(PERM_QUALITY_SUPPLIERS_DELETE)),
 ) -> ApiResponse[dict[str, str]]:
     row = get_supplier_by_id(db, supplier_id)
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="供应商不存在")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="供应商不存在"
+        )
     before_data = {"name": row.name, "remark": row.remark, "is_enabled": row.is_enabled}
     try:
         delete_supplier(db, row=row)
@@ -818,7 +841,9 @@ def delete_supplier_api(
         db.commit()
     except RuntimeError as exc:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
     except Exception:
         db.rollback()
         raise
@@ -1059,10 +1084,13 @@ def get_quality_repair_order_detail_api(
                     select(ProductionRecord)
                     .where(
                         ProductionRecord.order_id == row.source_order_id,
-                        ProductionRecord.order_process_id == row.source_order_process_id,
+                        ProductionRecord.order_process_id
+                        == row.source_order_process_id,
                         ProductionRecord.record_type == "production",
                     )
-                    .order_by(ProductionRecord.created_at.desc(), ProductionRecord.id.desc())
+                    .order_by(
+                        ProductionRecord.created_at.desc(), ProductionRecord.id.desc()
+                    )
                 )
                 .scalars()
                 .all()
@@ -1071,10 +1099,14 @@ def get_quality_repair_order_detail_api(
             unmatched_rows = list(production_rows)
             for defect_row in row.defect_rows:
                 if defect_row.production_record_id is not None:
-                    matched = production_record_map.get(int(defect_row.production_record_id))
+                    matched = production_record_map.get(
+                        int(defect_row.production_record_id)
+                    )
                     if matched is not None:
                         defect_record_map[defect_row.id] = matched
-                        unmatched_rows = [item for item in unmatched_rows if item.id != matched.id]
+                        unmatched_rows = [
+                            item for item in unmatched_rows if item.id != matched.id
+                        ]
                         continue
                 candidates = [
                     item
@@ -1087,7 +1119,9 @@ def get_quality_repair_order_detail_api(
                     continue
                 if defect_row.production_time is None:
                     defect_record_map[defect_row.id] = candidates[0]
-                    unmatched_rows = [item for item in unmatched_rows if item.id != candidates[0].id]
+                    unmatched_rows = [
+                        item for item in unmatched_rows if item.id != candidates[0].id
+                    ]
                     continue
                 matched = min(
                     candidates,
@@ -1096,7 +1130,9 @@ def get_quality_repair_order_detail_api(
                     ),
                 )
                 defect_record_map[defect_row.id] = matched
-                unmatched_rows = [item for item in unmatched_rows if item.id != matched.id]
+                unmatched_rows = [
+                    item for item in unmatched_rows if item.id != matched.id
+                ]
 
     return success_response(
         _to_quality_repair_order_detail_item(
@@ -1115,7 +1151,9 @@ def complete_quality_repair_order_api(
     repair_order_id: int,
     payload: RepairOrderCompleteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_QUALITY_REPAIR_ORDERS_COMPLETE)),
+    current_user: User = Depends(
+        require_permission(PERM_QUALITY_REPAIR_ORDERS_COMPLETE)
+    ),
 ) -> ApiResponse[RepairOrderItem]:
     try:
         row = complete_repair_order(

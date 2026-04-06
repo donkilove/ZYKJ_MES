@@ -3,6 +3,7 @@ import json
 import sys
 import time
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -21,6 +22,7 @@ from app.models.product import Product  # noqa: E402
 from app.models.product_process_template import ProductProcessTemplate  # noqa: E402
 from app.models.production_order import ProductionOrder  # noqa: E402
 from app.models.production_order_process import ProductionOrderProcess  # noqa: E402
+from app.models.production_record import ProductionRecord  # noqa: E402
 from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
 
@@ -216,6 +218,72 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         row = response.json()["data"]
         self.supplier_ids.append(int(row["id"]))
         return row
+
+    def _set_stage_sort_order(self, *, stage_id: int, sort_order: int) -> None:
+        db = SessionLocal()
+        try:
+            stage_row = db.get(ProcessStage, stage_id)
+            self.assertIsNotNone(stage_row)
+            assert stage_row is not None
+            stage_row.sort_order = sort_order
+            db.commit()
+        finally:
+            db.close()
+
+    def _seed_completed_process_metrics_sample(
+        self,
+        *,
+        order_id: int,
+        start_at: datetime,
+        end_at: datetime,
+        production_qty: int,
+    ) -> None:
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, order_id)
+            self.assertIsNotNone(order_row)
+            assert order_row is not None
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_id)
+                .first()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            self.assertIsNotNone(process_row)
+            self.assertIsNotNone(admin)
+            assert process_row is not None and admin is not None
+
+            order_row.status = "completed"
+            process_row.status = "completed"
+            process_row.visible_quantity = production_qty
+            process_row.completed_quantity = production_qty
+            process_row.updated_at = end_at
+
+            db.add(
+                ProductionRecord(
+                    order_id=order_row.id,
+                    order_process_id=process_row.id,
+                    sub_order_id=None,
+                    operator_user_id=admin.id,
+                    production_quantity=0,
+                    record_type="first_article",
+                    created_at=start_at,
+                )
+            )
+            db.add(
+                ProductionRecord(
+                    order_id=order_row.id,
+                    order_process_id=process_row.id,
+                    sub_order_id=None,
+                    operator_user_id=admin.id,
+                    production_quantity=production_qty,
+                    record_type="production",
+                    created_at=end_at,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
 
     def test_light_query_and_copy_source_export(self) -> None:
         stage = self._create_stage("A01")
@@ -799,6 +867,322 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         self.assertTrue(
             any(item["id"] == detail["template"]["id"] for item in payload["items"])
         )
+
+    def test_process_metrics_query_returns_grouped_filtered_samples(self) -> None:
+        stage_a = self._create_stage("K01")
+        stage_b = self._create_stage("K02")
+        self._set_stage_sort_order(stage_id=int(stage_a["id"]), sort_order=1)
+        self._set_stage_sort_order(stage_id=int(stage_b["id"]), sort_order=2)
+        process_a = self._create_process(
+            stage_id=stage_a["id"],
+            stage_code=stage_a["code"],
+            suffix="01",
+        )
+        process_b = self._create_process(
+            stage_id=stage_b["id"],
+            stage_code=stage_b["code"],
+            suffix="01",
+        )
+        product = self._create_product("看板查询")
+        template_a = self._create_template(
+            product_id=product["id"],
+            template_name="看板模板A",
+            stage_id=stage_a["id"],
+            process_id=process_a["id"],
+        )
+        template_b = self._create_template(
+            product_id=product["id"],
+            template_name="看板模板B",
+            stage_id=stage_b["id"],
+            process_id=process_b["id"],
+        )
+        publish_a = self.client.post(
+            f"/api/v1/craft/templates/{int(template_a['template']['id'])}/publish",
+            headers=self._headers(),
+            json={"apply_order_sync": False, "confirmed": True, "expected_version": 1},
+        )
+        self.assertEqual(publish_a.status_code, 200, publish_a.text)
+        publish_b = self.client.post(
+            f"/api/v1/craft/templates/{int(template_b['template']['id'])}/publish",
+            headers=self._headers(),
+            json={"apply_order_sync": False, "confirmed": True, "expected_version": 1},
+        )
+        self.assertEqual(publish_b.status_code, 200, publish_b.text)
+        order_a = self._create_order_from_template(
+            product_id=product["id"],
+            template_id=int(template_a["template"]["id"]),
+        )
+        order_b = self._create_order_from_template(
+            product_id=product["id"],
+            template_id=int(template_b["template"]["id"]),
+        )
+        self._seed_completed_process_metrics_sample(
+            order_id=int(order_a["id"]),
+            start_at=datetime(2026, 3, 1, 8, 0, tzinfo=UTC),
+            end_at=datetime(2026, 3, 1, 9, 30, tzinfo=UTC),
+            production_qty=9,
+        )
+        self._seed_completed_process_metrics_sample(
+            order_id=int(order_b["id"]),
+            start_at=datetime(2026, 3, 2, 10, 0, tzinfo=UTC),
+            end_at=datetime(2026, 3, 2, 10, 30, tzinfo=UTC),
+            production_qty=12,
+        )
+
+        response = self.client.get(
+            "/api/v1/craft/kanban/process-metrics",
+            headers=self._headers(),
+            params={"product_id": product["id"], "limit": 1},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()["data"]
+        self.assertEqual(payload["product_id"], product["id"])
+        self.assertEqual(len(payload["items"]), 2)
+        self.assertEqual(
+            [item["process_id"] for item in payload["items"]],
+            [process_a["id"], process_b["id"]],
+        )
+        first_sample = payload["items"][0]["samples"][0]
+        self.assertEqual(first_sample["production_qty"], 9)
+        self.assertEqual(first_sample["work_minutes"], 90)
+        self.assertEqual(first_sample["capacity_per_hour"], 6.0)
+
+        filtered = self.client.get(
+            "/api/v1/craft/kanban/process-metrics",
+            headers=self._headers(),
+            params={"product_id": product["id"], "process_id": process_b["id"]},
+        )
+        self.assertEqual(filtered.status_code, 200, filtered.text)
+        filtered_items = filtered.json()["data"]["items"]
+        self.assertEqual(len(filtered_items), 1)
+        self.assertEqual(filtered_items[0]["process_id"], process_b["id"])
+
+        date_filtered = self.client.get(
+            "/api/v1/craft/kanban/process-metrics",
+            headers=self._headers(),
+            params={
+                "product_id": product["id"],
+                "start_date": "2026-03-02T00:00:00Z",
+            },
+        )
+        self.assertEqual(date_filtered.status_code, 200, date_filtered.text)
+        date_items = date_filtered.json()["data"]["items"]
+        self.assertEqual(len(date_items), 1)
+        self.assertEqual(date_items[0]["process_id"], process_b["id"])
+
+    def test_product_template_references_use_self_row_for_templates_without_downstream_refs(
+        self,
+    ) -> None:
+        stage = self._create_stage("PR1")
+        process = self._create_process(
+            stage_id=stage["id"],
+            stage_code=stage["code"],
+            suffix="01",
+        )
+        product = self._create_product("产品模式")
+        detail = self._create_template(
+            product_id=product["id"],
+            template_name="产品模式模板",
+            stage_id=stage["id"],
+            process_id=process["id"],
+        )
+        template_id = int(detail["template"]["id"])
+
+        initial_response = self.client.get(
+            f"/api/v1/craft/products/{product['id']}/template-references",
+            headers=self._headers(),
+        )
+        self.assertEqual(initial_response.status_code, 200, initial_response.text)
+        initial_payload = initial_response.json()["data"]
+        initial_total_templates = int(initial_payload["total_templates"])
+        initial_total_references = int(initial_payload["total_references"])
+        template_self_row = next(
+            item
+            for item in initial_payload["items"]
+            if item["template_id"] == template_id
+        )
+        self.assertEqual(template_self_row["ref_type"], "template")
+        self.assertEqual(template_self_row["detail"], "无下游引用")
+
+        copy_response = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/copy",
+            headers=self._headers(),
+            json={"new_name": "产品模式模板-复用"},
+        )
+        self.assertEqual(copy_response.status_code, 201, copy_response.text)
+
+        after_copy_response = self.client.get(
+            f"/api/v1/craft/products/{product['id']}/template-references",
+            headers=self._headers(),
+        )
+        self.assertEqual(after_copy_response.status_code, 200, after_copy_response.text)
+        after_copy_payload = after_copy_response.json()["data"]
+        self.assertEqual(
+            after_copy_payload["total_templates"],
+            initial_total_templates + 1,
+        )
+        self.assertEqual(
+            after_copy_payload["total_references"],
+            initial_total_references + 1,
+        )
+        self.assertTrue(
+            any(
+                item["template_id"] == template_id
+                and item["ref_type"] == "template_reuse"
+                for item in after_copy_payload["items"]
+            )
+        )
+        self.assertTrue(
+            any(item["ref_type"] == "template" for item in after_copy_payload["items"])
+        )
+
+    def test_compare_rollback_copy_to_product_and_unarchive_flow(self) -> None:
+        stage_a = self._create_stage("CF1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"],
+            stage_code=stage_a["code"],
+            suffix="01",
+        )
+        product = self._create_product("生命周期")
+        detail = self._create_template(
+            product_id=product["id"],
+            template_name="生命周期模板",
+            stage_id=stage_a["id"],
+            process_id=process_a["id"],
+        )
+        template_id = int(detail["template"]["id"])
+
+        publish_v1 = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/publish",
+            headers=self._headers(),
+            json={"apply_order_sync": False, "confirmed": True, "expected_version": 1},
+        )
+        self.assertEqual(publish_v1.status_code, 200, publish_v1.text)
+
+        create_draft = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/draft",
+            headers=self._headers(),
+        )
+        self.assertEqual(create_draft.status_code, 200, create_draft.text)
+
+        stage_b = self._create_stage("CF2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"],
+            stage_code=stage_b["code"],
+            suffix="01",
+        )
+        update_draft = self.client.put(
+            f"/api/v1/craft/templates/{template_id}",
+            headers=self._headers(),
+            json={
+                "template_name": "生命周期模板",
+                "is_default": True,
+                "is_enabled": True,
+                "remark": "切换工序用于版本对比",
+                "sync_orders": False,
+                "steps": [
+                    {
+                        "step_order": 1,
+                        "stage_id": stage_b["id"],
+                        "process_id": process_b["id"],
+                    }
+                ],
+            },
+        )
+        self.assertEqual(update_draft.status_code, 200, update_draft.text)
+        expected_version = int(
+            update_draft.json()["data"]["detail"]["template"]["version"]
+        )
+
+        publish_v2 = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/publish",
+            headers=self._headers(),
+            json={
+                "apply_order_sync": False,
+                "confirmed": True,
+                "expected_version": expected_version,
+            },
+        )
+        self.assertEqual(publish_v2.status_code, 200, publish_v2.text)
+
+        compare_response = self.client.get(
+            f"/api/v1/craft/templates/{template_id}/versions/compare",
+            headers=self._headers(),
+            params={"from_version": 1, "to_version": 2},
+        )
+        self.assertEqual(compare_response.status_code, 200, compare_response.text)
+        compare_payload = compare_response.json()["data"]
+        self.assertEqual(compare_payload["changed_steps"], 1)
+        self.assertEqual(compare_payload["items"][0]["diff_type"], "changed")
+        self.assertEqual(
+            compare_payload["items"][0]["from_process_code"], process_a["code"]
+        )
+        self.assertEqual(
+            compare_payload["items"][0]["to_process_code"], process_b["code"]
+        )
+
+        rollback_response = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/rollback",
+            headers=self._headers(),
+            json={
+                "target_version": 1,
+                "apply_order_sync": False,
+                "confirmed": True,
+                "note": "回滚到初始版本",
+            },
+        )
+        self.assertEqual(rollback_response.status_code, 200, rollback_response.text)
+        rollback_payload = rollback_response.json()["data"]["detail"]
+        self.assertEqual(rollback_payload["steps"][0]["process_id"], process_a["id"])
+        self.assertEqual(
+            rollback_payload["template"]["lifecycle_status"],
+            "published",
+        )
+
+        archive_response = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/archive",
+            headers=self._headers(),
+        )
+        self.assertEqual(archive_response.status_code, 200, archive_response.text)
+
+        unarchive_response = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/unarchive",
+            headers=self._headers(),
+        )
+        self.assertEqual(unarchive_response.status_code, 200, unarchive_response.text)
+        self.assertEqual(
+            unarchive_response.json()["data"]["template"]["lifecycle_status"],
+            "published",
+        )
+
+        target_product = self._create_product("跨产品复制")
+        copy_to_product_response = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/copy-to-product",
+            headers=self._headers(),
+            json={
+                "target_product_id": target_product["id"],
+                "new_name": "跨产品模板",
+            },
+        )
+        self.assertEqual(
+            copy_to_product_response.status_code,
+            201,
+            copy_to_product_response.text,
+        )
+        copied_template = copy_to_product_response.json()["data"]["template"]
+        self.assertEqual(copied_template["product_id"], target_product["id"])
+        self.assertEqual(copied_template["source_type"], "cross_product_template")
+        self.assertEqual(copied_template["source_template_id"], template_id)
+
+        invalid_copy_response = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/copy-to-product",
+            headers=self._headers(),
+            json={"target_product_id": 999999999, "new_name": "非法目标产品"},
+        )
+        self.assertEqual(
+            invalid_copy_response.status_code, 400, invalid_copy_response.text
+        )
+        self.assertIn("Product not found", invalid_copy_response.text)
 
     def test_create_publish_and_import_follow_draft_gate(self) -> None:
         stage = self._create_stage("G01")

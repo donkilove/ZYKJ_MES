@@ -19,6 +19,7 @@ from app.api.v1.endpoints.quality import (  # noqa: E402
     get_first_article_detail_api,
     get_first_article_disposition_detail_api,
 )
+from app.core.security import get_password_hash  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.first_article_disposition import FirstArticleDisposition  # noqa: E402
 from app.models.first_article_disposition_history import (  # noqa: E402
@@ -39,7 +40,10 @@ from app.models.production_order_process import ProductionOrderProcess  # noqa: 
 from app.models.repair_cause import RepairCause  # noqa: E402
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon  # noqa: E402
 from app.models.repair_order import RepairOrder  # noqa: E402
+from app.models.role import Role  # noqa: E402
+from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.services.authz_service import replace_role_permissions_for_module  # noqa: E402
 from app.services.production_repair_service import complete_repair_order  # noqa: E402
 from app.services.quality_service import (  # noqa: E402
     get_first_article_by_id,
@@ -67,6 +71,8 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.repair_cause_ids: list[int] = []
         self.message_ids: list[int] = []
         self.user_ids: list[int] = []
+        self.role_ids: list[int] = []
+        self.supplier_ids: list[int] = []
         self.template_ids: list[int] = []
         self.token = self._login()
         self.admin_user = (
@@ -154,19 +160,89 @@ class QualityModuleIntegrationTest(unittest.TestCase):
                 if row is not None:
                     self.db.delete(row)
                     self.db.commit()
+            for role_id in reversed(self.role_ids):
+                row = self.db.get(Role, role_id)
+                if row is not None:
+                    self.db.delete(row)
+                    self.db.commit()
+            for supplier_id in reversed(self.supplier_ids):
+                row = self.db.get(Supplier, supplier_id)
+                if row is not None:
+                    self.db.delete(row)
+                    self.db.commit()
         finally:
             self.db.close()
 
     def _login(self) -> str:
+        return self._login_as(username="admin", password="Admin@123456")
+
+    def _login_as(self, *, username: str, password: str) -> str:
         response = self.client.post(
             "/api/v1/auth/login",
-            data={"username": "admin", "password": "Admin@123456"},
+            data={"username": username, "password": password},
         )
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()["data"]["access_token"]
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token}"}
+
+    def _create_role(self, suffix: str) -> Role:
+        row = Role(
+            code=f"quality_it_{suffix}_{int(time.time() * 1000)}",
+            name=f"质量集成角色-{suffix}",
+            role_type="custom",
+            is_enabled=True,
+            is_builtin=False,
+            is_deleted=False,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        self.role_ids.append(int(row.id))
+        return row
+
+    def _create_user_with_permissions(
+        self,
+        *,
+        suffix: str,
+        permission_codes: list[str],
+    ) -> User:
+        role = self._create_role(suffix)
+        row = User(
+            username=f"quality_perm_{suffix}_{int(time.time() * 1000)}",
+            full_name=f"质量权限用户-{suffix}",
+            password_hash=get_password_hash("Admin@123456"),
+            is_active=True,
+            is_superuser=False,
+            remark="质量模块集成测试",
+        )
+        row.roles.append(role)
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        self.user_ids.append(int(row.id))
+        replace_role_permissions_for_module(
+            self.db,
+            role_code=role.code,
+            module_code="quality",
+            granted_permission_codes=permission_codes,
+            operator=None,
+            remark="质量模块集成测试授权",
+        )
+        self.db.commit()
+        return row
+
+    def _create_supplier(self, name: str, *, is_enabled: bool = True) -> dict:
+        response = self.client.post(
+            "/api/v1/quality/suppliers",
+            headers=self._headers(),
+            json={"name": name, "remark": "质量模块集成测试", "is_enabled": is_enabled},
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        row = response.json()["data"]
+        self.supplier_ids.append(int(row["id"]))
+        return row
 
     def _create_stage(self, *, token: str) -> ProcessStage:
         row = ProcessStage(
@@ -503,6 +579,98 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(payload["filename"], "quality_trend.csv")
         self.assertIn("不良数", csv_text.splitlines()[0])
 
+    def test_first_article_export_returns_filtered_csv_contract(self) -> None:
+        record = self._create_first_article_record(result="failed")
+
+        response = self.client.post(
+            "/api/v1/quality/first-articles/export",
+            headers=self._headers(),
+            json={
+                "query_date": "2026-03-02",
+                "keyword": record.order.order_code,
+                "result": "failed",
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        payload = response.json()["data"]
+        csv_text = base64.b64decode(payload["content_base64"]).decode("utf-8-sig")
+        csv_lines = csv_text.splitlines()
+        self.assertTrue(payload["filename"].startswith("首件记录_2026-03-02_"))
+        self.assertEqual(payload["total_rows"], 1)
+        self.assertEqual(
+            csv_lines[0],
+            "提交时间,订单号,产品,工序编码,工序名称,操作员,结果,校验日期,校验码,备注",
+        )
+        self.assertIn(record.order.order_code, csv_lines[1])
+        self.assertIn("不通过", csv_lines[1])
+
+    def test_quality_stats_export_returns_quality_sections_and_trend_rows(self) -> None:
+        record = self._create_first_article_record(result="failed")
+        repair_order = self._create_repair_order(record=record)
+        self._create_repair_defect(
+            repair_order=repair_order,
+            phenomenon="虚焊",
+            quantity=2,
+        )
+        self._create_scrap_statistics(
+            record=record,
+            scrap_reason="焊点脱落",
+            scrap_quantity=1,
+        )
+
+        response = self.client.post(
+            "/api/v1/quality/stats/export",
+            headers=self._headers(),
+            json={
+                "start_date": "2026-03-01",
+                "end_date": "2026-03-03",
+                "product_name": record.order.product.name,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        payload = response.json()["data"]
+        csv_text = base64.b64decode(payload["content_base64"]).decode("utf-8-sig")
+        self.assertTrue(payload["filename"].startswith("品质统计_"))
+        self.assertGreaterEqual(payload["total_rows"], 4)
+        self.assertIn("== 品质总览 ==", csv_text)
+        self.assertIn("== 趋势分析 ==", csv_text)
+        self.assertIn(record.order.product.name, csv_text)
+        self.assertIn("2026-03-02", csv_text)
+
+    def test_defect_analysis_export_returns_filtered_csv_contract(self) -> None:
+        record = self._create_first_article_record(result="failed")
+        repair_order = self._create_repair_order(record=record)
+        self._create_repair_defect(
+            repair_order=repair_order,
+            phenomenon="虚焊",
+            quantity=3,
+        )
+
+        response = self.client.post(
+            "/api/v1/quality/defect-analysis/export",
+            headers=self._headers(),
+            params={
+                "start_date": "2026-03-01",
+                "end_date": "2026-03-03",
+                "product_id": record.order.product_id,
+                "phenomenon": "虚焊",
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        payload = response.json()["data"]
+        csv_text = base64.b64decode(payload["content_base64"]).decode("utf-8-sig")
+        csv_lines = csv_text.splitlines()
+        self.assertTrue(payload["filename"].startswith("defect_analysis_"))
+        self.assertEqual(payload["total_rows"], 1)
+        self.assertEqual(
+            csv_lines[0], "缺陷现象,产品,工序编码,工序名称,数量,操作员,生产时间"
+        )
+        self.assertIn("虚焊", csv_lines[1])
+        self.assertIn(record.order.product.name, csv_lines[1])
+
     def test_disposition_requires_failed_record_and_preserves_history(self) -> None:
         failed_record = self._create_first_article_record(result="failed")
         passed_record = self._create_first_article_record(result="passed")
@@ -642,7 +810,9 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         record.template_id = template.id
         record.check_content = "首件内容-品质详情"
         record.test_value = "首件测试值-品质详情"
-        self.db.add(FirstArticleParticipant(record_id=record.id, user_id=participant.id))
+        self.db.add(
+            FirstArticleParticipant(record_id=record.id, user_id=participant.id)
+        )
         self.db.commit()
 
         detail = get_first_article_by_id(self.db, record_id=record.id)
@@ -806,7 +976,9 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             8,
         )
 
-    def test_quality_stats_do_not_drop_repair_and_scrap_without_first_article(self) -> None:
+    def test_quality_stats_do_not_drop_repair_and_scrap_without_first_article(
+        self,
+    ) -> None:
         token = f"{self._suffix}-scope"
         order, order_process = self._create_order_context(token=token)
         operator_user = self._create_operator_user(token=f"{token}-worker")
@@ -918,7 +1090,9 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(trend_response.status_code, 200, trend_response.text)
         trend_items = trend_response.json()["data"]["items"]
-        matched = next(item for item in trend_items if item["stat_date"] == "2026-03-02")
+        matched = next(
+            item for item in trend_items if item["stat_date"] == "2026-03-02"
+        )
         self.assertEqual(matched["first_article_total"], 0)
         self.assertEqual(matched["defect_total"], 2)
         self.assertEqual(matched["scrap_total"], 2)
@@ -988,6 +1162,102 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             200,
             export_repair_response.text,
         )
+
+    def test_quality_suppliers_crud_and_filter_contracts_are_available(self) -> None:
+        supplier = self._create_supplier(f"质量供应商{self._suffix}")
+
+        list_response = self.client.get(
+            "/api/v1/quality/suppliers",
+            headers=self._headers(),
+            params={"keyword": supplier["name"], "enabled": True},
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        list_payload = list_response.json()["data"]
+        self.assertEqual(list_payload["total"], 1)
+        self.assertEqual(list_payload["items"][0]["id"], supplier["id"])
+
+        detail_response = self.client.get(
+            f"/api/v1/quality/suppliers/{supplier['id']}",
+            headers=self._headers(),
+        )
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        self.assertEqual(detail_response.json()["data"]["name"], supplier["name"])
+
+        update_response = self.client.put(
+            f"/api/v1/quality/suppliers/{supplier['id']}",
+            headers=self._headers(),
+            json={
+                "name": f"质量供应商已停用{self._suffix}",
+                "remark": "更新后的备注",
+                "is_enabled": False,
+            },
+        )
+        self.assertEqual(update_response.status_code, 200, update_response.text)
+        updated_payload = update_response.json()["data"]
+        self.assertEqual(updated_payload["remark"], "更新后的备注")
+        self.assertFalse(updated_payload["is_enabled"])
+
+        disabled_list_response = self.client.get(
+            "/api/v1/quality/suppliers",
+            headers=self._headers(),
+            params={"keyword": "已停用", "enabled": False},
+        )
+        self.assertEqual(
+            disabled_list_response.status_code,
+            200,
+            disabled_list_response.text,
+        )
+        disabled_items = disabled_list_response.json()["data"]["items"]
+        self.assertTrue(any(item["id"] == supplier["id"] for item in disabled_items))
+
+        delete_response = self.client.delete(
+            f"/api/v1/quality/suppliers/{supplier['id']}",
+            headers=self._headers(),
+        )
+        self.assertEqual(delete_response.status_code, 200, delete_response.text)
+        self.assertEqual(delete_response.json()["data"]["message"], "供应商已删除")
+
+        self.supplier_ids.remove(int(supplier["id"]))
+
+    def test_quality_suppliers_write_requires_specific_permissions(self) -> None:
+        supplier = self._create_supplier(f"权限供应商{self._suffix}")
+        limited_user = self._create_user_with_permissions(
+            suffix=f"supplier-{self._suffix}",
+            permission_codes=["page.quality_supplier_management.view"],
+        )
+        limited_headers = {
+            "Authorization": f"Bearer {self._login_as(username=limited_user.username, password='Admin@123456')}"
+        }
+
+        list_response = self.client.get(
+            "/api/v1/quality/suppliers",
+            headers=limited_headers,
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+
+        create_response = self.client.post(
+            "/api/v1/quality/suppliers",
+            headers=limited_headers,
+            json={
+                "name": f"越权创建{self._suffix}",
+                "remark": "不应允许",
+                "is_enabled": True,
+            },
+        )
+        self.assertEqual(create_response.status_code, 403, create_response.text)
+
+        update_response = self.client.put(
+            f"/api/v1/quality/suppliers/{supplier['id']}",
+            headers=limited_headers,
+            json={"name": supplier["name"], "remark": "越权更新", "is_enabled": True},
+        )
+        self.assertEqual(update_response.status_code, 403, update_response.text)
+
+        delete_response = self.client.delete(
+            f"/api/v1/quality/suppliers/{supplier['id']}",
+            headers=limited_headers,
+        )
+        self.assertEqual(delete_response.status_code, 403, delete_response.text)
 
     def test_repair_completion_message_jumps_to_quality_tab(self) -> None:
         record = self._create_first_article_record(result="failed")

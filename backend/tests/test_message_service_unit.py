@@ -111,7 +111,7 @@ class MessageServiceUnitTest(unittest.TestCase):
         stale_message = SimpleNamespace(
             id=1,
             title="旧消息",
-            status="src_unavailable",
+            status="source_unavailable",
             source_module="message",
             source_type="announcement",
             source_id="1",
@@ -152,6 +152,45 @@ class MessageServiceUnitTest(unittest.TestCase):
         self.assertEqual(stats["source_unavailable_updated"], 1)
         db.flush.assert_called_once()
         self.assertEqual(write_audit_log.call_count, 2)
+
+    def test_get_message_jump_target_returns_missing_target_for_blank_page(self):
+        msg = SimpleNamespace(
+            id=17,
+            status="active",
+            expires_at=None,
+            target_page_code=" ",
+            target_tab_code=None,
+            target_route_payload_json=None,
+        )
+        recipient = SimpleNamespace()
+        db = MagicMock()
+        db.execute.return_value.one_or_none.return_value = (msg, recipient)
+
+        result = message_service.get_message_jump_target(
+            db,
+            user_id=1,
+            message_id=17,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertFalse(result.can_jump)
+        self.assertEqual(result.disabled_reason, "missing_target")
+
+    def test_resolve_message_status_supports_legacy_source_unavailable_value(self):
+        msg = SimpleNamespace(
+            status="src_unavailable",
+            expires_at=None,
+            target_page_code="production",
+        )
+
+        status_value, inactive_reason = message_service._resolve_message_status(
+            msg,
+            now=datetime.now(UTC),
+            user_permission_codes={"page.production.view"},
+        )
+
+        self.assertEqual(status_value, "source_unavailable")
+        self.assertEqual(inactive_reason, "source_unavailable")
 
     def test_retry_failed_message_deliveries_replays_due_records(self):
         recipient = SimpleNamespace(id=5, message_id=21, recipient_user_id=9)

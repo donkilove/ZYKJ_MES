@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
-from app.core.authz_catalog import PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW
 from app.core.production_constants import (
     ORDER_STATUS_COMPLETED,
     PROCESS_STATUS_COMPLETED,
@@ -31,6 +30,7 @@ ASSIST_STATUS_ALL = {
 
 ASSIST_OP_FIRST_ARTICLE = "first_article"
 ASSIST_OP_END_PRODUCTION = "end_production"
+PERM_FEATURE_PRODUCTION_ASSIST_RECORDS_VIEW = "feature.production.assist.records.view"
 
 
 def _get_order_and_process_for_update(
@@ -207,12 +207,20 @@ def list_assist_authorizations(
             raise ValueError("Invalid assist authorization status")
         stmt = stmt.where(ProductionAssistAuthorization.status == status)
     if order_code:
-        stmt = stmt.where(
-            ProductionAssistAuthorization.order_code.ilike(f"%{order_code}%")
+        stmt = stmt.join(
+            ProductionOrder,
+            ProductionAssistAuthorization.order_id == ProductionOrder.id,
+            isouter=True,
         )
+        stmt = stmt.where(ProductionOrder.order_code.ilike(f"%{order_code}%"))
     if process_name:
+        stmt = stmt.join(
+            ProductionOrderProcess,
+            ProductionAssistAuthorization.order_process_id == ProductionOrderProcess.id,
+            isouter=True,
+        )
         stmt = stmt.where(
-            ProductionAssistAuthorization.process_name.ilike(f"%{process_name}%")
+            ProductionOrderProcess.process_name.ilike(f"%{process_name}%")
         )
     if requester_username:
         RequesterUser = aliased(User)
@@ -238,7 +246,7 @@ def list_assist_authorizations(
     can_view_all = has_permission(
         db,
         user=current_user,
-        permission_code=PERM_PAGE_PRODUCTION_ASSIST_RECORDS_VIEW,
+        permission_code=PERM_FEATURE_PRODUCTION_ASSIST_RECORDS_VIEW,
     )
     if not can_view_all:
         stmt = stmt.where(

@@ -29,6 +29,7 @@ from app.models.user_session import UserSession  # noqa: E402
 from app.core.authz_catalog import PERMISSION_CATALOG  # noqa: E402
 from app.schemas.user import UserUpdate  # noqa: E402
 from app.services.bootstrap_seed_service import seed_initial_data  # noqa: E402
+from app.services.audit_service import write_audit_log  # noqa: E402
 from app.services.authz_service import ensure_role_permission_defaults  # noqa: E402
 from app.services.user_service import approve_registration_request, update_user  # noqa: E402
 
@@ -263,8 +264,21 @@ class UserModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(snapshot_response.status_code, 200, snapshot_response.text)
         snapshot_data = snapshot_response.json()["data"]
+        self.assertEqual(snapshot_data["role_codes"], [self.role_code])
+        self.assertIn("home", snapshot_data["visible_sidebar_codes"])
         self.assertIn("user", snapshot_data["visible_sidebar_codes"])
         self.assertIn("account_settings", snapshot_data["tab_codes_by_parent"]["user"])
+        self.assertNotIn("message", snapshot_data["visible_sidebar_codes"])
+        user_module_item = next(
+            item
+            for item in snapshot_data["module_items"]
+            if item["module_code"] == "user"
+        )
+        self.assertTrue(user_module_item["module_enabled"])
+        self.assertIn(
+            "page.account_settings.view",
+            user_module_item["effective_page_permission_codes"],
+        )
 
         permissions_response = self.client.get(
             "/api/v1/authz/permissions/me?module=user",
@@ -833,6 +847,80 @@ class UserModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(restore_response.status_code, 200, restore_response.text)
 
+    def test_role_management_guardrails_and_auth_boundaries(self) -> None:
+        self._create_role_and_user()
+        assert self.role_id is not None
+        assert self.role_code is not None
+        assert self.user_token is not None
+
+        db = SessionLocal()
+        try:
+            system_admin_role_id = int(
+                db.query(Role).filter(Role.code == "system_admin").one().id
+            )
+        finally:
+            db.close()
+
+        duplicate_create_response = self.client.post(
+            "/api/v1/roles",
+            headers=self._headers(),
+            json={
+                "code": self.role_code.upper(),
+                "name": f"重复角色{self.role_code}",
+                "role_type": "custom",
+                "is_enabled": True,
+            },
+        )
+        self.assertEqual(
+            duplicate_create_response.status_code,
+            400,
+            duplicate_create_response.text,
+        )
+        self.assertIn(
+            "Role code already exists",
+            duplicate_create_response.json()["detail"],
+        )
+
+        builtin_update_response = self.client.put(
+            f"/api/v1/roles/{system_admin_role_id}",
+            headers=self._headers(),
+            json={"code": "system_admin_x"},
+        )
+        self.assertEqual(
+            builtin_update_response.status_code,
+            400,
+            builtin_update_response.text,
+        )
+        self.assertIn(
+            "Built-in role code cannot be changed",
+            builtin_update_response.json()["detail"],
+        )
+
+        builtin_delete_response = self.client.delete(
+            f"/api/v1/roles/{system_admin_role_id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            builtin_delete_response.status_code,
+            400,
+            builtin_delete_response.text,
+        )
+        self.assertEqual(
+            builtin_delete_response.json()["detail"],
+            "Built-in role cannot be deleted",
+        )
+
+        forbidden_list_response = self.client.get(
+            "/api/v1/roles",
+            headers=self._headers(self.user_token),
+        )
+        self.assertEqual(
+            forbidden_list_response.status_code,
+            403,
+            forbidden_list_response.text,
+        )
+        self.assertEqual(forbidden_list_response.json()["detail"], "Access denied")
+
     def test_seed_initial_data_repairs_builtin_role_metadata(self) -> None:
         db = SessionLocal()
         try:
@@ -1026,6 +1114,251 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(conflict_response.status_code, 400, conflict_response.text)
         self.assertEqual(conflict_response.json()["detail"], "Username already exists")
 
+    def test_auth_login_rejects_missing_pending_disabled_and_deleted_accounts(
+        self,
+    ) -> None:
+        pending_request = self._create_registration_request()
+
+        missing_response = self.client.post(
+            "/api/v1/auth/login",
+            data={"username": "missing_t37", "password": "Pwd@123"},
+        )
+        self.assertEqual(missing_response.status_code, 401, missing_response.text)
+        self.assertEqual(
+            missing_response.json()["detail"], "Incorrect username or password"
+        )
+
+        pending_response = self.client.post(
+            "/api/v1/auth/login",
+            data={"username": pending_request.account, "password": "Pwd@123"},
+        )
+        self.assertEqual(pending_response.status_code, 403, pending_response.text)
+        self.assertEqual(
+            pending_response.json()["detail"], "Account is pending approval"
+        )
+
+        self._create_role_and_user()
+        assert self.username is not None
+        assert self.user_id is not None
+
+        disable_db = SessionLocal()
+        try:
+            disabled_user = disable_db.query(User).filter(User.id == self.user_id).one()
+            disabled_user.is_active = False
+            disable_db.commit()
+        finally:
+            disable_db.close()
+
+        disabled_response = self.client.post(
+            "/api/v1/auth/login",
+            data={"username": self.username, "password": "Pwd@123"},
+        )
+        self.assertEqual(disabled_response.status_code, 403, disabled_response.text)
+        self.assertEqual(disabled_response.json()["detail"], "Account is disabled")
+
+        deleted_username = f"d{int(time.time() * 1000) % 100000:05d}"
+        self.extra_usernames.append(deleted_username)
+        deleted_user_response = self.client.post(
+            "/api/v1/users",
+            headers=self._headers(),
+            json={
+                "username": deleted_username,
+                "password": "Pwd@123",
+                "role_code": self.role_code,
+                "is_active": True,
+            },
+        )
+        self.assertEqual(
+            deleted_user_response.status_code, 201, deleted_user_response.text
+        )
+
+        deleted_db = SessionLocal()
+        try:
+            deleted_user = (
+                deleted_db.query(User).filter(User.username == deleted_username).one()
+            )
+            deleted_user.is_deleted = True
+            deleted_user.is_active = False
+            deleted_user.deleted_at = datetime.now(UTC)
+            deleted_db.commit()
+        finally:
+            deleted_db.close()
+
+        deleted_response = self.client.post(
+            "/api/v1/auth/login",
+            data={"username": deleted_username, "password": "Pwd@123"},
+        )
+        self.assertEqual(deleted_response.status_code, 403, deleted_response.text)
+        self.assertEqual(deleted_response.json()["detail"], "Account is disabled")
+
+        verify_db = SessionLocal()
+        try:
+            missing_log = (
+                verify_db.query(LoginLog)
+                .filter(LoginLog.username == "missing_t37")
+                .order_by(LoginLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(missing_log)
+            self.assertFalse(missing_log.success)
+            self.assertIsNone(missing_log.user_id)
+            self.assertEqual(
+                missing_log.failure_reason, "Incorrect username or password"
+            )
+
+            pending_log = (
+                verify_db.query(LoginLog)
+                .filter(LoginLog.username == pending_request.account)
+                .order_by(LoginLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(pending_log)
+            self.assertFalse(pending_log.success)
+            self.assertEqual(pending_log.failure_reason, "Account is pending approval")
+
+            disabled_log = (
+                verify_db.query(LoginLog)
+                .filter(LoginLog.username == self.username)
+                .filter(LoginLog.success.is_(False))
+                .order_by(LoginLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(disabled_log)
+            self.assertEqual(disabled_log.user_id, self.user_id)
+            self.assertEqual(disabled_log.failure_reason, "Account is disabled")
+
+            deleted_log = (
+                verify_db.query(LoginLog)
+                .filter(LoginLog.username == deleted_username)
+                .order_by(LoginLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(deleted_log)
+            self.assertFalse(deleted_log.success)
+            self.assertEqual(deleted_log.failure_reason, "Account is disabled")
+        finally:
+            verify_db.close()
+
+    def test_auth_login_success_persists_side_effects_and_auth_contracts(self) -> None:
+        self._create_role_and_user()
+        assert self.username is not None
+
+        login_response = self.client.post(
+            "/api/v1/auth/login",
+            data={"username": self.username, "password": "Pwd@123"},
+            headers={"user-agent": "T37-Test-Agent"},
+        )
+        self.assertEqual(login_response.status_code, 200, login_response.text)
+        login_data = login_response.json()["data"]
+        self.assertTrue(login_data["must_change_password"])
+
+        access_token = login_data["access_token"]
+        session_id = str(decode_access_token(access_token).get("sid") or "")
+        self.assertTrue(session_id)
+        self.extra_session_ids.append(session_id)
+
+        me_unauthorized_response = self.client.get("/api/v1/auth/me")
+        self.assertEqual(
+            me_unauthorized_response.status_code,
+            401,
+            me_unauthorized_response.text,
+        )
+
+        verify_db = SessionLocal()
+        try:
+            user = verify_db.query(User).filter(User.username == self.username).one()
+            self.assertIsNotNone(user.last_login_at)
+            self.assertEqual(user.last_login_ip, "testclient")
+            self.assertEqual(user.last_login_terminal, "T37-Test-Agent")
+            self.assertTrue(user.must_change_password)
+
+            success_log = (
+                verify_db.query(LoginLog)
+                .filter(LoginLog.session_token_id == session_id)
+                .one()
+            )
+            self.assertTrue(success_log.success)
+            self.assertEqual(success_log.username, self.username)
+            self.assertEqual(success_log.user_id, user.id)
+            self.assertEqual(success_log.ip_address, "testclient")
+            self.assertEqual(success_log.terminal_info, "T37-Test-Agent")
+            self.assertIsNone(success_log.failure_reason)
+
+            session_row = (
+                verify_db.query(UserSession)
+                .filter(UserSession.session_token_id == session_id)
+                .one()
+            )
+            self.assertEqual(session_row.user_id, user.id)
+            self.assertEqual(session_row.status, "active")
+            self.assertEqual(user.last_login_at, session_row.login_time)
+        finally:
+            verify_db.close()
+
+    def test_auth_register_covers_success_password_rule_and_conflicts(self) -> None:
+        account = f"r{int(time.time() * 1000) % 10000000:07d}"
+        register_response = self.client.post(
+            "/api/v1/auth/register",
+            json={"account": f" {account} ", "password": "Pwd@123"},
+        )
+        self.assertEqual(register_response.status_code, 202, register_response.text)
+        register_data = register_response.json()["data"]
+        self.assertEqual(register_data["account"], account)
+        self.assertEqual(register_data["status"], "pending_approval")
+
+        verify_db = SessionLocal()
+        try:
+            request_row = (
+                verify_db.query(RegistrationRequest)
+                .filter(RegistrationRequest.account == account)
+                .one()
+            )
+            self.extra_registration_request_ids.append(int(request_row.id))
+            self.assertEqual(request_row.status, "pending")
+        finally:
+            verify_db.close()
+
+        pending_conflict_response = self.client.post(
+            "/api/v1/auth/register",
+            json={"account": account, "password": "Pwd@123"},
+        )
+        self.assertEqual(
+            pending_conflict_response.status_code,
+            400,
+            pending_conflict_response.text,
+        )
+        self.assertEqual(
+            pending_conflict_response.json()["detail"],
+            "Registration request is pending approval",
+        )
+
+        invalid_password_response = self.client.post(
+            "/api/v1/auth/register",
+            json={"account": f"x{account[1:]}", "password": "Ab1111"},
+        )
+        self.assertEqual(
+            invalid_password_response.status_code,
+            400,
+            invalid_password_response.text,
+        )
+        self.assertEqual(
+            invalid_password_response.json()["detail"],
+            "密码不得包含连续4位相同字符",
+        )
+
+        self._create_role_and_user()
+        assert self.username is not None
+        existing_user_response = self.client.post(
+            "/api/v1/auth/register",
+            json={"account": self.username, "password": "Pwd@123"},
+        )
+        self.assertEqual(
+            existing_user_response.status_code, 400, existing_user_response.text
+        )
+        self.assertEqual(
+            existing_user_response.json()["detail"], "Username already exists"
+        )
+
     def test_authz_capability_pack_batch_apply_and_revision_conflict(self) -> None:
         self._create_role_and_user()
         assert self.role_code is not None
@@ -1104,9 +1437,111 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(conflict_response.status_code, 409, conflict_response.text)
         self.assertIn("authz revision conflict", conflict_response.json()["detail"])
 
+    def test_user_module_authz_specialized_contracts_cover_role_config_batch_apply_and_effective(
+        self,
+    ) -> None:
+        self._create_role_and_user()
+        assert self.role_code is not None
+
+        catalog_response = self.client.get(
+            "/api/v1/authz/capability-packs/catalog?module=user",
+            headers=self._headers(),
+        )
+        self.assertEqual(catalog_response.status_code, 200, catalog_response.text)
+        catalog_data = catalog_response.json()["data"]
+        self.assertEqual(catalog_data["module_code"], "user")
+        capability_codes = {
+            item["capability_code"] for item in catalog_data["capability_packs"]
+        }
+        self.assertIn(
+            "feature.user.registration_approval.reject",
+            capability_codes,
+        )
+        self.assertIn(
+            "feature.user.account_settings.session_view",
+            capability_codes,
+        )
+
+        preview_response = self.client.put(
+            f"/api/v1/authz/capability-packs/role-config/{self.role_code}",
+            headers=self._headers(),
+            json={
+                "module_code": "user",
+                "module_enabled": False,
+                "capability_codes": ["feature.user.registration_approval.reject"],
+                "dry_run": True,
+                "remark": "用户模块特化预览",
+            },
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        preview_data = preview_response.json()["data"]
+        self.assertTrue(preview_data["dry_run"])
+        self.assertIn(
+            "feature.user.registration_approval.view",
+            preview_data["after_capability_codes"],
+        )
+        self.assertIn(
+            "feature.user.registration_approval.view",
+            preview_data["auto_linked_dependencies"],
+        )
+        self.assertIn(
+            "page.registration_approval.view",
+            preview_data["effective_page_permission_codes"],
+        )
+
+        apply_response = self.client.put(
+            "/api/v1/authz/capability-packs/batch-apply",
+            headers=self._headers(),
+            json={
+                "module_code": "user",
+                "expected_revision": catalog_data["module_revision"],
+                "remark": "用户模块批量关闭后校验账号设置保底",
+                "role_items": [
+                    {
+                        "role_code": self.role_code,
+                        "module_enabled": False,
+                        "capability_codes": [],
+                    }
+                ],
+            },
+        )
+        self.assertEqual(apply_response.status_code, 200, apply_response.text)
+        apply_role_result = apply_response.json()["data"]["role_results"][0]
+        self.assertEqual(apply_role_result["role_code"], self.role_code)
+        self.assertIn(
+            "feature.user.account_settings.profile_view",
+            apply_role_result["effective_capability_codes"],
+        )
+        self.assertIn(
+            "page.account_settings.view",
+            apply_role_result["effective_page_permission_codes"],
+        )
+
+        effective_response = self.client.get(
+            f"/api/v1/authz/capability-packs/effective?role_code={self.role_code}&module=user",
+            headers=self._headers(),
+        )
+        self.assertEqual(effective_response.status_code, 200, effective_response.text)
+        effective_data = effective_response.json()["data"]
+        self.assertIn(
+            "page.account_settings.view",
+            effective_data["effective_page_permission_codes"],
+        )
+        registration_reject_item = next(
+            item
+            for item in effective_data["capability_items"]
+            if item["capability_code"] == "feature.user.registration_approval.reject"
+        )
+        self.assertFalse(registration_reject_item["available"])
+        self.assertIn(
+            "capability_not_granted",
+            registration_reject_item["reason_codes"],
+        )
+
     def test_sessions_batch_force_offline_updates_session_status(self) -> None:
         self._create_role_and_user()
         assert self.user_session_id is not None
+        assert self.user_token is not None
 
         response = self.client.post(
             "/api/v1/sessions/force-offline/batch",
@@ -1134,6 +1569,113 @@ class UserModuleIntegrationTest(unittest.TestCase):
             headers=self._headers(self.user_token),
         )
         self.assertEqual(profile_response.status_code, 401, profile_response.text)
+
+    def test_audits_cover_filters_empty_results_pagination_and_auth_boundary(
+        self,
+    ) -> None:
+        self._create_role_and_user()
+        assert self.username is not None
+        assert self.user_token is not None
+
+        suffix = str(time.time_ns())
+        action_code = f"user.audit.coverage.{suffix}"
+        target_type = f"user_audit_test_{suffix}"
+        window_start = datetime.now(UTC)
+
+        db = SessionLocal()
+        try:
+            admin_user = db.query(User).filter(User.username == "admin").one()
+            for index in range(3):
+                row = write_audit_log(
+                    db,
+                    action_code=action_code,
+                    action_name="用户审计覆盖",
+                    target_type=target_type,
+                    target_id=str(index + 1),
+                    target_name=self.username,
+                    operator=admin_user,
+                    remark=f"audit-case-{index + 1}",
+                )
+                row.occurred_at = window_start + timedelta(seconds=index)
+            db.commit()
+        finally:
+            db.close()
+
+        first_page_response = self.client.get(
+            "/api/v1/audits",
+            headers=self._headers(),
+            params={
+                "operator_username": "admin",
+                "action_code": action_code,
+                "target_type": target_type,
+                "start_time": (window_start - timedelta(seconds=1)).isoformat(),
+                "end_time": (window_start + timedelta(seconds=5)).isoformat(),
+                "page": 1,
+                "page_size": 2,
+            },
+        )
+        self.assertEqual(
+            first_page_response.status_code,
+            200,
+            first_page_response.text,
+        )
+        first_page_data = first_page_response.json()["data"]
+        self.assertEqual(first_page_data["total"], 3)
+        self.assertEqual(len(first_page_data["items"]), 2)
+        self.assertEqual(first_page_data["items"][0]["target_id"], "3")
+        self.assertEqual(first_page_data["items"][1]["target_id"], "2")
+
+        second_page_response = self.client.get(
+            "/api/v1/audits",
+            headers=self._headers(),
+            params={
+                "operator_username": "admin",
+                "action_code": action_code,
+                "target_type": target_type,
+                "start_time": (window_start - timedelta(seconds=1)).isoformat(),
+                "end_time": (window_start + timedelta(seconds=5)).isoformat(),
+                "page": 2,
+                "page_size": 2,
+            },
+        )
+        self.assertEqual(
+            second_page_response.status_code,
+            200,
+            second_page_response.text,
+        )
+        second_page_data = second_page_response.json()["data"]
+        self.assertEqual(second_page_data["total"], 3)
+        self.assertEqual(len(second_page_data["items"]), 1)
+        self.assertEqual(second_page_data["items"][0]["target_id"], "1")
+
+        empty_response = self.client.get(
+            "/api/v1/audits",
+            headers=self._headers(),
+            params={
+                "action_code": action_code,
+                "target_type": target_type,
+                "start_time": (window_start + timedelta(days=1)).isoformat(),
+                "end_time": (window_start + timedelta(days=1, seconds=5)).isoformat(),
+            },
+        )
+        self.assertEqual(empty_response.status_code, 200, empty_response.text)
+        self.assertEqual(empty_response.json()["data"]["total"], 0)
+        self.assertEqual(empty_response.json()["data"]["items"], [])
+
+        forbidden_response = self.client.get(
+            "/api/v1/audits",
+            headers=self._headers(self.user_token),
+            params={
+                "action_code": action_code,
+                "target_type": target_type,
+            },
+        )
+        self.assertEqual(
+            forbidden_response.status_code,
+            403,
+            forbidden_response.text,
+        )
+        self.assertEqual(forbidden_response.json()["detail"], "Access denied")
 
     def test_sessions_batch_force_offline_denies_user_without_permission(self) -> None:
         self._create_role_and_user()
@@ -1350,7 +1892,10 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(me_response.status_code, 200, me_response.text)
         me_data = me_response.json()["data"]
         self.assertEqual(me_data["username"], self.username)
+        self.assertEqual(me_data["role_code"], self.role_code)
+        self.assertIsNotNone(me_data["role_name"])
         self.assertIsNone(me_data["stage_id"])
+        self.assertIsNone(me_data["stage_name"])
 
         logout_response = self.client.post(
             "/api/v1/auth/logout",

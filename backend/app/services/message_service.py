@@ -44,6 +44,7 @@ _MESSAGE_DELIVERY_MAX_RETRY = 3
 _MESSAGE_DELIVERY_RETRY_DELAYS = (5, 30, 120)
 _MESSAGE_RETENTION_DAYS = 30
 _MESSAGE_STATUS_SOURCE_UNAVAILABLE = "src_unavailable"
+_PUBLIC_MESSAGE_STATUS_SOURCE_UNAVAILABLE = "source_unavailable"
 
 
 @dataclass(frozen=True)
@@ -455,8 +456,14 @@ def _resolve_message_status(
 ) -> tuple[str, str | None]:
     if msg.status == "archived":
         return "archived", "archived"
-    if msg.status == _MESSAGE_STATUS_SOURCE_UNAVAILABLE:
-        return "source_unavailable", "source_unavailable"
+    if msg.status in {
+        _MESSAGE_STATUS_SOURCE_UNAVAILABLE,
+        _PUBLIC_MESSAGE_STATUS_SOURCE_UNAVAILABLE,
+    }:
+        return (
+            _PUBLIC_MESSAGE_STATUS_SOURCE_UNAVAILABLE,
+            _PUBLIC_MESSAGE_STATUS_SOURCE_UNAVAILABLE,
+        )
     if msg.status != "active":
         return "source_unavailable", "source_unavailable"
     if msg.expires_at is not None and msg.expires_at <= now:
@@ -1011,7 +1018,10 @@ def run_message_maintenance(
                 reason="source_record_missing_or_deleted",
             )
             changed = True
-        if msg.status == _MESSAGE_STATUS_SOURCE_UNAVAILABLE:
+        if msg.status in {
+            _MESSAGE_STATUS_SOURCE_UNAVAILABLE,
+            _PUBLIC_MESSAGE_STATUS_SOURCE_UNAVAILABLE,
+        }:
             reference_time = msg.updated_at or msg.created_at or current_time
             if reference_time <= archive_before:
                 previous_status = msg.status

@@ -2,7 +2,7 @@ import sys
 import time
 import unittest
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -20,8 +21,14 @@ if str(BACKEND_DIR) not in sys.path:
 from app.db.session import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.audit_log import AuditLog  # noqa: E402
+from app.models.first_article_record import FirstArticleRecord  # noqa: E402
+from app.models.maintenance_work_order import MaintenanceWorkOrder  # noqa: E402
 from app.models.message import Message  # noqa: E402
 from app.models.message_recipient import MessageRecipient  # noqa: E402
+from app.models.process import Process  # noqa: E402
+from app.models.product import Product  # noqa: E402
+from app.models.production_order import ProductionOrder  # noqa: E402
+from app.models.production_order_process import ProductionOrderProcess  # noqa: E402
 from app.models.registration_request import RegistrationRequest  # noqa: E402
 from app.models.role import Role  # noqa: E402
 from app.models.user import User  # noqa: E402
@@ -51,6 +58,12 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         self.registration_request_ids: list[int] = []
         self.created_user_ids: list[int] = []
         self.created_role_ids: list[int] = []
+        self.product_ids: list[int] = []
+        self.process_ids: list[int] = []
+        self.production_order_ids: list[int] = []
+        self.production_order_process_ids: list[int] = []
+        self.first_article_record_ids: list[int] = []
+        self.maintenance_work_order_ids: list[int] = []
         self.case_token = f"msg-case-{time.time_ns()}"
 
     def tearDown(self) -> None:
@@ -69,7 +82,27 @@ class MessageModuleIntegrationTest(unittest.TestCase):
                 db.query(User).filter(User.id == user_id).delete()
             for role_id in reversed(self.created_role_ids):
                 db.query(Role).filter(Role.id == role_id).delete()
-                db.commit()
+            for record_id in reversed(self.first_article_record_ids):
+                db.query(FirstArticleRecord).filter(
+                    FirstArticleRecord.id == record_id
+                ).delete()
+            for order_process_id in reversed(self.production_order_process_ids):
+                db.query(ProductionOrderProcess).filter(
+                    ProductionOrderProcess.id == order_process_id
+                ).delete()
+            for work_order_id in reversed(self.maintenance_work_order_ids):
+                db.query(MaintenanceWorkOrder).filter(
+                    MaintenanceWorkOrder.id == work_order_id
+                ).delete()
+            for order_id in reversed(self.production_order_ids):
+                db.query(ProductionOrder).filter(
+                    ProductionOrder.id == order_id
+                ).delete()
+            for process_id in reversed(self.process_ids):
+                db.query(Process).filter(Process.id == process_id).delete()
+            for product_id in reversed(self.product_ids):
+                db.query(Product).filter(Product.id == product_id).delete()
+            db.commit()
         finally:
             db.close()
 
@@ -263,6 +296,100 @@ class MessageModuleIntegrationTest(unittest.TestCase):
             baseline_payload["urgent_unread_count"] + 1,
         )
 
+    def test_unread_count_mark_read_and_mark_all_read_endpoints(self) -> None:
+        baseline_response = self.client.get(
+            "/api/v1/messages/unread-count",
+            headers=self._headers(),
+        )
+        self.assertEqual(baseline_response.status_code, 200, baseline_response.text)
+        self.assertEqual(baseline_response.json()["code"], 0)
+        self.assertEqual(set(baseline_response.json()["data"].keys()), {"unread_count"})
+        baseline_unread = baseline_response.json()["data"]["unread_count"]
+
+        first_message_id = self._create_message(
+            message_type="todo",
+            priority="important",
+            title="接口已读-1",
+        )
+        second_message_id = self._create_message(
+            message_type="notice",
+            priority="normal",
+            title="接口已读-2",
+        )
+
+        unread_response = self.client.get(
+            "/api/v1/messages/unread-count",
+            headers=self._headers(),
+        )
+        self.assertEqual(unread_response.status_code, 200, unread_response.text)
+        self.assertEqual(
+            unread_response.json()["data"]["unread_count"],
+            baseline_unread + 2,
+        )
+
+        mark_read_response = self.client.post(
+            f"/api/v1/messages/{first_message_id}/read",
+            headers=self._headers(),
+        )
+        self.assertEqual(mark_read_response.status_code, 200, mark_read_response.text)
+        self.assertEqual(mark_read_response.json()["data"], {})
+
+        after_mark_one = self.client.get(
+            "/api/v1/messages/unread-count",
+            headers=self._headers(),
+        )
+        self.assertEqual(after_mark_one.status_code, 200, after_mark_one.text)
+        self.assertEqual(
+            after_mark_one.json()["data"]["unread_count"],
+            baseline_unread + 1,
+        )
+        unread_before_all = after_mark_one.json()["data"]["unread_count"]
+
+        not_found_response = self.client.post(
+            "/api/v1/messages/999999999/read",
+            headers=self._headers(),
+        )
+        self.assertEqual(not_found_response.status_code, 404, not_found_response.text)
+
+        mark_all_response = self.client.post(
+            "/api/v1/messages/read-all",
+            headers=self._headers(),
+        )
+        self.assertEqual(mark_all_response.status_code, 200, mark_all_response.text)
+        self.assertEqual(mark_all_response.json()["code"], 0)
+        self.assertGreaterEqual(
+            mark_all_response.json()["data"]["updated"],
+            unread_before_all,
+        )
+
+        unread_after_all = self.client.get(
+            "/api/v1/messages/unread-count",
+            headers=self._headers(),
+        )
+        self.assertEqual(unread_after_all.status_code, 200, unread_after_all.text)
+        self.assertEqual(unread_after_all.json()["data"]["unread_count"], 0)
+
+        db = SessionLocal()
+        try:
+            recipients = (
+                db.execute(
+                    select(MessageRecipient).where(
+                        MessageRecipient.message_id.in_(
+                            [first_message_id, second_message_id]
+                        ),
+                        MessageRecipient.recipient_user_id == 1,
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        finally:
+            db.close()
+
+        self.assertEqual(len(recipients), 2)
+        self.assertTrue(all(recipient.is_read for recipient in recipients))
+        self.assertTrue(all(recipient.read_at is not None for recipient in recipients))
+
     def test_register_request_creates_pending_approval_message(self) -> None:
         account = f"p{time.time_ns() % 1000000000:09d}"
         password = f"Pwd!{account}!Z9"
@@ -371,6 +498,86 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         self.assertTrue(jump_payload["can_jump"])
         self.assertEqual(jump_payload["target_page_code"], "production")
         self.assertEqual(jump_payload["target_tab_code"], "production_order_management")
+
+    def test_jump_target_endpoint_returns_precise_disabled_reason_matrix(self) -> None:
+        archived_id = self._create_message(
+            message_type="notice",
+            priority="normal",
+            title="跳转禁用-归档",
+            status="archived",
+        )
+        expired_id = self._create_message(
+            message_type="notice",
+            priority="normal",
+            title="跳转禁用-过期",
+            expires_at=datetime.now(UTC) - timedelta(minutes=1),
+        )
+        no_permission_id = self._create_message(
+            message_type="notice",
+            priority="normal",
+            title="跳转禁用-无权限",
+            target_page_code="production",
+        )
+        source_unavailable_id = self._create_message(
+            message_type="notice",
+            priority="normal",
+            title="跳转禁用-来源失效",
+            status="src_unavailable",
+        )
+        missing_target_id = self._create_message(
+            message_type="notice",
+            priority="normal",
+            title="跳转禁用-目标缺失",
+            target_page_code="",
+        )
+
+        with patch(
+            "app.services.message_service.get_user_permission_codes",
+            return_value={"page.message_center.view"},
+        ):
+            archived_response = self.client.get(
+                f"/api/v1/messages/{archived_id}/jump-target",
+                headers=self._headers(),
+            )
+            expired_response = self.client.get(
+                f"/api/v1/messages/{expired_id}/jump-target",
+                headers=self._headers(),
+            )
+            no_permission_response = self.client.get(
+                f"/api/v1/messages/{no_permission_id}/jump-target",
+                headers=self._headers(),
+            )
+            source_unavailable_response = self.client.get(
+                f"/api/v1/messages/{source_unavailable_id}/jump-target",
+                headers=self._headers(),
+            )
+            missing_target_response = self.client.get(
+                f"/api/v1/messages/{missing_target_id}/jump-target",
+                headers=self._headers(),
+            )
+
+        self.assertEqual(archived_response.status_code, 200, archived_response.text)
+        self.assertEqual(
+            archived_response.json()["data"]["disabled_reason"],
+            "archived",
+        )
+        self.assertEqual(expired_response.status_code, 200, expired_response.text)
+        self.assertEqual(
+            expired_response.json()["data"]["disabled_reason"],
+            "expired",
+        )
+        self.assertEqual(
+            no_permission_response.json()["data"]["disabled_reason"],
+            "no_permission",
+        )
+        self.assertEqual(
+            source_unavailable_response.json()["data"]["disabled_reason"],
+            "source_unavailable",
+        )
+        self.assertEqual(
+            missing_target_response.json()["data"]["disabled_reason"],
+            "missing_target",
+        )
 
     def test_list_messages_returns_precise_inactive_reason(self) -> None:
         archived_id = self._create_message(
@@ -657,6 +864,121 @@ class MessageModuleIntegrationTest(unittest.TestCase):
             messages["craft"].target_route_payload_json,
         )
         self.assertIn('"version": 5', messages["craft"].target_route_payload_json)
+
+    def test_quality_and_production_source_messages_include_jump_targets(self) -> None:
+        db = SessionLocal()
+        try:
+            product = Product(name=f"{self.case_token}-质量生产产品")
+            process = Process(
+                code=f"{self.case_token}-PROC",
+                name=f"{self.case_token}-工序",
+            )
+            db.add_all([product, process])
+            db.flush()
+            self.product_ids.append(product.id)
+            self.process_ids.append(process.id)
+
+            order = ProductionOrder(
+                order_code=f"{self.case_token}-ORDER",
+                product_id=product.id,
+                quantity=20,
+                status="in_progress",
+                current_process_code=process.code,
+                due_date=date.today() - timedelta(days=1),
+                created_by_user_id=1,
+            )
+            db.add(order)
+            db.flush()
+            self.production_order_ids.append(order.id)
+
+            order_process = ProductionOrderProcess(
+                order_id=order.id,
+                process_id=process.id,
+                process_code=process.code,
+                process_name=process.name,
+                process_order=1,
+                status="in_progress",
+            )
+            db.add(order_process)
+            db.flush()
+            self.production_order_process_ids.append(order_process.id)
+
+            record = FirstArticleRecord(
+                order_id=order.id,
+                order_process_id=order_process.id,
+                operator_user_id=1,
+                verification_date=date.today(),
+                verification_code=f"FA-{time.time_ns()}",
+                result="failed",
+            )
+            db.add(record)
+            db.flush()
+            self.first_article_record_ids.append(record.id)
+
+            stats = run_message_maintenance(db, now=datetime.now(UTC))
+            db.commit()
+
+            rows = (
+                db.execute(
+                    select(Message).where(
+                        Message.dedupe_key.in_(
+                            [
+                                f"first_article_failed_{record.id}",
+                                f"production_order_overdue_{order.id}_{order.due_date}",
+                            ]
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            self.message_ids.extend(row.id for row in rows)
+        finally:
+            db.close()
+
+        self.assertGreaterEqual(stats["source_unavailable_updated"], 0)
+        self.assertEqual(len(rows), 2)
+        messages = {row.source_type: row for row in rows}
+        self.assertEqual(messages["first_article_record"].target_page_code, "quality")
+        self.assertEqual(
+            messages["first_article_record"].target_tab_code,
+            "first_article_management",
+        )
+        self.assertIn(
+            f'"record_id":{record.id}',
+            messages["first_article_record"].target_route_payload_json,
+        )
+        self.assertEqual(messages["production_order"].target_page_code, "production")
+        self.assertEqual(
+            messages["production_order"].target_tab_code,
+            "production_order_management",
+        )
+        self.assertIn(
+            f'"order_id":{order.id}',
+            messages["production_order"].target_route_payload_json,
+        )
+
+    def test_message_websocket_endpoint_connects_and_rejects_invalid_token(
+        self,
+    ) -> None:
+        with self.client.websocket_connect(
+            f"/api/v1/messages/ws?token={self.token}"
+        ) as websocket:
+            payload = websocket.receive_json()
+            self.assertEqual(payload["event"], "connected")
+            self.assertEqual(payload["user_id"], 1)
+            self.assertIn("unread_count", payload)
+
+            websocket.send_text("ping")
+            self.assertEqual(websocket.receive_text(), "pong")
+
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect(
+                "/api/v1/messages/ws?token=invalid-token"
+            ) as websocket:
+                websocket.receive_text()
+
+        self.assertEqual(ctx.exception.code, 4001)
 
     def test_push_failure_marks_recipient_failed_with_timestamp(self) -> None:
         message_id = self._create_message(

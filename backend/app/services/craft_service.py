@@ -835,15 +835,12 @@ def _build_user_stage_reference_items(
     stage_ids = sorted({item.stage.id for item in step_processes})
 
     if stage_ids:
-        users = (
-            db.execute(
-                select(User, ProcessStage)
-                .join(ProcessStage, ProcessStage.id == User.stage_id)
-                .where(User.stage_id.in_(stage_ids), User.is_deleted.is_(False))
-                .order_by(ProcessStage.sort_order.asc(), User.id.asc())
-            )
-            .all()
-        )
+        users = db.execute(
+            select(User, ProcessStage)
+            .join(ProcessStage, ProcessStage.id == User.stage_id)
+            .where(User.stage_id.in_(stage_ids), User.is_deleted.is_(False))
+            .order_by(ProcessStage.sort_order.asc(), User.id.asc())
+        ).all()
         for user, stage in users:
             reference_items.append(
                 ReferenceItem(
@@ -2262,14 +2259,18 @@ def import_templates(
                     continue
 
                 if existing.published_version > 0 or existing.revisions:
-                    raise ValueError("不允许导入覆盖已发布模板历史，请复制为新草稿后再发布")
+                    raise ValueError(
+                        "不允许导入覆盖已发布模板历史，请复制为新草稿后再发布"
+                    )
 
                 existing.is_default = is_default
                 existing.is_enabled = is_enabled
                 existing.lifecycle_status = TEMPLATE_LIFECYCLE_DRAFT
                 existing.version += 1
                 existing.updated_by_user_id = operator.id
-                existing.source_type = str(item.get("source_type") or existing.source_type)
+                existing.source_type = str(
+                    item.get("source_type") or existing.source_type
+                )
                 existing.source_template_name = (
                     str(item.get("source_template_name") or "").strip() or None
                 )
@@ -2387,11 +2388,16 @@ def copy_template_from_system_master(
     operator: User,
 ) -> ProductProcessTemplate:
     """从系统母版套版，创建指定产品的工艺模板草稿。"""
+    product = (
+        db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    )
+    if product is None:
+        raise ValueError("Product not found")
     normalized_name = _normalize_text(new_name, field_name="Template name")
     existing_name = (
         db.execute(
             select(ProductProcessTemplate).where(
-                ProductProcessTemplate.product_id == product_id,
+                ProductProcessTemplate.product_id == product.id,
                 ProductProcessTemplate.template_name == normalized_name,
                 ProductProcessTemplate.is_enabled.is_(True),
             )
@@ -2403,7 +2409,7 @@ def copy_template_from_system_master(
         raise ValueError("Template name already exists under this product")
 
     row = ProductProcessTemplate(
-        product_id=product_id,
+        product_id=product.id,
         template_name=normalized_name,
         version=1,
         lifecycle_status=TEMPLATE_LIFECYCLE_DRAFT,
@@ -2446,11 +2452,18 @@ def copy_template_to_product(
     operator: User,
 ) -> ProductProcessTemplate:
     """跨产品复制模板，来源记录保留在 template_name 中。"""
+    target_product = (
+        db.execute(select(Product).where(Product.id == target_product_id))
+        .scalars()
+        .first()
+    )
+    if target_product is None:
+        raise ValueError("Product not found")
     normalized_name = _normalize_text(new_name, field_name="Template name")
     existing_name = (
         db.execute(
             select(ProductProcessTemplate).where(
-                ProductProcessTemplate.product_id == target_product_id,
+                ProductProcessTemplate.product_id == target_product.id,
                 ProductProcessTemplate.template_name == normalized_name,
                 ProductProcessTemplate.is_enabled.is_(True),
             )
@@ -2462,7 +2475,7 @@ def copy_template_to_product(
         raise ValueError("Template name already exists under target product")
 
     row = ProductProcessTemplate(
-        product_id=target_product_id,
+        product_id=target_product.id,
         template_name=normalized_name,
         version=1,
         lifecycle_status=TEMPLATE_LIFECYCLE_DRAFT,
@@ -3501,7 +3514,9 @@ def _build_template_reuse_reference_items(
 ) -> list[ReferenceItem]:
     items: list[ReferenceItem] = []
     for reused in _list_template_reuse_rows(db, template_id=template.id):
-        product_name = reused.product.name if reused.product else f"产品#{reused.product_id}"
+        product_name = (
+            reused.product.name if reused.product else f"产品#{reused.product_id}"
+        )
         items.append(
             ReferenceItem(
                 ref_type="template_reuse",
@@ -3658,7 +3673,10 @@ def get_product_template_references(
     rows: list[ProductTemplateReferenceRow] = []
     for template in templates:
         ref_result = get_template_references(db, template=template)
-        if not ref_result.items:
+        downstream_items = [
+            item for item in ref_result.items if item.ref_type != "product"
+        ]
+        if not downstream_items:
             rows.append(
                 ProductTemplateReferenceRow(
                     template_id=template.id,
@@ -3678,7 +3696,7 @@ def get_product_template_references(
                 )
             )
             continue
-        for item in ref_result.items:
+        for item in downstream_items:
             rows.append(
                 ProductTemplateReferenceRow(
                     template_id=template.id,

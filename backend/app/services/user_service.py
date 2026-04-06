@@ -553,6 +553,10 @@ def submit_registration_request(
     if not account_name:
         return None, "Account is required"
 
+    pwd_error = validate_password(password)
+    if pwd_error:
+        return None, pwd_error
+
     existing = get_user_by_username(db, account_name)
     if existing:
         return None, "Username already exists"

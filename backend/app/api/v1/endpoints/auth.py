@@ -74,7 +74,7 @@ def login(
     ip_address = request.client.host if request and request.client else None
     terminal_info = request.headers.get("user-agent") if request else None
 
-    user = get_user_by_username(db, username)
+    user = get_user_by_username(db, username, include_deleted=True)
     if not user:
         pending_request = get_registration_request_by_account(
             db, username, pending_only=True

@@ -201,14 +201,11 @@ def _build_last_process_order_map(
 ) -> dict[int, int]:
     if not order_ids:
         return {}
-    rows = (
-        db.execute(
-            select(ProductionOrderProcess.order_id, ProductionOrderProcess.process_order).where(
-                ProductionOrderProcess.order_id.in_(order_ids)
-            )
-        )
-        .all()
-    )
+    rows = db.execute(
+        select(
+            ProductionOrderProcess.order_id, ProductionOrderProcess.process_order
+        ).where(ProductionOrderProcess.order_id.in_(order_ids))
+    ).all()
     result: dict[int, int] = {}
     for order_id, process_order in rows:
         current = result.get(int(order_id))
@@ -235,7 +232,10 @@ def _record_matches_common_filters(
         return False
     if filters.process_ids and process.process_id not in filters.process_ids:
         return False
-    if filters.operator_user_ids and record.operator_user_id not in filters.operator_user_ids:
+    if (
+        filters.operator_user_ids
+        and record.operator_user_id not in filters.operator_user_ids
+    ):
         return False
     if filters.stat_mode == STAT_MODE_MAIN_ORDER:
         max_order = last_process_order_map.get(order.id)
@@ -289,12 +289,18 @@ def get_today_realtime_data(
             product_bucket[order.product_id] = bucket
         bucket["quantity"] = int(bucket["quantity"]) + int(row.production_quantity or 0)
         previous_latest = bucket.get("latest_time")
-        if previous_latest is None or (row.created_at and row.created_at > previous_latest):
+        if previous_latest is None or (
+            row.created_at and row.created_at > previous_latest
+        ):
             bucket["latest_time"] = row.created_at
 
     table_rows = sorted(
         product_bucket.values(),
-        key=lambda item: (-int(item["quantity"]), str(item["product_name"]), int(item["product_id"])),
+        key=lambda item: (
+            -int(item["quantity"]),
+            str(item["product_name"]),
+            int(item["product_id"]),
+        ),
     )
     chart_data = [
         {
@@ -375,9 +381,13 @@ def get_unfinished_progress_data(
         )
         if not process_rows:
             continue
-        if normalized_stage_ids and not any((row.stage_id or 0) in normalized_stage_ids for row in process_rows):
+        if normalized_stage_ids and not any(
+            (row.stage_id or 0) in normalized_stage_ids for row in process_rows
+        ):
             continue
-        if normalized_process_ids and not any(row.process_id in normalized_process_ids for row in process_rows):
+        if normalized_process_ids and not any(
+            row.process_id in normalized_process_ids for row in process_rows
+        ):
             continue
 
         record_rows = [
@@ -385,7 +395,9 @@ def get_unfinished_progress_data(
             for row in (order.production_records or [])
             if row.record_type == RECORD_TYPE_PRODUCTION
         ]
-        if normalized_operator_ids and not any(row.operator_user_id in normalized_operator_ids for row in record_rows):
+        if normalized_operator_ids and not any(
+            row.operator_user_id in normalized_operator_ids for row in record_rows
+        ):
             continue
 
         current_process = next(
@@ -400,7 +412,11 @@ def get_unfinished_progress_data(
         process_count = len(process_rows)
         target_total = int(max(order.quantity, 0))
         remaining_quantity = max(target_total - produced_total, 0)
-        progress_percent = round((produced_total / target_total * 100.0), 2) if target_total > 0 else 0.0
+        progress_percent = (
+            round((produced_total / target_total * 100.0), 2)
+            if target_total > 0
+            else 0.0
+        )
         progress_percent = max(0.0, min(progress_percent, 100.0))
 
         table_rows.append(
@@ -426,10 +442,15 @@ def get_unfinished_progress_data(
             int(item["order_id"]),
         )
     )
-    avg_progress = round(
-        sum(float(item["progress_percent"]) for item in table_rows) / len(table_rows),
-        2,
-    ) if table_rows else 0.0
+    avg_progress = (
+        round(
+            sum(float(item["progress_percent"]) for item in table_rows)
+            / len(table_rows),
+            2,
+        )
+        if table_rows
+        else 0.0
+    )
     query_signature = json.dumps(
         {
             "view": "unfinished_progress",
@@ -492,9 +513,13 @@ def _build_manual_rows(
                     "order_status": order.status,
                 }
                 grouped[order.id] = bucket
-            bucket["quantity"] = int(bucket["quantity"]) + int(row.production_quantity or 0)
+            bucket["quantity"] = int(bucket["quantity"]) + int(
+                row.production_quantity or 0
+            )
             previous_time = bucket.get("production_time")
-            if previous_time is None or (row.created_at and row.created_at > previous_time):
+            if previous_time is None or (
+                row.created_at and row.created_at > previous_time
+            ):
                 bucket["production_time"] = row.created_at
         return list(grouped.values())
 
@@ -548,10 +573,14 @@ def _build_manual_chart_data(
     model_output_map: dict[str, int] = {}
     for row in table_rows:
         model_name = str(row.get("product_name") or "")
-        model_output_map[model_name] = int(model_output_map.get(model_name, 0)) + int(row.get("quantity", 0) or 0)
+        model_output_map[model_name] = int(model_output_map.get(model_name, 0)) + int(
+            row.get("quantity", 0) or 0
+        )
     model_output = [
         {"product_name": key, "quantity": value}
-        for key, value in sorted(model_output_map.items(), key=lambda item: (-int(item[1]), str(item[0])))
+        for key, value in sorted(
+            model_output_map.items(), key=lambda item: (-int(item[1]), str(item[0]))
+        )
     ]
 
     single_day = start_date == end_date
@@ -560,8 +589,14 @@ def _build_manual_chart_data(
         for record in filtered_records:
             if not isinstance(record.created_at, datetime):
                 continue
-            local_time = record.created_at.astimezone() if record.created_at.tzinfo is not None else record.created_at
-            hour_counter[int(local_time.hour)] = int(hour_counter[int(local_time.hour)]) + int(record.production_quantity or 0)
+            local_time = (
+                record.created_at.astimezone()
+                if record.created_at.tzinfo is not None
+                else record.created_at
+            )
+            hour_counter[int(local_time.hour)] = int(
+                hour_counter[int(local_time.hour)]
+            ) + int(record.production_quantity or 0)
         trend_output = [
             {"bucket": f"{hour:02d}:00", "quantity": int(hour_counter[hour])}
             for hour in range(24)
@@ -576,10 +611,16 @@ def _build_manual_chart_data(
         for record in filtered_records:
             if not isinstance(record.created_at, datetime):
                 continue
-            local_time = record.created_at.astimezone() if record.created_at.tzinfo is not None else record.created_at
+            local_time = (
+                record.created_at.astimezone()
+                if record.created_at.tzinfo is not None
+                else record.created_at
+            )
             key = local_time.strftime("%Y-%m-%d")
             if key in day_counter:
-                day_counter[key] = int(day_counter[key]) + int(record.production_quantity or 0)
+                day_counter[key] = int(day_counter[key]) + int(
+                    record.production_quantity or 0
+                )
         trend_output = [
             {"bucket": key, "quantity": int(value)}
             for key, value in sorted(day_counter.items(), key=lambda item: item[0])
@@ -657,14 +698,20 @@ def get_manual_production_data(
         filters=broad_filters,
         last_process_order_map=last_process_order_map,
     )
-    time_range_total = int(sum(int(item.get("quantity", 0) or 0) for item in broad_rows))
+    time_range_total = int(
+        sum(int(item.get("quantity", 0) or 0) for item in broad_rows)
+    )
     remaining_total = max(time_range_total - filtered_total, 0)
     chart_data["pie_output"] = [
         {"name": "筛选结果", "quantity": filtered_total},
         {"name": "其余产量", "quantity": remaining_total},
     ]
 
-    ratio_percent = round((filtered_total / time_range_total * 100.0), 2) if time_range_total > 0 else 0.0
+    ratio_percent = (
+        round((filtered_total / time_range_total * 100.0), 2)
+        if time_range_total > 0
+        else 0.0
+    )
 
     for row in table_rows:
         row["production_time_text"] = _format_datetime_text(row.get("production_time"))
@@ -725,14 +772,14 @@ def export_manual_production_data_csv(
                 "主订单" if filters.stat_mode == STAT_MODE_MAIN_ORDER else "子订单",
             ]
         )
-    content_base64 = base64.b64encode(output.getvalue().encode("utf-8-sig")).decode("ascii")
+    content_base64 = base64.b64encode(output.getvalue().encode("utf-8-sig")).decode(
+        "ascii"
+    )
     file_name = f"production_manual_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     mime_type = "text/csv"
 
     unique_order_ids = {
-        int(row.get("order_id"))
-        for row in rows
-        if row.get("order_id") is not None
+        int(row.get("order_id")) for row in rows if row.get("order_id") is not None
     }
     if unique_order_ids:
         for order_id in unique_order_ids:

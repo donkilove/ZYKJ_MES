@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.authz_catalog import (
@@ -693,25 +694,29 @@ def ensure_role_permission_defaults(db: Session) -> bool:
         }
     )
 
-    changed = False
+    pending_rows: list[dict[str, object]] = []
     for role_code in role_codes:
         for permission_code in permission_codes:
             key = (role_code, permission_code)
             if key in existing_keys:
                 continue
-            db.add(
-                RolePermissionGrant(
-                    role_code=role_code,
-                    permission_code=permission_code,
-                    granted=default_permission_granted(role_code, permission_code),
-                )
+            pending_rows.append(
+                {
+                    "role_code": role_code,
+                    "permission_code": permission_code,
+                    "granted": default_permission_granted(role_code, permission_code),
+                }
             )
             existing_keys.add(key)
-            changed = True
+    if not pending_rows:
+        return False
 
-    if changed:
-        db.flush()
-    return changed
+    db.execute(
+        pg_insert(RolePermissionGrant)
+        .values(pending_rows)
+        .on_conflict_do_nothing(index_elements=["role_code", "permission_code"])
+    )
+    return True
 
 
 def ensure_authz_module_revision_defaults(db: Session) -> bool:

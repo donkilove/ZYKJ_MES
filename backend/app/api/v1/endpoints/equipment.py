@@ -867,7 +867,7 @@ def start_maintenance_execution(
             current_user_stage_codes=_current_user_stage_codes(db, current_user),
         )
     except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+        _raise_visibility_error(error)
     return success_response(to_work_order_item(updated), message="started")
 
 
@@ -898,7 +898,7 @@ def complete_maintenance_execution(
             attachment_link=payload.attachment_link,
         )
     except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+        _raise_visibility_error(error)
     write_audit_log(
         db,
         action_code="equipment.work_order.complete",
@@ -1099,7 +1099,7 @@ def cancel_maintenance_execution(
             current_user_stage_codes=_current_user_stage_codes(db, current_user),
         )
     except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+        _raise_visibility_error(error)
     write_audit_log(
         db,
         action_code="equipment.work_order.cancel",
