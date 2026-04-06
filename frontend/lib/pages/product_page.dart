@@ -34,6 +34,8 @@ class ProductPage extends StatefulWidget {
     this.preferredTabCode,
     this.routePayloadJson,
     this.productVersionService,
+    this.tabChildBuilder,
+    this.tabPageBuilder,
   });
 
   final AppSession session;
@@ -43,6 +45,8 @@ class ProductPage extends StatefulWidget {
   final String? preferredTabCode;
   final String? routePayloadJson;
   final ProductService? productVersionService;
+  final Widget Function(String tabCode)? tabChildBuilder;
+  final Widget Function(String tabCode, Widget child)? tabPageBuilder;
 
   @override
   State<ProductPage> createState() => _ProductPageState();
@@ -76,7 +80,7 @@ class _ProductPageState extends State<ProductPage>
       _orderedVisibleTabCodes = updatedCodes;
       _rebuildTabController(preferredCode: selectedCode);
     } else if (widget.preferredTabCode != oldWidget.preferredTabCode) {
-      _rebuildTabController(preferredCode: widget.preferredTabCode);
+      _selectPreferredTab(widget.preferredTabCode);
     }
     if (widget.routePayloadJson != oldWidget.routePayloadJson) {
       _consumeRoutePayload(widget.routePayloadJson);
@@ -133,6 +137,18 @@ class _ProductPageState extends State<ProductPage>
       vsync: this,
       initialIndex: initialIndex,
     );
+  }
+
+  void _selectPreferredTab(String? preferredCode) {
+    final controller = _tabController;
+    if (controller == null || preferredCode == null) {
+      return;
+    }
+    final preferredIndex = _orderedVisibleTabCodes.indexOf(preferredCode);
+    if (preferredIndex < 0 || preferredIndex == controller.index) {
+      return;
+    }
+    controller.animateTo(preferredIndex);
   }
 
   void _consumeRoutePayload(String? rawJson) {
@@ -215,114 +231,134 @@ class _ProductPageState extends State<ProductPage>
     }
   }
 
+  Widget _buildTabChild(String code, Widget child) {
+    final overridden = widget.tabPageBuilder?.call(code, child);
+    if (overridden != null) {
+      return overridden;
+    }
+    return widget.tabChildBuilder?.call(code) ?? child;
+  }
+
   Widget _buildTabContent(String code) {
     switch (code) {
       case productManagementTabCode:
-        return ProductManagementPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canCreateProduct: _hasPermission(
-            ProductFeaturePermissionCodes.productManagementManage,
+        return _buildTabChild(
+          code,
+          ProductManagementPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            canCreateProduct: _hasPermission(
+              ProductFeaturePermissionCodes.productManagementManage,
+            ),
+            canExportProducts: _hasPermission(
+              ProductFeaturePermissionCodes.catalogExport,
+            ),
+            canDeleteProduct: _hasPermission(
+              ProductFeaturePermissionCodes.productManagementManage,
+            ),
+            canUpdateLifecycle: _hasPermission(
+              ProductFeaturePermissionCodes.productManagementManage,
+            ),
+            canViewVersions: _hasPermission(
+              ProductFeaturePermissionCodes.versionAnalysisView,
+            ),
+            canCompareVersions: _hasPermission(
+              ProductFeaturePermissionCodes.versionAnalysisView,
+            ),
+            canRollbackVersion: _hasPermission(
+              ProductFeaturePermissionCodes.productManagementManage,
+            ),
+            canManageVersions: _hasPermission(
+              ProductFeaturePermissionCodes.versionsManage,
+            ),
+            canActivateVersions: _hasPermission(
+              ProductFeaturePermissionCodes.versionActivationManage,
+            ),
+            canViewImpactAnalysis: _hasPermission(
+              ProductFeaturePermissionCodes.versionAnalysisView,
+            ),
+            canViewParameters: _hasPermission(
+              ProductFeaturePermissionCodes.parametersView,
+            ),
+            canEditParameters: _hasPermission(
+              ProductFeaturePermissionCodes.parametersEdit,
+            ),
+            canExportParameters: _hasPermission(
+              ProductFeaturePermissionCodes.parametersExport,
+            ),
+            onViewParameters: (product) {
+              _dispatchJump(
+                targetTabCode: productParameterQueryTabCode,
+                action: 'view',
+                product: product,
+              );
+            },
+            onEditParameters: (product) {
+              _dispatchJump(
+                targetTabCode: productParameterManagementTabCode,
+                action: 'edit',
+                product: product,
+                targetVersion: product.currentVersion,
+              );
+            },
           ),
-          canExportProducts: _hasPermission(
-            ProductFeaturePermissionCodes.catalogExport,
-          ),
-          canDeleteProduct: _hasPermission(
-            ProductFeaturePermissionCodes.productManagementManage,
-          ),
-          canUpdateLifecycle: _hasPermission(
-            ProductFeaturePermissionCodes.productManagementManage,
-          ),
-          canViewVersions: _hasPermission(
-            ProductFeaturePermissionCodes.versionAnalysisView,
-          ),
-          canCompareVersions: _hasPermission(
-            ProductFeaturePermissionCodes.versionAnalysisView,
-          ),
-          canRollbackVersion: _hasPermission(
-            ProductFeaturePermissionCodes.productManagementManage,
-          ),
-          canManageVersions: _hasPermission(
-            ProductFeaturePermissionCodes.versionsManage,
-          ),
-          canActivateVersions: _hasPermission(
-            ProductFeaturePermissionCodes.versionActivationManage,
-          ),
-          canViewImpactAnalysis: _hasPermission(
-            ProductFeaturePermissionCodes.versionAnalysisView,
-          ),
-          canViewParameters: _hasPermission(
-            ProductFeaturePermissionCodes.parametersView,
-          ),
-          canEditParameters: _hasPermission(
-            ProductFeaturePermissionCodes.parametersEdit,
-          ),
-          canExportParameters: _hasPermission(
-            ProductFeaturePermissionCodes.parametersExport,
-          ),
-          onViewParameters: (product) {
-            _dispatchJump(
-              targetTabCode: productParameterQueryTabCode,
-              action: 'view',
-              product: product,
-            );
-          },
-          onEditParameters: (product) {
-            _dispatchJump(
-              targetTabCode: productParameterManagementTabCode,
-              action: 'edit',
-              product: product,
-              targetVersion: product.currentVersion,
-            );
-          },
         );
       case productVersionManagementTabCode:
-        return ProductVersionManagementPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          tabCode: productVersionManagementTabCode,
-          jumpCommand: _jumpCommand,
-          onJumpHandled: _handleJumpConsumed,
-          onEditVersionParameters: (product, version) {
-            _dispatchJump(
-              targetTabCode: productParameterManagementTabCode,
-              action: 'edit',
-              product: product,
-              targetVersion: version.version,
-              targetVersionLabel: version.versionLabel,
-            );
-          },
-          canManageVersions: _hasPermission(
-            ProductFeaturePermissionCodes.versionsManage,
+        return _buildTabChild(
+          code,
+          ProductVersionManagementPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            tabCode: productVersionManagementTabCode,
+            jumpCommand: _jumpCommand,
+            onJumpHandled: _handleJumpConsumed,
+            onEditVersionParameters: (product, version) {
+              _dispatchJump(
+                targetTabCode: productParameterManagementTabCode,
+                action: 'edit',
+                product: product,
+                targetVersion: version.version,
+                targetVersionLabel: version.versionLabel,
+              );
+            },
+            canManageVersions: _hasPermission(
+              ProductFeaturePermissionCodes.versionsManage,
+            ),
+            canActivateVersions: _hasPermission(
+              ProductFeaturePermissionCodes.versionActivationManage,
+            ),
+            canExportVersionParameters: _hasPermission(
+              ProductFeaturePermissionCodes.parametersExport,
+            ),
+            service: widget.productVersionService,
           ),
-          canActivateVersions: _hasPermission(
-            ProductFeaturePermissionCodes.versionActivationManage,
-          ),
-          canExportVersionParameters: _hasPermission(
-            ProductFeaturePermissionCodes.parametersExport,
-          ),
-          service: widget.productVersionService,
         );
       case productParameterManagementTabCode:
-        return ProductParameterManagementPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          tabCode: productParameterManagementTabCode,
-          jumpCommand: _jumpCommand,
-          onJumpHandled: _handleJumpConsumed,
-          canExportParameters: _hasPermission(
-            ProductFeaturePermissionCodes.parametersExport,
+        return _buildTabChild(
+          code,
+          ProductParameterManagementPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            tabCode: productParameterManagementTabCode,
+            jumpCommand: _jumpCommand,
+            onJumpHandled: _handleJumpConsumed,
+            canExportParameters: _hasPermission(
+              ProductFeaturePermissionCodes.parametersExport,
+            ),
           ),
         );
       case productParameterQueryTabCode:
-        return ProductParameterQueryPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          tabCode: productParameterQueryTabCode,
-          jumpCommand: _jumpCommand,
-          onJumpHandled: _handleJumpConsumed,
-          canExportParameters: _hasPermission(
-            ProductFeaturePermissionCodes.parametersExport,
+        return _buildTabChild(
+          code,
+          ProductParameterQueryPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            tabCode: productParameterQueryTabCode,
+            jumpCommand: _jumpCommand,
+            onJumpHandled: _handleJumpConsumed,
+            canExportParameters: _hasPermission(
+              ProductFeaturePermissionCodes.parametersExport,
+            ),
           ),
         );
       default:

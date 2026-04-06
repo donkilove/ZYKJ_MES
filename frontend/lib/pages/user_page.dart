@@ -52,6 +52,7 @@ class UserPage extends StatefulWidget {
 
 class _UserPageState extends State<UserPage> {
   int _currentTabIndex = 0;
+  TabController? _tabController;
 
   String _tabSemanticsLabel(_UserTabItem item) => '${item.title}页签';
 
@@ -166,6 +167,7 @@ class _UserPageState extends State<UserPage> {
                   canExport: _canExportUsers,
                   onNavigateToRoleManagement: roleManagementIndex >= 0
                       ? () {
+                          _tabController?.animateTo(roleManagementIndex);
                           setState(
                             () => _currentTabIndex = roleManagementIndex,
                           );
@@ -188,6 +190,10 @@ class _UserPageState extends State<UserPage> {
                   onLogout: widget.onLogout,
                   canApprove: _canApproveRegistration,
                   canReject: _canRejectRegistration,
+                  routePayloadJson:
+                      widget.preferredTabCode == 'registration_approval'
+                      ? widget.routePayloadJson
+                      : null,
                 ),
               ),
             ),
@@ -307,12 +313,15 @@ class _UserPageState extends State<UserPage> {
       children: [
         Expanded(
           child: DefaultTabController(
-            key: ValueKey(tabs.map((item) => item.code).join('|')),
+            key: ValueKey(
+              '${tabs.map((item) => item.code).join('|')}|$_currentTabIndex',
+            ),
             length: tabs.length,
             initialIndex: _currentTabIndex.clamp(0, tabs.length - 1),
             child: Builder(
               builder: (context) {
                 final tabController = DefaultTabController.of(context);
+                _tabController = tabController;
                 tabController.addListener(() {
                   if (!tabController.indexIsChanging) {
                     _currentTabIndex = tabController.index;

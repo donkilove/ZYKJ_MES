@@ -59,7 +59,7 @@ class QualityPage extends StatefulWidget {
 }
 
 class _QualityPageState extends State<QualityPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
 

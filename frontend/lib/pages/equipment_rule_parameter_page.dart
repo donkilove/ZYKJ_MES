@@ -798,26 +798,32 @@ class _RulesTabState extends State<_RulesTab> {
                                 ),
                               ),
                             if (widget.canManage)
-                              UnifiedListTableHeaderStyle.actionMenuButton<
-                                _RuleListAction
-                              >(
-                                theme: theme,
-                                onSelected: (action) =>
-                                    _handleRuleAction(action, item),
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(
-                                    value: _RuleListAction.edit,
-                                    child: Text('编辑'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: _RuleListAction.toggle,
-                                    child: Text(item.isEnabled ? '停用' : '启用'),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: _RuleListAction.delete,
-                                    child: Text('删除'),
-                                  ),
-                                ],
+                              KeyedSubtree(
+                                key: Key('equipment-rule-actions-${item.id}'),
+                                child:
+                                    UnifiedListTableHeaderStyle.actionMenuButton<
+                                      _RuleListAction
+                                    >(
+                                      theme: theme,
+                                      onSelected: (action) =>
+                                          _handleRuleAction(action, item),
+                                      itemBuilder: (context) => [
+                                        const PopupMenuItem(
+                                          value: _RuleListAction.edit,
+                                          child: Text('编辑'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: _RuleListAction.toggle,
+                                          child: Text(
+                                            item.isEnabled ? '停用' : '启用',
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: _RuleListAction.delete,
+                                          child: Text('删除'),
+                                        ),
+                                      ],
+                                    ),
                               ),
                           ],
                         ),
@@ -1518,26 +1524,30 @@ class _ParametersTabState extends State<_ParametersTab> {
                     DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
                     if (widget.canManage)
                       DataCell(
-                        UnifiedListTableHeaderStyle.actionMenuButton<
-                          _ParameterListAction
-                        >(
-                          theme: theme,
-                          onSelected: (action) =>
-                              _handleParameterAction(action, item),
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: _ParameterListAction.edit,
-                              child: Text('编辑'),
-                            ),
-                            PopupMenuItem(
-                              value: _ParameterListAction.toggle,
-                              child: Text(item.isEnabled ? '停用' : '启用'),
-                            ),
-                            const PopupMenuItem(
-                              value: _ParameterListAction.delete,
-                              child: Text('删除'),
-                            ),
-                          ],
+                        KeyedSubtree(
+                          key: Key('equipment-parameter-actions-${item.id}'),
+                          child:
+                              UnifiedListTableHeaderStyle.actionMenuButton<
+                                _ParameterListAction
+                              >(
+                                theme: theme,
+                                onSelected: (action) =>
+                                    _handleParameterAction(action, item),
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: _ParameterListAction.edit,
+                                    child: Text('编辑'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: _ParameterListAction.toggle,
+                                    child: Text(item.isEnabled ? '停用' : '启用'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: _ParameterListAction.delete,
+                                    child: Text('删除'),
+                                  ),
+                                ],
+                              ),
                         ),
                       ),
                   ],

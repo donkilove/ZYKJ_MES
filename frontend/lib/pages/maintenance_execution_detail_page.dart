@@ -12,11 +12,13 @@ class MaintenanceExecutionDetailPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.workOrderId,
+    this.service,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final int workOrderId;
+  final EquipmentService? service;
 
   @override
   State<MaintenanceExecutionDetailPage> createState() =>
@@ -33,7 +35,7 @@ class _MaintenanceExecutionDetailPageState
   @override
   void initState() {
     super.initState();
-    _service = EquipmentService(widget.session);
+    _service = widget.service ?? EquipmentService(widget.session);
     _load();
   }
 

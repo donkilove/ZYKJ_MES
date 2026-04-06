@@ -194,6 +194,7 @@ class _LoginPageState extends State<LoginPage> {
       MaterialPageRoute(
         builder: (_) => RegisterPage(
           initialBaseUrl: _normalizeBaseUrl(_baseUrlController.text),
+          authService: widget.authService,
         ),
       ),
     );
@@ -484,15 +485,23 @@ class _LoginPageState extends State<LoginPage> {
             fieldViewBuilder:
                 (context, textEditingController, focusNode, onFieldSubmitted) {
                   if (textEditingController.text != _accountController.text) {
-                    textEditingController.value = TextEditingValue(
-                      text: _accountController.text,
-                      selection: TextSelection.collapsed(
-                        offset: _accountController.text.length,
-                      ),
-                    );
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted ||
+                          textEditingController.text ==
+                              _accountController.text) {
+                        return;
+                      }
+                      textEditingController.value = TextEditingValue(
+                        text: _accountController.text,
+                        selection: TextSelection.collapsed(
+                          offset: _accountController.text.length,
+                        ),
+                      );
+                    });
                   }
                   return _wrapLoginSubmitShortcut(
                     TextFormField(
+                      key: const Key('login-account-field'),
                       controller: textEditingController,
                       focusNode: focusNode,
                       decoration: InputDecoration(
@@ -522,6 +531,7 @@ class _LoginPageState extends State<LoginPage> {
           const SizedBox(height: 12),
           _wrapLoginSubmitShortcut(
             TextFormField(
+              key: const Key('login-password-field'),
               controller: _passwordController,
               obscureText: true,
               textInputAction: TextInputAction.done,
@@ -547,6 +557,7 @@ class _LoginPageState extends State<LoginPage> {
               Expanded(
                 child: _wrapLoginSubmitShortcut(
                   FilledButton(
+                    key: const Key('login-submit-button'),
                     onPressed: _loading ? null : _submitLogin,
                     child: _loading
                         ? const SizedBox(
@@ -561,6 +572,7 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: OutlinedButton(
+                  key: const Key('go-register-button'),
                   onPressed: _loading ? null : _openRegisterPage,
                   child: const Text('去注册'),
                 ),
@@ -570,6 +582,7 @@ class _LoginPageState extends State<LoginPage> {
           if (_message.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
+              key: const Key('login-message-text'),
               _message,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: _message.startsWith('注册申请已提交')

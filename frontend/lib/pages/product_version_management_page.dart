@@ -88,7 +88,12 @@ class _ProductVersionManagementPageState
     if (cmd != null &&
         cmd.targetTabCode == widget.tabCode &&
         cmd.seq != oldWidget.jumpCommand?.seq) {
-      _handleJump(cmd);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.jumpCommand?.seq != cmd.seq) {
+          return;
+        }
+        _handleJump(cmd);
+      });
     }
   }
 
@@ -427,7 +432,9 @@ class _ProductVersionManagementPageState
         ],
       ),
     );
-    controller.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      controller.dispose();
+    });
     if (result == null) return;
     try {
       await _service.updateProductVersionNote(
@@ -889,20 +896,28 @@ class _ProductVersionManagementPageState
                     switch (action) {
                       case 'detail':
                         _showVersionDetail(rev);
+                        return;
                       case 'activate':
                         _activateVersion(rev);
+                        return;
                       case 'copy':
                         _copyVersion(rev);
+                        return;
                       case 'editNote':
                         _editVersionNote(rev);
+                        return;
                       case 'editParams':
                         _navigateToEditParams(rev);
+                        return;
                       case 'export':
                         _exportVersionParams(rev);
+                        return;
                       case 'disable':
                         _disableVersion(rev);
+                        return;
                       case 'delete':
                         _deleteVersion(rev);
+                        return;
                     }
                   },
                 )

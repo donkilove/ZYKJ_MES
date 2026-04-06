@@ -674,12 +674,19 @@ class _CraftReferenceAnalysisPageState
                               (row) => ListTile(
                                 dense: true,
                                 leading: _buildRefTypeChip(row.refType),
-                                title: Row(
+                                title: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(child: Text(row.refName)),
-                                    _buildStatusChip(row.refStatus),
-                                    const SizedBox(width: 4),
-                                    _buildRiskChip(row.riskLevel),
+                                    Text(row.refName),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 4,
+                                      children: [
+                                        _buildStatusChip(row.refStatus),
+                                        _buildRiskChip(row.riskLevel),
+                                      ],
+                                    ),
                                   ],
                                 ),
                                 subtitle: Text(

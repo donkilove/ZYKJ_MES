@@ -43,6 +43,8 @@ class ProductionPage extends StatefulWidget {
     required this.capabilityCodes,
     this.preferredTabCode,
     this.routePayloadJson,
+    this.tabChildBuilder,
+    this.tabPageBuilder,
   });
 
   final AppSession session;
@@ -51,13 +53,15 @@ class ProductionPage extends StatefulWidget {
   final Set<String> capabilityCodes;
   final String? preferredTabCode;
   final String? routePayloadJson;
+  final Widget Function(String tabCode)? tabChildBuilder;
+  final Widget Function(String tabCode, Widget child)? tabPageBuilder;
 
   @override
   State<ProductionPage> createState() => _ProductionPageState();
 }
 
 class _ProductionPageState extends State<ProductionPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
 
@@ -162,112 +166,111 @@ class _ProductionPageState extends State<ProductionPage>
     }
   }
 
-  Widget _buildTabContent(String code) {
-    switch (code) {
-      case productionOrderManagementTabCode:
-        return ProductionOrderManagementPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canCreateOrder: _hasPermission(
-            ProductionFeaturePermissionCodes.orderManagementManage,
-          ),
-          canEditOrder: _hasPermission(
-            ProductionFeaturePermissionCodes.orderManagementManage,
-          ),
-          canDeleteOrder: _hasPermission(
-            ProductionFeaturePermissionCodes.orderManagementManage,
-          ),
-          canCompleteOrder: _hasPermission(
-            ProductionFeaturePermissionCodes.orderManagementManage,
-          ),
-          canUpdatePipelineMode: _hasPermission(
-            ProductionFeaturePermissionCodes.pipelineModeManage,
-          ),
-        );
-      case productionOrderQueryTabCode:
-        return ProductionOrderQueryPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canFirstArticle: _hasPermission(
-            ProductionFeaturePermissionCodes.orderQueryExecute,
-          ),
-          canEndProduction: _hasPermission(
-            ProductionFeaturePermissionCodes.orderQueryExecute,
-          ),
-          canCreateManualRepairOrder: _hasPermission(
-            ProductionFeaturePermissionCodes.repairOrdersCreateManual,
-          ),
-          canCreateAssistAuthorization: _hasPermission(
-            ProductionFeaturePermissionCodes.assistLaunch,
-          ),
-          canProxyView: _hasPermission(
-            ProductionFeaturePermissionCodes.orderQueryProxy,
-          ),
-          canExportCsv: _hasPermission(
-            ProductionFeaturePermissionCodes.orderQueryExport,
-          ),
-        );
-      case productionAssistRecordsTabCode:
-        return ProductionAssistRecordsPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canViewRecords: _hasPermission(
-            ProductionFeaturePermissionCodes.assistRecordsView,
-          ),
-          routePayloadJson:
-              widget.preferredTabCode == productionAssistRecordsTabCode
-              ? widget.routePayloadJson
-              : null,
-        );
-      case productionDataQueryTabCode:
-        return ProductionDataPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          section: ProductionDataSection.processStats,
-        );
-      case productionTodayRealtimeTabCode:
-        return ProductionDataPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          section: ProductionDataSection.todayRealtime,
-        );
-      case productionOperatorStatsTabCode:
-        return ProductionDataPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          section: ProductionDataSection.operatorStats,
-        );
-      case productionScrapStatisticsTabCode:
-        return ProductionScrapStatisticsPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canExport: _hasPermission(
-            ProductionFeaturePermissionCodes.scrapExportUse,
-          ),
-        );
-      case productionRepairOrdersTabCode:
-        return ProductionRepairOrdersPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canComplete: _hasPermission(
-            ProductionFeaturePermissionCodes.repairOrdersManage,
-          ),
-          canExport: _hasPermission(
-            ProductionFeaturePermissionCodes.repairOrdersExport,
-          ),
-          jumpPayloadJson:
-              widget.preferredTabCode == productionRepairOrdersTabCode
-              ? widget.routePayloadJson
-              : null,
-        );
-      case productionPipelineInstancesTabCode:
-        return ProductionPipelineInstancesPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-        );
-      default:
-        return Center(child: Text('页面暂未实现：$code'));
+  Widget _buildTabChild(String code, Widget child) {
+    final overridden = widget.tabPageBuilder?.call(code, child);
+    if (overridden != null) {
+      return overridden;
     }
+    return widget.tabChildBuilder?.call(code) ?? child;
+  }
+
+  Widget _buildTabContent(String code) {
+    final child = switch (code) {
+      productionOrderManagementTabCode => ProductionOrderManagementPage(
+        session: widget.session,
+        onLogout: widget.onLogout,
+        canCreateOrder: _hasPermission(
+          ProductionFeaturePermissionCodes.orderManagementManage,
+        ),
+        canEditOrder: _hasPermission(
+          ProductionFeaturePermissionCodes.orderManagementManage,
+        ),
+        canDeleteOrder: _hasPermission(
+          ProductionFeaturePermissionCodes.orderManagementManage,
+        ),
+        canCompleteOrder: _hasPermission(
+          ProductionFeaturePermissionCodes.orderManagementManage,
+        ),
+        canUpdatePipelineMode: _hasPermission(
+          ProductionFeaturePermissionCodes.pipelineModeManage,
+        ),
+      ),
+      productionOrderQueryTabCode => ProductionOrderQueryPage(
+        session: widget.session,
+        onLogout: widget.onLogout,
+        canFirstArticle: _hasPermission(
+          ProductionFeaturePermissionCodes.orderQueryExecute,
+        ),
+        canEndProduction: _hasPermission(
+          ProductionFeaturePermissionCodes.orderQueryExecute,
+        ),
+        canCreateManualRepairOrder: _hasPermission(
+          ProductionFeaturePermissionCodes.repairOrdersCreateManual,
+        ),
+        canCreateAssistAuthorization: _hasPermission(
+          ProductionFeaturePermissionCodes.assistLaunch,
+        ),
+        canProxyView: _hasPermission(
+          ProductionFeaturePermissionCodes.orderQueryProxy,
+        ),
+        canExportCsv: _hasPermission(
+          ProductionFeaturePermissionCodes.orderQueryExport,
+        ),
+      ),
+      productionAssistRecordsTabCode => ProductionAssistRecordsPage(
+        session: widget.session,
+        onLogout: widget.onLogout,
+        canViewRecords: _hasPermission(
+          ProductionFeaturePermissionCodes.assistRecordsView,
+        ),
+        routePayloadJson:
+            widget.preferredTabCode == productionAssistRecordsTabCode
+            ? widget.routePayloadJson
+            : null,
+      ),
+      productionDataQueryTabCode => ProductionDataPage(
+        session: widget.session,
+        onLogout: widget.onLogout,
+        section: ProductionDataSection.processStats,
+      ),
+      productionTodayRealtimeTabCode => ProductionDataPage(
+        session: widget.session,
+        onLogout: widget.onLogout,
+        section: ProductionDataSection.todayRealtime,
+      ),
+      productionOperatorStatsTabCode => ProductionDataPage(
+        session: widget.session,
+        onLogout: widget.onLogout,
+        section: ProductionDataSection.operatorStats,
+      ),
+      productionScrapStatisticsTabCode => ProductionScrapStatisticsPage(
+        session: widget.session,
+        onLogout: widget.onLogout,
+        canExport: _hasPermission(
+          ProductionFeaturePermissionCodes.scrapExportUse,
+        ),
+      ),
+      productionRepairOrdersTabCode => ProductionRepairOrdersPage(
+        session: widget.session,
+        onLogout: widget.onLogout,
+        canComplete: _hasPermission(
+          ProductionFeaturePermissionCodes.repairOrdersManage,
+        ),
+        canExport: _hasPermission(
+          ProductionFeaturePermissionCodes.repairOrdersExport,
+        ),
+        jumpPayloadJson:
+            widget.preferredTabCode == productionRepairOrdersTabCode
+            ? widget.routePayloadJson
+            : null,
+      ),
+      productionPipelineInstancesTabCode => ProductionPipelineInstancesPage(
+        session: widget.session,
+        onLogout: widget.onLogout,
+      ),
+      _ => Center(child: Text('页面暂未实现：$code')),
+    };
+    return _buildTabChild(code, child);
   }
 
   @override

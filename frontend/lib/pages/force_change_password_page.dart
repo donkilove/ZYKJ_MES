@@ -102,6 +102,7 @@ class _ForceChangePasswordPageState extends State<ForceChangePasswordPage> {
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
+                      key: const Key('force-old-password-field'),
                       controller: _oldPasswordController,
                       obscureText: true,
                       decoration: const InputDecoration(
@@ -113,6 +114,7 @@ class _ForceChangePasswordPageState extends State<ForceChangePasswordPage> {
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
+                      key: const Key('force-new-password-field'),
                       controller: _newPasswordController,
                       obscureText: true,
                       decoration: const InputDecoration(
@@ -135,6 +137,7 @@ class _ForceChangePasswordPageState extends State<ForceChangePasswordPage> {
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
+                      key: const Key('force-confirm-password-field'),
                       controller: _confirmPasswordController,
                       obscureText: true,
                       decoration: const InputDecoration(
@@ -156,6 +159,7 @@ class _ForceChangePasswordPageState extends State<ForceChangePasswordPage> {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
+                        key: const Key('force-submit-button'),
                         onPressed: _submitting ? null : _submit,
                         child: _submitting
                             ? const SizedBox(

@@ -35,6 +35,7 @@ class EquipmentPage extends StatefulWidget {
     required this.capabilityCodes,
     this.preferredTabCode,
     this.routePayloadJson,
+    this.tabPageBuilder,
   });
 
   final AppSession session;
@@ -43,6 +44,7 @@ class EquipmentPage extends StatefulWidget {
   final Set<String> capabilityCodes;
   final String? preferredTabCode;
   final String? routePayloadJson;
+  final Widget Function(String tabCode, Widget child)? tabPageBuilder;
 
   @override
   State<EquipmentPage> createState() => _EquipmentPageState();
@@ -69,7 +71,7 @@ class _EquipmentPageState extends State<EquipmentPage>
       _orderedVisibleTabCodes = updatedCodes;
       _rebuildTabController(preferredCode: selectedCode);
     } else if (widget.preferredTabCode != oldWidget.preferredTabCode) {
-      _rebuildTabController(preferredCode: widget.preferredTabCode);
+      _selectPreferredTab(widget.preferredTabCode);
     }
   }
 
@@ -94,16 +96,18 @@ class _EquipmentPageState extends State<EquipmentPage>
       _hasPermission(EquipmentFeaturePermissionCodes.executionsOperate);
 
   List<String> _sortedVisibleTabCodes(List<String> tabCodes) {
-    final visibleSet = tabCodes.toSet();
+    final visibleSet = tabCodes.toSet().intersection(_defaultTabOrder.toSet());
     final ordered = <String>[];
     for (final code in _defaultTabOrder) {
       if (visibleSet.remove(code)) {
         ordered.add(code);
       }
     }
-    final remaining = visibleSet.toList()..sort();
-    ordered.addAll(remaining);
     return ordered;
+  }
+
+  Widget _wrapTabContent(String code, Widget child) {
+    return widget.tabPageBuilder?.call(code, child) ?? child;
   }
 
   String? _currentSelectedTabCode() {
@@ -137,6 +141,18 @@ class _EquipmentPageState extends State<EquipmentPage>
     );
   }
 
+  void _selectPreferredTab(String? preferredCode) {
+    final controller = _tabController;
+    if (controller == null || preferredCode == null) {
+      return;
+    }
+    final preferredIndex = _orderedVisibleTabCodes.indexOf(preferredCode);
+    if (preferredIndex < 0 || preferredIndex == controller.index) {
+      return;
+    }
+    controller.animateTo(preferredIndex);
+  }
+
   String _tabTitle(String code) {
     switch (code) {
       case equipmentLedgerTabCode:
@@ -159,61 +175,79 @@ class _EquipmentPageState extends State<EquipmentPage>
   Widget _buildTabContent(String code) {
     switch (code) {
       case equipmentLedgerTabCode:
-        return EquipmentLedgerPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canWrite: _canWriteLedger,
+        return _wrapTabContent(
+          code,
+          EquipmentLedgerPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            canWrite: _canWriteLedger,
+          ),
         );
       case maintenanceItemTabCode:
-        return MaintenanceItemPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canWrite: _canWriteItems,
+        return _wrapTabContent(
+          code,
+          MaintenanceItemPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            canWrite: _canWriteItems,
+          ),
         );
       case maintenancePlanTabCode:
-        return MaintenancePlanPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canWrite: _canWritePlans,
+        return _wrapTabContent(
+          code,
+          MaintenancePlanPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            canWrite: _canWritePlans,
+          ),
         );
       case maintenanceExecutionTabCode:
-        return MaintenanceExecutionPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canExecute: _canExecute,
-          jumpPayloadJson:
-              widget.preferredTabCode == maintenanceExecutionTabCode
-              ? widget.routePayloadJson
-              : null,
+        return _wrapTabContent(
+          code,
+          MaintenanceExecutionPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            canExecute: _canExecute,
+            jumpPayloadJson:
+                widget.preferredTabCode == maintenanceExecutionTabCode
+                ? widget.routePayloadJson
+                : null,
+          ),
         );
       case maintenanceRecordTabCode:
-        return MaintenanceRecordPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
+        return _wrapTabContent(
+          code,
+          MaintenanceRecordPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+          ),
         );
       case equipmentRuleParameterTabCode:
-        return EquipmentRuleParameterPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canViewRules: _hasPermission(
-            EquipmentFeaturePermissionCodes.rulesView,
-          ) ||
-              _hasPermission(EquipmentFeaturePermissionCodes.rulesManage),
-          canManageRules: _hasPermission(
-            EquipmentFeaturePermissionCodes.rulesManage,
-          ),
-          canViewParameters: _hasPermission(
-            EquipmentFeaturePermissionCodes.runtimeParametersView,
-          ) ||
-              _hasPermission(
-                EquipmentFeaturePermissionCodes.runtimeParametersManage,
-              ),
-          canManageParameters: _hasPermission(
-            EquipmentFeaturePermissionCodes.runtimeParametersManage,
+        return _wrapTabContent(
+          code,
+          EquipmentRuleParameterPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            canViewRules:
+                _hasPermission(EquipmentFeaturePermissionCodes.rulesView) ||
+                _hasPermission(EquipmentFeaturePermissionCodes.rulesManage),
+            canManageRules: _hasPermission(
+              EquipmentFeaturePermissionCodes.rulesManage,
+            ),
+            canViewParameters:
+                _hasPermission(
+                  EquipmentFeaturePermissionCodes.runtimeParametersView,
+                ) ||
+                _hasPermission(
+                  EquipmentFeaturePermissionCodes.runtimeParametersManage,
+                ),
+            canManageParameters: _hasPermission(
+              EquipmentFeaturePermissionCodes.runtimeParametersManage,
+            ),
           ),
         );
       default:
-        return Center(child: Text('页面暂未实现：$code'));
+        return _wrapTabContent(code, Center(child: Text('页面暂未实现：$code')));
     }
   }
 

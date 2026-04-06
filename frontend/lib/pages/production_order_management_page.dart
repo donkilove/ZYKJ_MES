@@ -220,6 +220,8 @@ class _ProductionOrderManagementPageState
           initialProducts: _products,
           initialProcesses: _processes,
           initialTemplates: _templates,
+          service: _service,
+          craftService: _craftService,
           supplierService: widget.supplierService,
         ),
       ),
@@ -345,7 +347,9 @@ class _ProductionOrderManagementPageState
       ),
     );
     if (confirmed != true) {
-      passwordController.dispose();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        passwordController.dispose();
+      });
       return false;
     }
 
@@ -376,7 +380,9 @@ class _ProductionOrderManagementPageState
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       return false;
     } finally {
-      passwordController.dispose();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        passwordController.dispose();
+      });
     }
   }
 

@@ -101,6 +101,8 @@ class MessageItem {
         return '消息已归档';
       case 'no_permission':
         return '暂无目标页面访问权限';
+      case 'missing_target':
+        return '未配置业务跳转目标';
       case 'source_unavailable':
         return '来源对象不可访问';
       default:

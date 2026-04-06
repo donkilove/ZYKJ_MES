@@ -9,6 +9,23 @@ import '../services/api_exception.dart';
 import '../services/message_service.dart';
 import '../services/user_service.dart';
 
+String messageJumpDisabledReasonName(String? code) {
+  switch (code) {
+    case 'expired':
+      return '该消息已过期，无法继续跳转';
+    case 'archived':
+      return '该消息已归档，无法继续跳转';
+    case 'no_permission':
+      return '当前账号暂无目标页面访问权限';
+    case 'source_unavailable':
+      return '来源对象已失效，无法继续跳转';
+    case 'missing_target':
+      return '该消息未配置业务跳转目标';
+    default:
+      return '当前消息暂不可跳转';
+  }
+}
+
 class MessageCenterPage extends StatefulWidget {
   const MessageCenterPage({
     super.key,
@@ -22,6 +39,7 @@ class MessageCenterPage extends StatefulWidget {
     this.service,
     this.userService,
     this.refreshTick = 0,
+    this.onPickDateRange,
   });
 
   final AppSession session;
@@ -39,6 +57,8 @@ class MessageCenterPage extends StatefulWidget {
   final MessageService? service;
   final UserService? userService;
   final int refreshTick;
+  final Future<DateTimeRange?> Function(DateTimeRange? initialDateRange)?
+  onPickDateRange;
 
   @override
   State<MessageCenterPage> createState() => _MessageCenterPageState();
@@ -221,8 +241,15 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       await _load(reset: false);
     } on ApiException catch (e) {
       if (!mounted) return;
-      if (e.statusCode == 401) widget.onLogout();
-    } catch (_) {}
+      if (e.statusCode == 401) {
+        widget.onLogout();
+        return;
+      }
+      setState(() => _error = e.message);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
   }
 
   Future<void> _markBatchRead() async {
@@ -251,8 +278,15 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       await _load(reset: false);
     } on ApiException catch (e) {
       if (!mounted) return;
-      if (e.statusCode == 401) widget.onLogout();
-    } catch (_) {}
+      if (e.statusCode == 401) {
+        widget.onLogout();
+        return;
+      }
+      setState(() => _error = e.message);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
   }
 
   Future<void> _publishAnnouncement() async {
@@ -321,17 +355,26 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   }
 
   Future<void> _pickDateRange() async {
-    final now = DateTime.now();
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(now.year - 2),
-      lastDate: now,
-      initialDateRange: _dateRange,
-    );
-    if (picked != null) {
-      setState(() => _dateRange = picked);
-      _load();
+    if (!mounted) {
+      return;
     }
+    final picker = widget.onPickDateRange;
+    final DateTimeRange? picked;
+    if (picker != null) {
+      picked = await picker(_dateRange);
+    } else {
+      picked = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(DateTime.now().year - 2),
+        lastDate: DateTime.now(),
+        initialDateRange: _dateRange,
+      );
+    }
+    if (!mounted || picked == null) {
+      return;
+    }
+    setState(() => _dateRange = picked);
+    _load();
   }
 
   Future<void> _navigateToPage(MessageItem item) async {
@@ -346,7 +389,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       if (!jumpResult.canJump ||
           jumpResult.targetPageCode == null ||
           jumpResult.targetPageCode!.isEmpty) {
-        final disabledReason = _messageDisabledReasonName(
+        final disabledReason = messageJumpDisabledReasonName(
           jumpResult.disabledReason,
         );
         ScaffoldMessenger.of(
@@ -373,23 +416,6 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         return;
       }
       setState(() => _error = e.toString());
-    }
-  }
-
-  String _messageDisabledReasonName(String? code) {
-    switch (code) {
-      case 'expired':
-        return '该消息已过期，无法继续跳转';
-      case 'archived':
-        return '该消息已归档，无法继续跳转';
-      case 'no_permission':
-        return '当前账号暂无目标页面访问权限';
-      case 'source_unavailable':
-        return '来源对象已失效，无法继续跳转';
-      case 'missing_target':
-        return '该消息未配置业务跳转目标';
-      default:
-        return '当前消息暂不可跳转';
     }
   }
 
@@ -544,12 +570,14 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           ],
           const SizedBox(width: 8),
           FilledButton.icon(
+            key: const ValueKey('message-center-mark-all-read-button'),
             onPressed: _loading ? null : _markAllRead,
             icon: const Icon(Icons.done_all, size: 16),
             label: const Text('全部已读'),
           ),
           const SizedBox(width: 8),
           FilledButton.tonalIcon(
+            key: const ValueKey('message-center-mark-batch-read-button'),
             onPressed: _loading || _selectedIds.isEmpty ? null : _markBatchRead,
             icon: const Icon(Icons.playlist_add_check, size: 16),
             label: Text(
@@ -622,6 +650,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
             width: 200,
             height: 36,
             child: TextField(
+              key: const ValueKey('message-center-keyword-field'),
               controller: _keywordCtrl,
               decoration: const InputDecoration(
                 hintText: '搜索标题/摘要',
@@ -724,6 +753,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     void Function(String) onChanged,
   ) {
     return DropdownButton<String>(
+      key: ValueKey('message-center-filter-$label'),
       value: current,
       isDense: true,
       underline: const SizedBox(),
@@ -740,6 +770,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   Widget _dateRangeButton(ThemeData theme) {
     final hasRange = _dateRange != null;
     return OutlinedButton.icon(
+      key: const ValueKey('message-center-date-range-button'),
       onPressed: _pickDateRange,
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -884,6 +915,8 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           if (disabledReason != null) _detailRow('跳转状态', disabledReason, theme),
           if (!widget.canViewDetail)
             _detailRow('详情权限', '当前账号未开通消息详情查看权限', theme),
+          if (!widget.canUseJump || widget.onNavigateToPage == null)
+            _detailRow('跳转权限', '当前账号未开通业务跳转权限', theme),
           if (_detailLoading)
             const Padding(
               padding: EdgeInsets.only(top: 8),
@@ -893,6 +926,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           Row(
             children: [
               TextButton(
+                key: ValueKey('message-center-preview-detail-${item.id}'),
                 onPressed: widget.canViewDetail
                     ? () => _showDetailDialog(item)
                     : null,
@@ -901,18 +935,20 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
               const Spacer(),
               if (!item.isRead)
                 TextButton(
+                  key: ValueKey('message-center-preview-read-${item.id}'),
                   onPressed: () => _markRead(item),
                   child: const Text('标记已读'),
                 ),
               const SizedBox(width: 8),
               FilledButton(
+                key: ValueKey('message-center-preview-jump-${item.id}'),
                 onPressed:
                     item.isActive &&
                         widget.canUseJump &&
                         widget.onNavigateToPage != null
-                    ? () {
+                    ? () async {
                         _markRead(item);
-                        _navigateToPage(item);
+                        await _navigateToPage(item);
                       }
                     : null,
                 child: const Text('跳转业务'),
@@ -941,6 +977,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         : '已读于 ${_formatDateTime(item.readAt!)}';
 
     return InkWell(
+      key: ValueKey('message-center-tile-${item.id}'),
       onTap: () {
         setState(() {
           _selectedItem = item;
@@ -1103,6 +1140,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Checkbox(
+                  key: ValueKey('message-center-select-${item.id}'),
                   value: _selectedIds.contains(item.id),
                   onChanged: (value) =>
                       _toggleSelected(item.id, value ?? false),
@@ -1120,6 +1158,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                     ),
                   ),
                 TextButton(
+                  key: ValueKey('message-center-detail-${item.id}'),
                   onPressed: widget.canViewDetail
                       ? () async {
                           setState(() {
@@ -1149,6 +1188,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                     widget.canUseJump &&
                     widget.onNavigateToPage != null)
                   TextButton(
+                    key: ValueKey('message-center-jump-${item.id}'),
                     onPressed: () async {
                       _markRead(item);
                       await _navigateToPage(item);
@@ -1165,6 +1205,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                   ),
                 if (!item.isRead)
                   TextButton(
+                    key: ValueKey('message-center-read-${item.id}'),
                     onPressed: () => _markRead(item),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(

@@ -23,6 +23,7 @@ class MaintenanceExecutionPage extends StatefulWidget {
     this.jumpPayloadJson,
     this.equipmentService,
     this.craftService,
+    this.detailPageBuilder,
   });
 
   final AppSession session;
@@ -31,6 +32,8 @@ class MaintenanceExecutionPage extends StatefulWidget {
   final String? jumpPayloadJson;
   final EquipmentService? equipmentService;
   final CraftService? craftService;
+  final Widget Function(BuildContext context, int workOrderId)?
+  detailPageBuilder;
 
   @override
   State<MaintenanceExecutionPage> createState() =>
@@ -327,8 +330,10 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     );
 
     if (confirmed != true) {
-      remarkController.dispose();
-      attachmentController.dispose();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        remarkController.dispose();
+        attachmentController.dispose();
+      });
       return;
     }
 
@@ -361,8 +366,10 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         context,
       ).showSnackBar(SnackBar(content: Text('完成执行失败：${_errorMessage(error)}')));
     } finally {
-      remarkController.dispose();
-      attachmentController.dispose();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        remarkController.dispose();
+        attachmentController.dispose();
+      });
     }
   }
 
@@ -411,15 +418,17 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   }
 
   Future<void> _showDetailById(int workOrderId) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MaintenanceExecutionDetailPage(
+    final detailPage =
+        widget.detailPageBuilder?.call(context, workOrderId) ??
+        MaintenanceExecutionDetailPage(
           session: widget.session,
           onLogout: widget.onLogout,
           workOrderId: workOrderId,
-        ),
-      ),
-    );
+          service: _equipmentService,
+        );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => detailPage));
   }
 
   void _consumeJumpPayload(String? rawPayload) {
@@ -712,6 +721,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             TextButton(
+                              key: Key(
+                                'maintenance-execution-start-${item.id}',
+                              ),
                               onPressed: canStart
                                   ? () => _startExecution(item)
                                   : null,
@@ -719,6 +731,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                             ),
                             const SizedBox(width: 8),
                             TextButton(
+                              key: Key(
+                                'maintenance-execution-complete-${item.id}',
+                              ),
                               onPressed: canComplete
                                   ? () => _completeExecution(item)
                                   : null,
@@ -726,6 +741,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                             ),
                             const SizedBox(width: 8),
                             TextButton(
+                              key: Key(
+                                'maintenance-execution-cancel-${item.id}',
+                              ),
                               onPressed: canCancel
                                   ? () => _cancelExecution(item)
                                   : null,
@@ -733,6 +751,9 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                             ),
                             const SizedBox(width: 8),
                             TextButton(
+                              key: Key(
+                                'maintenance-execution-detail-${item.id}',
+                              ),
                               onPressed: () => _showDetail(item),
                               child: const Text('详情'),
                             ),

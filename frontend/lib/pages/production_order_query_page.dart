@@ -755,10 +755,12 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       return false;
     } finally {
-      qtyController.dispose();
-      for (final row in defectRows) {
-        row.dispose();
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        qtyController.dispose();
+        for (final row in defectRows) {
+          row.dispose();
+        }
+      });
     }
   }
 
@@ -940,10 +942,12 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       return false;
     } finally {
-      productionQtyController.dispose();
-      for (final row in defectRows) {
-        row.dispose();
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        productionQtyController.dispose();
+        for (final row in defectRows) {
+          row.dispose();
+        }
+      });
     }
   }
 
@@ -957,7 +961,21 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       return false;
     }
     final targetOperators = _proxyOperators.isNotEmpty
-        ? _proxyOperators
+        ? [
+            ..._proxyOperators,
+            if (item.operatorUserId != null &&
+                !_proxyOperators.any((it) => it.id == item.operatorUserId))
+              AssistUserOptionItem(
+                id: item.operatorUserId!,
+                username:
+                    (item.operatorUsername == null ||
+                        item.operatorUsername!.trim().isEmpty)
+                    ? 'operator_${item.operatorUserId}'
+                    : item.operatorUsername!,
+                fullName: null,
+                roleCodes: const ['operator'],
+              ),
+          ]
         : [
             if (item.operatorUserId != null)
               AssistUserOptionItem(
@@ -982,54 +1000,56 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
             title: const Text('发起代班'),
             content: SizedBox(
               width: 440,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<int>(
-                    initialValue: targetId,
-                    decoration: const InputDecoration(
-                      labelText: '目标操作员',
-                      border: OutlineInputBorder(),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      initialValue: targetId,
+                      decoration: const InputDecoration(
+                        labelText: '目标操作员',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: targetOperators
+                          .map(
+                            (it) => DropdownMenuItem<int>(
+                              value: it.id,
+                              child: Text(it.displayName),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) =>
+                          setDialogState(() => targetId = value),
                     ),
-                    items: targetOperators
-                        .map(
-                          (it) => DropdownMenuItem<int>(
-                            value: it.id,
-                            child: Text(it.displayName),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => targetId = value),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<int>(
-                    initialValue: helperId,
-                    decoration: const InputDecoration(
-                      labelText: '代班人',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      initialValue: helperId,
+                      decoration: const InputDecoration(
+                        labelText: '代班人',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _assistUsers
+                          .map(
+                            (it) => DropdownMenuItem<int>(
+                              value: it.id,
+                              child: Text(it.displayName),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) =>
+                          setDialogState(() => helperId = value),
                     ),
-                    items: _assistUsers
-                        .map(
-                          (it) => DropdownMenuItem<int>(
-                            value: it.id,
-                            child: Text(it.displayName),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => helperId = value),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: reasonController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: '代班原因（可选）',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: reasonController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: '代班原因（可选）',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -1080,7 +1100,9 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       return false;
     } finally {
-      reasonController.dispose();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        reasonController.dispose();
+      });
     }
   }
 

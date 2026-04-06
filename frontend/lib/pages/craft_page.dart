@@ -56,6 +56,8 @@ class CraftPage extends StatefulWidget {
     this.preferredTabCode,
     this.routePayloadJson,
     this.onNavigateToPage,
+    this.tabChildBuilder,
+    this.tabPageBuilder,
   });
 
   final AppSession session;
@@ -65,13 +67,14 @@ class CraftPage extends StatefulWidget {
   final String? preferredTabCode;
   final String? routePayloadJson;
   final void Function(String pageCode)? onNavigateToPage;
+  final Widget Function(String tabCode)? tabChildBuilder;
+  final Widget Function(String tabCode, Widget child)? tabPageBuilder;
 
   @override
   State<CraftPage> createState() => _CraftPageState();
 }
 
-class _CraftPageState extends State<CraftPage>
-    with SingleTickerProviderStateMixin {
+class _CraftPageState extends State<CraftPage> with TickerProviderStateMixin {
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
   _ProcessManagementJumpTarget? _processManagementJumpTarget;
@@ -184,6 +187,14 @@ class _CraftPageState extends State<CraftPage>
     }
   }
 
+  Widget _buildTabChild(String code, Widget child) {
+    final overridden = widget.tabPageBuilder?.call(code, child);
+    if (overridden != null) {
+      return overridden;
+    }
+    return widget.tabChildBuilder?.call(code) ?? child;
+  }
+
   void _selectCraftTab(String tabCode) {
     final index = _orderedVisibleTabCodes.indexOf(tabCode);
     if (index >= 0 && _tabController != null) {
@@ -241,7 +252,7 @@ class _CraftPageState extends State<CraftPage>
     required String moduleCode,
     String? jumpTarget,
   }) {
-    final normalizedModule = moduleCode.trim();
+    final normalizedModule = moduleCode.trim().toLowerCase();
     if (normalizedModule == 'craft') {
       final target = (jumpTarget ?? '').trim();
       final uri = _parseJumpTarget(target);
@@ -300,38 +311,47 @@ class _CraftPageState extends State<CraftPage>
   Widget _buildTabContent(String code) {
     switch (code) {
       case processManagementTabCode:
-        return ProcessManagementPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canWrite: _canWriteProcessBasics,
-          processId: (_processManagementJumpTarget?.processId ?? 0) > 0
-              ? _processManagementJumpTarget?.processId
-              : null,
-          jumpRequestId: _processManagementJumpTarget?.requestId ?? 0,
+        return _buildTabChild(
+          code,
+          ProcessManagementPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            canWrite: _canWriteProcessBasics,
+            processId: (_processManagementJumpTarget?.processId ?? 0) > 0
+                ? _processManagementJumpTarget?.processId
+                : null,
+            jumpRequestId: _processManagementJumpTarget?.requestId ?? 0,
+          ),
         );
       case productionProcessConfigTabCode:
-        return ProcessConfigurationPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canViewTemplates: _canViewTemplates,
-          canManageTemplates: _canManageTemplates,
-          canManageSystemMasterTemplate: _canManageSystemMasterTemplate,
-          templateId: _processConfigurationJumpTarget?.templateId,
-          version: _processConfigurationJumpTarget?.version,
-          systemMasterVersions:
-              _processConfigurationJumpTarget?.systemMasterVersions ?? false,
-          jumpRequestId: _processConfigurationJumpTarget?.requestId ?? 0,
+        return _buildTabChild(
+          code,
+          ProcessConfigurationPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            canViewTemplates: _canViewTemplates,
+            canManageTemplates: _canManageTemplates,
+            canManageSystemMasterTemplate: _canManageSystemMasterTemplate,
+            templateId: _processConfigurationJumpTarget?.templateId,
+            version: _processConfigurationJumpTarget?.version,
+            systemMasterVersions:
+                _processConfigurationJumpTarget?.systemMasterVersions ?? false,
+            jumpRequestId: _processConfigurationJumpTarget?.requestId ?? 0,
+          ),
         );
       case craftKanbanTabCode:
-        return CraftKanbanPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
+        return _buildTabChild(
+          code,
+          CraftKanbanPage(session: widget.session, onLogout: widget.onLogout),
         );
       case craftReferenceAnalysisTabCode:
-        return CraftReferenceAnalysisPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          onNavigate: _handleReferenceNavigation,
+        return _buildTabChild(
+          code,
+          CraftReferenceAnalysisPage(
+            session: widget.session,
+            onLogout: widget.onLogout,
+            onNavigate: _handleReferenceNavigation,
+          ),
         );
       default:
         return Center(child: Text('页面暂未实现：$code'));
@@ -382,6 +402,32 @@ class CraftMessageJumpPayload {
   final bool systemMasterVersions;
 }
 
+int? _tryParsePositiveInt(dynamic rawValue) {
+  final value = switch (rawValue) {
+    int v => v,
+    String v => int.tryParse(v.trim()),
+    _ => null,
+  };
+  if (value == null || value <= 0) {
+    return null;
+  }
+  return value;
+}
+
+bool _parseFlexibleBool(dynamic rawValue) {
+  return switch (rawValue) {
+    bool v => v,
+    int v => v != 0,
+    String v => const {
+      '1',
+      'true',
+      'yes',
+      'y',
+    }.contains(v.trim().toLowerCase()),
+    _ => false,
+  };
+}
+
 CraftMessageJumpPayload? parseCraftMessageJumpPayload(String? rawJson) {
   final normalized = (rawJson ?? '').trim();
   if (normalized.isEmpty) {
@@ -392,14 +438,17 @@ CraftMessageJumpPayload? parseCraftMessageJumpPayload(String? rawJson) {
     if (payload is! Map<String, dynamic>) {
       return null;
     }
+    final targetTabCode = (payload['target_tab_code'] as String?)?.trim();
     return CraftMessageJumpPayload(
-      targetTabCode:
-          payload['target_tab_code'] as String? ??
-          productionProcessConfigTabCode,
-      templateId: payload['template_id'] as int?,
-      version: payload['version'] as int?,
-      processId: payload['process_id'] as int?,
-      systemMasterVersions: payload['system_master_versions'] as bool? ?? false,
+      targetTabCode: (targetTabCode == null || targetTabCode.isEmpty)
+          ? productionProcessConfigTabCode
+          : targetTabCode,
+      templateId: _tryParsePositiveInt(payload['template_id']),
+      version: _tryParsePositiveInt(payload['version']),
+      processId: _tryParsePositiveInt(payload['process_id']),
+      systemMasterVersions: _parseFlexibleBool(
+        payload['system_master_versions'],
+      ),
     );
   } catch (_) {
     return null;

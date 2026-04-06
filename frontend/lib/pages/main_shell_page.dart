@@ -90,6 +90,11 @@ class MainShellPage extends StatefulWidget {
     this.pageCatalogService,
     this.messageService,
     this.userPageBuilder,
+    this.productPageBuilder,
+    this.equipmentPageBuilder,
+    this.productionPageBuilder,
+    this.qualityPageBuilder,
+    this.craftPageBuilder,
   });
 
   final AppSession session;
@@ -118,6 +123,51 @@ class MainShellPage extends StatefulWidget {
     VoidCallback? onVisibilityConfigSaved,
   })?
   userPageBuilder;
+  final Widget Function({
+    required AppSession session,
+    required VoidCallback onLogout,
+    required List<String> visibleTabCodes,
+    required Set<String> capabilityCodes,
+    String? preferredTabCode,
+    String? routePayloadJson,
+  })?
+  productPageBuilder;
+  final Widget Function({
+    required AppSession session,
+    required VoidCallback onLogout,
+    required List<String> visibleTabCodes,
+    required Set<String> capabilityCodes,
+    String? preferredTabCode,
+    String? routePayloadJson,
+  })?
+  equipmentPageBuilder;
+  final Widget Function({
+    required AppSession session,
+    required VoidCallback onLogout,
+    required List<String> visibleTabCodes,
+    required Set<String> capabilityCodes,
+    String? preferredTabCode,
+    String? routePayloadJson,
+  })?
+  productionPageBuilder;
+  final Widget Function({
+    required AppSession session,
+    required VoidCallback onLogout,
+    required List<String> visibleTabCodes,
+    required Set<String> capabilityCodes,
+    String? preferredTabCode,
+    String? routePayloadJson,
+  })?
+  qualityPageBuilder;
+  final Widget Function({
+    required AppSession session,
+    required VoidCallback onLogout,
+    required List<String> visibleTabCodes,
+    required Set<String> capabilityCodes,
+    String? preferredTabCode,
+    String? routePayloadJson,
+  })?
+  craftPageBuilder;
 
   @override
   State<MainShellPage> createState() => _MainShellPageState();
@@ -320,7 +370,15 @@ class _MainShellPageState extends State<MainShellPage>
 
     final items = <_ShellMenuItem>[];
 
+    final homeCatalogItem = sidebarPages
+        .where((item) => item.code == _homePageCode)
+        .firstOrNull;
+
     for (final page in sidebarPages) {
+      if (page.code == _homePageCode) {
+        continue;
+      }
+
       if (!page.alwaysVisible && !visibleCodeSet.contains(page.code)) {
         continue;
       }
@@ -336,14 +394,14 @@ class _MainShellPageState extends State<MainShellPage>
       );
     }
 
-    if (!items.any((item) => item.code == _homePageCode)) {
+    if (items.isNotEmpty || visibleCodeSet.contains(_homePageCode)) {
       items.insert(
         0,
 
         _ShellMenuItem(
           code: _homePageCode,
 
-          title: '首页',
+          title: homeCatalogItem?.name ?? '首页',
 
           icon: _iconForPage(_homePageCode),
         ),
@@ -632,105 +690,176 @@ class _MainShellPageState extends State<MainShellPage>
               );
 
       case _productPageCode:
-        return ProductPage(
-          session: widget.session,
+        final builder = widget.productPageBuilder;
+        return builder != null
+            ? builder(
+                session: widget.session,
+                onLogout: widget.onLogout,
+                visibleTabCodes: _visibleProductTabCodes(),
+                capabilityCodes: _capabilityCodesForModule('product'),
+                preferredTabCode: _selectedPageCode == _productPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _productPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+              )
+            : ProductPage(
+                session: widget.session,
 
-          onLogout: widget.onLogout,
+                onLogout: widget.onLogout,
 
-          visibleTabCodes: _visibleProductTabCodes(),
+                visibleTabCodes: _visibleProductTabCodes(),
 
-          capabilityCodes: _capabilityCodesForModule('product'),
+                capabilityCodes: _capabilityCodesForModule('product'),
 
-          preferredTabCode: _selectedPageCode == _productPageCode
-              ? _preferredTabCode
-              : null,
-          routePayloadJson: _selectedPageCode == _productPageCode
-              ? _preferredRoutePayloadJson
-              : null,
-        );
+                preferredTabCode: _selectedPageCode == _productPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _productPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+              );
 
       case _equipmentPageCode:
-        return EquipmentPage(
-          session: widget.session,
+        final builder = widget.equipmentPageBuilder;
+        return builder != null
+            ? builder(
+                session: widget.session,
+                onLogout: widget.onLogout,
+                visibleTabCodes: _visibleEquipmentTabCodes(),
+                capabilityCodes: _capabilityCodesForModule('equipment'),
+                preferredTabCode: _selectedPageCode == _equipmentPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _equipmentPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+              )
+            : EquipmentPage(
+                session: widget.session,
 
-          onLogout: widget.onLogout,
+                onLogout: widget.onLogout,
 
-          visibleTabCodes: _visibleEquipmentTabCodes(),
+                visibleTabCodes: _visibleEquipmentTabCodes(),
 
-          capabilityCodes: _capabilityCodesForModule('equipment'),
+                capabilityCodes: _capabilityCodesForModule('equipment'),
 
-          preferredTabCode: _selectedPageCode == _equipmentPageCode
-              ? _preferredTabCode
-              : null,
-          routePayloadJson: _selectedPageCode == _equipmentPageCode
-              ? _preferredRoutePayloadJson
-              : null,
-        );
+                preferredTabCode: _selectedPageCode == _equipmentPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _equipmentPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+              );
 
       case _productionPageCode:
-        return ProductionPage(
-          session: widget.session,
+        final builder = widget.productionPageBuilder;
+        return builder != null
+            ? builder(
+                session: widget.session,
+                onLogout: widget.onLogout,
+                visibleTabCodes: _visibleProductionTabCodes(),
+                capabilityCodes: _capabilityCodesForModule('production'),
+                preferredTabCode: _selectedPageCode == _productionPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _productionPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+              )
+            : ProductionPage(
+                session: widget.session,
 
-          onLogout: widget.onLogout,
+                onLogout: widget.onLogout,
 
-          visibleTabCodes: _visibleProductionTabCodes(),
+                visibleTabCodes: _visibleProductionTabCodes(),
 
-          capabilityCodes: _capabilityCodesForModule('production'),
+                capabilityCodes: _capabilityCodesForModule('production'),
 
-          preferredTabCode: _selectedPageCode == _productionPageCode
-              ? _preferredTabCode
-              : null,
-          routePayloadJson: _selectedPageCode == _productionPageCode
-              ? _preferredRoutePayloadJson
-              : null,
-        );
+                preferredTabCode: _selectedPageCode == _productionPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _productionPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+              );
 
       case _qualityPageCode:
-        return QualityPage(
-          session: widget.session,
+        final builder = widget.qualityPageBuilder;
+        return builder != null
+            ? builder(
+                session: widget.session,
+                onLogout: widget.onLogout,
+                visibleTabCodes: _visibleQualityTabCodes(),
+                capabilityCodes: _capabilityCodesForModule('quality'),
+                preferredTabCode: _selectedPageCode == _qualityPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _qualityPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+              )
+            : QualityPage(
+                session: widget.session,
 
-          onLogout: widget.onLogout,
+                onLogout: widget.onLogout,
 
-          visibleTabCodes: _visibleQualityTabCodes(),
+                visibleTabCodes: _visibleQualityTabCodes(),
 
-          capabilityCodes: _capabilityCodesForModule('quality'),
+                capabilityCodes: _capabilityCodesForModule('quality'),
 
-          preferredTabCode: _selectedPageCode == _qualityPageCode
-              ? _preferredTabCode
-              : null,
-          routePayloadJson: _selectedPageCode == _qualityPageCode
-              ? _preferredRoutePayloadJson
-              : null,
-        );
+                preferredTabCode: _selectedPageCode == _qualityPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _qualityPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+              );
 
       case _craftPageCode:
-        return CraftPage(
-          session: widget.session,
+        final builder = widget.craftPageBuilder;
+        return builder != null
+            ? builder(
+                session: widget.session,
+                onLogout: widget.onLogout,
+                visibleTabCodes: _visibleCraftTabCodes(),
+                capabilityCodes: _capabilityCodesForModule('craft'),
+                preferredTabCode: _selectedPageCode == _craftPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _craftPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+              )
+            : CraftPage(
+                session: widget.session,
 
-          onLogout: widget.onLogout,
+                onLogout: widget.onLogout,
 
-          visibleTabCodes: _visibleCraftTabCodes(),
+                visibleTabCodes: _visibleCraftTabCodes(),
 
-          capabilityCodes: _capabilityCodesForModule('craft'),
-          preferredTabCode: _selectedPageCode == _craftPageCode
-              ? _preferredTabCode
-              : null,
-          routePayloadJson: _selectedPageCode == _craftPageCode
-              ? _preferredRoutePayloadJson
-              : null,
-          onNavigateToPage: (pageCode) {
-            setState(() {
-              _selectedPageCode = pageCode;
-              _preferredTabCode = null;
-              _preferredRoutePayloadJson = null;
-            });
-          },
-        );
+                capabilityCodes: _capabilityCodesForModule('craft'),
+                preferredTabCode: _selectedPageCode == _craftPageCode
+                    ? _preferredTabCode
+                    : null,
+                routePayloadJson: _selectedPageCode == _craftPageCode
+                    ? _preferredRoutePayloadJson
+                    : null,
+                onNavigateToPage: (pageCode) {
+                  setState(() {
+                    _selectedPageCode = pageCode;
+                    _preferredTabCode = null;
+                    _preferredRoutePayloadJson = null;
+                  });
+                },
+              );
 
       case _messagePageCode:
         final messageCapabilityCodes = _capabilityCodesForModule('message');
         return MessageCenterPage(
           session: widget.session,
+          service: _messageService,
           onLogout: widget.onLogout,
           canPublishAnnouncement: messageCapabilityCodes.contains(
             'feature.message.announcement.publish',
@@ -738,9 +867,8 @@ class _MainShellPageState extends State<MainShellPage>
           canViewDetail: messageCapabilityCodes.contains(
             'feature.message.detail.view',
           ),
-          canUseJump: messageCapabilityCodes.contains(
-            'feature.message.jump.use',
-          ),
+          // 真实跳转能力以 jump-target 接口返回为准，避免旧权限快照缺码时前端整段拦截。
+          canUseJump: true,
           refreshTick: _messageRefreshTick,
           onUnreadCountChanged: (count) {
             if (mounted) setState(() => _unreadCount = count);
@@ -892,6 +1020,10 @@ class _MainShellPageState extends State<MainShellPage>
       return Scaffold(body: _buildErrorPage());
     }
 
+    if (_authzSnapshot == null) {
+      return Scaffold(body: _buildErrorPage());
+    }
+
     if (_menus.isEmpty) {
       return Scaffold(body: _buildNoAccessPage());
     }
@@ -957,6 +1089,7 @@ class _MainShellPageState extends State<MainShellPage>
                         final isMessage = menu.code == _messagePageCode;
 
                         return ListTile(
+                          key: ValueKey('main-shell-menu-${menu.code}'),
                           selected: selected,
 
                           leading: isMessage && _unreadCount > 0
@@ -1024,12 +1157,15 @@ class _MainShellPageState extends State<MainShellPage>
                     ),
 
                   Expanded(
-                    child: IndexedStack(
-                      index: safeSelectedIndex,
+                    child: Container(
+                      key: ValueKey('main-shell-content-$selectedMenuCode'),
+                      child: IndexedStack(
+                        index: safeSelectedIndex,
 
-                      children: _menus
-                          .map((menu) => _buildContent(menu.code))
-                          .toList(),
+                        children: _menus
+                            .map((menu) => _buildContent(menu.code))
+                            .toList(),
+                      ),
                     ),
                   ),
                 ],

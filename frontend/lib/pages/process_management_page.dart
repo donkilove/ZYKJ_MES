@@ -396,11 +396,6 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       },
     );
 
-    codeController.dispose();
-    nameController.dispose();
-    sortController.dispose();
-    remarkController.dispose();
-
     if (saved == true) {
       await _loadData();
     }
@@ -647,10 +642,6 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         );
       },
     );
-
-    nameController.dispose();
-    serialController.dispose();
-    remarkController.dispose();
 
     if (saved == true) {
       await _loadData();

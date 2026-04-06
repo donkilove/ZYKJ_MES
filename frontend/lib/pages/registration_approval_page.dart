@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../models/app_session.dart';
@@ -19,6 +21,7 @@ class RegistrationApprovalPage extends StatefulWidget {
     required this.onLogout,
     required this.canApprove,
     required this.canReject,
+    this.routePayloadJson,
     this.userService,
     this.craftService,
   });
@@ -27,6 +30,7 @@ class RegistrationApprovalPage extends StatefulWidget {
   final VoidCallback onLogout;
   final bool canApprove;
   final bool canReject;
+  final String? routePayloadJson;
   final UserService? userService;
   final CraftService? craftService;
 
@@ -51,6 +55,8 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   List<CraftStageItem> _stages = const [];
   int _requestPage = 1;
   String? _statusFilter = 'pending';
+  int? _jumpRequestId;
+  String? _lastHandledRoutePayloadJson;
 
   int get _requestTotalPages {
     if (_total <= 0) {
@@ -64,7 +70,16 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     super.initState();
     _userService = widget.userService ?? UserService(widget.session);
     _craftService = widget.craftService ?? CraftService(widget.session);
+    _consumeRoutePayload(widget.routePayloadJson);
     _loadInitialData();
+  }
+
+  @override
+  void didUpdateWidget(covariant RegistrationApprovalPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.routePayloadJson != oldWidget.routePayloadJson) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    }
   }
 
   @override
@@ -103,6 +118,67 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     final hh = local.hour.toString().padLeft(2, '0');
     final min = local.minute.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd $hh:$min';
+  }
+
+  int? _parsePositiveInt(dynamic rawValue) {
+    final value = switch (rawValue) {
+      int v => v,
+      String v => int.tryParse(v.trim()),
+      _ => null,
+    };
+    if (value == null || value <= 0) {
+      return null;
+    }
+    return value;
+  }
+
+  void _consumeRoutePayload(String? rawJson) {
+    final normalized = (rawJson ?? '').trim();
+    if (normalized.isEmpty || normalized == _lastHandledRoutePayloadJson) {
+      return;
+    }
+    _lastHandledRoutePayloadJson = normalized;
+    try {
+      final payload = jsonDecode(normalized);
+      if (payload is! Map<String, dynamic>) {
+        return;
+      }
+      final requestId = _parsePositiveInt(payload['request_id']);
+      if (requestId == null) {
+        return;
+      }
+      setState(() {
+        _jumpRequestId = requestId;
+        _message = '已收到目标注册申请 #$requestId 的跳转请求，正在定位。';
+      });
+      final shouldReloadAllStatuses = _statusFilter != null;
+      if (shouldReloadAllStatuses) {
+        setState(() => _statusFilter = null);
+      }
+      if (_items.isNotEmpty || _total > 0 || _loading) {
+        if (shouldReloadAllStatuses) {
+          _loadRequests(page: 1);
+        } else {
+          _applyJumpTargetHint();
+        }
+      }
+    } catch (_) {
+      return;
+    }
+  }
+
+  void _applyJumpTargetHint() {
+    final requestId = _jumpRequestId;
+    if (requestId == null || _loading) {
+      return;
+    }
+    final matched = _items.where((item) => item.id == requestId).firstOrNull;
+    setState(() {
+      _message = matched == null
+          ? '已切换到注册审批页，已收到目标注册申请 #$requestId，但当前列表页未定位到该记录。'
+          : '已定位注册申请 #$requestId（账号：${matched.account}）。';
+    });
+    _jumpRequestId = null;
   }
 
   String _statusLabel(String status) {
@@ -208,6 +284,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         _stages = stages.items;
         _requestPage = resolvedPage;
       });
+      _applyJumpTargetHint();
       if (resolvedPage != targetPage) {
         await _loadInitialData(page: resolvedPage);
       }
@@ -260,6 +337,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         _total = result.total;
         _requestPage = resolvedPage;
       });
+      _applyJumpTargetHint();
       if (resolvedPage != targetPage) {
         await _loadRequests(page: resolvedPage);
       }

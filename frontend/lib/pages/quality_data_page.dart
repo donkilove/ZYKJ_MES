@@ -255,6 +255,13 @@ class _QualityDataPageState extends State<QualityDataPage> {
   }
 
   Future<void> _exportCsv() async {
+    if (_startDate.isAfter(_endDate)) {
+      setState(() {
+        _message = '开始日期不能晚于结束日期';
+      });
+      return;
+    }
+
     setState(() {
       _exporting = true;
       _message = '';
