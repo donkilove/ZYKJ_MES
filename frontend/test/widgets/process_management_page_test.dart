@@ -9,6 +9,37 @@ import 'package:mes_client/widgets/crud_page_header.dart';
 class _FakeCraftService extends CraftService {
   _FakeCraftService() : super(AppSession(baseUrl: '', accessToken: ''));
 
+  final List<CraftStageItem> _stages = [
+    CraftStageItem(
+      id: 1,
+      code: 'CUT',
+      name: '切割段',
+      sortOrder: 1,
+      isEnabled: true,
+      processCount: 1,
+      createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+      updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+    ),
+  ];
+  final List<CraftProcessItem> _processes = [
+    CraftProcessItem(
+      id: 11,
+      code: 'CUT-01',
+      name: '激光切割',
+      stageId: 1,
+      stageCode: 'CUT',
+      stageName: '切割段',
+      isEnabled: true,
+      createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+      updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+    ),
+  ];
+
+  int createProcessCalls = 0;
+  int deleteProcessCalls = 0;
+  CraftProcessItem? lastCreatedProcess;
+  int? lastDeletedProcessId;
+
   @override
   Future<CraftStageListResult> listStages({
     int page = 1,
@@ -16,21 +47,7 @@ class _FakeCraftService extends CraftService {
     String? keyword,
     bool? enabled,
   }) async {
-    return CraftStageListResult(
-      total: 1,
-      items: [
-        CraftStageItem(
-          id: 1,
-          code: 'CUT',
-          name: '切割段',
-          sortOrder: 1,
-          isEnabled: true,
-          processCount: 1,
-          createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-          updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
-        ),
-      ],
-    );
+    return CraftStageListResult(total: _stages.length, items: List.of(_stages));
   }
 
   @override
@@ -42,21 +59,41 @@ class _FakeCraftService extends CraftService {
     bool? enabled,
   }) async {
     return CraftProcessListResult(
-      total: 1,
-      items: [
-        CraftProcessItem(
-          id: 11,
-          code: 'CUT-01',
-          name: '激光切割',
-          stageId: 1,
-          stageCode: 'CUT',
-          stageName: '切割段',
-          isEnabled: true,
-          createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-          updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
-        ),
-      ],
+      total: _processes.length,
+      items: List.of(_processes),
     );
+  }
+
+  @override
+  Future<CraftProcessItem> createProcess({
+    required String code,
+    required String name,
+    required int stageId,
+    String remark = '',
+  }) async {
+    createProcessCalls += 1;
+    final created = CraftProcessItem(
+      id: 20,
+      code: code,
+      name: name,
+      stageId: stageId,
+      stageCode: 'CUT',
+      stageName: '切割段',
+      isEnabled: true,
+      remark: remark,
+      createdAt: DateTime.parse('2026-03-02T00:00:00Z'),
+      updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
+    );
+    lastCreatedProcess = created;
+    _processes.add(created);
+    return created;
+  }
+
+  @override
+  Future<void> deleteProcess({required int processId}) async {
+    deleteProcessCalls += 1;
+    lastDeletedProcessId = processId;
+    _processes.removeWhere((item) => item.id == processId);
   }
 
   @override
@@ -147,5 +184,84 @@ void main() {
 
     expect(find.text('工序引用分析：激光切割'), findsOneWidget);
     expect(find.textContaining('编码/编号：TPL-21'), findsOneWidget);
+  });
+
+  testWidgets('工序管理支持 jump 定位并展示横幅', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProcessManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canWrite: true,
+            craftService: _FakeCraftService(),
+            processId: 11,
+            jumpRequestId: 1,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('已定位工序 #11 激光切割'), findsOneWidget);
+    expect(find.textContaining('编码：CUT-01'), findsOneWidget);
+  });
+
+  testWidgets('工序管理支持新增与删除工序', (tester) async {
+    final craftService = _FakeCraftService();
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProcessManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canWrite: true,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.widgetWithText(FilledButton, '新增工序'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '工序编码序号（两位）'),
+      '02',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, '小工序名称'), '折弯');
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+
+    expect(craftService.createProcessCalls, 1);
+    expect(craftService.lastCreatedProcess?.code, 'CUT-02');
+    expect(find.text('折弯'), findsOneWidget);
+
+    await tester.tap(find.text('操作').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(craftService.deleteProcessCalls, 1);
+    expect(craftService.lastDeletedProcessId, 20);
+    expect(find.text('折弯'), findsNothing);
   });
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
 import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/authz_models.dart';
 import 'package:mes_client/models/product_models.dart';
@@ -10,6 +11,8 @@ import 'package:mes_client/pages/product_page.dart';
 import 'package:mes_client/pages/product_version_management_page.dart';
 import 'package:mes_client/services/api_exception.dart';
 import 'package:mes_client/services/product_service.dart';
+import 'package:url_launcher_platform_interface/link.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 final DateTime _fixedDate = DateTime.parse('2026-03-01T00:00:00Z');
 
@@ -720,6 +723,347 @@ class _ParameterQueryPageService extends ProductService {
     lastLifecycleStatus = lifecycleStatus;
     lastHasEffectiveVersion = hasEffectiveVersion;
     return ProductListResult(total: products.length, items: products);
+  }
+}
+
+class _VersionActionService extends ProductService {
+  _VersionActionService({required this.product, required this.versions})
+    : super(_session());
+
+  ProductItem product;
+  final List<ProductVersionItem> versions;
+  int createCalls = 0;
+  final List<int> activateCalls = [];
+  final List<int> disableCalls = [];
+  final List<int> deleteCalls = [];
+  final List<String> updateNotes = [];
+  final List<int> exportCalls = [];
+
+  @override
+  Future<ProductListResult> listProducts({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
+  }) async {
+    return ProductListResult(total: 1, items: [product]);
+  }
+
+  @override
+  Future<ProductItem> getProduct({required int productId}) async {
+    return product;
+  }
+
+  @override
+  Future<ProductVersionListResult> listProductVersions({
+    required int productId,
+  }) async {
+    return ProductVersionListResult(total: versions.length, items: versions);
+  }
+
+  @override
+  Future<ProductVersionItem> createProductVersion({
+    required int productId,
+  }) async {
+    createCalls += 1;
+    final nextVersion =
+        versions
+            .map((item) => item.version)
+            .fold<int>(0, (a, b) => a > b ? a : b) +
+        1;
+    final created = _buildVersion(
+      version: nextVersion,
+      versionLabel: 'V1.${nextVersion - 1}',
+      lifecycleStatus: 'draft',
+    );
+    versions.insert(0, created);
+    product = _buildProduct(
+      id: product.id,
+      currentVersion: created.version,
+      effectiveVersion: product.effectiveVersion,
+      lifecycleStatus: product.lifecycleStatus,
+      inactiveReason: product.inactiveReason,
+    );
+    return created;
+  }
+
+  @override
+  Future<ProductVersionItem> activateProductVersion({
+    required int productId,
+    required int version,
+    bool confirmed = false,
+    int? expectedEffectiveVersion,
+  }) async {
+    activateCalls.add(version);
+    for (var index = 0; index < versions.length; index += 1) {
+      final current = versions[index];
+      if (current.lifecycleStatus == 'effective') {
+        versions[index] = ProductVersionItem(
+          version: current.version,
+          versionLabel: current.versionLabel,
+          lifecycleStatus: 'obsolete',
+          action: current.action,
+          note: current.note,
+          effectiveAt: current.effectiveAt,
+          sourceVersion: current.sourceVersion,
+          sourceVersionLabel: current.sourceVersionLabel,
+          createdByUserId: current.createdByUserId,
+          createdByUsername: current.createdByUsername,
+          createdAt: current.createdAt,
+          updatedAt: current.updatedAt,
+        );
+      }
+      if (current.version == version) {
+        versions[index] = ProductVersionItem(
+          version: current.version,
+          versionLabel: current.versionLabel,
+          lifecycleStatus: 'effective',
+          action: current.action,
+          note: current.note,
+          effectiveAt: _fixedDate,
+          sourceVersion: current.sourceVersion,
+          sourceVersionLabel: current.sourceVersionLabel,
+          createdByUserId: current.createdByUserId,
+          createdByUsername: current.createdByUsername,
+          createdAt: current.createdAt,
+          updatedAt: current.updatedAt,
+        );
+      }
+    }
+    product = _buildProduct(
+      id: product.id,
+      currentVersion: product.currentVersion,
+      effectiveVersion: version,
+      lifecycleStatus: 'active',
+    );
+    return versions.firstWhere((item) => item.version == version);
+  }
+
+  @override
+  Future<ProductVersionItem> disableProductVersion({
+    required int productId,
+    required int version,
+  }) async {
+    disableCalls.add(version);
+    for (var index = 0; index < versions.length; index += 1) {
+      final current = versions[index];
+      if (current.version == version) {
+        versions[index] = ProductVersionItem(
+          version: current.version,
+          versionLabel: current.versionLabel,
+          lifecycleStatus: 'disabled',
+          action: current.action,
+          note: current.note,
+          effectiveAt: current.effectiveAt,
+          sourceVersion: current.sourceVersion,
+          sourceVersionLabel: current.sourceVersionLabel,
+          createdByUserId: current.createdByUserId,
+          createdByUsername: current.createdByUsername,
+          createdAt: current.createdAt,
+          updatedAt: current.updatedAt,
+        );
+      }
+    }
+    final remainingEffective = versions.any(
+      (item) => item.lifecycleStatus == 'effective',
+    );
+    if (!remainingEffective) {
+      product = _buildProduct(
+        id: product.id,
+        currentVersion: product.currentVersion,
+        effectiveVersion: 0,
+        lifecycleStatus: 'inactive',
+        inactiveReason: '当前无生效版本，请先将目标版本设为生效后再恢复启用。',
+      );
+    }
+    return versions.firstWhere((item) => item.version == version);
+  }
+
+  @override
+  Future<void> deleteProductVersion({
+    required int productId,
+    required int version,
+  }) async {
+    deleteCalls.add(version);
+    versions.removeWhere((item) => item.version == version);
+  }
+
+  @override
+  Future<ProductVersionItem> updateProductVersionNote({
+    required int productId,
+    required int version,
+    required String note,
+  }) async {
+    updateNotes.add(note);
+    for (var index = 0; index < versions.length; index += 1) {
+      final current = versions[index];
+      if (current.version == version) {
+        final updated = ProductVersionItem(
+          version: current.version,
+          versionLabel: current.versionLabel,
+          lifecycleStatus: current.lifecycleStatus,
+          action: current.action,
+          note: note,
+          effectiveAt: current.effectiveAt,
+          sourceVersion: current.sourceVersion,
+          sourceVersionLabel: current.sourceVersionLabel,
+          createdByUserId: current.createdByUserId,
+          createdByUsername: current.createdByUsername,
+          createdAt: current.createdAt,
+          updatedAt: _fixedDate,
+        );
+        versions[index] = updated;
+        return updated;
+      }
+    }
+    throw StateError('version not found');
+  }
+
+  @override
+  Future<List<int>> exportProductVersionParameters({
+    required int productId,
+    required int version,
+  }) async {
+    exportCalls.add(version);
+    return <int>[1, 2, 3];
+  }
+}
+
+class _ParameterQueryInteractionService extends ProductService {
+  _ParameterQueryInteractionService({required this.products})
+    : super(_session());
+
+  final List<ProductItem> products;
+  int queryCalls = 0;
+  int exportCalls = 0;
+  int detailCalls = 0;
+  String? launchedProductName;
+
+  @override
+  Future<ProductListResult> listProductsForParameterQuery({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    String? effectiveVersionKeyword,
+  }) async {
+    queryCalls += 1;
+    final trimmedKeyword = keyword?.trim() ?? '';
+    final filtered = products.where((product) {
+      if (trimmedKeyword.isNotEmpty && !product.name.contains(trimmedKeyword)) {
+        return false;
+      }
+      if ((category ?? '').isNotEmpty && product.category != category) {
+        return false;
+      }
+      return true;
+    }).toList();
+    return ProductListResult(total: filtered.length, items: filtered);
+  }
+
+  @override
+  Future<List<int>> exportProductParameters({
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    String? versionKeyword,
+    String? paramKeyword,
+    String? paramCategoryKeyword,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    bool effectiveOnly = false,
+  }) async {
+    exportCalls += 1;
+    return <int>[1, 2, 3];
+  }
+
+  @override
+  Future<ProductParameterListResult> listProductParameters({
+    required int productId,
+    int? version,
+    bool effectiveOnly = false,
+  }) async {
+    detailCalls += 1;
+    final product = products.firstWhere((item) => item.id == productId);
+    launchedProductName = product.name;
+    return ProductParameterListResult(
+      productId: product.id,
+      productName: product.name,
+      parameterScope: 'effective',
+      version: product.effectiveVersion,
+      versionLabel:
+          product.effectiveVersionLabel ?? 'V1.${product.effectiveVersion - 1}',
+      lifecycleStatus: 'effective',
+      total: 2,
+      items: [
+        ProductParameterItem(
+          name: '图纸链接',
+          category: '文档',
+          type: 'Link',
+          value: 'https://example.com/files/spec.pdf',
+          description: '在线资料',
+          sortOrder: 1,
+          isPreset: false,
+        ),
+        ProductParameterItem(
+          name: '本地图纸',
+          category: '文档',
+          type: 'Link',
+          value: r'C:\docs\manual.pdf',
+          description: '',
+          sortOrder: 2,
+          isPreset: false,
+        ),
+      ],
+    );
+  }
+}
+
+class _FakeFileSelectorPlatform extends FileSelectorPlatform {
+  String? savePath;
+
+  @override
+  Future<String?> getSavePath({
+    List<XTypeGroup>? acceptedTypeGroups,
+    String? initialDirectory,
+    String? suggestedName,
+    String? confirmButtonText,
+  }) async {
+    return savePath;
+  }
+}
+
+class _FakeUrlLauncherPlatform extends UrlLauncherPlatform {
+  final List<String> launchedUrls = [];
+
+  @override
+  LinkDelegate? get linkDelegate => null;
+
+  @override
+  Future<bool> canLaunch(String url) async => true;
+
+  @override
+  Future<bool> launch(
+    String url, {
+    required bool useSafariVC,
+    required bool useWebView,
+    required bool enableJavaScript,
+    required bool enableDomStorage,
+    required bool universalLinksOnly,
+    required Map<String, String> headers,
+    String? webOnlyWindowName,
+  }) async {
+    launchedUrls.add(url);
+    return true;
   }
 }
 
@@ -1689,6 +2033,182 @@ void main() {
         findsOneWidget,
         reason: '查看参数按钮应通过公共单元格包装保持垂直居中和水平居中。',
       );
+    });
+
+    testWidgets('版本管理页应覆盖新建 生效 停用 删除 备注与导出参数链路', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final originalFileSelector = FileSelectorPlatform.instance;
+      final fakeFileSelector = _FakeFileSelectorPlatform()
+        ..savePath =
+            'C:/Users/Donki/UserData/Code/ZYKJ_MES/frontend/version-export.csv';
+      FileSelectorPlatform.instance = fakeFileSelector;
+      addTearDown(() => FileSelectorPlatform.instance = originalFileSelector);
+
+      final service = _VersionActionService(
+        product: _buildProduct(id: 71, currentVersion: 2, effectiveVersion: 1),
+        versions: [
+          _buildVersion(
+            version: 2,
+            versionLabel: 'V1.1',
+            lifecycleStatus: 'draft',
+          ),
+          _buildVersion(
+            version: 1,
+            versionLabel: 'V1.0',
+            lifecycleStatus: 'effective',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _host(
+          ProductVersionManagementPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: productVersionManagementTabCode,
+            canManageVersions: true,
+            canActivateVersions: true,
+            canExportVersionParameters: true,
+            service: service,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('产品71'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(OutlinedButton, '编辑版本说明'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '版本备注已更新');
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pumpAndSettle();
+      expect(service.updateNotes, ['版本备注已更新']);
+      expect(find.text('版本备注已更新'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, '导出参数'));
+      await tester.pumpAndSettle();
+      expect(service.exportCalls, [2]);
+
+      await tester.tap(find.widgetWithText(FilledButton, '立即生效'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, '确认生效'));
+      await tester.pumpAndSettle();
+      expect(service.activateCalls, [2]);
+      expect(find.textContaining('V1.1 已生效'), findsOneWidget);
+
+      await _openPopupMenu(tester, _popupMenuButtonFinder().at(1));
+      await tester.tap(find.text('停用版本'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, '确认停用'));
+      await tester.pumpAndSettle();
+      expect(service.disableCalls, [1]);
+      expect(find.text('已停用'), findsWidgets);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, '新建版本'));
+      await tester.pumpAndSettle();
+      expect(service.createCalls, 1);
+      expect(find.text('V1.2'), findsOneWidget);
+
+      await _openPopupMenu(tester, _popupMenuButtonFinder().first);
+      await tester.tap(find.text('删除版本'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, '确认删除'));
+      await tester.pumpAndSettle();
+      expect(service.deleteCalls, [3]);
+      expect(find.text('V1.2'), findsNothing);
+    });
+
+    testWidgets('参数查询页应支持弹窗 Link 打开 导出与跳转后查看', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final originalFileSelector = FileSelectorPlatform.instance;
+      final fakeFileSelector = _FakeFileSelectorPlatform()
+        ..savePath =
+            'C:/Users/Donki/UserData/Code/ZYKJ_MES/frontend/query-export.csv';
+      FileSelectorPlatform.instance = fakeFileSelector;
+      addTearDown(() => FileSelectorPlatform.instance = originalFileSelector);
+
+      final originalUrlLauncher = UrlLauncherPlatform.instance;
+      final fakeUrlLauncher = _FakeUrlLauncherPlatform();
+      UrlLauncherPlatform.instance = fakeUrlLauncher;
+      addTearDown(() => UrlLauncherPlatform.instance = originalUrlLauncher);
+
+      final service = _ParameterQueryInteractionService(
+        products: [
+          _buildProduct(id: 81, currentVersion: 2, effectiveVersion: 1),
+        ],
+      );
+      var handledJumpSeq = 0;
+      ProductJumpCommand? jumpCommand;
+
+      await tester.pumpWidget(
+        _host(
+          ProductParameterQueryPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: productParameterQueryTabCode,
+            service: service,
+            canExportParameters: true,
+            jumpCommand: jumpCommand,
+            onJumpHandled: (seq) {
+              handledJumpSeq = seq;
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      jumpCommand = ProductJumpCommand(
+        seq: 9,
+        targetTabCode: productParameterQueryTabCode,
+        action: 'view',
+        productId: 81,
+        productName: '产品81',
+      );
+
+      await tester.pumpWidget(
+        _host(
+          ProductParameterQueryPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: productParameterQueryTabCode,
+            service: service,
+            canExportParameters: true,
+            jumpCommand: jumpCommand,
+            onJumpHandled: (seq) {
+              handledJumpSeq = seq;
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(service.detailCalls, 1);
+      expect(find.textContaining('产品参数 - 产品81'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'spec.pdf'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'manual.pdf'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'spec.pdf'));
+      await tester.pumpAndSettle();
+      expect(fakeUrlLauncher.launchedUrls, [
+        'https://example.com/files/spec.pdf',
+      ]);
+
+      await tester.tap(find.widgetWithText(FilledButton, '关闭'));
+      await tester.pumpAndSettle();
+      expect(handledJumpSeq, 9);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, '导出'));
+      await tester.pumpAndSettle();
+      expect(service.exportCalls, 1);
+
+      await tester.tap(find.widgetWithText(TextButton, '查看参数'));
+      await tester.pumpAndSettle();
+      expect(service.detailCalls, 2);
+      expect(find.textContaining('产品参数 - 产品81'), findsOneWidget);
     });
   });
 }

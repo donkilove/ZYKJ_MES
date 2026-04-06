@@ -22,11 +22,14 @@ void main() {
             },
           );
         },
-        'POST /auth/register': (_) => TestResponse.json(201, body: {'ok': true}),
+        'POST /auth/register': (_) =>
+            TestResponse.json(201, body: {'ok': true}),
         'GET /auth/accounts': (_) => TestResponse.json(
           200,
           body: {
-            'data': {'accounts': ['admin', 'worker']},
+            'data': {
+              'accounts': ['admin', 'worker'],
+            },
           },
         ),
         'GET /auth/me': (request) {
@@ -81,10 +84,8 @@ void main() {
 
     test('throws ApiException when login failed or token missing', () async {
       final badLoginServer = await TestHttpServer.start({
-        'POST /auth/login': (_) => TestResponse.json(
-          401,
-          body: {'detail': 'invalid credentials'},
-        ),
+        'POST /auth/login': (_) =>
+            TestResponse.json(401, body: {'detail': 'invalid credentials'}),
       });
       addTearDown(badLoginServer.close);
       final service = AuthService();
@@ -103,12 +104,8 @@ void main() {
       );
 
       final missingTokenServer = await TestHttpServer.start({
-        'POST /auth/login': (_) => TestResponse.json(
-          200,
-          body: {
-            'data': <String, dynamic>{},
-          },
-        ),
+        'POST /auth/login': (_) =>
+            TestResponse.json(200, body: {'data': <String, dynamic>{}}),
       });
       addTearDown(missingTokenServer.close);
 
@@ -118,8 +115,42 @@ void main() {
           username: 'admin',
           password: 'pass123',
         ),
-        throwsA(isA<ApiException>().having((e) => e.statusCode, 'statusCode', 200)),
+        throwsA(
+          isA<ApiException>().having((e) => e.statusCode, 'statusCode', 200),
+        ),
       );
     });
+
+    test(
+      'returns mustChangePassword flag and handles empty account payload',
+      () async {
+        final server = await TestHttpServer.start({
+          'POST /auth/login': (_) => TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'access_token': 'token-abc',
+                'must_change_password': true,
+              },
+            },
+          ),
+          'GET /auth/accounts': (_) =>
+              TestResponse.json(200, body: {'data': <String, dynamic>{}}),
+        });
+        addTearDown(server.close);
+
+        final service = AuthService();
+        final result = await service.login(
+          baseUrl: server.baseUrl,
+          username: 'admin',
+          password: 'pass123',
+        );
+        final accounts = await service.listAccounts(baseUrl: server.baseUrl);
+
+        expect(result.token, 'token-abc');
+        expect(result.mustChangePassword, isTrue);
+        expect(accounts, isEmpty);
+      },
+    );
   });
 }

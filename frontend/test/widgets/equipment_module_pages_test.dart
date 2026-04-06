@@ -81,6 +81,10 @@ class _FakeEquipmentService extends EquipmentService {
        super(AppSession(baseUrl: '', accessToken: 'token'));
 
   int ownersRequestCount = 0;
+  int startExecutionCalls = 0;
+  int completeExecutionCalls = 0;
+  int cancelExecutionCalls = 0;
+  int getWorkOrderDetailCalls = 0;
   final List<EquipmentOwnerOption> _owners;
   final List<EquipmentLedgerItem> _equipmentItems;
   final List<MaintenanceItemEntry> _maintenanceItems;
@@ -169,8 +173,152 @@ class _FakeEquipmentService extends EquipmentService {
   }) async {
     return MaintenanceWorkOrderListResult(
       total: _workOrders.length,
-      items: _workOrders,
+      items: List<MaintenanceWorkOrderItem>.from(_workOrders),
     );
+  }
+
+  @override
+  Future<void> startExecution({required int workOrderId}) async {
+    startExecutionCalls += 1;
+    _replaceWorkOrder(
+      workOrderId,
+      (item) => MaintenanceWorkOrderItem(
+        id: item.id,
+        planId: item.planId,
+        equipmentId: item.equipmentId,
+        equipmentName: item.equipmentName,
+        sourceEquipmentCode: item.sourceEquipmentCode,
+        itemId: item.itemId,
+        itemName: item.itemName,
+        sourceItemName: item.sourceItemName,
+        sourceExecutionProcessCode: item.sourceExecutionProcessCode,
+        dueDate: item.dueDate,
+        status: 'in_progress',
+        executorUserId: item.executorUserId,
+        executorUsername: item.executorUsername,
+        startedAt: DateTime.parse('2026-03-31T08:00:00Z'),
+        completedAt: item.completedAt,
+        resultSummary: item.resultSummary,
+        resultRemark: item.resultRemark,
+        attachmentLink: item.attachmentLink,
+        attachmentName: item.attachmentName,
+        createdAt: item.createdAt,
+        updatedAt: DateTime.parse('2026-03-31T08:00:00Z'),
+      ),
+    );
+  }
+
+  @override
+  Future<void> completeExecution({
+    required int workOrderId,
+    required String resultSummary,
+    String? resultRemark,
+    String? attachmentLink,
+  }) async {
+    completeExecutionCalls += 1;
+    _replaceWorkOrder(
+      workOrderId,
+      (item) => MaintenanceWorkOrderItem(
+        id: item.id,
+        planId: item.planId,
+        equipmentId: item.equipmentId,
+        equipmentName: item.equipmentName,
+        sourceEquipmentCode: item.sourceEquipmentCode,
+        itemId: item.itemId,
+        itemName: item.itemName,
+        sourceItemName: item.sourceItemName,
+        sourceExecutionProcessCode: item.sourceExecutionProcessCode,
+        dueDate: item.dueDate,
+        status: 'done',
+        executorUserId: item.executorUserId,
+        executorUsername: item.executorUsername,
+        startedAt: item.startedAt ?? DateTime.parse('2026-03-31T08:00:00Z'),
+        completedAt: DateTime.parse('2026-03-31T09:00:00Z'),
+        resultSummary: resultSummary,
+        resultRemark: resultRemark,
+        attachmentLink: attachmentLink,
+        attachmentName: attachmentLink == null ? null : 'report.pdf',
+        createdAt: item.createdAt,
+        updatedAt: DateTime.parse('2026-03-31T09:00:00Z'),
+      ),
+    );
+  }
+
+  @override
+  Future<void> cancelExecution({required int workOrderId}) async {
+    cancelExecutionCalls += 1;
+    _replaceWorkOrder(
+      workOrderId,
+      (item) => MaintenanceWorkOrderItem(
+        id: item.id,
+        planId: item.planId,
+        equipmentId: item.equipmentId,
+        equipmentName: item.equipmentName,
+        sourceEquipmentCode: item.sourceEquipmentCode,
+        itemId: item.itemId,
+        itemName: item.itemName,
+        sourceItemName: item.sourceItemName,
+        sourceExecutionProcessCode: item.sourceExecutionProcessCode,
+        dueDate: item.dueDate,
+        status: 'cancelled',
+        executorUserId: item.executorUserId,
+        executorUsername: item.executorUsername,
+        startedAt: item.startedAt,
+        completedAt: item.completedAt,
+        resultSummary: item.resultSummary,
+        resultRemark: item.resultRemark,
+        attachmentLink: item.attachmentLink,
+        attachmentName: item.attachmentName,
+        createdAt: item.createdAt,
+        updatedAt: DateTime.parse('2026-03-31T09:30:00Z'),
+      ),
+    );
+  }
+
+  @override
+  Future<MaintenanceWorkOrderDetail> getWorkOrderDetail({
+    required int workOrderId,
+  }) async {
+    getWorkOrderDetailCalls += 1;
+    final item = _workOrders.singleWhere((entry) => entry.id == workOrderId);
+    return MaintenanceWorkOrderDetail(
+      id: item.id,
+      planId: item.planId,
+      equipmentId: item.equipmentId,
+      equipmentName: item.equipmentName,
+      sourceEquipmentCode: item.sourceEquipmentCode,
+      itemId: item.itemId,
+      itemName: item.itemName,
+      sourceItemName: item.sourceItemName,
+      sourceExecutionProcessCode: item.sourceExecutionProcessCode,
+      dueDate: item.dueDate,
+      status: item.status,
+      executorUserId: item.executorUserId,
+      executorUsername: item.executorUsername,
+      startedAt: item.startedAt,
+      completedAt: item.completedAt,
+      resultSummary: item.resultSummary,
+      resultRemark: item.resultRemark,
+      attachmentLink: item.attachmentLink,
+      attachmentName: item.attachmentName,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      sourcePlanId: item.planId,
+      sourcePlanCycleDays: 30,
+      sourcePlanStartDate: DateTime.parse('2026-03-01T00:00:00Z'),
+      sourcePlanSummary: '冲压机-A / 月度润滑',
+      sourceEquipmentName: item.equipmentName,
+      sourceItemId: item.itemId,
+      recordId: item.status == 'done' ? 5 : null,
+    );
+  }
+
+  void _replaceWorkOrder(
+    int workOrderId,
+    MaintenanceWorkOrderItem Function(MaintenanceWorkOrderItem item) transform,
+  ) {
+    final index = _workOrders.indexWhere((item) => item.id == workOrderId);
+    _workOrders[index] = transform(_workOrders[index]);
   }
 
   @override
@@ -588,6 +736,130 @@ void main() {
 
     expect(find.textContaining('超长工段名称'), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('保养执行页面可完成开始执行与详情跳转', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+
+    await _pumpPage(
+      tester,
+      MaintenanceExecutionPage(
+        session: session,
+        onLogout: () {},
+        canExecute: true,
+        equipmentService: equipmentService,
+        craftService: craftService,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('maintenance-execution-start-4')));
+    await tester.pumpAndSettle();
+
+    expect(equipmentService.startExecutionCalls, 1);
+    expect(find.text('执行中'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('maintenance-execution-detail-4')));
+    await tester.pumpAndSettle();
+
+    expect(equipmentService.getWorkOrderDetailCalls, 1);
+    expect(find.text('保养执行详情 #4'), findsOneWidget);
+    expect(find.text('冲压机-A / 月度润滑'), findsOneWidget);
+  });
+
+  testWidgets('保养执行页面可完成完成执行', (tester) async {
+    final inProgressService = _FakeEquipmentService(
+      workOrders: [
+        MaintenanceWorkOrderItem(
+          id: 4,
+          planId: 3,
+          equipmentId: 1,
+          equipmentName: '冲压机-A',
+          sourceEquipmentCode: 'EQ-001',
+          itemId: 2,
+          itemName: '月度润滑',
+          sourceItemName: '月度润滑',
+          sourceExecutionProcessCode: 'STAMPING',
+          dueDate: DateTime.parse('2026-03-31T00:00:00Z'),
+          status: 'in_progress',
+          executorUserId: 7,
+          executorUsername: 'm1',
+          startedAt: DateTime.parse('2026-03-31T08:00:00Z'),
+          completedAt: null,
+          resultSummary: null,
+          resultRemark: null,
+          attachmentLink: null,
+          attachmentName: null,
+          createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+          updatedAt: DateTime.parse('2026-03-03T10:00:00Z'),
+        ),
+      ],
+    );
+
+    await _pumpPage(
+      tester,
+      MaintenanceExecutionPage(
+        session: session,
+        onLogout: () {},
+        canExecute: true,
+        equipmentService: inProgressService,
+        craftService: craftService,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('maintenance-execution-complete-4')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '提交'));
+    await tester.pumpAndSettle();
+
+    expect(inProgressService.completeExecutionCalls, 1);
+    expect(
+      inProgressService
+          .listExecutions(page: 1, pageSize: 30)
+          .then((result) => result.items.single.status),
+      completion('done'),
+    );
+  });
+
+  testWidgets('保养执行页面可取消工单', (tester) async {
+    final pendingService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      MaintenanceExecutionPage(
+        session: session,
+        onLogout: () {},
+        canExecute: true,
+        equipmentService: pendingService,
+        craftService: craftService,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('maintenance-execution-cancel-4')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认'));
+    await tester.pumpAndSettle();
+
+    expect(pendingService.cancelExecutionCalls, 1);
+    expect(find.text('已取消'), findsOneWidget);
+  });
+
+  testWidgets('保养执行页面可根据 jump payload 直达详情', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+
+    await _pumpPage(
+      tester,
+      MaintenanceExecutionPage(
+        session: session,
+        onLogout: () {},
+        canExecute: true,
+        equipmentService: equipmentService,
+        craftService: craftService,
+        jumpPayloadJson: '{"action":"detail","work_order_id":4}',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(equipmentService.getWorkOrderDetailCalls, 1);
+    expect(find.text('保养执行详情 #4'), findsOneWidget);
   });
 
   testWidgets('保养记录页面展示到期日期字段', (tester) async {

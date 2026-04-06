@@ -6,7 +6,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/authz_models.dart';
+import 'package:mes_client/pages/production_assist_records_page.dart';
 import 'package:mes_client/pages/production_page.dart';
+import 'package:mes_client/pages/production_repair_orders_page.dart';
+
+class _PayloadProbe extends StatelessWidget {
+  const _PayloadProbe(this.label, {required this.payload});
+
+  final String label;
+  final String? payload;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text('$label:${payload ?? 'null'}');
+  }
+}
 
 class _FakeHttpClient implements HttpClient {
   @override
@@ -229,6 +243,9 @@ class _FakeHttpHeaders implements HttpHeaders {
 }
 
 void main() {
+  AppSession buildSession() =>
+      AppSession(baseUrl: 'http://example.test', accessToken: 'test-token');
+
   testWidgets('production page mounts assist records tab', (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -242,10 +259,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: ProductionPage(
-              session: AppSession(
-                baseUrl: 'http://example.test',
-                accessToken: 'test-token',
-              ),
+              session: buildSession(),
               onLogout: () {},
               visibleTabCodes: const <String>[productionAssistRecordsTabCode],
               capabilityCodes: const <String>{
@@ -283,10 +297,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: ProductionPage(
-              session: AppSession(
-                baseUrl: 'http://example.test',
-                accessToken: 'test-token',
-              ),
+              session: buildSession(),
               onLogout: () {},
               visibleTabCodes: const <String>[productionDataQueryTabCode],
               capabilityCodes: const <String>{},
@@ -305,5 +316,197 @@ void main() {
       expect(find.text('手动筛选'), findsNothing);
       expect(find.text('未完工进度'), findsNothing);
     }, createHttpClient: (_) => _FakeHttpClient());
+  });
+
+  testWidgets('production page supports full tab mounting and preferred tab', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionPage(
+            session: buildSession(),
+            onLogout: () {},
+            visibleTabCodes: const <String>[
+              productionOrderManagementTabCode,
+              productionOrderQueryTabCode,
+              productionAssistRecordsTabCode,
+              productionDataQueryTabCode,
+              productionScrapStatisticsTabCode,
+              productionRepairOrdersTabCode,
+              productionPipelineInstancesTabCode,
+            ],
+            capabilityCodes: const <String>{},
+            preferredTabCode: productionPipelineInstancesTabCode,
+            tabChildBuilder: (tabCode) => Center(child: Text('tab:$tabCode')),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('订单管理'), findsOneWidget);
+    expect(find.text('订单查询'), findsOneWidget);
+    expect(find.text('代班记录'), findsOneWidget);
+    expect(find.text('工序统计'), findsOneWidget);
+    expect(find.text('今日实时产量'), findsOneWidget);
+    expect(find.text('人员统计'), findsOneWidget);
+    expect(find.text('报废统计'), findsOneWidget);
+    expect(find.text('维修订单'), findsOneWidget);
+    expect(find.text('并行实例追踪'), findsOneWidget);
+    expect(
+      find.text('tab:$productionPipelineInstancesTabCode'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('production page shows empty state when no visible tabs', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionPage(
+            session: buildSession(),
+            onLogout: () {},
+            visibleTabCodes: const <String>[],
+            capabilityCodes: const <String>{},
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前账号无可见生产页面'), findsOneWidget);
+  });
+
+  testWidgets('production page forwards route payload to target tab pages', (
+    tester,
+  ) async {
+    const assistPayload =
+        '{"target_tab_code":"production_assist_records","assist_authorization_id":91}';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionPage(
+            session: buildSession(),
+            onLogout: () {},
+            visibleTabCodes: const <String>[
+              productionAssistRecordsTabCode,
+              productionRepairOrdersTabCode,
+            ],
+            capabilityCodes: const <String>{
+              ProductionFeaturePermissionCodes.assistRecordsView,
+              ProductionFeaturePermissionCodes.repairOrdersManage,
+              ProductionFeaturePermissionCodes.repairOrdersExport,
+            },
+            preferredTabCode: productionAssistRecordsTabCode,
+            routePayloadJson: assistPayload,
+            tabPageBuilder: (tabCode, child) {
+              if (child is ProductionAssistRecordsPage) {
+                return _PayloadProbe('assist', payload: child.routePayloadJson);
+              }
+              if (child is ProductionRepairOrdersPage) {
+                return _PayloadProbe('repair', payload: child.jumpPayloadJson);
+              }
+              return child;
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('assist:$assistPayload'), findsOneWidget);
+
+    const repairPayload =
+        '{"target_tab_code":"production_repair_orders","repair_order_id":15}';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionPage(
+            session: buildSession(),
+            onLogout: () {},
+            visibleTabCodes: const <String>[
+              productionAssistRecordsTabCode,
+              productionRepairOrdersTabCode,
+            ],
+            capabilityCodes: const <String>{
+              ProductionFeaturePermissionCodes.assistRecordsView,
+              ProductionFeaturePermissionCodes.repairOrdersManage,
+              ProductionFeaturePermissionCodes.repairOrdersExport,
+            },
+            preferredTabCode: productionRepairOrdersTabCode,
+            routePayloadJson: repairPayload,
+            tabPageBuilder: (tabCode, child) {
+              if (child is ProductionAssistRecordsPage) {
+                return _PayloadProbe('assist', payload: child.routePayloadJson);
+              }
+              if (child is ProductionRepairOrdersPage) {
+                return _PayloadProbe('repair', payload: child.jumpPayloadJson);
+              }
+              return child;
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('repair:$repairPayload'), findsOneWidget);
+  });
+
+  testWidgets('production page updates tabs when visibleTabCodes changes', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionPage(
+            session: buildSession(),
+            onLogout: () {},
+            visibleTabCodes: const <String>[
+              productionOrderManagementTabCode,
+              productionAssistRecordsTabCode,
+            ],
+            capabilityCodes: const <String>{},
+            preferredTabCode: productionAssistRecordsTabCode,
+            tabChildBuilder: (tabCode) => Center(child: Text('tab:$tabCode')),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('tab:$productionAssistRecordsTabCode'), findsOneWidget);
+    expect(find.text('订单管理'), findsOneWidget);
+    expect(find.text('代班记录'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionPage(
+            session: buildSession(),
+            onLogout: () {},
+            visibleTabCodes: const <String>[
+              productionOrderQueryTabCode,
+              productionPipelineInstancesTabCode,
+            ],
+            capabilityCodes: const <String>{},
+            preferredTabCode: productionPipelineInstancesTabCode,
+            tabChildBuilder: (tabCode) => Center(child: Text('tab:$tabCode')),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('订单管理'), findsNothing);
+    expect(find.text('代班记录'), findsNothing);
+    expect(find.text('订单查询'), findsOneWidget);
+    expect(find.text('并行实例追踪'), findsOneWidget);
+    expect(find.text('tab:$productionOrderQueryTabCode'), findsOneWidget);
   });
 }

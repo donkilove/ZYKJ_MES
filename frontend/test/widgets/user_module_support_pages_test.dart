@@ -237,6 +237,7 @@ class _FakeSupportAuthzService extends AuthzService {
   _FakeSupportAuthzService() : super(_session);
 
   int applyCapabilityPacksCalls = 0;
+  final List<String> loadedCatalogModules = <String>[];
   String? lastAppliedModuleCode;
   int? lastExpectedRevision;
   List<CapabilityPackRoleDraftItem>? lastAppliedRoleItems;
@@ -247,12 +248,15 @@ class _FakeSupportAuthzService extends AuthzService {
   Future<CapabilityPackCatalogResult> loadCapabilityPackCatalog({
     required String moduleCode,
   }) async {
+    loadedCatalogModules.add(moduleCode);
     return CapabilityPackCatalogResult(
-      moduleCode: 'user',
+      moduleCode: moduleCode,
       moduleCodes: const ['user', 'system', 'product'],
-      moduleName: '用户管理',
+      moduleName: moduleCode == 'product' ? '产品管理' : '用户管理',
       moduleRevision: 1,
-      modulePermissionCode: 'module.user',
+      modulePermissionCode: moduleCode == 'product'
+          ? 'module.product'
+          : 'module.user',
       capabilityPacks: const [
         CapabilityPackItem(
           capabilityCode: 'feature.user.role_management.view',
@@ -657,6 +661,38 @@ void main() {
     expect(_findSemanticsLabel('功能权限配置保存按钮'), findsOneWidget);
   });
 
+  testWidgets('function permission config 脏数据切换模块时可确认放弃并重载', (tester) async {
+    authzService.loadedCatalogModules.clear();
+
+    await _pumpPage(
+      tester,
+      FunctionPermissionConfigPage(
+        session: _session,
+        onLogout: () {},
+        authzService: authzService,
+        userService: userService,
+      ),
+    );
+
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    expect(find.text('未保存'), findsWidgets);
+
+    await tester.tap(find.text('用户管理'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('产品管理').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('切换模块'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '放弃并切换'));
+    await tester.pumpAndSettle();
+
+    expect(
+      authzService.loadedCatalogModules,
+      containsAll(<String>['user', 'product']),
+    );
+  });
+
   testWidgets('audit log page renders audit rows', (tester) async {
     userService.listAuditLogsCalls = 0;
     userService.lastAuditLogPageSize = null;
@@ -794,6 +830,40 @@ void main() {
     userService.listAuditLogsError = null;
   });
 
+  testWidgets('audit log page 清除时间范围后重新查询会移除时间筛选', (tester) async {
+    userService.auditLogResponses = [
+      AuditLogListResult(
+        total: 1,
+        items: userService.auditLogResponses.first.items,
+      ),
+    ];
+
+    await _pumpPage(
+      tester,
+      AuditLogPage(
+        session: _session,
+        onLogout: () {},
+        userService: userService,
+        dateRangePicker: (context, start, end) async {
+          return DateTimeRange(
+            start: DateTime(2026, 3, 1),
+            end: DateTime(2026, 3, 5),
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '选择时间范围'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('清除时间范围'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
+    await tester.pumpAndSettle();
+
+    expect(userService.lastAuditStartTime, isNull);
+    expect(userService.lastAuditEndTime, isNull);
+  });
+
   testWidgets('login session page renders', (tester) async {
     userService.listOnlineSessionsCalls = 0;
     userService.lastOnlineSessionStatusFilter = null;
@@ -896,6 +966,31 @@ void main() {
 
     expect(find.text('停用失败'), findsOneWidget);
     userService.disableRoleError = null;
+  });
+
+  testWidgets('role management page handles 401 on initial load', (
+    tester,
+  ) async {
+    var logoutCalls = 0;
+    userService.listRolesError = ApiException('登录失效', 401);
+
+    await _pumpPage(
+      tester,
+      RoleManagementPage(
+        session: _session,
+        onLogout: () {
+          logoutCalls += 1;
+        },
+        canCreateRole: false,
+        canEditRole: false,
+        canToggleRole: false,
+        canDeleteRole: false,
+        userService: userService,
+      ),
+    );
+
+    expect(logoutCalls, 1);
+    userService.listRolesError = null;
   });
 
   testWidgets('login session page无在线会话权限时不发起加载', (tester) async {

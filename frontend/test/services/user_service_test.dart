@@ -197,5 +197,237 @@ void main() {
         ),
       );
     });
+
+    test('covers user module audit session profile and export APIs', () async {
+      final server = await TestHttpServer.start({
+        'GET /users': (request) {
+          expect(request.uri.queryParameters['page'], '1');
+          expect(request.uri.queryParameters['page_size'], '50');
+          expect(request.uri.queryParameters['role_code'], 'quality_admin');
+          expect(request.uri.queryParameters['stage_id'], '9');
+          expect(request.uri.queryParameters['is_online'], 'true');
+          expect(request.uri.queryParameters['is_active'], 'false');
+          expect(request.uri.queryParameters['include_deleted'], 'true');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'total': 1,
+                'items': [
+                  {
+                    'id': 21,
+                    'username': 'quality_user',
+                    'full_name': 'Quality User',
+                    'role_code': 'quality_admin',
+                    'role_name': '品质管理员',
+                    'stage_id': 9,
+                    'stage_name': '检验',
+                    'is_online': true,
+                    'is_active': false,
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'GET /users/export': (request) {
+          expect(request.uri.queryParameters['format'], 'xlsx');
+          expect(request.uri.queryParameters['keyword'], 'quality');
+          expect(request.uri.queryParameters['role_code'], 'quality_admin');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'filename': 'users.xlsx',
+                'content_type':
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'content_base64': 'dGVzdA==',
+              },
+            },
+          );
+        },
+        'GET /audits': (request) {
+          expect(request.uri.queryParameters['page'], '2');
+          expect(request.uri.queryParameters['page_size'], '50');
+          expect(request.uri.queryParameters['operator_username'], 'auditor');
+          expect(request.uri.queryParameters['action_code'], 'user.disable');
+          expect(request.uri.queryParameters['target_type'], 'user');
+          expect(
+            request.uri.queryParameters['start_time'],
+            '2026-03-01T00:00:00.000',
+          );
+          expect(
+            request.uri.queryParameters['end_time'],
+            '2026-03-05T23:59:59.000',
+          );
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'total': 1,
+                'items': [
+                  {
+                    'id': 8,
+                    'occurred_at': '2026-03-02T10:30:00Z',
+                    'operator_user_id': 1,
+                    'operator_username': 'auditor',
+                    'action_code': 'user.disable',
+                    'action_name': '停用用户',
+                    'target_type': 'user',
+                    'target_id': '21',
+                    'target_name': 'quality_user',
+                    'result': 'success',
+                    'before_data': {'is_active': true},
+                    'after_data': {'is_active': false},
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'GET /me/profile': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'id': 1,
+              'username': 'tester',
+              'full_name': '测试用户',
+              'role_code': 'quality_admin',
+              'role_name': '品质管理员',
+              'stage_id': 9,
+              'stage_name': '检验',
+              'is_active': true,
+            },
+          },
+        ),
+        'GET /me/session': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'session_token_id': 'session-1',
+              'login_time': '2026-03-03T08:00:00Z',
+              'last_active_at': '2026-03-03T08:10:00Z',
+              'expires_at': '2026-03-03T10:00:00Z',
+              'status': 'active',
+              'remaining_seconds': 3600,
+            },
+          },
+        ),
+        'POST /me/password': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['old_password'], 'OldPass123');
+          expect(body['new_password'], 'NewPass456');
+          expect(body['confirm_password'], 'NewPass456');
+          return TestResponse.json(200, body: {'data': {}});
+        },
+        'GET /sessions/online': (request) {
+          expect(request.uri.queryParameters['page'], '1');
+          expect(request.uri.queryParameters['page_size'], '20');
+          expect(request.uri.queryParameters['keyword'], 'tester');
+          expect(request.uri.queryParameters['status_filter'], 'active');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'total': 1,
+                'items': [
+                  {
+                    'id': 1,
+                    'session_token_id': 'session-1',
+                    'user_id': 1,
+                    'username': 'tester',
+                    'role_code': 'quality_admin',
+                    'role_name': '品质管理员',
+                    'login_time': '2026-03-03T08:00:00Z',
+                    'last_active_at': '2026-03-03T08:10:00Z',
+                    'expires_at': '2026-03-03T10:00:00Z',
+                    'status': 'active',
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'POST /sessions/force-offline': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['session_token_id'], 'session-1');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {'affected': 1},
+            },
+          );
+        },
+        'POST /sessions/force-offline/batch': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['session_token_ids'], ['session-1', 'session-2']);
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {'affected': 2},
+            },
+          );
+        },
+      });
+      addTearDown(server.close);
+
+      final service = UserService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-user'),
+      );
+
+      final filteredUsers = await service.listUsers(
+        page: 1,
+        pageSize: 50,
+        roleCode: 'quality_admin',
+        stageId: 9,
+        isOnline: true,
+        isActive: false,
+        includeDeleted: true,
+      );
+      final exported = await service.exportUsers(
+        keyword: ' quality ',
+        roleCode: 'quality_admin',
+        format: 'xlsx',
+      );
+      final audits = await service.listAuditLogs(
+        page: 2,
+        pageSize: 50,
+        operatorUsername: ' auditor ',
+        actionCode: ' user.disable ',
+        targetType: ' user ',
+        startTime: DateTime(2026, 3, 1),
+        endTime: DateTime(2026, 3, 5, 23, 59, 59),
+      );
+      final profile = await service.getMyProfile();
+      final session = await service.getMySession();
+      await service.changeMyPassword(
+        oldPassword: 'OldPass123',
+        newPassword: 'NewPass456',
+        confirmPassword: 'NewPass456',
+      );
+      final onlineSessions = await service.listOnlineSessions(
+        page: 1,
+        pageSize: 20,
+        keyword: ' tester ',
+        statusFilter: ' active ',
+      );
+      final singleOffline = await service.forceOffline(
+        sessionTokenId: 'session-1',
+      );
+      final batchOffline = await service.batchForceOffline(
+        sessionTokenIds: const ['session-1', 'session-2'],
+      );
+
+      expect(filteredUsers.items.single.roleCode, 'quality_admin');
+      expect(exported.filename, 'users.xlsx');
+      expect(exported.contentBase64, 'dGVzdA==');
+      expect(audits.items.single.actionName, '停用用户');
+      expect(profile.username, 'tester');
+      expect(session.sessionTokenId, 'session-1');
+      expect(onlineSessions.items.single.username, 'tester');
+      expect(singleOffline.affected, 1);
+      expect(batchOffline.affected, 2);
+      expect(server.requests.length, 9);
+    });
   });
 }

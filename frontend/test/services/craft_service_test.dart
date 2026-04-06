@@ -184,6 +184,55 @@ void main() {
       expect(utf8.decode(base64Decode(exported)), 'csv');
     });
 
+    test('按产品查询模板引用走独立服务契约并解析跳转字段', () async {
+      final server = await TestHttpServer.start({
+        'GET /craft/products/8/template-references': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'product_id': 8,
+              'product_name': '产品A',
+              'total_templates': 1,
+              'total_references': 1,
+              'items': [
+                {
+                  'template_id': 21,
+                  'template_name': '模板A',
+                  'lifecycle_status': 'published',
+                  'ref_type': 'template_reuse',
+                  'ref_id': 22,
+                  'ref_code': 'TMP-22',
+                  'ref_name': '模板B',
+                  'detail': '复用到产品B',
+                  'ref_status': '正在使用',
+                  'jump_module': 'craft',
+                  'jump_target': 'process-configuration?template_id=22',
+                  'risk_level': 'medium',
+                  'risk_note': '同步发布后处理',
+                },
+              ],
+            },
+          },
+        ),
+      });
+      addTearDown(server.close);
+
+      final service = CraftService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-craft'),
+      );
+
+      final result = await service.getProductTemplateReferences(productId: 8);
+
+      expect(result.productName, '产品A');
+      expect(result.totalTemplates, 1);
+      expect(result.items.single.refCode, 'TMP-22');
+      expect(result.items.single.jumpModule, 'craft');
+      expect(
+        result.items.single.jumpTarget,
+        'process-configuration?template_id=22',
+      );
+    });
+
     test('模板列表优先走服务端完整筛选契约并解析关键引用影响', () async {
       final server = await TestHttpServer.start({
         'GET /craft/templates': (request) {

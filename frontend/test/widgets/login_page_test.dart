@@ -1,20 +1,33 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/pages/login_page.dart';
+import 'package:mes_client/pages/register_page.dart';
 import 'package:mes_client/services/api_exception.dart';
 import 'package:mes_client/services/auth_service.dart';
 
 class _FakeAuthService extends AuthService {
   int loginCalls = 0;
+  int listAccountsCalls = 0;
   String? lastBaseUrl;
   String? lastUsername;
   String? lastPassword;
   Object? loginError;
+  Object? listAccountsError;
+  List<String> accounts = ['tester', 'operator_a'];
+  Completer<({String token, bool mustChangePassword})>? loginCompleter;
 
   @override
   Future<List<String>> listAccounts({required String baseUrl}) async {
-    return ['tester', 'operator_a'];
+    listAccountsCalls += 1;
+    lastBaseUrl = baseUrl;
+    if (listAccountsError != null) {
+      throw listAccountsError!;
+    }
+    return accounts;
   }
 
   @override
@@ -30,37 +43,61 @@ class _FakeAuthService extends AuthService {
     if (loginError != null) {
       throw loginError!;
     }
+    if (loginCompleter != null) {
+      return loginCompleter!.future;
+    }
     return (token: 'token-123', mustChangePassword: true);
   }
 }
 
+void _setDesktopViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1440, 1200);
+  tester.view.devicePixelRatio = 1.0;
+}
+
+Finder _field(String label) => find.widgetWithText(TextFormField, label);
+
+Future<void> _pumpLoginPage(
+  WidgetTester tester, {
+  required AuthService authService,
+  String defaultBaseUrl = 'http://example.test/api/v1',
+  String? initialMessage,
+  ValueChanged<AppSession>? onLoginSuccess,
+}) async {
+  _setDesktopViewport(tester);
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+
+  await tester.pumpWidget(
+    MaterialApp(
+      home: LoginPage(
+        defaultBaseUrl: defaultBaseUrl,
+        initialMessage: initialMessage,
+        authService: authService,
+        onLoginSuccess: onLoginSuccess ?? (_) {},
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('登录页完成登录主链路并回传会话', (tester) async {
-    tester.view.physicalSize = const Size(1440, 1200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
     final authService = _FakeAuthService();
     AppSession? capturedSession;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: LoginPage(
-          defaultBaseUrl: 'http://example.test/api/v1',
-          authService: authService,
-          onLoginSuccess: (session) {
-            capturedSession = session;
-          },
-        ),
-      ),
+    await _pumpLoginPage(
+      tester,
+      authService: authService,
+      onLoginSuccess: (session) {
+        capturedSession = session;
+      },
     );
-    await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextFormField, '账号'), 'tester');
-    await tester.enterText(find.widgetWithText(TextFormField, '密码'), 'Pass123');
+    await tester.enterText(_field('账号'), 'tester');
+    await tester.enterText(_field('密码'), 'Pass123');
     await tester.ensureVisible(find.widgetWithText(FilledButton, '登录'));
     await tester.tap(find.widgetWithText(FilledButton, '登录'));
     await tester.pumpAndSettle();
@@ -74,33 +111,165 @@ void main() {
     expect(capturedSession!.mustChangePassword, isTrue);
   });
 
-  testWidgets('登录失败时会展示服务端错误消息', (tester) async {
-    tester.view.physicalSize = const Size(1440, 1200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
+  testWidgets('接口地址不合法时会阻止提交并展示校验信息', (tester) async {
+    final authService = _FakeAuthService();
 
+    await _pumpLoginPage(tester, authService: authService);
+
+    await tester.enterText(_field('接口地址'), 'example.test/api/v1');
+    await tester.enterText(_field('账号'), 'tester');
+    await tester.enterText(_field('密码'), 'Pass123');
+    await tester.tap(find.widgetWithText(FilledButton, '登录'));
+    await tester.pump();
+
+    expect(find.text('地址必须以 http:// 或 https:// 开头'), findsOneWidget);
+    expect(authService.loginCalls, 0);
+  });
+
+  testWidgets('点击刷新会重新拉取账号列表并支持下拉选择', (tester) async {
+    final authService = _FakeAuthService();
+
+    await _pumpLoginPage(tester, authService: authService);
+    expect(authService.listAccountsCalls, 1);
+
+    authService.accounts = ['operator_a', 'operator_b'];
+    await tester.tap(find.byTooltip('刷新账号列表'));
+    await tester.pumpAndSettle();
+
+    expect(authService.listAccountsCalls, 2);
+    expect(authService.lastBaseUrl, 'http://example.test/api/v1');
+
+    await tester.enterText(_field('账号'), 'operator');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('operator_b').last);
+    await tester.pumpAndSettle();
+
+    final accountField = tester.widget<TextFormField>(_field('账号'));
+    expect(accountField.controller!.text, 'operator_b');
+  });
+
+  testWidgets('账号列表加载失败时展示错误消息', (tester) async {
     final authService = _FakeAuthService()
-      ..loginError = ApiException('账号或密码错误', 401);
+      ..listAccountsError = ApiException('网络异常', 500);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: LoginPage(
-          defaultBaseUrl: 'http://example.test/api/v1',
-          authService: authService,
-          onLoginSuccess: (_) {},
-        ),
+    await _pumpLoginPage(tester, authService: authService);
+
+    expect(find.text('加载账号列表失败：网络异常'), findsOneWidget);
+  });
+
+  testWidgets('回车键会触发登录提交', (tester) async {
+    final authService = _FakeAuthService();
+
+    await _pumpLoginPage(tester, authService: authService);
+
+    await tester.enterText(_field('账号'), 'tester');
+    await tester.enterText(_field('密码'), 'Pass123');
+    await tester.tap(_field('密码'));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(authService.loginCalls, 1);
+  });
+
+  testWidgets('小键盘回车会触发登录提交', (tester) async {
+    final authService = _FakeAuthService();
+
+    await _pumpLoginPage(tester, authService: authService);
+
+    await tester.enterText(_field('账号'), 'tester');
+    await tester.enterText(_field('密码'), 'Pass123');
+    await tester.tap(_field('密码'));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
+    await tester.pumpAndSettle();
+
+    expect(authService.loginCalls, 1);
+  });
+
+  testWidgets('登录进行中按钮会禁用并阻止重复提交', (tester) async {
+    final authService = _FakeAuthService()
+      ..loginCompleter = Completer<({String token, bool mustChangePassword})>();
+
+    await _pumpLoginPage(tester, authService: authService);
+
+    await tester.enterText(_field('账号'), 'tester');
+    await tester.enterText(_field('密码'), 'Pass123');
+    await tester.tap(find.widgetWithText(FilledButton, '登录'));
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump();
+
+    expect(authService.loginCalls, 1);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+
+    authService.loginCompleter!.complete((
+      token: 'token-123',
+      mustChangePassword: false,
+    ));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('初始消息会直接展示', (tester) async {
+    await _pumpLoginPage(
+      tester,
+      authService: _FakeAuthService(),
+      initialMessage: '请先登录系统',
+    );
+
+    expect(find.text('请先登录系统'), findsOneWidget);
+  });
+
+  testWidgets('去注册返回后会回填账号与提示消息', (tester) async {
+    final authService = _FakeAuthService();
+
+    await _pumpLoginPage(tester, authService: authService);
+
+    await tester.enterText(_field('接口地址'), 'http://new.example.test/api/v1');
+    await tester.tap(find.widgetWithText(OutlinedButton, '去注册'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RegisterPage), findsOneWidget);
+
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.pop(
+      const RegisterPageResult(
+        baseUrl: 'http://new.example.test/api/v1',
+        account: 'new_user',
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextFormField, '账号'), 'tester');
-    await tester.enterText(
-      find.widgetWithText(TextFormField, '密码'),
-      'wrong-pass',
+    expect(find.text('注册申请已提交，请等待系统管理员审批后再登录。'), findsOneWidget);
+    expect(
+      tester.widget<TextFormField>(_field('接口地址')).controller!.text,
+      'http://new.example.test/api/v1',
     );
+    expect(
+      tester.widget<TextFormField>(_field('账号')).controller!.text,
+      'new_user',
+    );
+    expect(authService.listAccountsCalls, 2);
+    expect(authService.lastBaseUrl, 'http://new.example.test/api/v1');
+  });
+
+  testWidgets('公告区基础内容可正常渲染', (tester) async {
+    await _pumpLoginPage(tester, authService: _FakeAuthService());
+
+    expect(find.text('系统公告'), findsOneWidget);
+    expect(find.text('生产运行提醒'), findsOneWidget);
+    expect(find.text('质量与追溯要求'), findsOneWidget);
+    expect(find.text('账号使用规范'), findsOneWidget);
+  });
+
+  testWidgets('登录失败时会展示服务端错误消息', (tester) async {
+    final authService = _FakeAuthService()
+      ..loginError = ApiException('账号或密码错误', 401);
+
+    await _pumpLoginPage(tester, authService: authService);
+
+    await tester.enterText(_field('账号'), 'tester');
+    await tester.enterText(_field('密码'), 'wrong-pass');
     await tester.ensureVisible(find.widgetWithText(FilledButton, '登录'));
     await tester.tap(find.widgetWithText(FilledButton, '登录'));
     await tester.pumpAndSettle();

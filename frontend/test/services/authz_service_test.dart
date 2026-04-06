@@ -359,20 +359,20 @@ void main() {
           return TestResponse.json(
             200,
             body: {
-                'data': {
-                  'module_code': 'production',
-                  'module_codes': [
-                    'user',
-                    'product',
-                    'craft',
-                    'production',
-                    'quality',
-                    'equipment',
-                    'message',
-                  ],
-                  'module_name': 'Production',
-                  'module_revision': 3,
-                  'module_permission_code': 'module.production.access',
+              'data': {
+                'module_code': 'production',
+                'module_codes': [
+                  'user',
+                  'product',
+                  'craft',
+                  'production',
+                  'quality',
+                  'equipment',
+                  'message',
+                ],
+                'module_name': 'Production',
+                'module_revision': 3,
+                'module_permission_code': 'module.production.access',
                 'capability_packs': [
                   {
                     'capability_code': 'feature.production.order_query.execute',
@@ -607,6 +607,248 @@ void main() {
         contains('feature.production.order_query.execute'),
       );
       expect(explain.capabilityItems.first.available, isTrue);
+    });
+
+    test('covers user module permission and capability pack APIs', () async {
+      final server = await TestHttpServer.start({
+        'GET /authz/permissions/me': (request) {
+          expect(request.uri.queryParameters['module'], 'user');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'permission_codes': [
+                  'page.user_management.view',
+                  'page.role_management.view',
+                ],
+              },
+            },
+          );
+        },
+        'GET /authz/permissions/catalog': (request) {
+          expect(request.uri.queryParameters['module'], 'user');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'items': [
+                  {
+                    'permission_code': 'page.user_management.view',
+                    'permission_name': '查看用户管理',
+                    'module_code': 'user',
+                    'resource_type': 'page',
+                    'parent_permission_code': null,
+                    'is_enabled': true,
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'GET /authz/role-permissions': (request) {
+          expect(request.uri.queryParameters['role_code'], 'quality_admin');
+          expect(request.uri.queryParameters['module'], 'user');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'role_code': 'quality_admin',
+                'role_name': '品质管理员',
+                'module_code': 'user',
+                'items': [
+                  {
+                    'role_code': 'quality_admin',
+                    'role_name': '品质管理员',
+                    'permission_code': 'page.user_management.view',
+                    'permission_name': '查看用户管理',
+                    'module_code': 'user',
+                    'resource_type': 'page',
+                    'parent_permission_code': null,
+                    'granted': true,
+                    'is_enabled': true,
+                  },
+                ],
+              },
+            },
+          );
+        },
+        'PUT /authz/role-permissions/quality_admin': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['module_code'], 'user');
+          expect(body['granted_permission_codes'], [
+            'page.user_management.view',
+            'page.role_management.view',
+          ]);
+          expect(body['remark'], 'sync user permissions');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'role_code': 'quality_admin',
+                'module_code': 'user',
+                'updated_count': 2,
+                'before_permission_codes': ['page.user_management.view'],
+                'after_permission_codes': [
+                  'page.user_management.view',
+                  'page.role_management.view',
+                ],
+              },
+            },
+          );
+        },
+        'GET /authz/capability-packs/catalog': (request) {
+          expect(request.uri.queryParameters['module'], 'user');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'module_code': 'user',
+                'module_codes': ['user', 'product', 'system'],
+                'module_name': '用户管理',
+                'module_revision': 9,
+                'module_permission_code': 'module.user.access',
+                'capability_packs': [
+                  {
+                    'capability_code': 'feature.user.role_management.view',
+                    'capability_name': '查看角色管理',
+                    'group_code': 'user.roles',
+                    'group_name': '角色管理',
+                    'page_code': 'role_management',
+                    'page_name': '角色管理',
+                    'description': '查看角色权限配置',
+                    'dependency_capability_codes': [],
+                    'linked_action_permission_codes': ['user.roles.read'],
+                  },
+                ],
+                'role_templates': [],
+              },
+            },
+          );
+        },
+        'GET /authz/capability-packs/role-config': (request) {
+          expect(request.uri.queryParameters['role_code'], 'quality_admin');
+          expect(request.uri.queryParameters['module'], 'user');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'role_code': 'quality_admin',
+                'role_name': '品质管理员',
+                'readonly': false,
+                'module_code': 'user',
+                'module_enabled': true,
+                'granted_capability_codes': [
+                  'feature.user.role_management.view',
+                ],
+                'effective_capability_codes': [
+                  'feature.user.role_management.view',
+                ],
+                'effective_page_permission_codes': [
+                  'page.role_management.view',
+                ],
+                'auto_linked_dependencies': [],
+              },
+            },
+          );
+        },
+        'PUT /authz/capability-packs/batch-apply': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['module_code'], 'user');
+          expect(body['expected_revision'], 9);
+          expect(body['remark'], 'apply user module');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'module_code': 'user',
+                'module_revision': 10,
+                'role_results': [
+                  {
+                    'role_code': 'quality_admin',
+                    'role_name': '品质管理员',
+                    'readonly': false,
+                    'ignored_input': false,
+                    'module_code': 'user',
+                    'before_capability_codes': [],
+                    'after_capability_codes': [
+                      'feature.user.role_management.view',
+                    ],
+                    'added_capability_codes': [
+                      'feature.user.role_management.view',
+                    ],
+                    'removed_capability_codes': [],
+                    'auto_linked_dependencies': [],
+                    'effective_capability_codes': [
+                      'feature.user.role_management.view',
+                    ],
+                    'effective_page_permission_codes': [
+                      'page.role_management.view',
+                    ],
+                    'updated_count': 1,
+                    'dry_run': false,
+                  },
+                ],
+              },
+            },
+          );
+        },
+      });
+      addTearDown(server.close);
+
+      final service = AuthzService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-abc'),
+      );
+
+      final permissionCodes = await service.getMyPermissionCodes(
+        moduleCode: 'user',
+      );
+      final catalogItems = await service.listPermissionCatalog(
+        moduleCode: 'user',
+      );
+      final rolePermissions = await service.getRolePermissions(
+        roleCode: 'quality_admin',
+        moduleCode: 'user',
+      );
+      final updateResult = await service.updateRolePermissions(
+        roleCode: 'quality_admin',
+        moduleCode: 'user',
+        grantedPermissionCodes: [
+          'page.user_management.view',
+          'page.role_management.view',
+        ],
+        remark: 'sync user permissions',
+      );
+      final capabilityCatalog = await service.loadCapabilityPackCatalog(
+        moduleCode: 'user',
+      );
+      final capabilityRoleConfig = await service.loadCapabilityPackRoleConfig(
+        roleCode: 'quality_admin',
+        moduleCode: 'user',
+      );
+      final applyResult = await service.applyCapabilityPacks(
+        moduleCode: 'user',
+        roleItems: const [
+          CapabilityPackRoleDraftItem(
+            roleCode: 'quality_admin',
+            moduleEnabled: true,
+            capabilityCodes: ['feature.user.role_management.view'],
+          ),
+        ],
+        expectedRevision: 9,
+        remark: 'apply user module',
+      );
+
+      expect(permissionCodes, contains('page.user_management.view'));
+      expect(catalogItems.single.moduleCode, 'user');
+      expect(rolePermissions.items.single.granted, isTrue);
+      expect(updateResult.updatedCount, 2);
+      expect(capabilityCatalog.moduleCodes, contains('system'));
+      expect(capabilityRoleConfig.moduleEnabled, isTrue);
+      expect(applyResult.moduleRevision, 10);
+      expect(
+        applyResult.roleResults.single.afterCapabilityCodes,
+        contains('feature.user.role_management.view'),
+      );
     });
   });
 }

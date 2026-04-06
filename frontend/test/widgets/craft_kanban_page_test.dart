@@ -4,6 +4,7 @@ import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/craft_models.dart';
 import 'package:mes_client/models/production_models.dart';
 import 'package:mes_client/pages/craft_kanban_page.dart';
+import 'package:mes_client/services/api_exception.dart';
 import 'package:mes_client/services/craft_service.dart';
 import 'package:mes_client/services/production_service.dart';
 
@@ -11,6 +12,37 @@ class _FakeCraftService extends CraftService {
   _FakeCraftService() : super(AppSession(baseUrl: '', accessToken: ''));
 
   int? lastExportLimit;
+  int? lastMetricsProductId;
+  int? lastMetricsStageId;
+  int? lastMetricsProcessId;
+  Object? metricsError;
+  CraftKanbanProcessMetricsResult metricsResult =
+      CraftKanbanProcessMetricsResult(
+        productId: 1,
+        productName: '产品A',
+        items: [
+          CraftKanbanProcessItem(
+            stageId: 1,
+            stageCode: 'CUT',
+            stageName: '切割段',
+            processId: 11,
+            processCode: 'CUT-01',
+            processName: '激光切割',
+            samples: [
+              CraftKanbanSampleItem(
+                orderProcessId: 101,
+                orderId: 1001,
+                orderCode: 'MO-1001',
+                startAt: DateTime.parse('2026-03-01T08:00:00Z'),
+                endAt: DateTime.parse('2026-03-01T09:00:00Z'),
+                workMinutes: 60,
+                productionQty: 120,
+                capacityPerHour: 120,
+              ),
+            ],
+          ),
+        ],
+      );
 
   @override
   Future<CraftStageListResult> listStages({
@@ -71,32 +103,13 @@ class _FakeCraftService extends CraftService {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    return CraftKanbanProcessMetricsResult(
-      productId: productId,
-      productName: '产品A',
-      items: [
-        CraftKanbanProcessItem(
-          stageId: 1,
-          stageCode: 'CUT',
-          stageName: '切割段',
-          processId: 11,
-          processCode: 'CUT-01',
-          processName: '激光切割',
-          samples: [
-            CraftKanbanSampleItem(
-              orderProcessId: 101,
-              orderId: 1001,
-              orderCode: 'MO-1001',
-              startAt: DateTime.parse('2026-03-01T08:00:00Z'),
-              endAt: DateTime.parse('2026-03-01T09:00:00Z'),
-              workMinutes: 60,
-              productionQty: 120,
-              capacityPerHour: 120,
-            ),
-          ],
-        ),
-      ],
-    );
+    lastMetricsProductId = productId;
+    lastMetricsStageId = stageId;
+    lastMetricsProcessId = processId;
+    if (metricsError != null) {
+      throw metricsError!;
+    }
+    return metricsResult;
   }
 
   @override
@@ -114,11 +127,15 @@ class _FakeCraftService extends CraftService {
 }
 
 class _FakeProductionService extends ProductionService {
-  _FakeProductionService() : super(AppSession(baseUrl: '', accessToken: ''));
+  _FakeProductionService({List<ProductionProductOption>? products})
+    : products = products ?? [ProductionProductOption(id: 1, name: '产品A')],
+      super(AppSession(baseUrl: '', accessToken: ''));
+
+  final List<ProductionProductOption> products;
 
   @override
   Future<List<ProductionProductOption>> listProductOptions() async {
-    return [ProductionProductOption(id: 1, name: '产品A')];
+    return products;
   }
 }
 
@@ -229,5 +246,30 @@ void main() {
     expect(find.text('开始日期'), findsNothing);
     expect(find.text('结束日期'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('工艺看板查询失败时展示错误态', (tester) async {
+    final craftService = _FakeCraftService()
+      ..metricsError = ApiException('统计接口异常', 500);
+
+    await pumpCraftKanbanPage(
+      tester,
+      craftService: craftService,
+      productionService: _FakeProductionService(),
+    );
+
+    expect(find.text('加载看板失败：统计接口异常'), findsOneWidget);
+    expect(find.text('暂无可统计数据'), findsOneWidget);
+  });
+
+  testWidgets('工艺看板无产品时展示空态并隐藏筛选区', (tester) async {
+    await pumpCraftKanbanPage(
+      tester,
+      craftService: _FakeCraftService(),
+      productionService: _FakeProductionService(products: const []),
+    );
+
+    expect(find.text('暂无产品数据'), findsOneWidget);
+    expect(find.text('主筛选'), findsNothing);
   });
 }

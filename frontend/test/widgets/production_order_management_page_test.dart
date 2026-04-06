@@ -3,14 +3,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/models/craft_models.dart';
 import 'package:mes_client/models/production_models.dart';
+import 'package:mes_client/models/quality_models.dart';
 import 'package:mes_client/pages/production_order_management_page.dart';
 import 'package:mes_client/services/craft_service.dart';
 import 'package:mes_client/services/production_service.dart';
+import 'package:mes_client/services/quality_supplier_service.dart';
 
 class _FakeProductionOrderManagementService extends ProductionService {
   _FakeProductionOrderManagementService()
     : super(AppSession(baseUrl: '', accessToken: ''));
 
+  final List<ProductionOrderItem> _items = <ProductionOrderItem>[
+    _buildItemStatic(1),
+    _buildItemStatic(2, status: 'in_progress'),
+  ];
   final List<int> requestedPages = [];
   final List<int> requestedPageSizes = [];
   String? lastListKeyword;
@@ -19,18 +25,32 @@ class _FakeProductionOrderManagementService extends ProductionService {
   DateTime? lastListStartDateTo;
   DateTime? lastListDueDateFrom;
   DateTime? lastListDueDateTo;
+  int createOrderCallCount = 0;
+  int updateOrderCallCount = 0;
+  int deleteOrderCallCount = 0;
+  int completeOrderCallCount = 0;
+  int pipelineUpdateCallCount = 0;
+  String? lastCompletedPassword;
+  List<String> lastPipelineProcessCodes = const <String>[];
+  bool? lastPipelineEnabled;
 
-  ProductionOrderItem _buildItem(int id) {
+  static ProductionOrderItem _buildItemStatic(
+    int id, {
+    String status = 'pending',
+    bool pipelineEnabled = false,
+    List<String> pipelineProcessCodes = const <String>[],
+    int quantity = 10,
+  }) {
     return ProductionOrderItem(
       id: id,
       orderCode: 'PO-$id',
       productId: 1,
       productName: '产品$id',
-      supplierId: null,
-      supplierName: null,
+      supplierId: 3,
+      supplierName: '供应商A',
       productVersion: null,
-      quantity: 10,
-      status: 'pending',
+      quantity: quantity,
+      status: status,
       currentProcessCode: '01-01',
       currentProcessName: '切割',
       startDate: DateTime(2026, 3, 1),
@@ -39,8 +59,8 @@ class _FakeProductionOrderManagementService extends ProductionService {
       processTemplateId: null,
       processTemplateName: null,
       processTemplateVersion: null,
-      pipelineEnabled: false,
-      pipelineProcessCodes: const [],
+      pipelineEnabled: pipelineEnabled,
+      pipelineProcessCodes: pipelineProcessCodes,
       createdByUserId: 1,
       createdByUsername: 'admin',
       createdAt: DateTime(2026, 3, 1),
@@ -71,12 +91,21 @@ class _FakeProductionOrderManagementService extends ProductionService {
     lastListDueDateTo = dueDateTo;
     final normalizedKeyword = keyword?.trim() ?? '';
     if (normalizedKeyword.isNotEmpty) {
-      return ProductionOrderListResult(total: 1, items: [_buildItem(99)]);
+      final filtered = _items
+          .where((item) => item.orderCode.contains(normalizedKeyword))
+          .toList();
+      return ProductionOrderListResult(total: filtered.length, items: filtered);
     }
     if (page == 2) {
-      return ProductionOrderListResult(total: 401, items: [_buildItem(2)]);
+      final secondPageItems = _items.length > 1
+          ? [_items[1]]
+          : <ProductionOrderItem>[];
+      return ProductionOrderListResult(total: 401, items: secondPageItems);
     }
-    return ProductionOrderListResult(total: 401, items: [_buildItem(1)]);
+    return ProductionOrderListResult(
+      total: 401,
+      items: _items.take(2).toList(),
+    );
   }
 
   @override
@@ -95,7 +124,172 @@ class _FakeProductionOrderManagementService extends ProductionService {
         stageCode: '01',
         stageName: '切割段',
       ),
+      ProductionProcessOption(
+        id: 12,
+        code: '02-01',
+        name: '抛光',
+        stageId: 2,
+        stageCode: '02',
+        stageName: '抛光段',
+      ),
     ];
+  }
+
+  @override
+  Future<ProductionOrderItem> createOrder({
+    required String orderCode,
+    required int productId,
+    required int supplierId,
+    required int quantity,
+    required List<String> processCodes,
+    int? templateId,
+    List<ProductionOrderProcessStepInput>? processSteps,
+    bool saveAsTemplate = false,
+    String? newTemplateName,
+    bool newTemplateSetDefault = false,
+    DateTime? startDate,
+    DateTime? dueDate,
+    String? remark,
+  }) async {
+    createOrderCallCount += 1;
+    final created = _buildItemStatic(
+      99,
+      quantity: quantity,
+      pipelineProcessCodes: processCodes,
+    );
+    _items.insert(0, created);
+    return created;
+  }
+
+  @override
+  Future<ProductionOrderItem> updateOrder({
+    required int orderId,
+    required int productId,
+    required int supplierId,
+    required int quantity,
+    required List<String> processCodes,
+    int? templateId,
+    List<ProductionOrderProcessStepInput>? processSteps,
+    bool saveAsTemplate = false,
+    String? newTemplateName,
+    bool newTemplateSetDefault = false,
+    DateTime? startDate,
+    DateTime? dueDate,
+    String? remark,
+  }) async {
+    updateOrderCallCount += 1;
+    final index = _items.indexWhere((item) => item.id == orderId);
+    final updated = _buildItemStatic(
+      orderId,
+      quantity: quantity,
+      pipelineProcessCodes: processCodes,
+    );
+    if (index >= 0) {
+      _items[index] = updated;
+    }
+    return updated;
+  }
+
+  @override
+  Future<void> deleteOrder({required int orderId}) async {
+    deleteOrderCallCount += 1;
+    _items.removeWhere((item) => item.id == orderId);
+  }
+
+  @override
+  Future<ProductionActionResult> completeOrder({
+    required int orderId,
+    required String password,
+  }) async {
+    completeOrderCallCount += 1;
+    lastCompletedPassword = password;
+    return ProductionActionResult(
+      orderId: orderId,
+      status: 'completed',
+      message: 'ok',
+    );
+  }
+
+  @override
+  Future<ProductionOrderDetail> getOrderDetail({required int orderId}) async {
+    return ProductionOrderDetail.fromJson({
+      'order': {
+        'id': orderId,
+        'order_code': 'PO-$orderId',
+        'product_id': 1,
+        'product_name': '产品$orderId',
+        'supplier_id': 3,
+        'supplier_name': '供应商A',
+        'quantity': 10,
+        'status': orderId == 2 ? 'in_progress' : 'pending',
+        'current_process_code': '01-01',
+        'current_process_name': '切割',
+        'created_at': '2026-03-01T00:00:00Z',
+        'updated_at': '2026-03-01T12:00:00Z',
+      },
+      'processes': [
+        {
+          'id': 11,
+          'stage_id': 1,
+          'stage_code': '01',
+          'stage_name': '切割段',
+          'process_code': '01-01',
+          'process_name': '切割',
+          'process_order': 1,
+          'status': 'pending',
+          'visible_quantity': 0,
+          'completed_quantity': 0,
+          'created_at': '2026-03-01T00:00:00Z',
+          'updated_at': '2026-03-01T12:00:00Z',
+        },
+        {
+          'id': 12,
+          'stage_id': 2,
+          'stage_code': '02',
+          'stage_name': '抛光段',
+          'process_code': '02-01',
+          'process_name': '抛光',
+          'process_order': 2,
+          'status': 'pending',
+          'visible_quantity': 0,
+          'completed_quantity': 0,
+          'created_at': '2026-03-01T00:00:00Z',
+          'updated_at': '2026-03-01T12:00:00Z',
+        },
+      ],
+      'sub_orders': const [],
+      'records': const [],
+      'events': const [],
+    });
+  }
+
+  @override
+  Future<OrderPipelineModeItem> getOrderPipelineMode({
+    required int orderId,
+  }) async {
+    return OrderPipelineModeItem.fromJson({
+      'order_id': orderId,
+      'enabled': false,
+      'process_codes': const <String>[],
+      'available_process_codes': const <String>['01-01', '02-01'],
+    });
+  }
+
+  @override
+  Future<OrderPipelineModeItem> updateOrderPipelineMode({
+    required int orderId,
+    required bool enabled,
+    required List<String> processCodes,
+  }) async {
+    pipelineUpdateCallCount += 1;
+    lastPipelineEnabled = enabled;
+    lastPipelineProcessCodes = processCodes;
+    return OrderPipelineModeItem.fromJson({
+      'order_id': orderId,
+      'enabled': enabled,
+      'process_codes': processCodes,
+      'available_process_codes': const <String>['01-01', '02-01'],
+    });
   }
 }
 
@@ -116,6 +310,31 @@ class _FakeCraftService extends CraftService {
     DateTime? updatedTo,
   }) async {
     return CraftTemplateListResult(total: 0, items: const []);
+  }
+}
+
+class _FakeQualitySupplierService extends QualitySupplierService {
+  _FakeQualitySupplierService()
+    : super(AppSession(baseUrl: '', accessToken: ''));
+
+  @override
+  Future<QualitySupplierListResult> listSuppliers({
+    String? keyword,
+    bool? enabled,
+  }) async {
+    return QualitySupplierListResult(
+      total: 1,
+      items: [
+        QualitySupplierItem(
+          id: 3,
+          name: '供应商A',
+          remark: null,
+          isEnabled: true,
+          createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+          updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
+        ),
+      ],
+    );
   }
 }
 
@@ -142,6 +361,7 @@ void main() {
             canUpdatePipelineMode: true,
             service: service,
             craftService: _FakeCraftService(),
+            supplierService: _FakeQualitySupplierService(),
           ),
         ),
       ),
@@ -199,5 +419,122 @@ void main() {
     expect(service.lastListDueDateFrom, isNull);
     expect(service.lastListDueDateTo, isNull);
     expect(find.text('第 1 / 1 页'), findsOneWidget);
+  });
+
+  testWidgets('生产订单管理页支持创建和编辑订单主链路', (tester) async {
+    final service = _FakeProductionOrderManagementService();
+    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canCreateOrder: true,
+            canEditOrder: true,
+            canDeleteOrder: true,
+            canCompleteOrder: true,
+            canUpdatePipelineMode: true,
+            service: service,
+            craftService: _FakeCraftService(),
+            supplierService: _FakeQualitySupplierService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.widgetWithText(FilledButton, '创建'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '订单号'),
+      'PO-NEW-001',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, '数量'), '18');
+    await tester.tap(find.widgetWithText(FilledButton, '创建'));
+    await tester.pumpAndSettle();
+
+    expect(service.createOrderCallCount, 1);
+
+    await tester.tap(find.byIcon(Icons.more_vert).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑订单').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+
+    expect(service.updateOrderCallCount, 1);
+  });
+
+  testWidgets('生产订单管理页支持删除完工与并行模式设置', (tester) async {
+    final service = _FakeProductionOrderManagementService();
+    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canCreateOrder: true,
+            canEditOrder: true,
+            canDeleteOrder: true,
+            canCompleteOrder: true,
+            canUpdatePipelineMode: true,
+            service: service,
+            craftService: _FakeCraftService(),
+            supplierService: _FakeQualitySupplierService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byIcon(Icons.more_vert).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除订单').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(service.deleteOrderCallCount, 1);
+    expect(find.text('订单已删除。'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.more_vert).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('手工完工').last);
+    await tester.pumpAndSettle();
+    final completeDialogFields = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(completeDialogFields.first, 'Pass123');
+    await tester.tap(find.widgetWithText(FilledButton, '结束'));
+    await tester.pumpAndSettle();
+
+    expect(service.completeOrderCallCount, 1);
+    expect(service.lastCompletedPassword, 'Pass123');
+
+    await tester.tap(find.byIcon(Icons.more_vert).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('并行模式设置').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(CheckboxListTile, '切割 (01-01)'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(CheckboxListTile, '抛光 (02-01)'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+
+    expect(service.pipelineUpdateCallCount, 1);
+    expect(service.lastPipelineEnabled, isTrue);
+    expect(service.lastPipelineProcessCodes, ['01-01', '02-01']);
   });
 }

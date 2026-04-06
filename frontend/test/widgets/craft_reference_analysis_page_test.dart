@@ -122,6 +122,35 @@ class _FakeCraftService extends CraftService {
   }
 
   @override
+  Future<CraftProductTemplateReferenceResult> getProductTemplateReferences({
+    required int productId,
+  }) async {
+    return CraftProductTemplateReferenceResult(
+      productId: productId,
+      productName: '产品A',
+      totalTemplates: 1,
+      totalReferences: 1,
+      items: [
+        CraftProductTemplateReferenceRow(
+          templateId: 21,
+          templateName: '模板A',
+          lifecycleStatus: 'published',
+          refType: 'template_reuse',
+          refId: 22,
+          refCode: 'TMP-22',
+          refName: '模板B',
+          detail: '复用到 产品B · published',
+          refStatus: '正在使用',
+          jumpModule: 'craft',
+          jumpTarget: 'process-configuration?template_id=22',
+          riskLevel: 'medium',
+          riskNote: '需同步模板版本',
+        ),
+      ],
+    );
+  }
+
+  @override
   Future<CraftStageReferenceResult> getStageReferences({
     required int stageId,
   }) async {
@@ -206,5 +235,47 @@ void main() {
     expect(find.text('模板复用 1'), findsOneWidget);
     expect(find.text('阻断 1'), findsOneWidget);
     expect(find.textContaining('operator_a'), findsOneWidget);
+  });
+
+  testWidgets('按产品查询展示模板分组并支持工艺回跳', (tester) async {
+    String? capturedModuleCode;
+    String? capturedJumpTarget;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CraftReferenceAnalysisPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            craftService: _FakeCraftService(),
+            onNavigate: ({required String moduleCode, String? jumpTarget}) {
+              capturedModuleCode = moduleCode;
+              capturedJumpTarget = jumpTarget;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.text('按产品'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('产品A'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('按产品查询：产品A'), findsOneWidget);
+    expect(find.text('模板 1 个 / 引用 1 条'), findsOneWidget);
+
+    await tester.tap(find.text('模板A (published)'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('编码/编号：TMP-22'), findsOneWidget);
+    await tester.tap(find.text('跳转工艺模块'));
+    await tester.pumpAndSettle();
+
+    expect(capturedModuleCode, 'craft');
+    expect(capturedJumpTarget, 'process-configuration?template_id=22');
   });
 }

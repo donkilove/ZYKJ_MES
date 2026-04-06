@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/models/app_session.dart';
 import 'package:mes_client/pages/account_settings_page.dart';
+import 'package:mes_client/pages/audit_log_page.dart';
 import 'package:mes_client/pages/function_permission_config_page.dart';
+import 'package:mes_client/pages/login_session_page.dart';
+import 'package:mes_client/pages/registration_approval_page.dart';
+import 'package:mes_client/pages/role_management_page.dart';
+import 'package:mes_client/pages/user_management_page.dart';
 import 'package:mes_client/pages/user_page.dart';
 
 Finder _findSemanticsLabel(String label) {
@@ -10,6 +15,16 @@ Finder _findSemanticsLabel(String label) {
     (widget) => widget is Semantics && widget.properties.label == label,
     description: 'Semantics(label: $label)',
   );
+}
+
+List<String> _tabTitles(WidgetTester tester) {
+  final tabBar = tester.widget<TabBar>(find.byType(TabBar));
+  return tabBar.tabs.map((tab) {
+    final semantics = (tab as Tab).child! as Semantics;
+    final padding = semantics.child! as Padding;
+    final text = padding.child! as Text;
+    return text.data!;
+  }).toList();
 }
 
 void main() {
@@ -34,6 +49,55 @@ void main() {
     expect(find.text('角色管理'), findsOneWidget);
     expect(find.text('个人中心'), findsOneWidget);
     expect(find.text('tab:account_settings'), findsOneWidget);
+  });
+
+  testWidgets('用户页会按固定顺序装配全部页签并保持完整装配', (tester) async {
+    final capturedChildren = <String, Type>{};
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: UserPage(
+            session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
+            onLogout: () {},
+            visibleTabCodes: const [
+              'function_permission_config',
+              'audit_log',
+              'role_management',
+              'login_session',
+              'registration_approval',
+              'user_management',
+            ],
+            capabilityCodes: const <String>{},
+            preferredTabCode: 'user_management',
+            tabPageBuilder: (tabCode, child) {
+              capturedChildren[tabCode] = child.runtimeType;
+              return Center(child: Text('tab:$tabCode'));
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_tabTitles(tester), const [
+      '用户管理',
+      '注册审批',
+      '角色管理',
+      '审计日志',
+      '个人中心',
+      '登录会话',
+      '功能权限配置',
+    ]);
+    expect(capturedChildren, {
+      'user_management': UserManagementPage,
+      'registration_approval': RegistrationApprovalPage,
+      'role_management': RoleManagementPage,
+      'audit_log': AuditLogPage,
+      'account_settings': AccountSettingsPage,
+      'login_session': LoginSessionPage,
+      'function_permission_config': FunctionPermissionConfigPage,
+    });
   });
 
   testWidgets('用户页在无可见页签时仍会保留个人中心入口', (tester) async {
@@ -152,6 +216,105 @@ void main() {
     expect(permissionPage, isNotNull);
     await permissionPage!.onPermissionsChanged?.call();
     expect(callbackCalls, 1);
+  });
+
+  testWidgets('用户页更新 preferredTabCode 时会切换到目标页签', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: UserPage(
+            session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
+            onLogout: () {},
+            visibleTabCodes: const ['role_management', 'audit_log'],
+            capabilityCodes: const <String>{},
+            preferredTabCode: 'role_management',
+            tabChildBuilder: (tabCode) => Center(child: Text('tab:$tabCode')),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('tab:role_management'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: UserPage(
+            session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
+            onLogout: () {},
+            visibleTabCodes: const ['role_management', 'audit_log'],
+            capabilityCodes: const <String>{},
+            preferredTabCode: 'audit_log',
+            tabChildBuilder: (tabCode) => Center(child: Text('tab:$tabCode')),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('tab:audit_log'), findsOneWidget);
+  });
+
+  testWidgets('用户管理页存在时会透传跳转到角色管理回调', (tester) async {
+    UserManagementPage? userManagementPage;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: UserPage(
+            session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
+            onLogout: () {},
+            visibleTabCodes: const ['user_management', 'role_management'],
+            capabilityCodes: const <String>{},
+            preferredTabCode: 'user_management',
+            tabPageBuilder: (tabCode, child) {
+              if (child is UserManagementPage) {
+                userManagementPage = child;
+              }
+              return Center(child: Text('tab:$tabCode'));
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(userManagementPage, isNotNull);
+    expect(userManagementPage!.onNavigateToRoleManagement, isNotNull);
+
+    userManagementPage!.onNavigateToRoleManagement!.call();
+    await tester.pumpAndSettle();
+
+    expect(find.text('tab:role_management'), findsOneWidget);
+  });
+
+  testWidgets('角色管理页签不可见时不提供用户管理跳转回调', (tester) async {
+    UserManagementPage? userManagementPage;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: UserPage(
+            session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
+            onLogout: () {},
+            visibleTabCodes: const ['user_management'],
+            capabilityCodes: const <String>{},
+            preferredTabCode: 'user_management',
+            tabPageBuilder: (tabCode, child) {
+              if (child is UserManagementPage) {
+                userManagementPage = child;
+              }
+              return Center(child: Text('tab:$tabCode'));
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(userManagementPage, isNotNull);
+    expect(userManagementPage!.onNavigateToRoleManagement, isNull);
   });
 
   testWidgets('用户页为长标题页签提供稳定语义标签', (tester) async {
