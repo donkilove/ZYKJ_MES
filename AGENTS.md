@@ -24,6 +24,7 @@
 - 指挥官模式下，主 agent 只负责拆解需求、维护任务队列、定义验收标准、派发子 agent、汇总结果与判定通过/不通过；不得直接以主 agent 身份承担业务实现与最终验证。
 - 指挥官模式下，每个原子任务至少必须经过“执行子 agent -> 独立验证子 agent”两段闭环；验证失败时必须重新派发执行子 agent 修复，再由新的验证子 agent 复检，直至通过或进入硬阻塞收口。
 - 指挥官模式下，若工具能力允许，原子任务的调研、实现、验证应优先通过 `Task` 子 agent 完成；若因工具能力不足无法完全按子 agent 方式落地，必须在任务日志中记录降级原因、未满足环节与补偿措施。
+- 指挥官模式下，子 agent 在当前原子任务完成、回执被主 agent 接收或被判定废弃后，必须立即关闭，不得保留空闲实例常驻。
 - 指挥官模式下，`Sequential Thinking`、`Task`、`TodoWrite`、Serena、Context7 等工具任一不可用时，允许立即降级到当前可用工具链继续执行；必须同步记录不可用工具、触发时间、降级原因、替代工具与未覆盖风险，不得仅因工具缺失中断等待。
 
 ### 2.2 交互与文档
@@ -32,6 +33,7 @@
 - 指挥官模式任务必须在开始阶段建立或更新 `evidence/` 下的任务日志，至少记录任务拆分、子 agent 输出摘要、验证命令、失败重试、硬阻塞与最终结论；无日志留痕的任务不得宣称按指挥官流程完成。
 - 指挥官模式任务默认不中断，不因常规实现分歧、命名偏好或局部方案选择暂停等待用户回复；仅在破坏性操作、权限/凭证缺失、外部环境不可用或用户目标本身不可判定时，才允许记录阻塞并在收尾统一说明。
 - 只读调研子 agent 若受工具或权限限制无法直接写入 `evidence/`，可将带来源与时间戳的结果返回给主 agent，由主 agent 统一补记到任务日志，并标注“evidence 代记”责任归属。
+- 若子 agent 回执出现越位口吻、角色冒用、主 agent 对外话术或不符合内部摘要契约，主 agent 必须直接丢弃该回执或重新派发，不得原样暴露给用户。
 - 证据记录必须包含证据编号、来源、适用结论；发生工具降级时，须同时记录降级原因、影响范围与补偿措施。
 
 ### 2.3 安全与合规
@@ -62,6 +64,9 @@
 - 代码检索与编辑：`find_symbol`、`find_referencing_symbols`、`get_document_overview`、`get_dir_overview`、`create_text_file`、`insert_after_symbol`、`insert_before_symbol`、`insert_at_line`、`replace_symbol_body`、`delete_lines`、`search_in_all_code`、`read_file`。
 - 辅助思考与执行：`think_about_collected_information`、`think_about_task_adherence`、`think_about_whether_you_are_done`、`execute_shell_command`、`list_dir`。
 - 降级策略：Serena 不可用时才可改用 `rg -n`，并在记录中说明原因。
+- 使用生命周期管理：仅在确有需要（如探索/验证、符号级检索）时才启用 Serena MCP，避免默认常驻。
+- 只要任务结束、切换到不再依赖 Serena 的阶段，或发现窗口/后台残留实例，就必须主动关闭所有 Serena/uvx/uv/python 相关进程，避免重复堆叠。
+- 不得长期保留多余 Serena 实例；若误启动多于一条，应立即清理，避免影响资源和图标占用。
 
 ### 4.2 Sequential Thinking MCP
 - 工具标识：`sequential_thinking`，支持动态、可回溯的分步思考流程。
