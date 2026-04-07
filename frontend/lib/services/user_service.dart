@@ -138,6 +138,79 @@ class UserService {
     return UserExportResult.fromJson(_dataObject(json));
   }
 
+  Future<UserExportTaskItem> createUserExportTask({
+    required String format,
+    String? keyword,
+    String? roleCode,
+    bool? isActive,
+    String deletedScope = 'active',
+  }) async {
+    final uri = Uri.parse('${session.baseUrl}/users/export-tasks');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'format': format,
+        'keyword': keyword?.trim(),
+        'role_code': roleCode?.trim(),
+        'is_active': isActive,
+        'deleted_scope': deletedScope,
+      }),
+    );
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return UserExportTaskItem.fromJson(_dataObject(json));
+  }
+
+  Future<UserExportTaskListResult> listUserExportTasks() async {
+    final uri = Uri.parse('${session.baseUrl}/users/export-tasks');
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    final data = _dataObject(json);
+    final items = (data['items'] as List<dynamic>? ?? const [])
+        .map(
+          (entry) => UserExportTaskItem.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList();
+    return UserExportTaskListResult(
+      total: (data['total'] as int?) ?? items.length,
+      items: items,
+    );
+  }
+
+  Future<UserExportTaskItem> getUserExportTask({required int taskId}) async {
+    final uri = Uri.parse('${session.baseUrl}/users/export-tasks/$taskId');
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return UserExportTaskItem.fromJson(_dataObject(json));
+  }
+
+  Future<UserExportDownloadResult> downloadUserExportTask({
+    required int taskId,
+  }) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/users/export-tasks/$taskId/download',
+    );
+    final response = await http.get(uri, headers: _authHeaders);
+    if (response.statusCode != 200) {
+      final json = _decodeBody(response);
+      _throwIfNotSuccess(response, json, expectedCode: 200);
+    }
+    final contentDisposition = response.headers['content-disposition'] ?? '';
+    final filename =
+        _resolveDownloadFilename(contentDisposition) ??
+        'users_export.${_resolveFormatFromMime(response.headers['content-type'] ?? 'text/csv') == 'excel' ? 'xlsx' : 'csv'}';
+    final mimeType =
+        response.headers['content-type'] ?? 'application/octet-stream';
+    return UserExportDownloadResult(
+      filename: filename,
+      mimeType: mimeType,
+      bytes: response.bodyBytes,
+    );
+  }
+
   Future<RoleListResult> listRoles({
     int page = 1,
     int pageSize = 200,
@@ -705,6 +778,32 @@ class UserService {
       return {};
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  String? _resolveDownloadFilename(String contentDisposition) {
+    final filenameUtf8Match = RegExp(
+      r"filename\\*=UTF-8''([^;]+)",
+      caseSensitive: false,
+    ).firstMatch(contentDisposition);
+    if (filenameUtf8Match != null) {
+      return Uri.decodeComponent(filenameUtf8Match.group(1)!);
+    }
+    final filenameMatch = RegExp(
+      r'filename=\"?([^\";]+)\"?',
+      caseSensitive: false,
+    ).firstMatch(contentDisposition);
+    if (filenameMatch != null) {
+      return filenameMatch.group(1);
+    }
+    return null;
+  }
+
+  String _resolveFormatFromMime(String mimeType) {
+    final normalized = mimeType.toLowerCase();
+    if (normalized.contains('spreadsheetml')) {
+      return 'excel';
+    }
+    return 'csv';
   }
 
   Map<String, dynamic> _dataObject(Map<String, dynamic> body) {

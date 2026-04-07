@@ -1,8 +1,10 @@
 import base64
 import csv
 import io
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, require_permission
@@ -15,6 +17,9 @@ from app.schemas.user import (
     UserDeleteRequest,
     UserDeleteResult,
     UserExportResult,
+    UserExportTaskCreateRequest,
+    UserExportTaskItem,
+    UserExportTaskListResult,
     UserItem,
     UserLifecycleRequest,
     UserLifecycleResult,
@@ -38,9 +43,37 @@ from app.services.user_service import (
     set_user_active,
     update_user,
 )
+from app.services.user_export_task_service import (
+    USER_EXPORT_STATUS_SUCCEEDED,
+    create_user_export_task,
+    get_user_export_task,
+    list_user_export_tasks,
+    run_user_export_task,
+)
 
 
 router = APIRouter()
+
+
+def to_user_export_task_item(task) -> UserExportTaskItem:
+    return UserExportTaskItem(
+        id=task.id,
+        task_code=task.task_code,
+        status=task.status,
+        format=task.format,
+        deleted_scope=task.deleted_scope,
+        keyword=task.keyword,
+        role_code=task.role_code,
+        is_active=task.is_active,
+        record_count=task.record_count,
+        file_name=task.file_name,
+        mime_type=task.mime_type,
+        failure_reason=task.failure_reason,
+        requested_at=task.requested_at,
+        started_at=task.started_at,
+        finished_at=task.finished_at,
+        expires_at=task.expires_at,
+    )
 
 
 def _resolve_online_user_ids_for_users(
@@ -244,6 +277,107 @@ def export_users(
             content_type="text/csv",
             content_base64=content_base64,
         )
+    )
+
+
+@router.post("/export-tasks", response_model=ApiResponse[UserExportTaskItem])
+def create_user_export_task_api(
+    payload: UserExportTaskCreateRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("user.users.export")),
+) -> ApiResponse[UserExportTaskItem]:
+    task = create_user_export_task(
+        db,
+        created_by_user_id=int(current_user.id),
+        format=payload.format,
+        deleted_scope=payload.deleted_scope,
+        keyword=payload.keyword,
+        role_code=payload.role_code,
+        is_active=payload.is_active,
+    )
+    write_audit_log(
+        db,
+        action_code="user.export.create",
+        action_name="创建用户导出任务",
+        target_type="user_export_task",
+        target_id=str(task.id),
+        target_name=task.task_code,
+        operator=current_user,
+        after_data={
+            "format": task.format,
+            "keyword": task.keyword,
+            "role_code": task.role_code,
+            "is_active": task.is_active,
+            "deleted_scope": task.deleted_scope,
+        },
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
+    )
+    db.commit()
+    background_tasks.add_task(run_user_export_task, int(task.id))
+    return success_response(to_user_export_task_item(task), message="accepted")
+
+
+@router.get("/export-tasks", response_model=ApiResponse[UserExportTaskListResult])
+def list_user_export_tasks_api(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("user.users.export")),
+) -> ApiResponse[UserExportTaskListResult]:
+    tasks = list_user_export_tasks(db, created_by_user_id=int(current_user.id))
+    return success_response(
+        UserExportTaskListResult(
+            total=len(tasks),
+            items=[to_user_export_task_item(task) for task in tasks],
+        )
+    )
+
+
+@router.get("/export-tasks/{task_id}", response_model=ApiResponse[UserExportTaskItem])
+def get_user_export_task_api(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("user.users.export")),
+) -> ApiResponse[UserExportTaskItem]:
+    task = get_user_export_task(
+        db,
+        task_id=task_id,
+        created_by_user_id=int(current_user.id),
+    )
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="导出任务不存在")
+    return success_response(to_user_export_task_item(task))
+
+
+@router.get("/export-tasks/{task_id}/download", response_class=StreamingResponse)
+def download_user_export_task_api(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("user.users.export")),
+) -> StreamingResponse:
+    task = get_user_export_task(
+        db,
+        task_id=task_id,
+        created_by_user_id=int(current_user.id),
+    )
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="导出任务不存在")
+    if task.status != USER_EXPORT_STATUS_SUCCEEDED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导出任务尚未完成")
+    if not task.storage_path or not task.file_name or not task.mime_type:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导出文件不存在，请重新导出")
+    file_path = Path(task.storage_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导出文件已过期，请重新导出")
+    headers = {
+        "Content-Disposition": f'attachment; filename="{task.file_name}"',
+        "Content-Type": task.mime_type,
+    }
+    return StreamingResponse(
+        iter([file_path.read_bytes()]),
+        media_type=task.mime_type,
+        headers=headers,
     )
 
 

@@ -47,10 +47,12 @@ from app.models.role import Role
 from app.models.role_permission_grant import RolePermissionGrant
 from app.models.supplier import Supplier
 from app.models.user import User
+from app.models.user_export_task import UserExportTask
 from app.models.user_session import UserSession
 
 __all__ = [
     "User",
+    "UserExportTask",
     "Role",
     "AuthzChangeLog",
     "AuthzChangeLogItem",

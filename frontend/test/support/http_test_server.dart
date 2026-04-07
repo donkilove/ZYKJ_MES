@@ -43,9 +43,8 @@ class TestResponse {
   }
 }
 
-typedef TestRouteHandler = FutureOr<TestResponse> Function(
-  RecordedRequest request,
-);
+typedef TestRouteHandler =
+    FutureOr<TestResponse> Function(RecordedRequest request);
 
 class TestHttpServer {
   TestHttpServer._(this._server, this._routes) {
@@ -91,9 +90,7 @@ class TestHttpServer {
         rawRequest.response,
         TestResponse.json(
           404,
-          body: <String, dynamic>{
-            'detail': 'No test handler for $routeKey',
-          },
+          body: <String, dynamic>{'detail': 'No test handler for $routeKey'},
         ),
       );
       return;
@@ -107,9 +104,7 @@ class TestHttpServer {
         rawRequest.response,
         TestResponse.json(
           500,
-          body: <String, dynamic>{
-            'detail': error.toString(),
-          },
+          body: <String, dynamic>{'detail': error.toString()},
         ),
       );
     }
@@ -128,13 +123,18 @@ class TestHttpServer {
     }
 
     if (body is String) {
-      if (!target.headers.contentType
-          .toString()
-          .toLowerCase()
-          .contains('application/json')) {
+      if (!target.headers.contentType.toString().toLowerCase().contains(
+        'application/json',
+      )) {
         target.headers.contentType = ContentType.text;
       }
       target.write(body);
+      target.close();
+      return;
+    }
+
+    if (body is List<int>) {
+      target.add(body);
       target.close();
       return;
     }

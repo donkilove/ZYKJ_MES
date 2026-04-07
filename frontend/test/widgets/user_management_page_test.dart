@@ -48,11 +48,19 @@ class _FakeUserService extends UserService {
   List<int> lastOnlineStatusQueryUserIds = const [];
   Set<int> onlineStatusUserIds = <int>{};
   String? lastExportFormat;
+  String lastExportDeletedScope = 'active';
+  int createExportTaskCalls = 0;
+  int listExportTasksCalls = 0;
+  int downloadExportTaskCalls = 0;
+  Object? createExportTaskError;
+  Object? listExportTasksError;
+  Object? downloadExportTaskError;
   Object? listUsersError;
   Object? listAllRolesError;
   Object? listOnlineUserIdsError;
   Object? getUserDetailError;
   Object? updateUserError;
+  Object? resetPasswordError;
   Object? exportError;
   Duration listUsersDelay = Duration.zero;
   Duration listOnlineStatusDelay = Duration.zero;
@@ -62,6 +70,24 @@ class _FakeUserService extends UserService {
     filename: 'users.csv',
     contentType: 'text/csv',
     contentBase64: 'YQ==',
+  );
+  UserExportTaskItem exportTaskItem = UserExportTaskItem(
+    id: 501,
+    taskCode: 'task-501',
+    status: 'succeeded',
+    format: 'csv',
+    deletedScope: 'active',
+    keyword: null,
+    roleCode: null,
+    isActive: null,
+    recordCount: 12,
+    fileName: 'users_active_20260407_101530.csv',
+    mimeType: 'text/csv',
+    failureReason: null,
+    requestedAt: DateTime.parse('2026-04-07T10:15:30Z'),
+    startedAt: DateTime.parse('2026-04-07T10:15:31Z'),
+    finishedAt: DateTime.parse('2026-04-07T10:15:33Z'),
+    expiresAt: DateTime.parse('2026-04-14T10:15:33Z'),
   );
 
   void _updateUser(int userId, UserItem Function(UserItem) updater) {
@@ -356,6 +382,10 @@ class _FakeUserService extends UserService {
     required String password,
     required String remark,
   }) async {
+    final error = resetPasswordError;
+    if (error != null) {
+      throw error;
+    }
     resetPasswordCalls += 1;
     lastResetRemark = remark;
     _updateUser(userId, (user) => user.copyWith(isOnline: false));
@@ -424,6 +454,77 @@ class _FakeUserService extends UserService {
       throw error;
     }
     return exportResult;
+  }
+
+  @override
+  Future<UserExportTaskItem> createUserExportTask({
+    required String format,
+    String? keyword,
+    String? roleCode,
+    bool? isActive,
+    String deletedScope = 'active',
+  }) async {
+    final error = createExportTaskError;
+    if (error != null) {
+      throw error;
+    }
+    createExportTaskCalls += 1;
+    lastExportFormat = format;
+    lastExportDeletedScope = deletedScope;
+    exportTaskItem = UserExportTaskItem(
+      id: exportTaskItem.id,
+      taskCode: exportTaskItem.taskCode,
+      status: exportTaskItem.status,
+      format: format,
+      deletedScope: deletedScope,
+      keyword: keyword,
+      roleCode: roleCode,
+      isActive: isActive,
+      recordCount: exportTaskItem.recordCount,
+      fileName: format == 'excel'
+          ? 'users_${deletedScope}_20260407_101530.xlsx'
+          : 'users_${deletedScope}_20260407_101530.csv',
+      mimeType: format == 'excel'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv',
+      failureReason: exportTaskItem.failureReason,
+      requestedAt: exportTaskItem.requestedAt,
+      startedAt: exportTaskItem.startedAt,
+      finishedAt: exportTaskItem.finishedAt,
+      expiresAt: exportTaskItem.expiresAt,
+    );
+    return exportTaskItem;
+  }
+
+  @override
+  Future<UserExportTaskListResult> listUserExportTasks() async {
+    final error = listExportTasksError;
+    if (error != null) {
+      throw error;
+    }
+    listExportTasksCalls += 1;
+    return UserExportTaskListResult(total: 1, items: [exportTaskItem]);
+  }
+
+  @override
+  Future<UserExportTaskItem> getUserExportTask({required int taskId}) async {
+    return exportTaskItem;
+  }
+
+  @override
+  Future<UserExportDownloadResult> downloadUserExportTask({
+    required int taskId,
+  }) async {
+    final error = downloadExportTaskError;
+    if (error != null) {
+      throw error;
+    }
+    downloadExportTaskCalls += 1;
+    return UserExportDownloadResult(
+      filename: exportTaskItem.fileName ?? 'users.csv',
+      mimeType: exportTaskItem.mimeType ?? 'text/csv',
+      bytes: [1, 2, 3],
+    );
   }
 }
 
@@ -527,8 +628,8 @@ Future<void> _pumpPage(
   bool canExport = true,
   Future<String?> Function({
     required String filename,
-    required String contentBase64,
-    required String contentType,
+    required List<int> bytes,
+    required String mimeType,
     required String format,
   })?
   saveExportFile,
@@ -958,6 +1059,7 @@ void main() {
 
     expect(find.text('导出 CSV'), findsOneWidget);
     expect(find.text('导出 Excel'), findsOneWidget);
+    expect(find.text('导出任务'), findsOneWidget);
   });
 
   testWidgets('桌面工具栏搜索框会吃满剩余宽度且与按钮保持同一行', (tester) async {
@@ -2297,6 +2399,85 @@ void main() {
     expect(find.text('启用'), findsWidgets);
   });
 
+  testWidgets('重置密码返回 400 时展示失败提示', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 42,
+          username: 'reset_fail',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    )..resetPasswordError = ApiException('新密码不能与当前密码相同', 400);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重置密码'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, 'Reset@123');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '重置原因'),
+      '异常修复',
+    );
+    await tester.tap(find.text('确认重置'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('重置密码失败：新密码不能与当前密码相同'), findsOneWidget);
+    expect(userService.resetPasswordCalls, 0);
+  });
+
+  testWidgets('重置密码返回 401 时触发登出回调', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 43,
+          username: 'reset_401',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    )..resetPasswordError = ApiException('登录失效', 401);
+    final craftService = _FakeCraftService();
+    var logoutCalls = 0;
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      onLogout: () {
+        logoutCalls += 1;
+      },
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重置密码'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, 'Reset@123');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '重置原因'),
+      '会话失效校验',
+    );
+    await tester.tap(find.text('确认重置'));
+    await tester.pumpAndSettle();
+
+    expect(logoutCalls, 1);
+  });
+
   testWidgets('无导出权限时不显示导出按钮', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
@@ -2362,7 +2543,7 @@ void main() {
     expect(logoutCalls, 1);
   });
 
-  testWidgets('导出当前筛选结果成功后提示保存路径', (tester) async {
+  testWidgets('创建导出任务后自动打开任务弹窗并可下载保存', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
 
@@ -2373,11 +2554,12 @@ void main() {
       saveExportFile:
           ({
             required filename,
-            required contentBase64,
-            required contentType,
+            required bytes,
+            required mimeType,
             required format,
           }) async {
             expect(format, 'csv');
+            expect(mimeType, 'text/csv');
             return 'C:/exports/$filename';
           },
     );
@@ -2390,12 +2572,24 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('导出 CSV').last);
     await tester.pumpAndSettle();
+    expect(find.text('创建导出任务'), findsWidgets);
+    await tester.tap(find.text('创建导出任务').last);
+    await tester.pumpAndSettle();
 
+    expect(userService.createExportTaskCalls, 1);
     expect(userService.lastExportFormat, 'csv');
-    expect(find.text('已导出到 C:/exports/users.csv'), findsOneWidget);
+    expect(find.text('导出任务已创建，生成完成后可下载'), findsOneWidget);
+    expect(find.text('导出任务'), findsWidgets);
+    expect(find.text('可下载'), findsOneWidget);
+
+    await tester.tap(find.text('下载'));
+    await tester.pumpAndSettle();
+
+    expect(userService.downloadExportTaskCalls, 1);
+    expect(find.textContaining('已下载到 C:/exports/'), findsOneWidget);
   });
 
-  testWidgets('导出当前筛选结果取消保存后提示已取消', (tester) async {
+  testWidgets('下载导出任务取消保存后提示已取消', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
 
@@ -2406,8 +2600,8 @@ void main() {
       saveExportFile:
           ({
             required filename,
-            required contentBase64,
-            required contentType,
+            required bytes,
+            required mimeType,
             required format,
           }) async => null,
     );
@@ -2420,14 +2614,19 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('导出 Excel').last);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('创建导出任务').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('下载'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(userService.lastExportFormat, 'excel');
-    expect(find.text('已取消导出保存'), findsOneWidget);
+    expect(find.text('已取消下载保存'), findsOneWidget);
   });
 
-  testWidgets('导出当前筛选结果失败后提示错误信息', (tester) async {
+  testWidgets('创建导出任务失败后提示错误信息', (tester) async {
     final userService = _FakeUserService(initialUsers: const [])
-      ..exportError = ApiException('导出接口异常', 500);
+      ..createExportTaskError = ApiException('导出接口异常', 500);
     final craftService = _FakeCraftService();
 
     await _pumpPage(
@@ -2437,8 +2636,8 @@ void main() {
       saveExportFile:
           ({
             required filename,
-            required contentBase64,
-            required contentType,
+            required bytes,
+            required mimeType,
             required format,
           }) async => 'C:/exports/$filename',
     );
@@ -2451,7 +2650,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('导出 CSV').last);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('创建导出任务').last);
+    await tester.pumpAndSettle();
 
-    expect(find.text('导出失败：导出接口异常'), findsOneWidget);
+    expect(find.text('创建导出任务失败：导出接口异常'), findsOneWidget);
   });
 }

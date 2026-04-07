@@ -289,6 +289,84 @@ class UserLifecycleResult {
   }
 }
 
+class UserExportTaskItem {
+  UserExportTaskItem({
+    required this.id,
+    required this.taskCode,
+    required this.status,
+    required this.format,
+    required this.deletedScope,
+    required this.keyword,
+    required this.roleCode,
+    required this.isActive,
+    required this.recordCount,
+    required this.fileName,
+    required this.mimeType,
+    required this.failureReason,
+    required this.requestedAt,
+    required this.startedAt,
+    required this.finishedAt,
+    required this.expiresAt,
+  });
+
+  final int id;
+  final String taskCode;
+  final String status;
+  final String format;
+  final String deletedScope;
+  final String? keyword;
+  final String? roleCode;
+  final bool? isActive;
+  final int recordCount;
+  final String? fileName;
+  final String? mimeType;
+  final String? failureReason;
+  final DateTime? requestedAt;
+  final DateTime? startedAt;
+  final DateTime? finishedAt;
+  final DateTime? expiresAt;
+
+  factory UserExportTaskItem.fromJson(Map<String, dynamic> json) {
+    return UserExportTaskItem(
+      id: (json['id'] as int?) ?? 0,
+      taskCode: (json['task_code'] as String?) ?? '',
+      status: (json['status'] as String?) ?? 'pending',
+      format: (json['format'] as String?) ?? 'csv',
+      deletedScope: (json['deleted_scope'] as String?) ?? 'active',
+      keyword: json['keyword'] as String?,
+      roleCode: json['role_code'] as String?,
+      isActive: json['is_active'] as bool?,
+      recordCount: (json['record_count'] as int?) ?? 0,
+      fileName: json['file_name'] as String?,
+      mimeType: json['mime_type'] as String?,
+      failureReason: json['failure_reason'] as String?,
+      requestedAt: _parseDateTimeOrNull(json['requested_at']),
+      startedAt: _parseDateTimeOrNull(json['started_at']),
+      finishedAt: _parseDateTimeOrNull(json['finished_at']),
+      expiresAt: _parseDateTimeOrNull(json['expires_at']),
+    );
+  }
+}
+
+class UserExportTaskListResult {
+  UserExportTaskListResult({required this.total, required this.items});
+
+  final int total;
+  final List<UserExportTaskItem> items;
+}
+
+class UserExportDownloadResult {
+  UserExportDownloadResult({
+    required this.filename,
+    required this.mimeType,
+    required this.bytes,
+  });
+
+  final String filename;
+  final String mimeType;
+  final List<int> bytes;
+}
+
 class UserDeleteResult {
   UserDeleteResult({
     required this.user,

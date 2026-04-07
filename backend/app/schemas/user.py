@@ -85,6 +85,40 @@ class UserExportResult(BaseModel):
     content_base64: str
 
 
+class UserExportTaskCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    format: str = Field(pattern="^(csv|excel)$")
+    keyword: str | None = Field(default=None, max_length=255)
+    role_code: str | None = Field(default=None, max_length=64)
+    is_active: bool | None = None
+    deleted_scope: str = Field(default="active", pattern="^(active|deleted|all)$")
+
+
+class UserExportTaskItem(BaseModel):
+    id: int
+    task_code: str
+    status: str
+    format: str
+    deleted_scope: str
+    keyword: str | None = None
+    role_code: str | None = None
+    is_active: bool | None = None
+    record_count: int
+    file_name: str | None = None
+    mime_type: str | None = None
+    failure_reason: str | None = None
+    requested_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    expires_at: datetime | None = None
+
+
+class UserExportTaskListResult(BaseModel):
+    total: int
+    items: list[UserExportTaskItem]
+
+
 class UserOnlineStatusResult(BaseModel):
     user_ids: list[int]
 

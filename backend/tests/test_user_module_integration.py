@@ -27,6 +27,7 @@ from app.models.registration_request import RegistrationRequest  # noqa: E402
 from app.models.role import Role  # noqa: E402
 from app.models.role_permission_grant import RolePermissionGrant  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.models.user_export_task import UserExportTask  # noqa: E402
 from app.models.user_session import UserSession  # noqa: E402
 from app.core.authz_catalog import PERMISSION_CATALOG  # noqa: E402
 from app.schemas.user import UserUpdate  # noqa: E402
@@ -34,6 +35,7 @@ from app.services.bootstrap_seed_service import seed_initial_data  # noqa: E402
 from app.services.audit_service import write_audit_log  # noqa: E402
 from app.services.authz_service import ensure_role_permission_defaults  # noqa: E402
 from app.services.user_service import approve_registration_request, update_user  # noqa: E402
+from app.services.user_export_task_service import ensure_user_export_runtime_dir  # noqa: E402
 
 
 class UserModuleIntegrationTest(unittest.TestCase):
@@ -55,7 +57,13 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.extra_usernames: list[str] = []
         self.extra_session_ids: list[str] = []
         self.extra_registration_request_ids: list[int] = []
+        self.extra_export_task_ids: list[int] = []
         self._registration_request_seq = 0
+        db = SessionLocal()
+        try:
+            UserExportTask.__table__.create(bind=db.get_bind(), checkfirst=True)
+        finally:
+            db.close()
 
     def tearDown(self) -> None:
         db = SessionLocal()
@@ -124,6 +132,22 @@ class UserModuleIntegrationTest(unittest.TestCase):
                         RegistrationRequest.id == request_id
                     )
                 )
+            export_task_ids = {
+                task_id
+                for task_id in self.extra_export_task_ids
+                if task_id is not None
+            }
+            for task_id in export_task_ids:
+                task = (
+                    db.query(UserExportTask)
+                    .filter(UserExportTask.id == task_id)
+                    .one_or_none()
+                )
+                if task is None:
+                    continue
+                if task.storage_path:
+                    Path(task.storage_path).unlink(missing_ok=True)
+                db.delete(task)
             if self.stage_id is not None:
                 stage = (
                     db.query(ProcessStage)
@@ -740,6 +764,92 @@ class UserModuleIntegrationTest(unittest.TestCase):
             self.assertEqual(restore_audit.remark, "资料纠正恢复")
         finally:
             restored_db.close()
+
+    def test_user_export_tasks_create_complete_and_download(self) -> None:
+        self._create_role_and_user()
+
+        create_response = self.client.post(
+            "/api/v1/users/export-tasks",
+            headers=self._headers(),
+            json={
+                "format": "csv",
+                "keyword": self.username,
+                "role_code": self.role_code,
+                "deleted_scope": "active",
+            },
+        )
+        self.assertEqual(create_response.status_code, 200, create_response.text)
+        task_payload = create_response.json()["data"]
+        task_id = int(task_payload["id"])
+        self.extra_export_task_ids.append(task_id)
+
+        detail_response = None
+        for _ in range(10):
+            detail_response = self.client.get(
+                f"/api/v1/users/export-tasks/{task_id}",
+                headers=self._headers(),
+            )
+            self.assertEqual(
+                detail_response.status_code, 200, detail_response.text
+            )
+            if detail_response.json()["data"]["status"] == "succeeded":
+                break
+            time.sleep(0.2)
+        assert detail_response is not None
+        self.assertEqual(detail_response.json()["data"]["status"], "succeeded")
+        self.assertGreaterEqual(detail_response.json()["data"]["record_count"], 1)
+        self.assertTrue(detail_response.json()["data"]["file_name"].startswith("users_active_"))
+
+        list_response = self.client.get(
+            "/api/v1/users/export-tasks",
+            headers=self._headers(),
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        listed_ids = {int(item["id"]) for item in list_response.json()["data"]["items"]}
+        self.assertIn(task_id, listed_ids)
+
+        download_response = self.client.get(
+            f"/api/v1/users/export-tasks/{task_id}/download",
+            headers=self._headers(),
+        )
+        self.assertEqual(download_response.status_code, 200, download_response.text)
+        self.assertTrue(download_response.content)
+        self.assertIn(
+            "attachment; filename=",
+            download_response.headers.get("content-disposition", ""),
+        )
+
+        db = SessionLocal()
+        try:
+            task = db.query(UserExportTask).filter(UserExportTask.id == task_id).one()
+            self.assertEqual(task.status, "succeeded")
+            self.assertIsNotNone(task.storage_path)
+            self.assertTrue(Path(task.storage_path).exists())
+
+            create_audit = (
+                db.query(AuditLog)
+                .filter(
+                    AuditLog.action_code == "user.export.create",
+                    AuditLog.target_id == str(task_id),
+                )
+                .order_by(AuditLog.id.desc())
+                .first()
+            )
+            complete_audit = (
+                db.query(AuditLog)
+                .filter(
+                    AuditLog.action_code == "user.export.complete",
+                    AuditLog.target_id == str(task_id),
+                )
+                .order_by(AuditLog.id.desc())
+                .first()
+            )
+            assert create_audit is not None
+            assert complete_audit is not None
+            self.assertEqual(create_audit.after_data["deleted_scope"], "active")
+            self.assertEqual(complete_audit.after_data["status"], "succeeded")
+        finally:
+            db.close()
 
     def test_system_admin_guardrails_block_disabling_last_permission_admin(
         self,

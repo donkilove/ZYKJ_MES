@@ -324,6 +324,118 @@ void main() {
       },
     );
 
+    test('supports async user export tasks and binary download', () async {
+      final server = await TestHttpServer.start({
+        'POST /users/export-tasks': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['format'], 'excel');
+          expect(body['keyword'], 'tester');
+          expect(body['role_code'], 'quality_admin');
+          expect(body['is_active'], false);
+          expect(body['deleted_scope'], 'deleted');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'id': 31,
+                'task_code': 'task-31',
+                'status': 'pending',
+                'format': 'excel',
+                'deleted_scope': 'deleted',
+                'record_count': 0,
+                'requested_at': '2026-04-07T10:00:00Z',
+              },
+            },
+          );
+        },
+        'GET /users/export-tasks': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'total': 1,
+              'items': [
+                {
+                  'id': 31,
+                  'task_code': 'task-31',
+                  'status': 'succeeded',
+                  'format': 'excel',
+                  'deleted_scope': 'deleted',
+                  'keyword': 'tester',
+                  'role_code': 'quality_admin',
+                  'is_active': false,
+                  'record_count': 18,
+                  'file_name':
+                      'users_deleted_quality_admin_20260407_100000.xlsx',
+                  'mime_type':
+                      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                  'requested_at': '2026-04-07T10:00:00Z',
+                  'started_at': '2026-04-07T10:00:01Z',
+                  'finished_at': '2026-04-07T10:00:05Z',
+                  'expires_at': '2026-04-14T10:00:05Z',
+                },
+              ],
+            },
+          },
+        ),
+        'GET /users/export-tasks/31': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {
+              'id': 31,
+              'task_code': 'task-31',
+              'status': 'succeeded',
+              'format': 'excel',
+              'deleted_scope': 'deleted',
+              'record_count': 18,
+              'file_name': 'users_deleted_quality_admin_20260407_100000.xlsx',
+              'mime_type':
+                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'requested_at': '2026-04-07T10:00:00Z',
+            },
+          },
+        ),
+        'GET /users/export-tasks/31/download': (_) => const TestResponse(
+          statusCode: 200,
+          body: [1, 2, 3, 4],
+          headers: {
+            'content-disposition':
+                'attachment; filename="users_deleted_quality_admin_20260407_100000.xlsx"',
+            'content-type':
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          },
+        ),
+      });
+      addTearDown(server.close);
+
+      final service = UserService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-user'),
+      );
+
+      final task = await service.createUserExportTask(
+        format: 'excel',
+        keyword: ' tester ',
+        roleCode: ' quality_admin ',
+        isActive: false,
+        deletedScope: 'deleted',
+      );
+      final taskList = await service.listUserExportTasks();
+      final detail = await service.getUserExportTask(taskId: 31);
+      final download = await service.downloadUserExportTask(taskId: 31);
+
+      expect(task.id, 31);
+      expect(task.status, 'pending');
+      expect(taskList.total, 1);
+      expect(taskList.items.single.recordCount, 18);
+      expect(detail.taskCode, 'task-31');
+      expect(
+        download.filename,
+        'users_deleted_quality_admin_20260407_100000.xlsx',
+      );
+      expect(download.mimeType, contains('spreadsheetml'));
+      expect(download.bytes, [1, 2, 3, 4]);
+      expect(server.requests.length, 4);
+    });
+
     test('covers user module audit session profile and export APIs', () async {
       final server = await TestHttpServer.start({
         'GET /users': (request) {
