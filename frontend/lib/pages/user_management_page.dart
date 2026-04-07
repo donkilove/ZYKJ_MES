@@ -561,6 +561,64 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final formKey = GlobalKey<FormState>();
     String? selectedRoleCode;
     int? selectedStageId;
+    int accountCheckSequence = 0;
+    bool checkingAccountConflict = false;
+    String? accountConflictError;
+    String? createdAccount;
+    bool createdActive = true;
+
+    Future<void> checkAccountConflict(
+      StateSetter setDialogState, {
+      bool force = false,
+    }) async {
+      final account = accountController.text.trim();
+      if (account.isEmpty || account.length < 2 || account.length > 10) {
+        setDialogState(() {
+          checkingAccountConflict = false;
+          accountConflictError = null;
+        });
+        formKey.currentState?.validate();
+        return;
+      }
+      if (!force && !accountController.selection.isValid) {
+        return;
+      }
+      final currentSequence = ++accountCheckSequence;
+      setDialogState(() {
+        checkingAccountConflict = true;
+        accountConflictError = null;
+      });
+      try {
+        final result = await _userService.listUsers(
+          page: 1,
+          pageSize: 20,
+          keyword: account,
+        );
+        if (!mounted || currentSequence != accountCheckSequence) {
+          return;
+        }
+        final duplicated = result.items.any(
+          (user) => user.username.trim().toLowerCase() == account.toLowerCase(),
+        );
+        setDialogState(() {
+          checkingAccountConflict = false;
+          accountConflictError = duplicated ? '账号已存在，请更换后再创建' : null;
+        });
+        formKey.currentState?.validate();
+      } catch (error) {
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+          return;
+        }
+        if (!mounted || currentSequence != accountCheckSequence) {
+          return;
+        }
+        setDialogState(() {
+          checkingAccountConflict = false;
+          accountConflictError = null;
+        });
+      }
+    }
 
     final created = await showLockedFormDialog<bool>(
       context: context,
@@ -569,6 +627,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
           builder: (context, setDialogState) {
             final isOperatorSelected = _isOperator(selectedRoleCode);
             final canAssignStage = _canAssignStage(selectedRoleCode);
+            final stageHelperText = selectedRoleCode == null
+                ? '请先选择角色，再确定是否需要分配工段'
+                : isOperatorSelected
+                ? '操作员必须选择一个工段后才能创建'
+                : canAssignStage
+                ? '当前角色可选工段，不选则默认无工段'
+                : '该角色无需分配工段';
 
             return AlertDialog(
               title: const Text('新建用户'),
@@ -577,13 +642,38 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 child: SingleChildScrollView(
                   child: Form(
                     key: formKey,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         TextFormField(
                           controller: accountController,
-                          decoration: const InputDecoration(labelText: '账号'),
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          decoration: InputDecoration(
+                            labelText: '账号',
+                            helperText: checkingAccountConflict
+                                ? '正在检查账号是否可用...'
+                                : null,
+                            suffixIcon: checkingAccountConflict
+                                ? const Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          onChanged: (_) {
+                            setDialogState(() {
+                              accountConflictError = null;
+                            });
+                            checkAccountConflict(setDialogState);
+                          },
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return '请输入账号';
@@ -594,6 +684,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             if (value.trim().length > 10) {
                               return '账号最多 10 个字符';
                             }
+                            if (accountConflictError != null) {
+                              return accountConflictError;
+                            }
                             return null;
                           },
                         ),
@@ -601,6 +694,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         TextFormField(
                           controller: passwordController,
                           obscureText: true,
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
                           decoration: const InputDecoration(
                             labelText: '密码',
                             helperText: '密码规则：至少6位；不能包含连续4位相同字符。',
@@ -682,6 +776,18 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
+                        Text(
+                          stageHelperText,
+                          style: TextStyle(
+                            color: isOperatorSelected
+                                ? Colors.red
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontWeight: isOperatorSelected
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Opacity(
                           opacity: canAssignStage ? 1 : 0.5,
                           child: IgnorePointer(
@@ -740,6 +846,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
                     if (!formKey.currentState!.validate()) {
                       return;
                     }
+                    await checkAccountConflict(setDialogState, force: true);
+                    if (checkingAccountConflict || accountConflictError != null) {
+                      return;
+                    }
                     if (selectedRoleCode == null) {
                       return;
                     }
@@ -756,6 +866,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         stageId: selectedStageId,
                         isActive: isActive,
                       );
+                      createdAccount = accountController.text.trim();
+                      createdActive = isActive;
                       if (context.mounted) {
                         Navigator.of(context).pop(true);
                       }
@@ -784,6 +896,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
     if (created == true) {
       await _loadUsers();
+      if (mounted && createdAccount != null) {
+        final followup = createdActive
+            ? '用户 $createdAccount 已创建，首次登录需修改密码。'
+            : '用户 $createdAccount 已创建，首次登录需修改密码；当前为停用状态，启用后方可登录。';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(followup)));
+      }
     }
   }
 

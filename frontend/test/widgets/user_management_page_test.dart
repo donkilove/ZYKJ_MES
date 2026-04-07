@@ -876,6 +876,56 @@ void main() {
     expect(craftService.listStagesCalls, 2);
   });
 
+  testWidgets('新建用户会在提交前预判账号冲突', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 99,
+          username: 'dup_user',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.text('新建用户'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'dup_user');
+    await tester.pumpAndSettle();
+
+    expect(find.text('账号已存在，请更换后再创建'), findsOneWidget);
+  });
+
+  testWidgets('新建用户会根据角色前置展示工段说明', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.text('新建用户'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请先选择角色，再确定是否需要分配工段'), findsOneWidget);
+
+    await tester.tap(find.text('生产管理员').first);
+    await tester.pumpAndSettle();
+    expect(find.text('该角色无需分配工段'), findsOneWidget);
+
+    await tester.tap(find.text('操作员').first);
+    await tester.pumpAndSettle();
+    expect(find.text('操作员必须选择一个工段后才能创建'), findsOneWidget);
+  });
+
   testWidgets('创建操作员时会携带 stageId 提交', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
@@ -1002,6 +1052,27 @@ void main() {
     await tester.pump();
     expect(find.text('密码不能包含连续4位相同字符'), findsOneWidget);
     expect(userService.createCalls, 0);
+  });
+
+  testWidgets('新建用户输入时会前置显示账号和密码校验', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.text('新建用户'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'a');
+    await tester.pumpAndSettle();
+    expect(find.text('账号至少 2 个字符'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(1), '12345');
+    await tester.pumpAndSettle();
+    expect(find.text('密码至少 6 个字符'), findsOneWidget);
   });
 
   testWidgets('用户管理重置密码弹窗直接展示并校验密码规则', (tester) async {
