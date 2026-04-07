@@ -69,6 +69,41 @@ ROLE_PRIORITY = [
 ROLE_PRIORITY_INDEX = {code: index for index, code in enumerate(ROLE_PRIORITY)}
 
 
+def _build_user_filter_conditions(
+    *,
+    keyword: str | None,
+    role_code: str | None,
+    stage_id: int | None,
+    is_online: bool | None,
+    online_user_ids: set[int] | None,
+    is_active: bool | None,
+    include_deleted: bool,
+) -> tuple[list[object], bool]:
+    conditions: list[object] = []
+    requires_role_join = False
+    if not include_deleted:
+        conditions.append(User.is_deleted.is_(False))
+    if keyword:
+        conditions.append(User.username.ilike(f"%{keyword}%"))
+    if role_code:
+        requires_role_join = True
+        conditions.append(Role.code == role_code)
+    if stage_id is not None:
+        conditions.append(User.stage_id == stage_id)
+    if is_online is not None:
+        effective_online_user_ids = online_user_ids or set()
+        if is_online:
+            if not effective_online_user_ids:
+                conditions.append(User.id == -1)
+            else:
+                conditions.append(User.id.in_(effective_online_user_ids))
+        elif effective_online_user_ids:
+            conditions.append(~User.id.in_(effective_online_user_ids))
+    if is_active is not None:
+        conditions.append(User.is_active.is_(is_active))
+    return conditions, requires_role_join
+
+
 def query_users(
     *,
     keyword: str | None,
@@ -79,35 +114,27 @@ def query_users(
     is_active: bool | None = None,
     include_deleted: bool = False,
 ) -> Select[tuple[User]]:
+    conditions, requires_role_join = _build_user_filter_conditions(
+        keyword=keyword,
+        role_code=role_code,
+        stage_id=stage_id,
+        is_online=is_online,
+        online_user_ids=online_user_ids,
+        is_active=is_active,
+        include_deleted=include_deleted,
+    )
     stmt = (
         select(User)
         .options(
             selectinload(User.roles),
-            selectinload(User.processes).selectinload(Process.stage),
             selectinload(User.stage),
         )
         .order_by(User.id.asc())
     )
-    if not include_deleted:
-        stmt = stmt.where(User.is_deleted.is_(False))
-    if keyword:
-        like_pattern = f"%{keyword}%"
-        stmt = stmt.where(User.username.ilike(like_pattern))
-    if role_code:
-        stmt = stmt.join(User.roles).where(Role.code == role_code)
-    if stage_id is not None:
-        stmt = stmt.where(User.stage_id == stage_id)
-    if is_online is not None:
-        effective_online_user_ids = online_user_ids or set()
-        if is_online:
-            if not effective_online_user_ids:
-                stmt = stmt.where(User.id == -1)
-            else:
-                stmt = stmt.where(User.id.in_(effective_online_user_ids))
-        elif effective_online_user_ids:
-            stmt = stmt.where(~User.id.in_(effective_online_user_ids))
-    if is_active is not None:
-        stmt = stmt.where(User.is_active.is_(is_active))
+    if requires_role_join:
+        stmt = stmt.join(User.roles)
+    if conditions:
+        stmt = stmt.where(*conditions)
     return stmt
 
 
@@ -193,6 +220,27 @@ def list_users(
     is_active: bool | None = None,
     include_deleted: bool = False,
 ) -> tuple[int, list[User]]:
+    conditions, requires_role_join = _build_user_filter_conditions(
+        keyword=keyword,
+        role_code=role_code,
+        stage_id=stage_id,
+        is_online=is_online,
+        online_user_ids=online_user_ids,
+        is_active=is_active,
+        include_deleted=include_deleted,
+    )
+    count_expr = (
+        func.count(func.distinct(User.id))
+        if requires_role_join
+        else func.count(User.id)
+    )
+    total_stmt = select(count_expr).select_from(User)
+    if requires_role_join:
+        total_stmt = total_stmt.join(User.roles)
+    if conditions:
+        total_stmt = total_stmt.where(*conditions)
+    total = int(db.execute(total_stmt).scalar_one())
+
     base_stmt = query_users(
         keyword=keyword,
         role_code=role_code,
@@ -202,8 +250,6 @@ def list_users(
         is_active=is_active,
         include_deleted=include_deleted,
     )
-    total_stmt = select(func.count()).select_from(base_stmt.subquery())
-    total = int(db.execute(total_stmt).scalar_one())
 
     offset = (page - 1) * page_size
     stmt = base_stmt.offset(offset).limit(page_size)

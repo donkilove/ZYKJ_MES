@@ -147,9 +147,11 @@ class _UserPageState extends State<UserPage> {
     final tabs = <_UserTabItem>[];
     final sortedCodes = _sortedVisibleTabCodes();
     for (final code in sortedCodes) {
+      final currentIndex = tabs.length;
       switch (code) {
         case 'user_management':
           final roleManagementIndex = sortedCodes.indexOf('role_management');
+          final isVisible = _currentTabIndex == currentIndex;
           tabs.add(
             _UserTabItem(
               code: code,
@@ -173,6 +175,7 @@ class _UserPageState extends State<UserPage> {
                           );
                         }
                       : null,
+                  isCurrentTabVisible: isVisible,
                 ),
               ),
             ),
@@ -323,8 +326,9 @@ class _UserPageState extends State<UserPage> {
                 final tabController = DefaultTabController.of(context);
                 _tabController = tabController;
                 tabController.addListener(() {
-                  if (!tabController.indexIsChanging) {
-                    _currentTabIndex = tabController.index;
+                  if (!tabController.indexIsChanging &&
+                      _currentTabIndex != tabController.index) {
+                    setState(() => _currentTabIndex = tabController.index);
                   }
                 });
                 if (_currentTabIndex != tabController.index &&

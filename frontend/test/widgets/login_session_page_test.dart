@@ -270,12 +270,12 @@ void main() {
         _buildSecondPageSessions(),
         _buildSecondPageSessions(),
       ]
-      ..responseTotals = [201, 201, 1];
+      ..responseTotals = [11, 11, 1];
 
     await _pumpSessionPage(tester, userService: userService);
 
     expect(userService.lastListPage, 1);
-    expect(userService.lastListPageSize, 200);
+    expect(userService.lastListPageSize, 10);
     expect(userService.lastStatusFilter, 'active');
 
     await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
@@ -301,7 +301,7 @@ void main() {
         _buildSecondPageSessions(),
         _buildActiveSessions(),
       ]
-      ..responseTotals = [201, 201, 201];
+      ..responseTotals = [11, 11, 11];
 
     await _pumpSessionPage(tester, userService: userService);
 

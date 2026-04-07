@@ -41,6 +41,7 @@ class UserManagementPage extends StatefulWidget {
     this.userService,
     this.craftService,
     this.saveExportFile,
+    this.isCurrentTabVisible = true,
   });
 
   final AppSession session;
@@ -55,6 +56,7 @@ class UserManagementPage extends StatefulWidget {
   final UserService? userService;
   final CraftService? craftService;
   final UserExportFileSaver? saveExportFile;
+  final bool isCurrentTabVisible;
 
   @override
   State<UserManagementPage> createState() => _UserManagementPageState();
@@ -63,26 +65,46 @@ class UserManagementPage extends StatefulWidget {
 class _UserManagementPageState extends State<UserManagementPage> {
   static const String _roleSystemAdmin = 'system_admin';
   static const String _roleOperator = 'operator';
-  static const int _userPageSize = 50;
+  static const int _userPageSize = 10;
+  static const Duration _headerRefreshCooldown = Duration(seconds: 2);
+  static const String _headerRefreshThrottledMessage = '刚刚已刷新，无需重复操作';
 
   late final UserService _userService;
   late final CraftService _craftService;
   final TextEditingController _keywordController = TextEditingController();
   Timer? _onlineStatusTimer;
   static const Duration _onlineRefreshInterval = Duration(seconds: 5);
+  static const Duration _maxOnlineRefreshInterval = Duration(seconds: 60);
+  Duration _currentOnlineRefreshDelay = _onlineRefreshInterval;
   bool _onlineRefreshInFlight = false;
+  bool _onlineRefreshPaused = false;
+  bool _baseDataLoaded = false;
+  List<UserItem> get _pollableUsers =>
+      _users.where((user) => user.isActive && !user.isDeleted).toList(growable: false);
+
+  bool get _hasPollableUsers => _pollableUsers.isNotEmpty;
+
+  bool get _canScheduleOnlineRefresh =>
+      widget.isCurrentTabVisible &&
+      !_loading &&
+      !_onlineRefreshPaused &&
+      !_onlineRefreshInFlight &&
+      _hasPollableUsers;
 
   // 筛选条件
   String? _filterRoleCode;
   bool? _filterIsActive; // null=全部, true=启用, false=停用
 
   bool _loading = false;
+  bool _queryInFlight = false;
   String _message = '';
   List<UserItem> _users = const [];
   List<RoleItem> _roles = const [];
   List<CraftStageItem> _stages = const [];
   int _total = 0;
   int _userPage = 1;
+  DateTime? _lastHeaderRefreshAt;
+  DateTime? _lastHeaderRefreshFeedbackAt;
   String? _myRoleCode;
 
   bool _isCurrentUserSystemAdmin() => _myRoleCode == _roleSystemAdmin;
@@ -94,13 +116,34 @@ class _UserManagementPageState extends State<UserManagementPage> {
     return ((_total - 1) ~/ _userPageSize) + 1;
   }
 
+  bool get _hasSearchCriteria {
+    final keyword = _keywordController.text.trim();
+    return keyword.isNotEmpty ||
+        _filterRoleCode != null ||
+        _filterIsActive != null;
+  }
+
+  String get _emptyListMessage => _hasSearchCriteria
+      ? '当前账号/角色/状态筛选未命中任何用户，请尝试修改关键词或清除筛选。'
+      : '暂无用户';
+
   @override
   void initState() {
     super.initState();
     _userService = widget.userService ?? UserService(widget.session);
     _craftService = widget.craftService ?? CraftService(widget.session);
-    _startOnlineStatusRefresh();
     _loadInitialData();
+  }
+
+  @override
+  void didUpdateWidget(covariant UserManagementPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isCurrentTabVisible && !oldWidget.isCurrentTabVisible) {
+      _currentOnlineRefreshDelay = _onlineRefreshInterval;
+      _scheduleOnlineStatusRefresh();
+    } else if (!widget.isCurrentTabVisible && oldWidget.isCurrentTabVisible) {
+      _stopOnlineStatusRefresh();
+    }
   }
 
   @override
@@ -228,17 +271,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
     return location.path;
   }
 
-  void _startOnlineStatusRefresh() {
-    _onlineStatusTimer?.cancel();
-    _onlineStatusTimer = Timer.periodic(_onlineRefreshInterval, (_) {
-      if (!mounted || _onlineRefreshInFlight) {
-        return;
-      }
-      _onlineRefreshInFlight = true;
-      _loadUsers(silent: true).whenComplete(() {
-        _onlineRefreshInFlight = false;
-      });
-    });
+  void _scheduleOnlineStatusRefresh() {
+    if (!_canScheduleOnlineRefresh) {
+      return;
+    }
+    if (_onlineStatusTimer?.isActive == true) {
+      return;
+    }
+    _onlineStatusTimer = Timer(_currentOnlineRefreshDelay, _executeOnlineStatusRefresh);
   }
 
   void _stopOnlineStatusRefresh() {
@@ -247,51 +287,167 @@ class _UserManagementPageState extends State<UserManagementPage> {
     _onlineRefreshInFlight = false;
   }
 
+  Future<void> _executeOnlineStatusRefresh() async {
+    _onlineStatusTimer = null;
+    if (!_canScheduleOnlineRefresh) {
+      return;
+    }
+    _onlineRefreshInFlight = true;
+    final success = await _refreshVisibleUsersOnlineStatus();
+    _onlineRefreshInFlight = false;
+    if (success) {
+      _currentOnlineRefreshDelay = _onlineRefreshInterval;
+    } else {
+      final nextSeconds = (_currentOnlineRefreshDelay.inSeconds * 2)
+          .clamp(_onlineRefreshInterval.inSeconds, _maxOnlineRefreshInterval.inSeconds);
+      _currentOnlineRefreshDelay = Duration(seconds: nextSeconds);
+    }
+    if (mounted) {
+      _scheduleOnlineStatusRefresh();
+    }
+  }
+
+  Future<T> _runWithOnlineRefreshPaused<T>(Future<T> Function() action) async {
+    final previousPaused = _onlineRefreshPaused;
+    _onlineRefreshPaused = true;
+    _stopOnlineStatusRefresh();
+    try {
+      return await action();
+    } finally {
+      _onlineRefreshPaused = previousPaused;
+      if (!_onlineRefreshPaused) {
+        _scheduleOnlineStatusRefresh();
+      }
+    }
+  }
+
+  // 后端 list/export 接口虽然支持 stage_id/is_online，但页面查询区只开放账号、角色、账号状态筛选，故不传这两个参数。
+  Future<UserListResult> _queryUsersPage(int page) {
+    return _userService.listUsers(
+      page: page,
+      pageSize: _userPageSize,
+      keyword: _keywordController.text.trim(),
+      roleCode: _filterRoleCode,
+      isActive: _filterIsActive,
+    );
+  }
+
+  Future<bool> _refreshVisibleUsersOnlineStatus() async {
+    final userIds = _pollableUsers.map((user) => user.id).toList(growable: false);
+    if (userIds.isEmpty) {
+      return false;
+    }
+    try {
+      final onlineUserIds = await _userService.listOnlineUserIds(
+        userIds: userIds,
+      );
+      if (!mounted) {
+        return false;
+      }
+      setState(() {
+        _users = _users
+            .map(
+              (user) =>
+                  user.copyWith(isOnline: onlineUserIds.contains(user.id)),
+            )
+            .toList(growable: false);
+      });
+      return true;
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+      }
+      return false;
+    }
+  }
+
+  Future<void> _refreshUsersFromHeader() async {
+    final now = DateTime.now();
+    final lastRefreshAt = _lastHeaderRefreshAt;
+    if (lastRefreshAt != null &&
+        now.difference(lastRefreshAt) < _headerRefreshCooldown) {
+      _showHeaderRefreshThrottledMessage(now);
+      return;
+    }
+    _lastHeaderRefreshAt = now;
+    await _loadUsers(page: _userPage);
+  }
+
+  void _showHeaderRefreshThrottledMessage(DateTime now) {
+    if (!mounted) {
+      return;
+    }
+    final lastFeedbackAt = _lastHeaderRefreshFeedbackAt;
+    if (lastFeedbackAt != null &&
+        now.difference(lastFeedbackAt) < _headerRefreshCooldown) {
+      return;
+    }
+    _lastHeaderRefreshFeedbackAt = now;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(milliseconds: 1200),
+        content: Text(_headerRefreshThrottledMessage),
+      ),
+    );
+  }
+
   Future<void> _loadInitialData({int? page}) async {
     final targetPage = page ?? _userPage;
     setState(() {
       _loading = true;
+      _queryInFlight = true;
       _message = '';
     });
 
     try {
-      final result = await Future.wait<dynamic>([
-        _userService.listAllRoles(),
-        _craftService.listStages(pageSize: 500, enabled: true),
-        _userService.listUsers(
-          page: targetPage,
-          pageSize: _userPageSize,
-          keyword: _keywordController.text.trim(),
-          roleCode: _filterRoleCode,
-          isActive: _filterIsActive,
-        ),
-        _userService.getMyProfile(),
-      ]);
-      final roles = result[0] as RoleListResult;
-      final stages = result[1] as CraftStageListResult;
-      final users = result[2] as UserListResult;
-      final myProfile = result[3] as ProfileResult;
+      await _runWithOnlineRefreshPaused(() async {
+        if (!_baseDataLoaded) {
+          final baseData = await Future.wait<dynamic>([
+            _userService.listAllRoles(),
+            _craftService.listStages(pageSize: 500, enabled: true),
+            _userService.getMyProfile(),
+          ]);
+          final roles = baseData[0] as RoleListResult;
+          final stages = baseData[1] as CraftStageListResult;
+          final myProfile = baseData[2] as ProfileResult;
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _roles = roles.items;
+            _stages = stages.items;
+            _myRoleCode = myProfile.roleCode;
+            _baseDataLoaded = true;
+          });
+        }
 
-      if (!mounted) {
-        return;
-      }
-      final resolvedTotalPages = users.total <= 0
-          ? 1
-          : (((users.total - 1) ~/ _userPageSize) + 1);
-      final resolvedPage = targetPage > resolvedTotalPages
-          ? resolvedTotalPages
-          : targetPage;
-      setState(() {
-        _roles = roles.items;
-        _stages = stages.items;
-        _users = users.items;
-        _total = users.total;
-        _userPage = resolvedPage;
-        _myRoleCode = myProfile.roleCode;
+        var users = await _queryUsersPage(targetPage);
+        var resolvedTotalPages = users.total <= 0
+            ? 1
+            : (((users.total - 1) ~/ _userPageSize) + 1);
+        var resolvedPage = targetPage > resolvedTotalPages
+            ? resolvedTotalPages
+            : targetPage;
+        if (resolvedPage != targetPage) {
+          users = await _queryUsersPage(resolvedPage);
+          resolvedTotalPages = users.total <= 0
+              ? 1
+              : (((users.total - 1) ~/ _userPageSize) + 1);
+          if (resolvedPage > resolvedTotalPages) {
+            resolvedPage = resolvedTotalPages;
+          }
+        }
+
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _users = users.items;
+          _total = users.total;
+          _userPage = resolvedPage;
+        });
       });
-      if (resolvedPage != targetPage) {
-        await _loadInitialData(page: resolvedPage);
-      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -309,28 +465,35 @@ class _UserManagementPageState extends State<UserManagementPage> {
       if (mounted) {
         setState(() {
           _loading = false;
+          _queryInFlight = false;
         });
+        _scheduleOnlineStatusRefresh();
       }
     }
   }
 
   Future<void> _loadUsers({bool silent = false, int? page}) async {
+    if (!silent) {
+      await _runWithOnlineRefreshPaused(() async {
+        await _loadUsersCore(silent: false, page: page);
+      });
+      return;
+    }
+    await _loadUsersCore(silent: true, page: page);
+  }
+
+  Future<void> _loadUsersCore({required bool silent, int? page}) async {
     final targetPage = page ?? _userPage;
     if (!silent) {
       setState(() {
         _loading = true;
+        _queryInFlight = true;
         _message = '';
       });
     }
 
     try {
-      final result = await _userService.listUsers(
-        page: targetPage,
-        pageSize: _userPageSize,
-        keyword: _keywordController.text.trim(),
-        roleCode: _filterRoleCode,
-        isActive: _filterIsActive,
-      );
+      final result = await _queryUsersPage(targetPage);
       if (!mounted) {
         return;
       }
@@ -346,7 +509,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
         _userPage = resolvedPage;
       });
       if (resolvedPage != targetPage) {
-        await _loadUsers(silent: silent, page: resolvedPage);
+        await _loadUsersCore(silent: silent, page: resolvedPage);
       }
     } catch (error) {
       if (!mounted) {
@@ -364,10 +527,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
         });
       }
     } finally {
-      if (mounted && !silent) {
-        setState(() {
-          _loading = false;
-        });
+      if (mounted) {
+        if (!silent) {
+          setState(() {
+            _loading = false;
+            _queryInFlight = false;
+          });
+        }
+        _scheduleOnlineStatusRefresh();
       }
     }
   }
@@ -867,11 +1034,17 @@ class _UserManagementPageState extends State<UserManagementPage> {
     try {
       await _userService.deleteUser(userId: user.id);
       if (mounted) {
+        setState(() {
+          _users = _users
+              .where((existing) => existing.id != user.id)
+              .toList(growable: false);
+          _total = (_total > 0) ? _total - 1 : 0;
+        });
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('用户 ${user.username} 已逻辑删除并停用')));
       }
-      await _loadUsers();
+      await _loadUsers(silent: true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -920,11 +1093,23 @@ class _UserManagementPageState extends State<UserManagementPage> {
         await _userService.disableUser(userId: user.id);
       }
       if (mounted) {
+        setState(() {
+          _users = _users
+              .map(
+                (existing) => existing.id == user.id
+                    ? existing.copyWith(
+                        isActive: active,
+                        isOnline: active ? existing.isOnline : false,
+                      )
+                    : existing,
+              )
+              .toList(growable: false);
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('用户 ${user.username} 已$actionLabel')),
         );
       }
-      await _loadUsers();
+      await _loadUsers(silent: true);
     } catch (error) {
       if (!mounted) return;
       if (_isUnauthorized(error)) {
@@ -1010,9 +1195,19 @@ class _UserManagementPageState extends State<UserManagementPage> {
     );
 
     if (confirmed == true && mounted) {
+      setState(() {
+        _users = _users
+            .map(
+              (existing) => existing.id == user.id
+                  ? existing.copyWith(isOnline: false)
+                  : existing,
+            )
+            .toList(growable: false);
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('用户 ${user.username} 密码已重置')));
+      await _loadUsers(silent: true);
     }
   }
 
@@ -1146,11 +1341,32 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   List<Widget> _buildToolbarButtons() {
+    final theme = Theme.of(context);
+    final isQuerying = _queryInFlight;
     final buttons = <Widget>[
       FilledButton.icon(
         onPressed: _loading ? null : () => _loadUsers(page: 1),
-        icon: const Icon(Icons.search),
-        label: const Text('查询用户'),
+        icon: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 150),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: child,
+          ),
+          child: isQuerying
+              ? SizedBox(
+                  key: const ValueKey('queryBusy'),
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      theme.colorScheme.onPrimary,
+                    ),
+                  ),
+                )
+              : const Icon(Icons.search, key: ValueKey('queryIcon')),
+        ),
+        label: Text(isQuerying ? '查询中...' : '查询用户'),
       ),
       FilledButton.icon(
         onPressed: (_loading || !widget.canCreateUser)
@@ -1180,13 +1396,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
             PopupMenuItem(value: 'csv', child: Text('导出 CSV')),
             PopupMenuItem(value: 'excel', child: Text('导出 Excel')),
           ],
-          child: IgnorePointer(
-            child: OutlinedButton.icon(
-              onPressed: _loading ? null : () {},
-              icon: const Icon(Icons.download),
-              label: const Text('导出用户'),
-            ),
+        child: IgnorePointer(
+          child: OutlinedButton.icon(
+            onPressed: _loading ? null : () {},
+            icon: const Icon(Icons.download),
+            label: const Text('导出当前筛选结果'),
           ),
+        ),
         ),
       );
     }
@@ -1260,6 +1476,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final emptyListHint = _emptyListMessage;
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -1268,7 +1485,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
         children: [
           CrudPageHeader(
             title: '用户管理',
-            onRefresh: _loading ? null : _loadInitialData,
+            onRefresh: _loading ? null : _refreshUsersFromHeader,
           ),
           const SizedBox(height: 12),
           _buildToolbar(),
@@ -1289,7 +1506,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
               cardKey: const ValueKey('userListCard'),
               loading: _loading,
               isEmpty: _users.isEmpty,
-              emptyText: '暂无用户',
+              emptyText: emptyListHint,
               enableUnifiedHeaderStyle: true,
               child: DataTable(
                 columnSpacing: 16,

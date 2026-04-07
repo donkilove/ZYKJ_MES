@@ -9,7 +9,15 @@ from app.api.deps import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.user import UserCreate, UserExportResult, UserItem, UserListResult, UserResetPasswordRequest, UserUpdate
+from app.schemas.user import (
+    UserCreate,
+    UserExportResult,
+    UserItem,
+    UserListResult,
+    UserOnlineStatusResult,
+    UserResetPasswordRequest,
+    UserUpdate,
+)
 from app.services.audit_service import write_audit_log
 from app.services.message_service import create_message_for_users
 from app.services.session_service import list_online_user_ids
@@ -25,6 +33,24 @@ from app.services.user_service import (
 
 
 router = APIRouter()
+
+
+def _resolve_online_user_ids_for_users(
+    db: Session,
+    users: list[User],
+    *,
+    preloaded_online_user_ids: set[int] | None = None,
+) -> set[int]:
+    if not users:
+        return set()
+    current_page_user_ids = {user.id for user in users}
+    if preloaded_online_user_ids is not None:
+        return {
+            user_id
+            for user_id in preloaded_online_user_ids
+            if user_id in current_page_user_ids
+        }
+    return list_online_user_ids(db, candidate_user_ids=list(current_page_user_ids))
 
 
 def to_user_item(user: User, *, online_user_ids: set[int] | None = None) -> UserItem:
@@ -127,7 +153,9 @@ def get_users(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("user.users.list")),
 ) -> ApiResponse[UserListResult]:
-    online_user_ids = list_online_user_ids(db)
+    online_user_ids_for_filter = (
+        list_online_user_ids(db) if is_online is not None else None
+    )
     total, users = list_users(
         db,
         page=page,
@@ -136,11 +164,19 @@ def get_users(
         role_code=role_code,
         stage_id=stage_id,
         is_online=is_online,
-        online_user_ids=online_user_ids,
+        online_user_ids=online_user_ids_for_filter,
         is_active=is_active,
         include_deleted=include_deleted,
     )
-    result = UserListResult(total=total, items=[to_user_item(user, online_user_ids=online_user_ids) for user in users])
+    online_user_ids = _resolve_online_user_ids_for_users(
+        db,
+        users,
+        preloaded_online_user_ids=online_user_ids_for_filter,
+    )
+    result = UserListResult(
+        total=total,
+        items=[to_user_item(user, online_user_ids=online_user_ids) for user in users],
+    )
     return success_response(result)
 
 
@@ -156,7 +192,9 @@ def export_users(
     permission_user: User = Depends(require_permission("user.users.export")),
 ) -> ApiResponse[UserExportResult]:
     _ = permission_user
-    online_user_ids = list_online_user_ids(db)
+    online_user_ids_for_filter = (
+        list_online_user_ids(db) if is_online is not None else None
+    )
     total, users = list_users(
         db,
         page=1,
@@ -165,9 +203,14 @@ def export_users(
         role_code=role_code,
         stage_id=stage_id,
         is_online=is_online,
-        online_user_ids=online_user_ids,
+        online_user_ids=online_user_ids_for_filter,
         is_active=is_active,
         include_deleted=False,
+    )
+    online_user_ids = _resolve_online_user_ids_for_users(
+        db,
+        users,
+        preloaded_online_user_ids=online_user_ids_for_filter,
     )
     _ = total
     if format == "excel":
@@ -221,7 +264,31 @@ def create_user_api(
         terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
-    return success_response(to_user_item(user, online_user_ids=list_online_user_ids(db)), message="created")
+    return success_response(
+        to_user_item(
+            user,
+            online_user_ids=list_online_user_ids(
+                db,
+                candidate_user_ids=[user.id],
+            ),
+        ),
+        message="created",
+    )
+
+
+@router.get("/online-status", response_model=ApiResponse[UserOnlineStatusResult])
+def get_users_online_status(
+    user_id: list[int] = Query(default=[]),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("user.users.list")),
+) -> ApiResponse[UserOnlineStatusResult]:
+    requested_user_ids = sorted({value for value in user_id if value > 0})
+    if not requested_user_ids:
+        return success_response(UserOnlineStatusResult(user_ids=[]))
+    online_user_ids = sorted(
+        list_online_user_ids(db, candidate_user_ids=requested_user_ids)
+    )
+    return success_response(UserOnlineStatusResult(user_ids=online_user_ids))
 
 
 @router.get("/{user_id}", response_model=ApiResponse[UserItem])
@@ -233,7 +300,15 @@ def get_user_detail(
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return success_response(to_user_item(user, online_user_ids=list_online_user_ids(db)))
+    return success_response(
+        to_user_item(
+            user,
+            online_user_ids=list_online_user_ids(
+                db,
+                candidate_user_ids=[user.id],
+            ),
+        )
+    )
 
 
 @router.put("/{user_id}", response_model=ApiResponse[UserItem])
@@ -286,7 +361,15 @@ def update_user_api(
         terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
-    return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
+    return success_response(
+        to_user_item(
+            updated,
+            online_user_ids=list_online_user_ids(
+                db,
+                candidate_user_ids=[updated.id],
+            ),
+        )
+    )
 
 
 @router.post("/{user_id}/enable", response_model=ApiResponse[UserItem])
@@ -316,7 +399,15 @@ def enable_user_api(
         terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
-    return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
+    return success_response(
+        to_user_item(
+            updated,
+            online_user_ids=list_online_user_ids(
+                db,
+                candidate_user_ids=[updated.id],
+            ),
+        )
+    )
 
 
 @router.post("/{user_id}/disable", response_model=ApiResponse[UserItem])
@@ -366,7 +457,15 @@ def disable_user_api(
         dedupe_key=f"user_disabled_{updated.id}_{int(updated.updated_at.timestamp()) if updated.updated_at else 'now'}",
         created_by_user_id=current_user.id,
     )
-    return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
+    return success_response(
+        to_user_item(
+            updated,
+            online_user_ids=list_online_user_ids(
+                db,
+                candidate_user_ids=[updated.id],
+            ),
+        )
+    )
 
 
 @router.post("/{user_id}/reset-password", response_model=ApiResponse[UserItem])
@@ -397,7 +496,15 @@ def reset_password_api(
         terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
-    return success_response(to_user_item(updated, online_user_ids=list_online_user_ids(db)))
+    return success_response(
+        to_user_item(
+            updated,
+            online_user_ids=list_online_user_ids(
+                db,
+                candidate_user_ids=[updated.id],
+            ),
+        )
+    )
 
 
 @router.delete("/{user_id}", response_model=ApiResponse[dict[str, bool]])

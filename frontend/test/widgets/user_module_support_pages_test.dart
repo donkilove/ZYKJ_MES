@@ -719,7 +719,7 @@ void main() {
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.text('第 1 / 1 页'), findsOneWidget);
     expect(userService.listAuditLogsCalls, 1);
-    expect(userService.lastAuditLogPageSize, 50);
+    expect(userService.lastAuditLogPageSize, 10);
   });
 
   testWidgets('audit log page supports filter date range and pagination', (
@@ -728,11 +728,11 @@ void main() {
     userService.listAuditLogsCalls = 0;
     userService.auditLogResponses = [
       AuditLogListResult(
-        total: 51,
+        total: 11,
         items: userService.auditLogResponses.first.items,
       ),
       AuditLogListResult(
-        total: 51,
+        total: 11,
         items: [
           AuditLogItem(
             id: 2,
@@ -894,8 +894,8 @@ void main() {
   ) async {
     userService.listRolesCalls = 0;
     userService.roleResponses = [
-      RoleListResult(total: 51, items: [_customRole]),
-      RoleListResult(total: 51, items: [_maintenanceRole]),
+      RoleListResult(total: 11, items: [_customRole]),
+      RoleListResult(total: 11, items: [_maintenanceRole]),
       RoleListResult(total: 1, items: [_customRole]),
       RoleListResult(total: 1, items: [_customRole]),
     ];
@@ -917,7 +917,7 @@ void main() {
 
     expect(find.text('质检复核员'), findsOneWidget);
     expect(userService.lastRolePage, 1);
-    expect(userService.lastRolePageSize, 50);
+    expect(userService.lastRolePageSize, 10);
 
     await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
     await tester.pumpAndSettle();

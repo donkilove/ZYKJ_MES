@@ -801,6 +801,10 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(message.target_page_code, "user")
         self.assertEqual(message.target_tab_code, "account_settings")
         self.assertEqual(
+            message.summary,
+            f"账号 {account} 已创建，请使用初始密码登录；首次登录后系统将要求修改密码。",
+        )
+        self.assertEqual(
             message.target_route_payload_json,
             '{"action": "change_password"}',
         )

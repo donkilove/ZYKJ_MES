@@ -59,7 +59,7 @@ class _FakeApprovalUserService extends UserService {
   @override
   Future<RoleListResult> listRoles({
     int page = 1,
-    int pageSize = 200,
+    int pageSize = 10,
     String? keyword,
   }) async {
     return RoleListResult(
@@ -131,7 +131,7 @@ class _FakeApprovalCraftService extends CraftService {
   @override
   Future<CraftStageListResult> listStages({
     int page = 1,
-    int pageSize = 200,
+    int pageSize = 10,
     String? keyword,
     bool? enabled,
   }) async {

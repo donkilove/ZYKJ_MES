@@ -60,6 +60,36 @@ class UserService {
     return UserListResult(total: (data['total'] as int?) ?? 0, items: items);
   }
 
+  Future<Set<int>> listOnlineUserIds({required List<int> userIds}) async {
+    final normalizedUserIds = userIds.toSet().toList()..sort();
+    if (normalizedUserIds.isEmpty) {
+      return <int>{};
+    }
+    final query = normalizedUserIds
+        .map((userId) => 'user_id=${Uri.encodeQueryComponent('$userId')}')
+        .join('&');
+    final uri = Uri.parse(
+      '${session.baseUrl}/users/online-status',
+    ).replace(query: query);
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    final data = _dataObject(json);
+    final raw = data['user_ids'] as List<dynamic>? ?? const [];
+    final result = <int>{};
+    for (final entry in raw) {
+      if (entry is int) {
+        result.add(entry);
+        continue;
+      }
+      final parsed = int.tryParse('$entry');
+      if (parsed != null) {
+        result.add(parsed);
+      }
+    }
+    return result;
+  }
+
   Future<UserExportResult> exportUsers({
     String? keyword,
     String? roleCode,

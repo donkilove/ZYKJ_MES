@@ -30,7 +30,7 @@ class LoginSessionPage extends StatefulWidget {
 }
 
 class _LoginSessionPageState extends State<LoginSessionPage> {
-  static const int _sessionPageSize = 200;
+  static const int _sessionPageSize = 10;
 
   late final UserService _userService;
 

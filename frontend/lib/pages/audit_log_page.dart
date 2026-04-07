@@ -33,7 +33,7 @@ class AuditLogPage extends StatefulWidget {
 }
 
 class _AuditLogPageState extends State<AuditLogPage> {
-  static const int _pageSize = 50;
+  static const int _pageSize = 10;
 
   late final UserService _userService;
   final TextEditingController _operatorController = TextEditingController();

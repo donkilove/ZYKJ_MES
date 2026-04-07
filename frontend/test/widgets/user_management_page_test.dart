@@ -11,10 +11,11 @@ import 'package:mes_client/widgets/crud_page_header.dart';
 import 'package:mes_client/widgets/crud_list_table_section.dart';
 
 class _FakeUserService extends UserService {
-  _FakeUserService({required this.initialUsers})
-    : super(AppSession(baseUrl: '', accessToken: 'token'));
+  _FakeUserService({required List<UserItem> initialUsers})
+    : _mutableUsers = List<UserItem>.from(initialUsers),
+      super(AppSession(baseUrl: '', accessToken: 'token'));
 
-  final List<UserItem> initialUsers;
+  final List<UserItem> _mutableUsers;
 
   int? lastCreateStageId;
   int? lastUpdateStageId;
@@ -24,26 +25,43 @@ class _FakeUserService extends UserService {
   int disableCalls = 0;
   int resetPasswordCalls = 0;
   int deleteCalls = 0;
+  int listUsersCalls = 0;
+  int listAllRolesCalls = 0;
+  int getMyProfileCalls = 0;
+  int listOnlineUserIdsCalls = 0;
   String? lastCreateRemark;
   String? lastUpdateRemark;
   String? lastListRoleCode;
   int? lastListStageId;
   bool? lastListIsOnline;
   bool? lastListIsActive;
+  List<int> lastOnlineStatusQueryUserIds = const [];
+  Set<int> onlineStatusUserIds = <int>{};
   String? lastExportFormat;
   Object? listUsersError;
   Object? listAllRolesError;
+  Object? listOnlineUserIdsError;
   Object? exportError;
+  Duration listUsersDelay = Duration.zero;
+  Duration listOnlineStatusDelay = Duration.zero;
   UserExportResult exportResult = UserExportResult(
     filename: 'users.csv',
     contentType: 'text/csv',
     contentBase64: 'YQ==',
   );
 
+  void _updateUser(int userId, UserItem Function(UserItem) updater) {
+    final index = _mutableUsers.indexWhere((user) => user.id == userId);
+    if (index < 0) {
+      return;
+    }
+    _mutableUsers[index] = updater(_mutableUsers[index]);
+  }
+
   @override
   Future<RoleListResult> listRoles({
     int page = 1,
-    int pageSize = 200,
+    int pageSize = 10,
     String? keyword,
   }) async {
     final error = listAllRolesError;
@@ -121,24 +139,33 @@ class _FakeUserService extends UserService {
     bool? isActive,
     bool includeDeleted = false,
   }) async {
+    listUsersCalls += 1;
     final error = listUsersError;
     if (error != null) {
       throw error;
+    }
+    if (listUsersDelay > Duration.zero) {
+      await Future<void>.delayed(listUsersDelay);
     }
     lastListRoleCode = roleCode;
     lastListStageId = stageId;
     lastListIsOnline = isOnline;
     lastListIsActive = isActive;
-    return UserListResult(total: initialUsers.length, items: initialUsers);
+    return UserListResult(
+      total: _mutableUsers.length,
+      items: List<UserItem>.unmodifiable(_mutableUsers),
+    );
   }
 
   @override
   Future<RoleListResult> listAllRoles({String? keyword}) {
+    listAllRolesCalls += 1;
     return listRoles(page: 1, pageSize: 200, keyword: keyword);
   }
 
   @override
   Future<ProfileResult> getMyProfile() async {
+    getMyProfileCalls += 1;
     return ProfileResult(
       id: 99,
       username: 'admin',
@@ -153,6 +180,20 @@ class _FakeUserService extends UserService {
       lastLoginIp: null,
       passwordChangedAt: null,
     );
+  }
+
+  @override
+  Future<Set<int>> listOnlineUserIds({required List<int> userIds}) async {
+    listOnlineUserIdsCalls += 1;
+    lastOnlineStatusQueryUserIds = userIds.toList(growable: false);
+    final error = listOnlineUserIdsError;
+    if (error != null) {
+      throw error;
+    }
+    if (listOnlineStatusDelay > Duration.zero) {
+      await Future<void>.delayed(listOnlineStatusDelay);
+    }
+    return Set<int>.from(onlineStatusUserIds);
   }
 
   @override
@@ -186,11 +227,16 @@ class _FakeUserService extends UserService {
   @override
   Future<void> enableUser({required int userId}) async {
     enableCalls += 1;
+    _updateUser(userId, (user) => user.copyWith(isActive: true));
   }
 
   @override
   Future<void> disableUser({required int userId}) async {
     disableCalls += 1;
+    _updateUser(
+      userId,
+      (user) => user.copyWith(isActive: false, isOnline: false),
+    );
   }
 
   @override
@@ -199,11 +245,13 @@ class _FakeUserService extends UserService {
     required String password,
   }) async {
     resetPasswordCalls += 1;
+    _updateUser(userId, (user) => user.copyWith(isOnline: false));
   }
 
   @override
   Future<void> deleteUser({required int userId}) async {
     deleteCalls += 1;
+    _mutableUsers.removeWhere((user) => user.id == userId);
   }
 
   @override
@@ -235,7 +283,7 @@ class _FakeCraftService extends CraftService {
   @override
   Future<CraftStageListResult> listStages({
     int page = 1,
-    int pageSize = 200,
+    int pageSize = 10,
     String? keyword,
     bool? enabled,
   }) async {
@@ -319,6 +367,8 @@ Future<void> _pumpPage(
   saveExportFile,
   VoidCallback? onNavigateToRoleManagement,
   Size surfaceSize = const Size(1920, 1200),
+  bool isCurrentTabVisible = true,
+  bool settle = true,
 }) async {
   tester.view.physicalSize = surfaceSize;
   tester.view.devicePixelRatio = 1.0;
@@ -330,24 +380,29 @@ Future<void> _pumpPage(
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-        body: UserManagementPage(
-          session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
-          onLogout: () {},
-          canCreateUser: canCreateUser,
-          canEditUser: canEditUser,
-          canToggleUser: canToggleUser,
-          canResetPassword: canResetPassword,
-          canDeleteUser: canDeleteUser,
-          canExport: canExport,
-          onNavigateToRoleManagement: onNavigateToRoleManagement,
-          userService: userService,
-          craftService: craftService,
-          saveExportFile: saveExportFile,
-        ),
-      ),
+    body: UserManagementPage(
+      session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
+      onLogout: () {},
+      canCreateUser: canCreateUser,
+      canEditUser: canEditUser,
+      canToggleUser: canToggleUser,
+      canResetPassword: canResetPassword,
+      canDeleteUser: canDeleteUser,
+      canExport: canExport,
+      onNavigateToRoleManagement: onNavigateToRoleManagement,
+      userService: userService,
+      craftService: craftService,
+      saveExportFile: saveExportFile,
+      isCurrentTabVisible: isCurrentTabVisible,
+    ),
+  ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+  }
 }
 
 Rect _toolbarRect(WidgetTester tester, String key) {
@@ -367,7 +422,7 @@ void main() {
     expect(find.text('工段'), findsNothing);
     expect(find.text('在线状态'), findsNothing);
     expect(find.text('查询用户'), findsOneWidget);
-    expect(find.text('导出用户'), findsOneWidget);
+    expect(find.text('导出当前筛选结果'), findsOneWidget);
     expect(find.text('用户角色'), findsOneWidget);
     expect(find.text('账号状态'), findsOneWidget);
     expect(find.text('按账号搜索'), findsOneWidget);
@@ -412,6 +467,223 @@ void main() {
     expect(find.byTooltip('刷新'), findsOneWidget);
   });
 
+  testWidgets('右上角刷新仅刷新用户列表，不重复加载基础缓存', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 1,
+          username: 'refresh_only_users',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(userService.listUsersCalls, 1);
+    expect(userService.listAllRolesCalls, 1);
+    expect(userService.getMyProfileCalls, 1);
+    expect(craftService.listStagesCalls, 1);
+
+    await tester.tap(find.byTooltip('刷新'));
+    await tester.pumpAndSettle();
+
+    expect(userService.listUsersCalls, 2);
+    expect(userService.listAllRolesCalls, 1);
+    expect(userService.getMyProfileCalls, 1);
+    expect(craftService.listStagesCalls, 1);
+  });
+
+  testWidgets('快速连续点击页头刷新保持一次请求并提示', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 7,
+          username: 'header_throttle',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.byTooltip('刷新'));
+    await tester.pumpAndSettle();
+    expect(userService.listUsersCalls, 2);
+
+    await tester.tap(find.byTooltip('刷新'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(userService.listUsersCalls, 2);
+    expect(find.text('刚刚已刷新，无需重复操作'), findsOneWidget);
+
+  });
+
+  testWidgets('初始化完成前不会触发在线状态轮询请求', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 2,
+          username: 'init_waiting',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    )..listUsersDelay = const Duration(seconds: 6);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      settle: false,
+    );
+
+    await tester.pump(const Duration(seconds: 4));
+    expect(userService.listOnlineUserIdsCalls, 0);
+
+    await tester.pump(const Duration(seconds: 3));
+    expect(userService.listOnlineUserIdsCalls, 0);
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(userService.listOnlineUserIdsCalls, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets('轮询走轻量在线状态接口且不重复请求整页用户列表', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 3,
+          username: 'online_poll',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    )..onlineStatusUserIds = {3};
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final listUsersCallsBeforePolling = userService.listUsersCalls;
+    await tester.pump(const Duration(seconds: 6));
+
+    expect(userService.listOnlineUserIdsCalls, greaterThanOrEqualTo(1));
+    expect(userService.lastOnlineStatusQueryUserIds, [3]);
+    expect(userService.listUsersCalls, listUsersCallsBeforePolling);
+  });
+
+  testWidgets('页签不可见会暂停轮询，可见后恢复', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 20,
+          username: 'tab_hidden',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ).copyWith(isOnline: true),
+      ],
+    )..onlineStatusUserIds = {20};
+    final craftService = _FakeCraftService();
+
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      isCurrentTabVisible: false,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 10));
+    expect(userService.listOnlineUserIdsCalls, 0);
+
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 6));
+    expect(userService.listOnlineUserIdsCalls, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets('轮询失败会退避，下次成功后恢复基础间隔', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 30,
+          username: 'poll_backoff',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ).copyWith(isOnline: true),
+      ],
+    )..onlineStatusUserIds = {30}
+     ..listOnlineUserIdsError = ApiException('接口故障', 500);
+    final craftService = _FakeCraftService();
+
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 6));
+    expect(userService.listOnlineUserIdsCalls, 1);
+
+    userService.listOnlineUserIdsError = null;
+    userService.onlineStatusUserIds = {30};
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(userService.listOnlineUserIdsCalls, 1);
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(userService.listOnlineUserIdsCalls, 2);
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(userService.listOnlineUserIdsCalls, 3);
+  });
+
+  testWidgets('手动刷新期间会暂停轮询，避免重叠请求', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 4,
+          username: 'pause_during_refresh',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    )..listUsersDelay = const Duration(seconds: 6);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(find.byTooltip('刷新'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+    expect(userService.listOnlineUserIdsCalls, 0);
+
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+    expect(userService.listOnlineUserIdsCalls, greaterThanOrEqualTo(1));
+  });
+
   testWidgets('角色和账号状态筛选变更后仍自动触发查询', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
@@ -438,7 +710,55 @@ void main() {
     expect(userService.lastListIsOnline, isNull);
   });
 
-  testWidgets('点击导出用户后会弹出导出菜单', (tester) async {
+  testWidgets('有筛选条件时空结果提示更明确', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.text('暂无用户'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('userToolbarStatusFilter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('启用').last);
+    await tester.pumpAndSettle();
+
+    final filteredHint = find.text(
+      '当前账号/角色/状态筛选未命中任何用户，请尝试修改关键词或清除筛选。',
+    );
+    expect(filteredHint, findsOneWidget);
+    expect(find.text('暂无用户'), findsNothing);
+  });
+
+  testWidgets('查询进行中按钮显示忙碌反馈', (tester) async {
+    final userService = _FakeUserService(initialUsers: const []);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    userService.listUsersDelay = const Duration(seconds: 2);
+    await tester.enterText(
+      find.byKey(const ValueKey('userToolbarKeywordField')),
+      'busy',
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '查询用户'));
+    await tester.pump();
+
+    expect(find.text('查询中...'), findsOneWidget);
+    expect(find.byKey(const ValueKey('queryBusy')), findsOneWidget);
+
+    await tester.pumpAndSettle();
+    expect(find.text('查询用户'), findsOneWidget);
+  });
+
+  testWidgets('点击导出当前筛选结果后会弹出导出菜单', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
     await _pumpPage(
@@ -451,7 +771,7 @@ void main() {
     expect(find.text('导出 Excel'), findsNothing);
 
     final exportMenuButton = find.ancestor(
-      of: find.text('导出用户'),
+      of: find.text('导出当前筛选结果'),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
 
@@ -486,7 +806,7 @@ void main() {
       find.widgetWithText(OutlinedButton, '角色管理'),
     );
     final exportButtonRect = tester.getRect(
-      find.widgetWithText(OutlinedButton, '导出用户'),
+      find.widgetWithText(OutlinedButton, '导出当前筛选结果'),
     );
 
     expect(searchRect.width, greaterThan(roleRect.width));
@@ -1047,6 +1367,76 @@ void main() {
     expect(userService.resetPasswordCalls, 0);
   });
 
+  testWidgets('停用后行立即变为停用且在线状态为离线', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 40,
+          username: 'disable_status',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ).copyWith(isOnline: true),
+      ],
+    )..onlineStatusUserIds = {40};
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.text('在线'), findsWidgets);
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('离线'), findsWidgets);
+    expect(find.text('停用'), findsWidgets);
+  });
+
+  testWidgets('重置密码后行在线状态立即变为离线', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 41,
+          username: 'reset_status',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ).copyWith(isOnline: true),
+      ],
+    )..onlineStatusUserIds = {41};
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重置密码'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).first, 'Reset@123');
+    await tester.tap(find.text('确认重置'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('离线'), findsWidgets);
+    expect(find.text('启用'), findsWidgets);
+  });
+
   testWidgets('无导出权限时不显示导出按钮', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
@@ -1057,7 +1447,7 @@ void main() {
       canExport: false,
     );
 
-    expect(find.text('导出用户'), findsNothing);
+    expect(find.text('导出当前筛选结果'), findsNothing);
   });
 
   testWidgets('用户管理页 403 时展示无权限提示', (tester) async {
@@ -1112,7 +1502,7 @@ void main() {
     expect(logoutCalls, 1);
   });
 
-  testWidgets('导出用户成功后提示保存路径', (tester) async {
+  testWidgets('导出当前筛选结果成功后提示保存路径', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
 
@@ -1133,7 +1523,7 @@ void main() {
     );
 
     final exportMenuButton = find.ancestor(
-      of: find.text('导出用户'),
+      of: find.text('导出当前筛选结果'),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(exportMenuButton);
@@ -1145,7 +1535,7 @@ void main() {
     expect(find.text('已导出到 C:/exports/users.csv'), findsOneWidget);
   });
 
-  testWidgets('导出用户取消保存后提示已取消', (tester) async {
+  testWidgets('导出当前筛选结果取消保存后提示已取消', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
 
@@ -1163,7 +1553,7 @@ void main() {
     );
 
     final exportMenuButton = find.ancestor(
-      of: find.text('导出用户'),
+      of: find.text('导出当前筛选结果'),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(exportMenuButton);
@@ -1175,7 +1565,7 @@ void main() {
     expect(find.text('已取消导出保存'), findsOneWidget);
   });
 
-  testWidgets('导出用户失败后提示错误信息', (tester) async {
+  testWidgets('导出当前筛选结果失败后提示错误信息', (tester) async {
     final userService = _FakeUserService(initialUsers: const [])
       ..exportError = ApiException('导出接口异常', 500);
     final craftService = _FakeCraftService();
@@ -1194,7 +1584,7 @@ void main() {
     );
 
     final exportMenuButton = find.ancestor(
-      of: find.text('导出用户'),
+      of: find.text('导出当前筛选结果'),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(exportMenuButton);

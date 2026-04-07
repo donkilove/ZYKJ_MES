@@ -71,6 +71,48 @@ class UserItem {
       updatedAt: _parseDateTimeOrNull(json['updated_at']),
     );
   }
+
+  UserItem copyWith({
+    int? id,
+    String? username,
+    String? fullName,
+    String? remark,
+    bool? isOnline,
+    bool? isActive,
+    bool? isDeleted,
+    bool? mustChangePassword,
+    DateTime? lastSeenAt,
+    int? stageId,
+    String? stageName,
+    String? roleCode,
+    String? roleName,
+    DateTime? lastLoginAt,
+    String? lastLoginIp,
+    DateTime? passwordChangedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return UserItem(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      fullName: fullName ?? this.fullName,
+      remark: remark ?? this.remark,
+      isOnline: isOnline ?? this.isOnline,
+      isActive: isActive ?? this.isActive,
+      isDeleted: isDeleted ?? this.isDeleted,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+      lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+      stageId: stageId ?? this.stageId,
+      stageName: stageName ?? this.stageName,
+      roleCode: roleCode ?? this.roleCode,
+      roleName: roleName ?? this.roleName,
+      lastLoginAt: lastLoginAt ?? this.lastLoginAt,
+      lastLoginIp: lastLoginIp ?? this.lastLoginIp,
+      passwordChangedAt: passwordChangedAt ?? this.passwordChangedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 }
 
 class RoleItem {
@@ -471,8 +513,6 @@ class ForceOfflineResult {
   final int affected;
 
   factory ForceOfflineResult.fromJson(Map<String, dynamic> json) {
-    return ForceOfflineResult(
-      affected: (json['affected'] as int?) ?? 0,
-    );
+    return ForceOfflineResult(affected: (json['affected'] as int?) ?? 0);
   }
 }

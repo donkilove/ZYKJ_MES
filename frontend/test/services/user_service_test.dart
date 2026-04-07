@@ -198,6 +198,41 @@ void main() {
       );
     });
 
+    test(
+      'supports lightweight online status API with repeated user_id query',
+      () async {
+        final server = await TestHttpServer.start({
+          'GET /users/online-status': (request) {
+            final userIds =
+                request.uri.queryParametersAll['user_id'] ?? const [];
+            expect(userIds, ['3', '9', '12']);
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'user_ids': [3, '12'],
+                },
+              },
+            );
+          },
+        });
+        addTearDown(server.close);
+
+        final service = UserService(
+          AppSession(baseUrl: server.baseUrl, accessToken: 'token-user'),
+        );
+
+        final onlineUserIds = await service.listOnlineUserIds(
+          userIds: const [9, 3, 9, 12],
+        );
+        final emptyResult = await service.listOnlineUserIds(userIds: const []);
+
+        expect(onlineUserIds, {3, 12});
+        expect(emptyResult, isEmpty);
+        expect(server.requests.length, 1);
+      },
+    );
+
     test('covers user module audit session profile and export APIs', () async {
       final server = await TestHttpServer.start({
         'GET /users': (request) {

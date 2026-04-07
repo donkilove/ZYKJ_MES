@@ -44,3 +44,19 @@ def get_user_online_snapshot(user_id: int) -> tuple[bool, datetime | None]:
     if last_seen is None:
         return False, None
     return (now - last_seen) <= _online_ttl(), last_seen
+
+
+def list_online_user_ids(candidate_user_ids: list[int] | None = None) -> set[int]:
+    now = _now_utc()
+    with _lock:
+        _prune_expired(now)
+        if candidate_user_ids is None:
+            return {int(user_id) for user_id in _last_seen_by_user_id.keys()}
+        requested_user_ids = {user_id for user_id in candidate_user_ids if user_id > 0}
+        if not requested_user_ids:
+            return set()
+        return {
+            user_id
+            for user_id in requested_user_ids
+            if user_id in _last_seen_by_user_id
+        }

@@ -373,6 +373,12 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     if (profile == null) {
       return const SizedBox.shrink();
     }
+    final roleLabel = profile.roleName?.trim().isNotEmpty == true
+        ? profile.roleName!
+        : '-';
+    final stageLabel = profile.stageName?.trim().isNotEmpty == true
+        ? profile.stageName!
+        : '/';
     return Card(
       elevation: 0,
       clipBehavior: Clip.antiAlias,
@@ -384,48 +390,17 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
             _buildSectionHeader(
               icon: Icons.badge_outlined,
               title: '个人资料',
-              subtitle: '展示当前账号的基础信息、组织归属与最近登录情况。',
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _buildInfoChip(
-                  label: profile.isActive ? '账号启用中' : '账号已停用',
-                  color: profile.isActive ? Colors.green : Colors.red,
-                  icon: profile.isActive
-                      ? Icons.verified_outlined
-                      : Icons.block_outlined,
-                ),
-                _buildInfoChip(
-                  label: profile.roleName?.trim().isNotEmpty == true
-                      ? profile.roleName!
-                      : '未分配角色',
-                  color: Theme.of(context).colorScheme.primary,
-                  icon: Icons.security_outlined,
-                ),
-                _buildInfoChip(
-                  label: profile.stageName?.trim().isNotEmpty == true
-                      ? '工段 ${profile.stageName!}'
-                      : '未绑定工段',
-                  color: Theme.of(context).colorScheme.secondary,
-                  icon: Icons.factory_outlined,
-                ),
-              ],
+              subtitle: '保留账号核心信息，避免与会话信息重复展示。',
             ),
             const SizedBox(height: 16),
             _buildFieldGroup(
               children: [
                 _buildInfoItem('用户名', profile.username),
                 _buildInfoItem('显示名称', profile.fullName ?? '-'),
-                _buildInfoItem(
-                  '角色',
-                  profile.roleName?.trim().isNotEmpty == true
-                      ? profile.roleName!
-                      : '-',
-                ),
-                _buildInfoItem('工段', profile.stageName ?? '/'),
+                _buildInfoItem('账号状态', profile.isActive ? '启用' : '停用'),
+                _buildInfoItem('角色', roleLabel),
+                _buildInfoItem('工段', stageLabel),
+                _buildInfoItem('最近登录 IP', profile.lastLoginIp ?? '-'),
               ],
             ),
             const SizedBox(height: 12),
@@ -433,7 +408,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               children: [
                 _buildInfoItem('创建时间', _formatDateTime(profile.createdAt)),
                 _buildInfoItem('最近登录', _formatDateTime(profile.lastLoginAt)),
-                _buildInfoItem('最近登录 IP', profile.lastLoginIp ?? '-'),
                 _buildInfoItem(
                   '最近改密时间',
                   _formatDateTime(profile.passwordChangedAt),
@@ -463,6 +437,10 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     final theme = Theme.of(context);
     final profile = _profile;
     final currentSession = _session;
+    final accountLabel = profile?.username ?? '-';
+    final roleLabel = profile?.roleName?.trim().isNotEmpty == true
+        ? profile!.roleName!
+        : '未分配角色';
     final statusColor = currentSession == null
         ? theme.colorScheme.outline
         : _sessionStatusColor(currentSession.remainingSeconds);
@@ -494,98 +472,115 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: theme.colorScheme.primary.withValues(
-                    alpha: 0.12,
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(18),
                   ),
+                  alignment: Alignment.center,
                   child: Text(
                     (profile?.fullName?.isNotEmpty == true
                             ? profile!.fullName!
-                            : profile?.username ?? '我')
+                            : accountLabel)
                         .characters
-                        .first,
-                    style: theme.textTheme.titleLarge?.copyWith(
+                        .first
+                        .toUpperCase(),
+                    style: theme.textTheme.headlineSmall?.copyWith(
                       color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 220),
+                const SizedBox(width: 14),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         profile?.fullName?.trim().isNotEmpty == true
                             ? profile!.fullName!
-                            : profile?.username ?? '个人中心',
+                            : accountLabel,
                         style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '账号 ${profile?.username ?? '-'} · ${profile?.roleName?.trim().isNotEmpty == true ? profile!.roleName! : '未分配角色'}',
+                        '账号 $accountLabel · $roleLabel',
                         style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '统一管理个人资料、会话安全与密码设置。',
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
                 ),
-                _buildOverviewBadge(
-                  label: '会话状态',
-                  value: statusLabel,
-                  color: statusColor,
-                  icon:
-                      currentSession != null &&
-                          currentSession.remainingSeconds <= 600
-                      ? Icons.warning_amber_rounded
-                      : Icons.monitor_heart_outlined,
-                ),
               ],
             ),
-            const SizedBox(height: 20),
+            if (widget.canViewSession) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      currentSession != null &&
+                              currentSession.remainingSeconds <= 600
+                          ? Icons.warning_amber_rounded
+                          : Icons.monitor_heart_outlined,
+                      color: statusColor,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '会话状态：$statusLabel',
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
             Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: 10,
+              runSpacing: 10,
               children: [
-                _buildStatCard(
-                  label: '账号状态',
-                  value: profile == null
-                      ? '-'
-                      : (profile.isActive ? '启用' : '停用'),
-                  hint: '个人资料状态',
-                  icon: Icons.verified_user_outlined,
+                _buildPill(
+                  label: profile?.isActive == true ? '账号启用中' : '账号已停用',
+                  color: profile?.isActive == true ? Colors.green : Colors.red,
+                  icon: profile?.isActive == true
+                      ? Icons.verified_outlined
+                      : Icons.block_outlined,
                 ),
-                _buildStatCard(
-                  label: '工段归属',
-                  value: profile?.stageName?.trim().isNotEmpty == true
-                      ? profile!.stageName!
-                      : '未绑定',
-                  hint: '当前组织位置',
-                  icon: Icons.schema_outlined,
-                ),
-                _buildStatCard(
-                  label: '最近登录',
-                  value: _formatDateTime(profile?.lastLoginAt),
-                  hint: '最近访问时间',
-                  icon: Icons.history_toggle_off_outlined,
-                ),
-                _buildStatCard(
-                  label: '剩余时长',
-                  value: currentSession == null
-                      ? (widget.canViewSession ? '未同步' : '不可见')
-                      : _formatDuration(currentSession.remainingSeconds),
-                  hint: widget.canViewSession ? '当前登录会话' : '当前无会话权限',
-                  icon: Icons.timer_outlined,
-                  accent: statusColor,
+                _buildPill(
+                  label: roleLabel,
+                  color: theme.colorScheme.primary,
+                  icon: Icons.security_outlined,
                 ),
               ],
             ),
@@ -611,7 +606,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               title: '当前会话',
               subtitle: '自动刷新当前登录状态，支持直接退出本次登录。',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             if (currentSession == null)
               _buildEmptyStateCard(
                 icon: Icons.portable_wifi_off_outlined,
@@ -645,7 +640,10 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                     '过期时间',
                     _formatDateTime(currentSession.expiresAt),
                   ),
-                  _buildRemainingInfo(currentSession),
+                  _buildInfoItem(
+                    '剩余时间',
+                    _formatDuration(currentSession.remainingSeconds),
+                  ),
                 ],
               ),
             ],
@@ -701,29 +699,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildRemainingInfo(CurrentSessionResult session) {
-    final color = _sessionStatusColor(session.remainingSeconds);
-    final isWarning = session.remainingSeconds <= 600;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '剩余时间',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          _formatDuration(session.remainingSeconds),
-          style: TextStyle(
-            color: color,
-            fontWeight: isWarning ? FontWeight.bold : FontWeight.w600,
-            fontSize: isWarning ? 16 : 14,
-          ),
-        ),
-      ],
     );
   }
 
@@ -920,7 +895,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     );
   }
 
-  Widget _buildInfoChip({
+  Widget _buildPill({
     required String label,
     required Color color,
     required IconData icon,
@@ -941,85 +916,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
             style: TextStyle(color: color, fontWeight: FontWeight.w600),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildOverviewBadge({
-    required String label,
-    required String value,
-    required Color color,
-    required IconData icon,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 12)),
-              Text(
-                value,
-                style: TextStyle(color: color, fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard({
-    required String label,
-    required String value,
-    required String hint,
-    required IconData icon,
-    Color? accent,
-  }) {
-    final theme = Theme.of(context);
-    final highlight = accent ?? theme.colorScheme.primary;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 180, maxWidth: 260),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface.withValues(alpha: 0.78),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: theme.colorScheme.outlineVariant),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: highlight),
-            const SizedBox(height: 12),
-            Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(hint, style: theme.textTheme.bodySmall),
-          ],
-        ),
       ),
     );
   }
@@ -1110,7 +1006,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 1080;
-          final sideSpacing = isWide ? 20.0 : 0.0;
           return Semantics(
             container: true,
             label: '个人中心主区域',
@@ -1144,30 +1039,19 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          flex: 5,
-                          child: Column(
-                            children: [
-                              _buildProfileCard(),
-                              if (widget.canViewSession) ...[
-                                const SizedBox(height: 16),
-                                _buildSessionCard(),
-                              ],
-                            ],
-                          ),
-                        ),
-                        SizedBox(width: sideSpacing),
-                        Expanded(flex: 4, child: _buildPasswordCard()),
+                        Expanded(flex: 5, child: _buildProfileCard()),
+                        const SizedBox(width: 16),
+                        Expanded(flex: 5, child: _buildPasswordCard()),
                       ],
                     )
                   else ...[
                     _buildProfileCard(),
-                    if (widget.canViewSession) ...[
-                      const SizedBox(height: 16),
-                      _buildSessionCard(),
-                    ],
                     const SizedBox(height: 16),
                     _buildPasswordCard(),
+                  ],
+                  if (widget.canViewSession) ...[
+                    const SizedBox(height: 16),
+                    _buildSessionCard(),
                   ],
                 ],
               ),

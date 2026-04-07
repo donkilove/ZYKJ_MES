@@ -53,6 +53,7 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.extra_usernames: list[str] = []
         self.extra_session_ids: list[str] = []
         self.extra_registration_request_ids: list[int] = []
+        self._registration_request_seq = 0
 
     def tearDown(self) -> None:
         db = SessionLocal()
@@ -187,7 +188,8 @@ class UserModuleIntegrationTest(unittest.TestCase):
         status: str = "pending",
         rejected_reason: str | None = None,
     ) -> RegistrationRequest:
-        suffix = str(int(time.time() * 1000) % 100000)
+        self._registration_request_seq += 1
+        suffix = f"{time.time_ns()}_{self._registration_request_seq}"
         request_row = RegistrationRequest(
             account=f"rg{suffix}",
             password_hash="mocked-password-hash",
@@ -1114,10 +1116,14 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(conflict_response.status_code, 400, conflict_response.text)
         self.assertEqual(conflict_response.json()["detail"], "Username already exists")
 
-    def test_auth_login_rejects_missing_pending_disabled_and_deleted_accounts(
+    def test_auth_login_rejects_missing_pending_rejected_disabled_and_deleted_accounts(
         self,
     ) -> None:
         pending_request = self._create_registration_request()
+        rejected_request = self._create_registration_request(
+            status="rejected",
+            rejected_reason="资料不完整",
+        )
 
         missing_response = self.client.post(
             "/api/v1/auth/login",
@@ -1135,6 +1141,15 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(pending_response.status_code, 403, pending_response.text)
         self.assertEqual(
             pending_response.json()["detail"], "Account is pending approval"
+        )
+
+        rejected_response = self.client.post(
+            "/api/v1/auth/login",
+            data={"username": rejected_request.account, "password": "Pwd@123"},
+        )
+        self.assertEqual(rejected_response.status_code, 403, rejected_response.text)
+        self.assertEqual(
+            rejected_response.json()["detail"], "Registration request was rejected"
         )
 
         self._create_role_and_user()
@@ -1215,6 +1230,19 @@ class UserModuleIntegrationTest(unittest.TestCase):
             self.assertIsNotNone(pending_log)
             self.assertFalse(pending_log.success)
             self.assertEqual(pending_log.failure_reason, "Account is pending approval")
+
+            rejected_log = (
+                verify_db.query(LoginLog)
+                .filter(LoginLog.username == rejected_request.account)
+                .order_by(LoginLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(rejected_log)
+            self.assertFalse(rejected_log.success)
+            self.assertEqual(
+                rejected_log.failure_reason,
+                "Registration request was rejected: 资料不完整",
+            )
 
             disabled_log = (
                 verify_db.query(LoginLog)
@@ -2083,6 +2111,73 @@ class UserModuleIntegrationTest(unittest.TestCase):
         ).decode("utf-8-sig")
         self.assertIn(self.username, export_csv)
         self.assertNotIn(extra_username, export_csv)
+
+    def test_users_online_status_endpoint_and_is_online_filter(self) -> None:
+        self._create_role_and_user()
+        assert self.role_code is not None
+        assert self.user_id is not None
+        assert self.username is not None
+
+        offline_username = f"of{int(time.time() * 1000) % 1000000}"
+        self.extra_usernames.append(offline_username)
+        offline_user_response = self.client.post(
+            "/api/v1/users",
+            headers=self._headers(),
+            json={
+                "username": offline_username,
+                "password": "Pwd@123",
+                "role_code": self.role_code,
+                "is_active": True,
+            },
+        )
+        self.assertEqual(
+            offline_user_response.status_code, 201, offline_user_response.text
+        )
+        offline_user_id = int(offline_user_response.json()["data"]["id"])
+
+        online_status_response = self.client.get(
+            (
+                f"/api/v1/users/online-status?user_id={self.user_id}"
+                f"&user_id={offline_user_id}&user_id=999999"
+            ),
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            online_status_response.status_code, 200, online_status_response.text
+        )
+        online_user_ids = set(online_status_response.json()["data"]["user_ids"])
+        self.assertIn(self.user_id, online_user_ids)
+        self.assertNotIn(offline_user_id, online_user_ids)
+
+        online_filtered_response = self.client.get(
+            f"/api/v1/users?keyword={self.username}&is_online=true",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            online_filtered_response.status_code,
+            200,
+            online_filtered_response.text,
+        )
+        online_usernames = {
+            item["username"]
+            for item in online_filtered_response.json()["data"]["items"]
+        }
+        self.assertIn(self.username, online_usernames)
+
+        offline_filtered_response = self.client.get(
+            f"/api/v1/users?keyword={offline_username}&is_online=false",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            offline_filtered_response.status_code,
+            200,
+            offline_filtered_response.text,
+        )
+        offline_usernames = {
+            item["username"]
+            for item in offline_filtered_response.json()["data"]["items"]
+        }
+        self.assertIn(offline_username, offline_usernames)
 
     def test_authz_catalog_matrix_hierarchy_and_legacy_entries(self) -> None:
         self._create_role_and_user()

@@ -34,7 +34,7 @@ class RoleManagementPage extends StatefulWidget {
 }
 
 class _RoleManagementPageState extends State<RoleManagementPage> {
-  static const int _pageSize = 50;
+  static const int _pageSize = 10;
   static const String _roleTypeBuiltin = 'builtin';
   static const String _roleTypeCustom = 'custom';
   static const String _maintenanceRoleCode = 'maintenance_staff';

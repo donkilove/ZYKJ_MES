@@ -10,6 +10,9 @@ from app.core.config import settings
 from app.models.login_log import LoginLog
 from app.models.user import User
 from app.models.user_session import UserSession
+from app.services.online_status_service import (
+    list_online_user_ids as list_online_user_ids_from_memory,
+)
 
 
 def _now_utc() -> datetime:
@@ -229,7 +232,8 @@ def delete_expired_login_logs(db: Session) -> int:
     return len(rows)
 
 
-def list_online_user_ids(db: Session) -> set[int]:
-    cleanup_expired_sessions(db)
-    stmt = select(UserSession.user_id).where(UserSession.status == "active")
-    return {int(user_id) for user_id in db.execute(stmt).scalars().all()}
+def list_online_user_ids(
+    db: Session, *, candidate_user_ids: list[int] | None = None
+) -> set[int]:
+    _ = db
+    return list_online_user_ids_from_memory(candidate_user_ids)

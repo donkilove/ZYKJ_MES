@@ -41,7 +41,7 @@ class RegistrationApprovalPage extends StatefulWidget {
 
 class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   static const String _operatorRoleCode = 'operator';
-  static const int _requestPageSize = 100;
+  static const int _requestPageSize = 10;
   static const int _accountMaxLength = 10;
 
   late final UserService _userService;

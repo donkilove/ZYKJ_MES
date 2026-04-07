@@ -62,3 +62,7 @@ class UserExportResult(BaseModel):
     filename: str
     content_type: str
     content_base64: str
+
+
+class UserOnlineStatusResult(BaseModel):
+    user_ids: list[int]
