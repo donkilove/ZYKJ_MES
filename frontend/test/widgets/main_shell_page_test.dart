@@ -170,7 +170,7 @@ class _TestShellAuthService extends AuthService {
 }
 
 class _CountingShellAuthService extends _TestShellAuthService {
-  _CountingShellAuthService({super.error});
+  _CountingShellAuthService();
 
   int callCount = 0;
 
@@ -214,7 +214,7 @@ class _TestShellPageCatalogService extends PageCatalogService {
 }
 
 class _CountingShellPageCatalogService extends _TestShellPageCatalogService {
-  _CountingShellPageCatalogService({super.error});
+  _CountingShellPageCatalogService();
 
   int callCount = 0;
 

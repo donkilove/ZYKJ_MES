@@ -530,6 +530,7 @@ class _FakeUserService extends UserService {
     int? stageId,
     bool? isOnline,
     bool? isActive,
+    String deletedScope = 'active',
     bool includeDeleted = false,
   }) async {
     final start = (page - 1) * pageSize;
