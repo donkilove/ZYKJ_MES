@@ -87,6 +87,9 @@ class _UserPageState extends State<UserPage> {
   bool get _canDeleteUser =>
       _hasPermission(UserFeaturePermissionCodes.userManagementDelete);
 
+  bool get _canRestoreUser =>
+      _hasPermission(UserFeaturePermissionCodes.userManagementRestore);
+
   bool get _canExportUsers =>
       _hasPermission(UserFeaturePermissionCodes.userManagementExport);
 
@@ -166,6 +169,7 @@ class _UserPageState extends State<UserPage> {
                   canToggleUser: _canToggleUser,
                   canResetPassword: _canResetUserPassword,
                   canDeleteUser: _canDeleteUser,
+                  canRestoreUser: _canRestoreUser,
                   canExport: _canExportUsers,
                   onNavigateToRoleManagement: roleManagementIndex >= 0
                       ? () {

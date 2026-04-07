@@ -1207,6 +1207,8 @@ class UserFeaturePermissionCodes {
       'feature.user.user_management.password_reset';
   static const String userManagementDelete =
       'feature.user.user_management.delete';
+  static const String userManagementRestore =
+      'feature.user.user_management.restore';
   static const String userManagementExport =
       'feature.user.user_management.export';
   static const String registrationApprovalView =

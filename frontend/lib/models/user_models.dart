@@ -266,6 +266,81 @@ class UserExportResult {
   }
 }
 
+class UserLifecycleResult {
+  UserLifecycleResult({
+    required this.user,
+    required this.forcedOfflineSessionCount,
+    required this.clearedOnlineStatus,
+  });
+
+  final UserItem user;
+  final int forcedOfflineSessionCount;
+  final bool clearedOnlineStatus;
+
+  factory UserLifecycleResult.fromJson(Map<String, dynamic> json) {
+    return UserLifecycleResult(
+      user: UserItem.fromJson(
+        (json['user'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+      ),
+      forcedOfflineSessionCount:
+          (json['forced_offline_session_count'] as int?) ?? 0,
+      clearedOnlineStatus: (json['cleared_online_status'] as bool?) ?? false,
+    );
+  }
+}
+
+class UserDeleteResult {
+  UserDeleteResult({
+    required this.user,
+    required this.forcedOfflineSessionCount,
+    required this.clearedOnlineStatus,
+    required this.deleted,
+  });
+
+  final UserItem user;
+  final int forcedOfflineSessionCount;
+  final bool clearedOnlineStatus;
+  final bool deleted;
+
+  factory UserDeleteResult.fromJson(Map<String, dynamic> json) {
+    return UserDeleteResult(
+      user: UserItem.fromJson(
+        (json['user'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+      ),
+      forcedOfflineSessionCount:
+          (json['forced_offline_session_count'] as int?) ?? 0,
+      clearedOnlineStatus: (json['cleared_online_status'] as bool?) ?? false,
+      deleted: (json['deleted'] as bool?) ?? false,
+    );
+  }
+}
+
+class UserPasswordResetResult {
+  UserPasswordResetResult({
+    required this.user,
+    required this.forcedOfflineSessionCount,
+    required this.mustChangePassword,
+    required this.clearedOnlineStatus,
+  });
+
+  final UserItem user;
+  final int forcedOfflineSessionCount;
+  final bool mustChangePassword;
+  final bool clearedOnlineStatus;
+
+  factory UserPasswordResetResult.fromJson(Map<String, dynamic> json) {
+    return UserPasswordResetResult(
+      user: UserItem.fromJson(
+        (json['user'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+      ),
+      forcedOfflineSessionCount:
+          (json['forced_offline_session_count'] as int?) ?? 0,
+      mustChangePassword: (json['must_change_password'] as bool?) ?? true,
+      clearedOnlineStatus: (json['cleared_online_status'] as bool?) ?? false,
+    );
+  }
+}
+
 class AuditLogItem {
   AuditLogItem({
     required this.id,

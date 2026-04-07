@@ -17,6 +17,7 @@ void main() {
             expect(request.uri.queryParameters['page'], '2');
             expect(request.uri.queryParameters['page_size'], '20');
             expect(request.uri.queryParameters['keyword'], 'tester');
+            expect(request.uri.queryParameters['deleted_scope'], 'active');
             return TestResponse.json(
               200,
               body: {
@@ -125,9 +126,83 @@ void main() {
               isFalse,
             );
             expect(body['password'], 'reset-pass-2');
-            return TestResponse.json(200, body: {'data': {}});
+            expect(body['remark'], '交接重置');
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'user': {
+                    'id': 9,
+                    'username': 'updated_user',
+                    'full_name': 'updated_user',
+                    'role_code': 'system_admin',
+                    'role_name': 'System admin',
+                    'stage_id': 2,
+                    'stage_name': '装配二段',
+                    'is_online': false,
+                    'is_active': true,
+                    'must_change_password': true,
+                  },
+                  'forced_offline_session_count': 2,
+                  'must_change_password': true,
+                  'cleared_online_status': true,
+                },
+              },
+            );
           },
-          'DELETE /users/9': (_) => TestResponse.json(200, body: {'data': {}}),
+          'DELETE /users/9': (request) {
+            final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+            expect(body['remark'], '逻辑删除');
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'user': {
+                    'id': 9,
+                    'username': 'updated_user',
+                    'full_name': 'updated_user',
+                    'role_code': 'system_admin',
+                    'role_name': 'System admin',
+                    'stage_id': 2,
+                    'stage_name': '装配二段',
+                    'is_online': false,
+                    'is_active': false,
+                    'is_deleted': true,
+                    'must_change_password': true,
+                  },
+                  'forced_offline_session_count': 1,
+                  'cleared_online_status': true,
+                  'deleted': true,
+                },
+              },
+            );
+          },
+          'POST /users/9/restore': (request) {
+            final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+            expect(body['remark'], '恢复测试');
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'user': {
+                    'id': 9,
+                    'username': 'updated_user',
+                    'full_name': 'updated_user',
+                    'role_code': 'system_admin',
+                    'role_name': 'System admin',
+                    'stage_id': 2,
+                    'stage_name': '装配二段',
+                    'is_online': false,
+                    'is_active': false,
+                    'is_deleted': false,
+                    'must_change_password': true,
+                  },
+                  'forced_offline_session_count': 0,
+                  'cleared_online_status': false,
+                },
+              },
+            );
+          },
         });
         addTearDown(server.close);
 
@@ -165,15 +240,31 @@ void main() {
           roleCode: 'system_admin',
           stageId: 2,
         );
-        await service.resetUserPassword(userId: 9, password: 'reset-pass-2');
-        await service.deleteUser(userId: 9);
+        final resetResult = await service.resetUserPassword(
+          userId: 9,
+          password: 'reset-pass-2',
+          remark: ' 交接重置 ',
+        );
+        final deleteResult = await service.deleteUser(
+          userId: 9,
+          remark: '逻辑删除',
+        );
+        final restoreResult = await service.restoreUser(
+          userId: 9,
+          remark: '恢复测试',
+        );
 
         expect(users.total, 1);
         expect(users.items.single.username, 'tester');
         expect(roles.items.single.code, 'system_admin');
         expect(processes.items.single.code, '01-01');
         expect(requests.items.single.account, 'new_user');
-        expect(server.requests.length, 10);
+        expect(resetResult.forcedOfflineSessionCount, 2);
+        expect(resetResult.mustChangePassword, isTrue);
+        expect(deleteResult.deleted, isTrue);
+        expect(deleteResult.forcedOfflineSessionCount, 1);
+        expect(restoreResult.user.isDeleted, isFalse);
+        expect(server.requests.length, 11);
       },
     );
 
@@ -242,7 +333,8 @@ void main() {
           expect(request.uri.queryParameters['stage_id'], '9');
           expect(request.uri.queryParameters['is_online'], 'true');
           expect(request.uri.queryParameters['is_active'], 'false');
-          expect(request.uri.queryParameters['include_deleted'], 'true');
+          expect(request.uri.queryParameters['deleted_scope'], 'all');
+          expect(request.uri.queryParameters['include_deleted'], 'false');
           return TestResponse.json(
             200,
             body: {
@@ -269,6 +361,7 @@ void main() {
           expect(request.uri.queryParameters['format'], 'xlsx');
           expect(request.uri.queryParameters['keyword'], 'quality');
           expect(request.uri.queryParameters['role_code'], 'quality_admin');
+          expect(request.uri.queryParameters['deleted_scope'], 'deleted');
           return TestResponse.json(
             200,
             body: {
@@ -355,6 +448,54 @@ void main() {
           expect(body['confirm_password'], 'NewPass456');
           return TestResponse.json(200, body: {'data': {}});
         },
+        'POST /users/21/enable': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['remark'], '恢复排班');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'user': {
+                  'id': 21,
+                  'username': 'quality_user',
+                  'full_name': 'Quality User',
+                  'role_code': 'quality_admin',
+                  'role_name': '品质管理员',
+                  'stage_id': 9,
+                  'stage_name': '检验',
+                  'is_online': false,
+                  'is_active': true,
+                },
+                'forced_offline_session_count': 0,
+                'cleared_online_status': false,
+              },
+            },
+          );
+        },
+        'POST /users/21/disable': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['remark'], '夜班收口');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'user': {
+                  'id': 21,
+                  'username': 'quality_user',
+                  'full_name': 'Quality User',
+                  'role_code': 'quality_admin',
+                  'role_name': '品质管理员',
+                  'stage_id': 9,
+                  'stage_name': '检验',
+                  'is_online': false,
+                  'is_active': false,
+                },
+                'forced_offline_session_count': 2,
+                'cleared_online_status': true,
+              },
+            },
+          );
+        },
         'GET /sessions/online': (request) {
           expect(request.uri.queryParameters['page'], '1');
           expect(request.uri.queryParameters['page_size'], '20');
@@ -417,11 +558,12 @@ void main() {
         stageId: 9,
         isOnline: true,
         isActive: false,
-        includeDeleted: true,
+        deletedScope: 'all',
       );
       final exported = await service.exportUsers(
         keyword: ' quality ',
         roleCode: 'quality_admin',
+        deletedScope: 'deleted',
         format: 'xlsx',
       );
       final audits = await service.listAuditLogs(
@@ -439,6 +581,14 @@ void main() {
         oldPassword: 'OldPass123',
         newPassword: 'NewPass456',
         confirmPassword: 'NewPass456',
+      );
+      final enabledUser = await service.enableUser(
+        userId: 21,
+        remark: ' 恢复排班 ',
+      );
+      final disabledUser = await service.disableUser(
+        userId: 21,
+        remark: ' 夜班收口 ',
       );
       final onlineSessions = await service.listOnlineSessions(
         page: 1,
@@ -459,10 +609,13 @@ void main() {
       expect(audits.items.single.actionName, '停用用户');
       expect(profile.username, 'tester');
       expect(session.sessionTokenId, 'session-1');
+      expect(enabledUser.user.isActive, isTrue);
+      expect(disabledUser.forcedOfflineSessionCount, 2);
+      expect(disabledUser.clearedOnlineStatus, isTrue);
       expect(onlineSessions.items.single.username, 'tester');
       expect(singleOffline.affected, 1);
       expect(batchOffline.affected, 2);
-      expect(server.requests.length, 9);
+      expect(server.requests.length, 11);
     });
   });
 }

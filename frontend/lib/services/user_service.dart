@@ -26,6 +26,7 @@ class UserService {
     int? stageId,
     bool? isOnline,
     bool? isActive,
+    String deletedScope = 'active',
     bool includeDeleted = false,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
@@ -44,6 +45,7 @@ class UserService {
     if (isActive != null) {
       query['is_active'] = '$isActive';
     }
+    query['deleted_scope'] = deletedScope;
     query['include_deleted'] = '$includeDeleted';
 
     final uri = Uri.parse(
@@ -90,12 +92,22 @@ class UserService {
     return result;
   }
 
+  Future<UserItem> getUserDetail({required int userId}) async {
+    final uri = Uri.parse('${session.baseUrl}/users/$userId');
+    final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return UserItem.fromJson(_dataObject(json));
+  }
+
   Future<UserExportResult> exportUsers({
     String? keyword,
     String? roleCode,
     int? stageId,
     bool? isOnline,
     bool? isActive,
+    String deletedScope = 'active',
+    bool includeDeleted = false,
     String format = 'csv',
   }) async {
     final query = <String, String>{'format': format};
@@ -114,6 +126,8 @@ class UserService {
     if (isActive != null) {
       query['is_active'] = '$isActive';
     }
+    query['deleted_scope'] = deletedScope;
+    query['include_deleted'] = '$includeDeleted';
 
     final uri = Uri.parse(
       '${session.baseUrl}/users/export',
@@ -399,6 +413,7 @@ class UserService {
     String? remark,
     int? stageId,
     bool? isActive,
+    bool? mustChangePassword,
   }) async {
     final uri = Uri.parse('${session.baseUrl}/users/$userId');
     final payload = <String, dynamic>{};
@@ -418,6 +433,9 @@ class UserService {
     if (isActive != null) {
       payload['is_active'] = isActive;
     }
+    if (mustChangePassword != null) {
+      payload['must_change_password'] = mustChangePassword;
+    }
 
     final response = await http.put(
       uri,
@@ -428,39 +446,80 @@ class UserService {
     _throwIfNotSuccess(response, json, expectedCode: 200);
   }
 
-  Future<void> enableUser({required int userId}) async {
+  Future<UserLifecycleResult> enableUser({
+    required int userId,
+    String? remark,
+  }) async {
     final uri = Uri.parse('${session.baseUrl}/users/$userId/enable');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'remark': remark?.trim()}),
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
+    return UserLifecycleResult.fromJson(_dataObject(json));
   }
 
-  Future<void> disableUser({required int userId}) async {
+  Future<UserLifecycleResult> disableUser({
+    required int userId,
+    required String remark,
+  }) async {
     final uri = Uri.parse('${session.baseUrl}/users/$userId/disable');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'remark': remark.trim()}),
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
+    return UserLifecycleResult.fromJson(_dataObject(json));
   }
 
-  Future<void> resetUserPassword({
+  Future<UserPasswordResetResult> resetUserPassword({
     required int userId,
     required String password,
+    required String remark,
   }) async {
     final uri = Uri.parse('${session.baseUrl}/users/$userId/reset-password');
     final response = await http.post(
       uri,
       headers: _authHeaders,
-      body: jsonEncode({'password': password}),
+      body: jsonEncode({'password': password, 'remark': remark.trim()}),
     );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
+    return UserPasswordResetResult.fromJson(_dataObject(json));
   }
 
-  Future<void> deleteUser({required int userId}) async {
+  Future<UserDeleteResult> deleteUser({
+    required int userId,
+    required String remark,
+  }) async {
     final uri = Uri.parse('${session.baseUrl}/users/$userId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'remark': remark.trim()}),
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
+    return UserDeleteResult.fromJson(_dataObject(json));
+  }
+
+  Future<UserLifecycleResult> restoreUser({
+    required int userId,
+    required String remark,
+  }) async {
+    final uri = Uri.parse('${session.baseUrl}/users/$userId/restore');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'remark': remark.trim()}),
+    );
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return UserLifecycleResult.fromJson(_dataObject(json));
   }
 
   Future<AuditLogListResult> listAuditLogs({

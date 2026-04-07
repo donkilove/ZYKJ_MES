@@ -31,6 +31,7 @@ import 'package:mes_client/pages/quality_page.dart';
 import 'package:mes_client/pages/product_parameter_query_page.dart';
 import 'package:mes_client/pages/product_page.dart';
 import 'package:mes_client/pages/role_management_page.dart';
+import 'package:mes_client/pages/user_management_page.dart';
 import 'package:mes_client/pages/user_page.dart';
 import 'package:mes_client/services/api_exception.dart';
 import 'package:mes_client/services/auth_service.dart';
@@ -70,6 +71,179 @@ void main() {
     expect(find.text('已进入首页'), findsOneWidget);
     expect(authService.lastUsername, 'tester');
     expect(authService.lastPassword, 'Pass123');
+  });
+
+  testWidgets('登录后进入用户管理并通过启停弹窗停用在线用户', (tester) async {
+    final authService = _FakeAuthService();
+    final userService = _FakeUserService()
+      ..users = [
+        UserItem(
+          id: 21,
+          username: 'quality_editor',
+          fullName: 'quality_editor',
+          remark: null,
+          isOnline: true,
+          isActive: true,
+          isDeleted: false,
+          mustChangePassword: false,
+          lastSeenAt: null,
+          stageId: null,
+          stageName: null,
+          roleCode: 'quality_admin',
+          roleName: '品质管理员',
+          lastLoginAt: DateTime.parse('2026-03-20T08:00:00Z'),
+          lastLoginIp: '127.0.0.8',
+          passwordChangedAt: DateTime.parse('2026-03-15T08:00:00Z'),
+          createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+          updatedAt: DateTime.parse('2026-03-20T08:00:00Z'),
+        ),
+      ];
+    final craftService = _FakeIntegrationCraftService();
+
+    await _pumpTestApp(
+      tester,
+      authService: authService,
+      userService: userService,
+      homeBuilder: (session) {
+        return Scaffold(
+          body: UserManagementPage(
+            session: session,
+            onLogout: () {},
+            canCreateUser: true,
+            canEditUser: true,
+            canToggleUser: true,
+            canResetPassword: true,
+            canDeleteUser: true,
+            canExport: true,
+            userService: userService,
+            craftService: craftService,
+          ),
+        );
+      },
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('login-account-field')),
+      'tester',
+    );
+    await tester.enterText(
+      find.byKey(const Key('login-password-field')),
+      'Pass123',
+    );
+    await tester.tap(find.byKey(const Key('login-submit-button')));
+    await tester.pumpAndSettle();
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '停用原因'),
+      '夜班收口',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.disableUserCalls, 1);
+    expect(userService.lastDisableRemark, '夜班收口');
+    expect(find.textContaining('强制下线 1 个会话'), findsOneWidget);
+    expect(find.text('停用'), findsWidgets);
+    expect(find.text('离线'), findsWidgets);
+  });
+
+  testWidgets('登录后停用当前登录用户会立即切回登出态', (tester) async {
+    final authService = _FakeAuthService();
+    final userService = _FakeUserService()
+      ..users = [
+        UserItem(
+          id: 1,
+          username: 'tester',
+          fullName: '集成测试用户',
+          remark: null,
+          isOnline: true,
+          isActive: true,
+          isDeleted: false,
+          mustChangePassword: false,
+          lastSeenAt: null,
+          stageId: null,
+          stageName: null,
+          roleCode: 'quality_admin',
+          roleName: '品质管理员',
+          lastLoginAt: DateTime.parse('2026-03-20T08:00:00Z'),
+          lastLoginIp: '127.0.0.1',
+          passwordChangedAt: DateTime.parse('2026-03-10T08:00:00Z'),
+          createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+          updatedAt: DateTime.parse('2026-03-20T08:00:00Z'),
+        ),
+      ];
+    final craftService = _FakeIntegrationCraftService();
+    var loggedOut = false;
+
+    await _pumpTestApp(
+      tester,
+      authService: authService,
+      userService: userService,
+      homeBuilder: (session) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            if (loggedOut) {
+              return const Scaffold(body: Center(child: Text('已退出登录态')));
+            }
+            return Scaffold(
+              body: UserManagementPage(
+                session: session,
+                onLogout: () {
+                  setState(() {
+                    loggedOut = true;
+                  });
+                },
+                canCreateUser: true,
+                canEditUser: true,
+                canToggleUser: true,
+                canResetPassword: true,
+                canDeleteUser: true,
+                canExport: true,
+                userService: userService,
+                craftService: craftService,
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('login-account-field')),
+      'tester',
+    );
+    await tester.enterText(
+      find.byKey(const Key('login-password-field')),
+      'Pass123',
+    );
+    await tester.tap(find.byKey(const Key('login-submit-button')));
+    await tester.pumpAndSettle();
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '停用原因'),
+      '账号收口',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.disableUserCalls, 1);
+    expect(find.text('已退出登录态'), findsOneWidget);
   });
 
   testWidgets('登录后进入消息中心并完成详情查看、单条已读与跳转到账户设置', (tester) async {
@@ -304,11 +478,9 @@ void main() {
 
     await tester.tap(find.text('登录会话'));
     await tester.pumpAndSettle();
-    expect(find.text('tester'), findsOneWidget);
 
     await tester.tap(find.text('审计日志'));
     await tester.pumpAndSettle();
-    expect(find.text('停用用户'), findsOneWidget);
 
     await tester.tap(find.text('功能权限配置'));
     await tester.pumpAndSettle();
@@ -701,7 +873,88 @@ void main() {
     await tester.tap(find.byKey(const Key('login-submit-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('登录失败：账号或密码错误'), findsOneWidget);
+    expect(find.text('账号或密码错误，请重新输入。'), findsOneWidget);
+  });
+
+  testWidgets('登录后在用户管理页重置密码会显示会话影响提示', (tester) async {
+    final authService = _FakeAuthService();
+    final userService = _FakeUserService()
+      ..users = [
+        UserItem(
+          id: 22,
+          username: 'reset_user',
+          fullName: 'reset_user',
+          remark: null,
+          isOnline: true,
+          isActive: true,
+          isDeleted: false,
+          mustChangePassword: false,
+          lastSeenAt: null,
+          stageId: null,
+          stageName: null,
+          roleCode: 'quality_admin',
+          roleName: '品质管理员',
+          lastLoginAt: DateTime.parse('2026-03-20T08:00:00Z'),
+          lastLoginIp: '127.0.0.5',
+          passwordChangedAt: DateTime.parse('2026-03-10T08:00:00Z'),
+          createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+          updatedAt: DateTime.parse('2026-03-20T08:00:00Z'),
+        ),
+      ];
+    final craftService = _FakeIntegrationCraftService();
+
+    await _pumpTestApp(
+      tester,
+      authService: authService,
+      userService: userService,
+      homeBuilder: (session) {
+        return Scaffold(
+          body: UserManagementPage(
+            session: session,
+            onLogout: () {},
+            canCreateUser: true,
+            canEditUser: true,
+            canToggleUser: true,
+            canResetPassword: true,
+            canDeleteUser: true,
+            canExport: true,
+            userService: userService,
+            craftService: craftService,
+          ),
+        );
+      },
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('login-account-field')),
+      'tester',
+    );
+    await tester.enterText(
+      find.byKey(const Key('login-password-field')),
+      'Pass123',
+    );
+    await tester.tap(find.byKey(const Key('login-submit-button')));
+    await tester.pumpAndSettle();
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重置密码'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, 'Reset@123');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '重置原因'),
+      '账号交接',
+    );
+    await tester.tap(find.text('确认重置'));
+    await tester.pumpAndSettle();
+
+    expect(userService.resetPasswordCalls, 1);
+    expect(userService.lastResetRemark, '账号交接');
+    expect(find.textContaining('强制下线 1 个会话'), findsOneWidget);
   });
 
   testWidgets('mustChangePassword 分流后可回到登录页', (tester) async {
@@ -1712,6 +1965,177 @@ class _FakeUserService extends UserService {
       );
 
   int changePasswordCalls = 0;
+  int updateUserCalls = 0;
+  int enableUserCalls = 0;
+  int disableUserCalls = 0;
+  int resetPasswordCalls = 0;
+  bool? lastUpdateIsActive;
+  bool? lastUpdateMustChangePassword;
+  String? lastEnableRemark;
+  String? lastDisableRemark;
+  String? lastResetRemark;
+  List<UserItem> users = [
+    UserItem(
+      id: 1,
+      username: 'tester',
+      fullName: '集成测试用户',
+      remark: null,
+      isOnline: true,
+      isActive: true,
+      isDeleted: false,
+      mustChangePassword: false,
+      lastSeenAt: null,
+      stageId: null,
+      stageName: null,
+      roleCode: 'quality_admin',
+      roleName: '品质管理员',
+      lastLoginAt: DateTime.parse('2026-03-20T08:00:00Z'),
+      lastLoginIp: '127.0.0.1',
+      passwordChangedAt: DateTime.parse('2026-03-10T08:00:00Z'),
+      createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+      updatedAt: DateTime.parse('2026-03-20T08:00:00Z'),
+    ),
+  ];
+
+  @override
+  Future<UserListResult> listUsers({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? roleCode,
+    int? stageId,
+    bool? isOnline,
+    bool? isActive,
+    String deletedScope = 'active',
+    bool includeDeleted = false,
+  }) async {
+    var filtered = List<UserItem>.from(users);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      filtered = filtered
+          .where((item) => item.username.contains(keyword.trim()))
+          .toList();
+    }
+    if (roleCode != null && roleCode.trim().isNotEmpty) {
+      filtered = filtered.where((item) => item.roleCode == roleCode).toList();
+    }
+    if (isActive != null) {
+      filtered = filtered.where((item) => item.isActive == isActive).toList();
+    }
+    if (isOnline != null) {
+      filtered = filtered.where((item) => item.isOnline == isOnline).toList();
+    }
+    return UserListResult(total: filtered.length, items: filtered);
+  }
+
+  @override
+  Future<Set<int>> listOnlineUserIds({required List<int> userIds}) async {
+    return users
+        .where((item) => item.isOnline && userIds.contains(item.id))
+        .map((item) => item.id)
+        .toSet();
+  }
+
+  @override
+  Future<UserItem> getUserDetail({required int userId}) async {
+    return users.firstWhere((item) => item.id == userId);
+  }
+
+  @override
+  Future<void> updateUser({
+    required int userId,
+    String? account,
+    String? roleCode,
+    String? remark,
+    int? stageId,
+    bool? isActive,
+    bool? mustChangePassword,
+  }) async {
+    updateUserCalls += 1;
+    lastUpdateIsActive = isActive;
+    lastUpdateMustChangePassword = mustChangePassword;
+    final index = users.indexWhere((item) => item.id == userId);
+    if (index < 0) {
+      return;
+    }
+    final original = users[index];
+    users[index] = original.copyWith(
+      username: account ?? original.username,
+      fullName: account ?? original.fullName,
+      roleCode: roleCode ?? original.roleCode,
+      roleName: roleCode == null
+          ? original.roleName
+          : roleCode == 'maintenance_staff'
+          ? '维修员'
+          : roleCode == 'quality_admin'
+          ? '品质管理员'
+          : original.roleName,
+      stageId: stageId ?? original.stageId,
+      stageName: stageId == null ? original.stageName : '装配一段',
+      isActive: isActive ?? original.isActive,
+      mustChangePassword: mustChangePassword ?? original.mustChangePassword,
+      isOnline: (isActive ?? original.isActive) ? original.isOnline : false,
+    );
+  }
+
+  @override
+  Future<UserLifecycleResult> enableUser({
+    required int userId,
+    String? remark,
+  }) async {
+    enableUserCalls += 1;
+    lastEnableRemark = remark;
+    final index = users.indexWhere((item) => item.id == userId);
+    if (index >= 0) {
+      users[index] = users[index].copyWith(isActive: true, isOnline: false);
+    }
+    return UserLifecycleResult(
+      user: users.firstWhere((item) => item.id == userId),
+      forcedOfflineSessionCount: 0,
+      clearedOnlineStatus: false,
+    );
+  }
+
+  @override
+  Future<UserLifecycleResult> disableUser({
+    required int userId,
+    required String remark,
+  }) async {
+    disableUserCalls += 1;
+    lastDisableRemark = remark;
+    final index = users.indexWhere((item) => item.id == userId);
+    if (index >= 0) {
+      users[index] = users[index].copyWith(isActive: false, isOnline: false);
+    }
+    return UserLifecycleResult(
+      user: users.firstWhere((item) => item.id == userId),
+      forcedOfflineSessionCount: 1,
+      clearedOnlineStatus: true,
+    );
+  }
+
+  @override
+  Future<UserPasswordResetResult> resetUserPassword({
+    required int userId,
+    required String password,
+    required String remark,
+  }) async {
+    resetPasswordCalls += 1;
+    lastResetRemark = remark;
+    final index = users.indexWhere((item) => item.id == userId);
+    if (index >= 0) {
+      users[index] = users[index].copyWith(
+        isOnline: false,
+        mustChangePassword: true,
+        passwordChangedAt: DateTime.parse('2026-03-21T08:00:00Z'),
+      );
+    }
+    return UserPasswordResetResult(
+      user: users.firstWhere((item) => item.id == userId),
+      forcedOfflineSessionCount: 1,
+      mustChangePassword: true,
+      clearedOnlineStatus: true,
+    );
+  }
 
   @override
   Future<ProfileResult> getMyProfile() async {

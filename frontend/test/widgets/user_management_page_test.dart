@@ -28,22 +28,36 @@ class _FakeUserService extends UserService {
   int listUsersCalls = 0;
   int listAllRolesCalls = 0;
   int getMyProfileCalls = 0;
+  int getUserDetailCalls = 0;
   int listOnlineUserIdsCalls = 0;
   String? lastCreateRemark;
+  String? lastEnableRemark;
+  String? lastDisableRemark;
+  String? lastResetRemark;
   String? lastUpdateRemark;
+  bool? lastUpdateIsActive;
+  bool? lastUpdateMustChangePassword;
   String? lastListRoleCode;
   int? lastListStageId;
   bool? lastListIsOnline;
   bool? lastListIsActive;
+  String lastListDeletedScope = 'active';
+  String? lastDeleteRemark;
+  String? lastRestoreRemark;
+  int restoreCalls = 0;
   List<int> lastOnlineStatusQueryUserIds = const [];
   Set<int> onlineStatusUserIds = <int>{};
   String? lastExportFormat;
   Object? listUsersError;
   Object? listAllRolesError;
   Object? listOnlineUserIdsError;
+  Object? getUserDetailError;
+  Object? updateUserError;
   Object? exportError;
   Duration listUsersDelay = Duration.zero;
   Duration listOnlineStatusDelay = Duration.zero;
+  String profileRoleCode = 'system_admin';
+  String profileRoleName = '系统管理员';
   UserExportResult exportResult = UserExportResult(
     filename: 'users.csv',
     contentType: 'text/csv',
@@ -137,6 +151,7 @@ class _FakeUserService extends UserService {
     int? stageId,
     bool? isOnline,
     bool? isActive,
+    String deletedScope = 'active',
     bool includeDeleted = false,
   }) async {
     listUsersCalls += 1;
@@ -151,9 +166,33 @@ class _FakeUserService extends UserService {
     lastListStageId = stageId;
     lastListIsOnline = isOnline;
     lastListIsActive = isActive;
+    lastListDeletedScope = deletedScope;
+    var items = List<UserItem>.from(_mutableUsers);
+    if (deletedScope == 'active') {
+      items = items.where((user) => !user.isDeleted).toList();
+    } else if (deletedScope == 'deleted') {
+      items = items.where((user) => user.isDeleted).toList();
+    }
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      items = items
+          .where((user) => user.username.contains(keyword.trim()))
+          .toList();
+    }
+    if (roleCode != null && roleCode.trim().isNotEmpty) {
+      items = items.where((user) => user.roleCode == roleCode).toList();
+    }
+    if (stageId != null) {
+      items = items.where((user) => user.stageId == stageId).toList();
+    }
+    if (isOnline != null) {
+      items = items.where((user) => user.isOnline == isOnline).toList();
+    }
+    if (isActive != null) {
+      items = items.where((user) => user.isActive == isActive).toList();
+    }
     return UserListResult(
-      total: _mutableUsers.length,
-      items: List<UserItem>.unmodifiable(_mutableUsers),
+      total: items.length,
+      items: List<UserItem>.unmodifiable(items),
     );
   }
 
@@ -170,8 +209,8 @@ class _FakeUserService extends UserService {
       id: 99,
       username: 'admin',
       fullName: '管理员',
-      roleCode: 'system_admin',
-      roleName: '系统管理员',
+      roleCode: profileRoleCode,
+      roleName: profileRoleName,
       stageId: null,
       stageName: null,
       isActive: true,
@@ -197,6 +236,26 @@ class _FakeUserService extends UserService {
   }
 
   @override
+  Future<UserItem> getUserDetail({required int userId}) async {
+    getUserDetailCalls += 1;
+    final error = getUserDetailError;
+    if (error != null) {
+      throw error;
+    }
+    UserItem? matchedUser;
+    for (final user in _mutableUsers) {
+      if (user.id == userId) {
+        matchedUser = user;
+        break;
+      }
+    }
+    if (matchedUser == null) {
+      throw ApiException('User not found', 404);
+    }
+    return matchedUser;
+  }
+
+  @override
   Future<void> createUser({
     required String account,
     required String password,
@@ -218,40 +277,134 @@ class _FakeUserService extends UserService {
     String? remark,
     int? stageId,
     bool? isActive,
+    bool? mustChangePassword,
   }) async {
+    final error = updateUserError;
+    if (error != null) {
+      throw error;
+    }
     updateCalls += 1;
     lastUpdateStageId = stageId;
     lastUpdateRemark = remark;
-  }
-
-  @override
-  Future<void> enableUser({required int userId}) async {
-    enableCalls += 1;
-    _updateUser(userId, (user) => user.copyWith(isActive: true));
-  }
-
-  @override
-  Future<void> disableUser({required int userId}) async {
-    disableCalls += 1;
+    lastUpdateIsActive = isActive;
+    lastUpdateMustChangePassword = mustChangePassword;
     _updateUser(
       userId,
-      (user) => user.copyWith(isActive: false, isOnline: false),
+      (user) => user.copyWith(
+        username: account ?? user.username,
+        fullName: account ?? user.fullName,
+        roleCode: roleCode ?? user.roleCode,
+        roleName: roleCode == null
+            ? user.roleName
+            : ({
+                    'operator': '操作员',
+                    'production_admin': '生产管理员',
+                    'custom_dispatcher': '自定义调度员',
+                  })[roleCode] ??
+                  user.roleName,
+        stageId: stageId ?? user.stageId,
+        stageName: stageId == null
+            ? null
+            : stageId == 10
+            ? '装配一段'
+            : stageId == 11
+            ? '装配二段'
+            : user.stageName,
+        isActive: isActive ?? user.isActive,
+        mustChangePassword: mustChangePassword ?? user.mustChangePassword,
+        isOnline: (isActive ?? user.isActive) ? user.isOnline : false,
+      ),
     );
   }
 
   @override
-  Future<void> resetUserPassword({
+  Future<UserLifecycleResult> enableUser({
     required int userId,
-    required String password,
+    String? remark,
   }) async {
-    resetPasswordCalls += 1;
-    _updateUser(userId, (user) => user.copyWith(isOnline: false));
+    enableCalls += 1;
+    lastEnableRemark = remark;
+    _updateUser(userId, (user) => user.copyWith(isActive: true));
+    return UserLifecycleResult(
+      user: _mutableUsers.firstWhere((user) => user.id == userId),
+      forcedOfflineSessionCount: 0,
+      clearedOnlineStatus: false,
+    );
   }
 
   @override
-  Future<void> deleteUser({required int userId}) async {
+  Future<UserLifecycleResult> disableUser({
+    required int userId,
+    required String remark,
+  }) async {
+    disableCalls += 1;
+    lastDisableRemark = remark;
+    _updateUser(
+      userId,
+      (user) => user.copyWith(isActive: false, isOnline: false),
+    );
+    return UserLifecycleResult(
+      user: _mutableUsers.firstWhere((user) => user.id == userId),
+      forcedOfflineSessionCount: 1,
+      clearedOnlineStatus: true,
+    );
+  }
+
+  @override
+  Future<UserPasswordResetResult> resetUserPassword({
+    required int userId,
+    required String password,
+    required String remark,
+  }) async {
+    resetPasswordCalls += 1;
+    lastResetRemark = remark;
+    _updateUser(userId, (user) => user.copyWith(isOnline: false));
+    return UserPasswordResetResult(
+      user: _mutableUsers.firstWhere((user) => user.id == userId),
+      forcedOfflineSessionCount: 1,
+      mustChangePassword: true,
+      clearedOnlineStatus: true,
+    );
+  }
+
+  @override
+  Future<UserDeleteResult> deleteUser({
+    required int userId,
+    required String remark,
+  }) async {
     deleteCalls += 1;
-    _mutableUsers.removeWhere((user) => user.id == userId);
+    lastDeleteRemark = remark;
+    _updateUser(
+      userId,
+      (user) =>
+          user.copyWith(isDeleted: true, isActive: false, isOnline: false),
+    );
+    final deletedUser = _mutableUsers.firstWhere((user) => user.id == userId);
+    return UserDeleteResult(
+      user: deletedUser,
+      forcedOfflineSessionCount: 1,
+      clearedOnlineStatus: true,
+      deleted: true,
+    );
+  }
+
+  @override
+  Future<UserLifecycleResult> restoreUser({
+    required int userId,
+    required String remark,
+  }) async {
+    restoreCalls += 1;
+    lastRestoreRemark = remark;
+    _updateUser(
+      userId,
+      (user) =>
+          user.copyWith(isDeleted: false, isActive: false, isOnline: false),
+    );
+    return UserLifecycleResult(
+      user: _mutableUsers.firstWhere((user) => user.id == userId),
+      forcedOfflineSessionCount: 0,
+      clearedOnlineStatus: false,
+    );
   }
 
   @override
@@ -261,6 +414,8 @@ class _FakeUserService extends UserService {
     int? stageId,
     bool? isOnline,
     bool? isActive,
+    String deletedScope = 'active',
+    bool includeDeleted = false,
     String format = 'csv',
   }) async {
     lastExportFormat = format;
@@ -325,24 +480,35 @@ UserItem _buildUser({
   required String roleCode,
   required String roleName,
   int? stageId,
+  bool isActive = true,
+  bool isDeleted = false,
+  bool mustChangePassword = false,
+  bool isOnline = false,
+  DateTime? lastLoginAt,
+  String? lastLoginIp,
+  DateTime? passwordChangedAt,
 }) {
   return UserItem(
     id: id,
     username: username,
     fullName: username,
     remark: null,
-    isOnline: false,
-    isActive: true,
-    isDeleted: false,
-    mustChangePassword: false,
+    isOnline: isOnline,
+    isActive: isActive,
+    isDeleted: isDeleted,
+    mustChangePassword: mustChangePassword,
     lastSeenAt: null,
     stageId: stageId,
-    stageName: stageId == null ? null : '装配一段',
+    stageName: stageId == null
+        ? null
+        : stageId == 11
+        ? '装配二段'
+        : '装配一段',
     roleCode: roleCode,
     roleName: roleName,
-    lastLoginAt: null,
-    lastLoginIp: null,
-    passwordChangedAt: null,
+    lastLoginAt: lastLoginAt,
+    lastLoginIp: lastLoginIp,
+    passwordChangedAt: passwordChangedAt,
     createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
     updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
   );
@@ -357,6 +523,7 @@ Future<void> _pumpPage(
   bool canToggleUser = true,
   bool canResetPassword = true,
   bool canDeleteUser = true,
+  bool canRestoreUser = true,
   bool canExport = true,
   Future<String?> Function({
     required String filename,
@@ -366,6 +533,7 @@ Future<void> _pumpPage(
   })?
   saveExportFile,
   VoidCallback? onNavigateToRoleManagement,
+  VoidCallback? onLogout,
   Size surfaceSize = const Size(1920, 1200),
   bool isCurrentTabVisible = true,
   bool settle = true,
@@ -380,22 +548,23 @@ Future<void> _pumpPage(
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-    body: UserManagementPage(
-      session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
-      onLogout: () {},
-      canCreateUser: canCreateUser,
-      canEditUser: canEditUser,
-      canToggleUser: canToggleUser,
-      canResetPassword: canResetPassword,
-      canDeleteUser: canDeleteUser,
-      canExport: canExport,
-      onNavigateToRoleManagement: onNavigateToRoleManagement,
-      userService: userService,
-      craftService: craftService,
-      saveExportFile: saveExportFile,
-      isCurrentTabVisible: isCurrentTabVisible,
-    ),
-  ),
+        body: UserManagementPage(
+          session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
+          onLogout: onLogout ?? () {},
+          canCreateUser: canCreateUser,
+          canEditUser: canEditUser,
+          canToggleUser: canToggleUser,
+          canResetPassword: canResetPassword,
+          canDeleteUser: canDeleteUser,
+          canRestoreUser: canRestoreUser,
+          canExport: canExport,
+          onNavigateToRoleManagement: onNavigateToRoleManagement,
+          userService: userService,
+          craftService: craftService,
+          saveExportFile: saveExportFile,
+          isCurrentTabVisible: isCurrentTabVisible,
+        ),
+      ),
     ),
   );
   if (settle) {
@@ -410,7 +579,7 @@ Rect _toolbarRect(WidgetTester tester, String key) {
 }
 
 void main() {
-  testWidgets('用户管理工具栏仅保留搜索与角色状态筛选', (tester) async {
+  testWidgets('用户管理工具栏仅保留搜索与角色状态范围筛选', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
     await _pumpPage(
@@ -425,6 +594,7 @@ void main() {
     expect(find.text('导出当前筛选结果'), findsOneWidget);
     expect(find.text('用户角色'), findsOneWidget);
     expect(find.text('账号状态'), findsOneWidget);
+    expect(find.text('数据范围'), findsOneWidget);
     expect(find.text('按账号搜索'), findsOneWidget);
 
     expect(userService.lastListStageId, isNull);
@@ -526,7 +696,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(userService.listUsersCalls, 2);
     expect(find.text('刚刚已刷新，无需重复操作'), findsOneWidget);
-
   });
 
   testWidgets('初始化完成前不会触发在线状态轮询请求', (tester) async {
@@ -620,17 +789,19 @@ void main() {
   });
 
   testWidgets('轮询失败会退避，下次成功后恢复基础间隔', (tester) async {
-    final userService = _FakeUserService(
-      initialUsers: [
-        _buildUser(
-          id: 30,
-          username: 'poll_backoff',
-          roleCode: 'production_admin',
-          roleName: '生产管理员',
-        ).copyWith(isOnline: true),
-      ],
-    )..onlineStatusUserIds = {30}
-     ..listOnlineUserIdsError = ApiException('接口故障', 500);
+    final userService =
+        _FakeUserService(
+            initialUsers: [
+              _buildUser(
+                id: 30,
+                username: 'poll_backoff',
+                roleCode: 'production_admin',
+                roleName: '生产管理员',
+              ).copyWith(isOnline: true),
+            ],
+          )
+          ..onlineStatusUserIds = {30}
+          ..listOnlineUserIdsError = ApiException('接口故障', 500);
     final craftService = _FakeCraftService();
 
     await _pumpPage(
@@ -684,7 +855,7 @@ void main() {
     expect(userService.listOnlineUserIdsCalls, greaterThanOrEqualTo(1));
   });
 
-  testWidgets('角色和账号状态筛选变更后仍自动触发查询', (tester) async {
+  testWidgets('角色账号状态和数据范围筛选变更后仍自动触发查询', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
     await _pumpPage(
@@ -708,6 +879,15 @@ void main() {
     expect(userService.lastListIsActive, isFalse);
     expect(userService.lastListStageId, isNull);
     expect(userService.lastListIsOnline, isNull);
+
+    await tester.tap(
+      find.byKey(const ValueKey('userToolbarDeletedScopeFilter')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('仅已删除').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.lastListDeletedScope, 'deleted');
   });
 
   testWidgets('有筛选条件时空结果提示更明确', (tester) async {
@@ -726,9 +906,7 @@ void main() {
     await tester.tap(find.text('启用').last);
     await tester.pumpAndSettle();
 
-    final filteredHint = find.text(
-      '当前账号/角色/状态筛选未命中任何用户，请尝试修改关键词或清除筛选。',
-    );
+    final filteredHint = find.text('当前常规用户筛选未命中任何用户，请尝试修改关键词或清除筛选。');
     expect(filteredHint, findsOneWidget);
     expect(find.text('暂无用户'), findsNothing);
   });
@@ -839,7 +1017,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('窄宽度工具栏仍按搜索账号状态角色顺序排列', (tester) async {
+  testWidgets('窄宽度工具栏仍按搜索账号状态角色范围顺序排列', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
     await _pumpPage(
@@ -852,11 +1030,16 @@ void main() {
     final searchRect = _toolbarRect(tester, 'userToolbarKeywordField');
     final statusRect = _toolbarRect(tester, 'userToolbarStatusFilter');
     final roleRect = _toolbarRect(tester, 'userToolbarRoleFilter');
+    final deletedScopeRect = _toolbarRect(
+      tester,
+      'userToolbarDeletedScopeFilter',
+    );
 
     expect((searchRect.center.dy - statusRect.center.dy).abs(), lessThan(1));
     expect((statusRect.center.dy - roleRect.center.dy).abs(), lessThan(1));
     expect(searchRect.left, lessThan(statusRect.left));
     expect(statusRect.left, lessThan(roleRect.left));
+    expect(deletedScopeRect.top, greaterThanOrEqualTo(roleRect.top));
   });
 
   testWidgets('新建用户弹窗打开时会刷新工段列表', (tester) async {
@@ -1105,6 +1288,8 @@ void main() {
     expect(find.text('重置密码：reset_target'), findsOneWidget);
     expect(find.textContaining('不能与系统中已有用户密码相同'), findsNothing);
     expect(find.text('密码规则：至少6位；不能包含连续4位相同字符。'), findsOneWidget);
+    expect(find.textContaining('旧密码会立即失效'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, '重置原因'), findsOneWidget);
 
     await tester.enterText(find.byType(TextFormField).first, '12345');
     await tester.tap(find.text('确认重置'));
@@ -1115,18 +1300,24 @@ void main() {
     await tester.tap(find.text('确认重置'));
     await tester.pump();
     expect(find.text('新密码不能包含连续4位相同字符'), findsOneWidget);
+    expect(find.text('请输入重置原因'), findsOneWidget);
     expect(userService.resetPasswordCalls, 0);
   });
 
-  testWidgets('编辑操作员时会携带 stageId 提交', (tester) async {
+  testWidgets('编辑用户弹窗展示详情上下文与新增状态控件', (tester) async {
     final userService = _FakeUserService(
       initialUsers: [
         _buildUser(
           id: 1,
-          username: 'op_edit',
-          roleCode: 'operator',
-          roleName: '操作员',
+          username: 'detail_user',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
           stageId: 10,
+          isActive: false,
+          mustChangePassword: true,
+          lastLoginAt: DateTime.parse('2026-03-20T08:00:00Z'),
+          lastLoginIp: '10.0.0.8',
+          passwordChangedAt: DateTime.parse('2026-03-19T08:00:00Z'),
         ),
       ],
     );
@@ -1147,20 +1338,30 @@ void main() {
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
-
-    expect(userService.updateCalls, 1);
-    expect(userService.lastUpdateStageId, 10);
-    expect(userService.lastUpdateRemark, isNull);
+    expect(userService.getUserDetailCalls, 1);
+    expect(find.text('当前信息'), findsOneWidget);
+    expect(find.text('当前账号状态'), findsOneWidget);
+    expect(find.text('停用'), findsWidgets);
+    expect(find.text('首次登录需改密'), findsOneWidget);
+    expect(find.text('最近登录 IP'), findsOneWidget);
+    expect(find.text('10.0.0.8'), findsOneWidget);
+    expect(find.byKey(const ValueKey('userEditStatusEnabled')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('userEditStatusDisabled')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('userEditMustChangePassword')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('编辑自定义角色用户时也可以携带 stageId 提交', (tester) async {
+  testWidgets('编辑用户无变更保存时直接关闭且不发更新请求', (tester) async {
     final userService = _FakeUserService(
       initialUsers: [
         _buildUser(
           id: 8,
-          username: 'custedit',
+          username: 'no_change_user',
           roleCode: 'custom_dispatcher',
           roleName: '自定义调度员',
           stageId: 10,
@@ -1186,8 +1387,142 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
+    expect(userService.updateCalls, 0);
+  });
+
+  testWidgets('编辑操作员变更工段后先确认再提交 stageId', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 9,
+          username: 'op_edit',
+          roleCode: 'operator',
+          roleName: '操作员',
+          stageId: 10,
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('装配二段').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('确认保存用户变更'), findsOneWidget);
+    expect(find.text('工段：装配一段 -> 装配二段'), findsOneWidget);
+
+    await tester.tap(find.text('确认保存'));
+    await tester.pumpAndSettle();
+
     expect(userService.updateCalls, 1);
-    expect(userService.lastUpdateStageId, 10);
+    expect(userService.lastUpdateStageId, 11);
+  });
+
+  testWidgets('编辑用户修改状态后弹出确认并展示停用风险', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 10,
+          username: 'disable_me',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+          isActive: true,
+          isOnline: true,
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('userEditStatusDisabled')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('账号状态：启用 -> 停用'), findsOneWidget);
+    expect(find.text('用户将无法继续登录，在线状态会被置为离线，并收到停用通知'), findsOneWidget);
+
+    await tester.tap(find.text('确认保存'));
+    await tester.pumpAndSettle();
+
+    expect(userService.updateCalls, 1);
+    expect(userService.lastUpdateIsActive, isFalse);
+  });
+
+  testWidgets('编辑用户开启强制改密时弹出确认并展示提示', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 11,
+          username: 'force_pwd',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+          mustChangePassword: false,
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('userEditMustChangePassword')),
+        matching: find.byType(Switch),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('下次登录强制改密：关闭 -> 开启'), findsOneWidget);
+    expect(find.text('用户下次登录后必须修改密码'), findsOneWidget);
+
+    await tester.tap(find.text('确认保存'));
+    await tester.pumpAndSettle();
+
+    expect(userService.updateCalls, 1);
+    expect(userService.lastUpdateMustChangePassword, isTrue);
   });
 
   testWidgets('新建与编辑弹窗不再显示账号提示文本和备注字段', (tester) async {
@@ -1288,11 +1623,24 @@ void main() {
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
 
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('userEditMustChangePassword')),
+        matching: find.byType(Switch),
+      ),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认保存'));
     await tester.pumpAndSettle();
 
     expect(userService.updateCalls, 1);
-    expect(userService.lastUpdateStageId, 11);
+    expect(userService.lastUpdateStageId, isNull);
+    expect(
+      userService.getUserDetail(userId: 6).then((value) => value.stageId),
+      completion(11),
+    );
   });
 
   testWidgets('编辑用户弹窗打开时会刷新工段列表', (tester) async {
@@ -1390,6 +1738,365 @@ void main() {
     expect(find.text('新密码（留空不修改）'), findsNothing);
   });
 
+  testWidgets('编辑用户详情加载失败时显示回退提示', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 12,
+          username: 'detail_fallback',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    )..getUserDetailError = ApiException('详情读取失败', 500);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('userEditDetailWarning')), findsOneWidget);
+    expect(find.textContaining('部分详情刷新失败'), findsOneWidget);
+  });
+
+  testWidgets('非系统管理员编辑用户时账号字段保持只读', (tester) async {
+    final userService =
+        _FakeUserService(
+            initialUsers: [
+              _buildUser(
+                id: 13,
+                username: 'readonly_account',
+                roleCode: 'production_admin',
+                roleName: '生产管理员',
+              ),
+            ],
+          )
+          ..profileRoleCode = 'production_admin'
+          ..profileRoleName = '生产管理员';
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+
+    final editableField = tester.widget<EditableText>(
+      find.descendant(
+        of: find.widgetWithText(TextFormField, '账号'),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect(editableField.readOnly, isTrue);
+    expect(find.text('仅系统管理员可修改账号'), findsOneWidget);
+  });
+
+  testWidgets('编辑用户更新返回 400 时维持错误提示', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 14,
+          username: 'edit_400',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    )..updateUserError = ApiException('必须至少保留一个系统管理员', 400);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('userEditStatusDisabled')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('更新用户失败：必须至少保留一个系统管理员'), findsOneWidget);
+  });
+
+  testWidgets('编辑用户更新返回 401 时触发登出回调', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 15,
+          username: 'edit_401',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    )..updateUserError = ApiException('登录失效', 401);
+    final craftService = _FakeCraftService();
+    var logoutCalls = 0;
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      onLogout: () {
+        logoutCalls += 1;
+      },
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('userEditStatusDisabled')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认保存'));
+    await tester.pumpAndSettle();
+
+    expect(logoutCalls, 1);
+  });
+
+  testWidgets('编辑用户更新返回 403 时维持错误提示', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 16,
+          username: 'edit_403',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+        ),
+      ],
+    )..updateUserError = ApiException('禁止访问', 403);
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('userEditStatusDisabled')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('更新用户失败：禁止访问'), findsOneWidget);
+  });
+
+  testWidgets('逻辑删除弹窗展示影响摘要且删除原因必填', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 18,
+          username: 'delete_target',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+          stageId: 10,
+          isOnline: true,
+        ),
+      ],
+    )..onlineStatusUserIds = {18};
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('逻辑删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('逻辑删除用户'), findsOneWidget);
+    expect(find.text('影响摘要'), findsOneWidget);
+    expect(find.textContaining('提交后将强制下线当前会话'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, '删除原因'), findsOneWidget);
+
+    await tester.tap(find.text('确认删除'));
+    await tester.pump();
+    expect(find.text('请输入删除原因'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextFormField, '删除原因'), '离职归档');
+    await tester.tap(find.text('确认删除'));
+    await tester.pumpAndSettle();
+
+    expect(userService.deleteCalls, 1);
+    expect(userService.lastDeleteRemark, '离职归档');
+    expect(find.textContaining('已移入已删除视图'), findsOneWidget);
+    expect(find.text('delete_target'), findsNothing);
+  });
+
+  testWidgets('切换到仅已删除后可看到已删除用户并执行恢复', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 19,
+          username: 'archived_user',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+          isActive: false,
+          isDeleted: true,
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.text('archived_user'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey('userToolbarDeletedScopeFilter')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('仅已删除').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('archived_user'), findsOneWidget);
+    expect(find.text('已删除'), findsWidgets);
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('恢复用户'), findsOneWidget);
+    expect(find.text('编辑'), findsNothing);
+    expect(find.text('停用'), findsNothing);
+    expect(find.text('重置密码'), findsNothing);
+
+    await tester.tap(find.text('恢复用户'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, '恢复原因'), '误删恢复');
+    await tester.tap(find.text('确认恢复'));
+    await tester.pumpAndSettle();
+
+    expect(userService.restoreCalls, 1);
+    expect(userService.lastRestoreRemark, '误删恢复');
+    expect(find.text('archived_user'), findsNothing);
+    expect(find.textContaining('当前保持停用状态'), findsOneWidget);
+  });
+
+  testWidgets('当前登录用户不显示逻辑删除入口', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 99,
+          username: 'admin',
+          roleCode: 'system_admin',
+          roleName: '系统管理员',
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('逻辑删除'), findsNothing);
+  });
+
+  testWidgets('全部用户视图下恢复后行保留但状态改为停用', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 20,
+          username: 'recover_all_scope',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+          isActive: false,
+          isDeleted: true,
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('userToolbarDeletedScopeFilter')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('全部用户').last);
+    await tester.pumpAndSettle();
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('恢复用户'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, '恢复原因'), '归档回滚');
+    await tester.tap(find.text('确认恢复'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('recover_all_scope'), findsOneWidget);
+    expect(find.text('已删除'), findsNothing);
+    expect(find.text('停用'), findsWidgets);
+  });
+
   testWidgets('用户操作菜单按细粒度权限展示并允许独立启停', (tester) async {
     final userService = _FakeUserService(
       initialUsers: [
@@ -1427,14 +2134,17 @@ void main() {
     expect(find.text('停用'), findsOneWidget);
     expect(find.text('编辑'), findsNothing);
     expect(find.text('重置密码'), findsNothing);
-    expect(find.text('删除'), findsNothing);
+    expect(find.text('逻辑删除'), findsNothing);
 
     await tester.tap(find.text('停用'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('停用').last);
+    expect(find.widgetWithText(TextFormField, '停用原因'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextFormField, '停用原因'), '排班冻结');
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
     await tester.pumpAndSettle();
 
     expect(userService.disableCalls, 1);
+    expect(userService.lastDisableRemark, '排班冻结');
     expect(userService.resetPasswordCalls, 0);
   });
 
@@ -1466,11 +2176,87 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('停用'));
     await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, '停用原因'), '夜班切换');
     await tester.tap(find.widgetWithText(FilledButton, '停用').last);
     await tester.pumpAndSettle();
 
     expect(find.text('离线'), findsWidgets);
     expect(find.text('停用'), findsWidgets);
+    expect(find.textContaining('强制下线 1 个会话'), findsOneWidget);
+  });
+
+  testWidgets('启用用户时备注可空并展示重新登录提示', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 41,
+          username: 'enable_status',
+          roleCode: 'production_admin',
+          roleName: '生产管理员',
+          isActive: false,
+        ),
+      ],
+    );
+    final craftService = _FakeCraftService();
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('启用'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '启用').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.enableCalls, 1);
+    expect(userService.lastEnableRemark, isNull);
+    expect(find.textContaining('需重新登录后才会恢复在线状态'), findsOneWidget);
+  });
+
+  testWidgets('停用当前登录用户后立即触发登出回调', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: [
+        _buildUser(
+          id: 99,
+          username: 'admin',
+          roleCode: 'system_admin',
+          roleName: '系统管理员',
+          isOnline: true,
+        ),
+      ],
+    )..onlineStatusUserIds = {99};
+    final craftService = _FakeCraftService();
+    var logoutCalls = 0;
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+      onLogout: () {
+        logoutCalls += 1;
+      },
+    );
+
+    final rowActionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
+    );
+    await tester.tap(rowActionMenu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, '停用原因'), '账号收口');
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
+    await tester.pumpAndSettle();
+
+    expect(userService.disableCalls, 1);
+    expect(logoutCalls, 1);
   });
 
   testWidgets('重置密码后行在线状态立即变为离线', (tester) async {
@@ -1501,9 +2287,12 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextFormField).first, 'Reset@123');
+    await tester.enterText(find.widgetWithText(TextFormField, '重置原因'), '班次交接');
     await tester.tap(find.text('确认重置'));
     await tester.pumpAndSettle();
 
+    expect(userService.lastResetRemark, '班次交接');
+    expect(find.textContaining('强制下线 1 个会话'), findsOneWidget);
     expect(find.text('离线'), findsWidgets);
     expect(find.text('启用'), findsWidgets);
   });
