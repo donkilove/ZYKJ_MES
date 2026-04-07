@@ -76,14 +76,21 @@ def login(
 
     user = get_user_by_username(db, username, include_deleted=True)
     if not user:
-        pending_request = get_registration_request_by_account(
-            db, username, pending_only=True
-        )
-        reason = (
-            "Account is pending approval"
-            if pending_request
-            else "Incorrect username or password"
-        )
+        latest_request = get_registration_request_by_account(db, username)
+        detail = "Incorrect username or password"
+        status_code = status.HTTP_401_UNAUTHORIZED
+        reason = detail
+        if latest_request and latest_request.status == "pending":
+            detail = "Account is pending approval"
+            status_code = status.HTTP_403_FORBIDDEN
+            reason = detail
+        elif latest_request and latest_request.status == "rejected":
+            detail = "Registration request was rejected"
+            status_code = status.HTTP_403_FORBIDDEN
+            rejected_reason = (latest_request.rejected_reason or "").strip()
+            reason = (
+                f"{detail}: {rejected_reason}" if rejected_reason else detail
+            )
         create_login_log(
             db,
             username=username,
@@ -94,9 +101,7 @@ def login(
             failure_reason=reason,
         )
         db.commit()
-        if pending_request:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=reason)
+        raise HTTPException(status_code=status_code, detail=detail)
 
     if not user.is_active or user.is_deleted:
         reason = "Account is disabled"
@@ -393,7 +398,10 @@ def approve_registration(
         message_type="notice",
         priority="important",
         title="您的注册申请已通过审批",
-        summary=f"账号 {user.username} 已创建，您现在可以登录系统。",
+        summary=(
+            f"账号 {user.username} 已创建，请使用初始密码登录；"
+            "首次登录后系统将要求修改密码。"
+        ),
         source_module="user",
         source_type="registration_request",
         source_id=str(request_id),

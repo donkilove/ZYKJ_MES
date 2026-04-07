@@ -214,6 +214,10 @@ class _MainShellPageState extends State<MainShellPage>
 
   String? _preferredRoutePayloadJson;
 
+  bool _manualRefreshing = false;
+
+  DateTime? _lastManualRefreshAt;
+
   @override
   void initState() {
     super.initState();
@@ -324,6 +328,23 @@ class _MainShellPageState extends State<MainShellPage>
     }
 
     return error.toString();
+  }
+
+  String _formatClockTime(DateTime value) {
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    final second = value.second.toString().padLeft(2, '0');
+    return '$hour:$minute:$second';
+  }
+
+  String? _homeRefreshStatusText() {
+    if (_manualRefreshing) {
+      return '正在刷新业务数据...';
+    }
+    if (_lastManualRefreshAt == null) {
+      return null;
+    }
+    return '上次刷新：${_formatClockTime(_lastManualRefreshAt!)}';
   }
 
   IconData _iconForPage(String pageCode) {
@@ -544,6 +565,7 @@ class _MainShellPageState extends State<MainShellPage>
       }
 
       setState(() {
+        String? navigationAdjustedMessage;
         _authzSnapshot = snapshot;
         _catalog = sortedCatalog;
 
@@ -553,12 +575,20 @@ class _MainShellPageState extends State<MainShellPage>
 
         if (_menus.isEmpty) {
           _selectedPageCode = _homePageCode;
+          _preferredTabCode = null;
+          _preferredRoutePayloadJson = null;
         } else if (!_menus.any((item) => item.code == _selectedPageCode)) {
+          final fallbackMenu = _menus.first;
           _selectedPageCode = _menus.first.code;
+          _preferredTabCode = null;
+          _preferredRoutePayloadJson = null;
+          navigationAdjustedMessage = '当前页面权限已变更，已切换到${fallbackMenu.title}';
         }
 
         if (usedFallbackCatalog) {
           _message = '页面目录加载失败，已使用本地兜底配置。';
+        } else if (navigationAdjustedMessage != null) {
+          _message = navigationAdjustedMessage;
         } else if (!silent) {
           _message = '';
         }
@@ -636,6 +666,163 @@ class _MainShellPageState extends State<MainShellPage>
     return tabCodes.where(catalogCodes.contains).toList();
   }
 
+  List<String> _visibleTabCodesForPage(String pageCode) {
+    switch (pageCode) {
+      case _userPageCode:
+        return _visibleUserTabCodes();
+      case _productPageCode:
+        return _visibleProductTabCodes();
+      case _equipmentPageCode:
+        return _visibleEquipmentTabCodes();
+      case _productionPageCode:
+        return _visibleProductionTabCodes();
+      case _qualityPageCode:
+        return _visibleQualityTabCodes();
+      case _craftPageCode:
+        return _visibleCraftTabCodes();
+      default:
+        return const <String>[];
+    }
+  }
+
+  String? _defaultTabCodeForPage(String pageCode) {
+    final tabCodes = _visibleTabCodesForPage(pageCode);
+    if (tabCodes.isEmpty) {
+      return null;
+    }
+    return tabCodes.first;
+  }
+
+  String? _defaultRoutePayloadJsonForTab(String? tabCode) {
+    if (tabCode == null || tabCode.isEmpty) {
+      return null;
+    }
+    return '{"target_tab_code":"$tabCode"}';
+  }
+
+  List<HomeQuickJumpEntry> _buildHomeQuickJumps() {
+    final entries = <HomeQuickJumpEntry>[];
+    for (final menu in _menus) {
+      if (menu.code == _homePageCode) {
+        continue;
+      }
+      final defaultTabCode = _defaultTabCodeForPage(menu.code);
+      entries.add(
+        HomeQuickJumpEntry(
+          pageCode: menu.code,
+          title: menu.title,
+          icon: menu.icon,
+          tabCode: defaultTabCode,
+          routePayloadJson: _defaultRoutePayloadJsonForTab(defaultTabCode),
+        ),
+      );
+    }
+    return entries;
+  }
+
+  void _showNoAccessSnackBar() {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('您没有访问该页面的权限')));
+  }
+
+  void _navigateToPageTarget(
+    String pageCode, {
+    String? tabCode,
+    String? routePayloadJson,
+    bool showDeniedMessage = true,
+  }) {
+    if (!mounted) {
+      return;
+    }
+
+    var resolvedPageCode = pageCode;
+    var resolvedTabCode = tabCode;
+
+    final catalogItem = _catalog
+        .where((item) => item.code == pageCode)
+        .firstOrNull;
+    if (catalogItem != null && catalogItem.pageType == 'tab') {
+      resolvedPageCode = catalogItem.parentCode ?? pageCode;
+      resolvedTabCode ??= pageCode;
+    }
+
+    final hasAccess = _menus.any((menu) => menu.code == resolvedPageCode);
+    if (!hasAccess) {
+      if (showDeniedMessage) {
+        _showNoAccessSnackBar();
+      }
+      return;
+    }
+
+    setState(() {
+      _selectedPageCode = resolvedPageCode;
+      _preferredTabCode = resolvedTabCode;
+      _preferredRoutePayloadJson = routePayloadJson;
+    });
+  }
+
+  Future<void> _refreshShellDataFromUi({bool loadCatalog = true}) async {
+    if (_manualRefreshing) {
+      return;
+    }
+
+    setState(() {
+      _manualRefreshing = true;
+      _message = '';
+    });
+
+    try {
+      final currentUserFuture = _authService.getCurrentUser(
+        baseUrl: widget.session.baseUrl,
+        accessToken: widget.session.accessToken,
+      );
+      final refreshVisibilityFuture = _refreshVisibility(
+        loadCatalog: loadCatalog,
+      );
+      final refreshUnreadFuture = _refreshUnreadCount();
+
+      final currentUser = await currentUserFuture;
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _currentUser = currentUser;
+      });
+
+      await Future.wait<void>([refreshVisibilityFuture, refreshUnreadFuture]);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _lastManualRefreshAt = DateTime.now();
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+
+      setState(() {
+        _message = '刷新失败：${_errorMessage(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _manualRefreshing = false;
+        });
+      }
+    }
+  }
+
   Set<String> _capabilityCodesForModule(String moduleCode) {
     return _authzSnapshot?.capabilityCodesForModule(moduleCode) ??
         const <String>{};
@@ -646,13 +833,18 @@ class _MainShellPageState extends State<MainShellPage>
       case _homePageCode:
         return HomePage(
           currentUser: _currentUser!,
-          onNavigateToPage: (pageCode) {
-            setState(() {
-              _selectedPageCode = pageCode;
-              _preferredTabCode = null;
-              _preferredRoutePayloadJson = null;
-            });
-          },
+          shortcuts: _buildHomeQuickJumps(),
+          onNavigateToPage:
+              (pageCode, {String? tabCode, String? routePayloadJson}) {
+                _navigateToPageTarget(
+                  pageCode,
+                  tabCode: tabCode,
+                  routePayloadJson: routePayloadJson,
+                );
+              },
+          onRefresh: () => _refreshShellDataFromUi(loadCatalog: false),
+          refreshing: _manualRefreshing,
+          refreshStatusText: _homeRefreshStatusText(),
         );
 
       case _userPageCode:
@@ -847,11 +1039,7 @@ class _MainShellPageState extends State<MainShellPage>
                     ? _preferredRoutePayloadJson
                     : null,
                 onNavigateToPage: (pageCode) {
-                  setState(() {
-                    _selectedPageCode = pageCode;
-                    _preferredTabCode = null;
-                    _preferredRoutePayloadJson = null;
-                  });
+                  _navigateToPageTarget(pageCode);
                 },
               );
 
@@ -874,28 +1062,11 @@ class _MainShellPageState extends State<MainShellPage>
             if (mounted) setState(() => _unreadCount = count);
           },
           onNavigateToPage: (pageCode, {tabCode, routePayloadJson}) {
-            if (!mounted) return;
-            var resolvedPageCode = pageCode;
-            var resolvedTabCode = tabCode;
-            final catalogItem = _catalog
-                .where((item) => item.code == pageCode)
-                .firstOrNull;
-            if (catalogItem != null && catalogItem.pageType == 'tab') {
-              resolvedPageCode = catalogItem.parentCode ?? pageCode;
-              resolvedTabCode ??= pageCode;
-            }
-            final hasAccess = _menus.any((m) => m.code == resolvedPageCode);
-            if (!hasAccess) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('您没有访问该页面的权限')));
-              return;
-            }
-            setState(() {
-              _selectedPageCode = resolvedPageCode;
-              _preferredTabCode = resolvedTabCode;
-              _preferredRoutePayloadJson = routePayloadJson;
-            });
+            _navigateToPageTarget(
+              pageCode,
+              tabCode: tabCode,
+              routePayloadJson: routePayloadJson,
+            );
           },
         );
 
@@ -933,7 +1104,9 @@ class _MainShellPageState extends State<MainShellPage>
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => _refreshVisibility(),
+                        onPressed: _manualRefreshing
+                            ? null
+                            : () => _refreshShellDataFromUi(),
 
                         child: const Text('刷新'),
                       ),
@@ -1107,12 +1280,7 @@ class _MainShellPageState extends State<MainShellPage>
                             if (_selectedPageCode == menu.code) {
                               return;
                             }
-
-                            setState(() {
-                              _selectedPageCode = menu.code;
-                              _preferredTabCode = null;
-                              _preferredRoutePayloadJson = null;
-                            });
+                            _navigateToPageTarget(menu.code);
                           },
                         );
                       },

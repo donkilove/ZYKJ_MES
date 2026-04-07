@@ -169,6 +169,21 @@ class _TestShellAuthService extends AuthService {
   }
 }
 
+class _CountingShellAuthService extends _TestShellAuthService {
+  _CountingShellAuthService({super.error});
+
+  int callCount = 0;
+
+  @override
+  Future<CurrentUser> getCurrentUser({
+    required String baseUrl,
+    required String accessToken,
+  }) async {
+    callCount += 1;
+    return super.getCurrentUser(baseUrl: baseUrl, accessToken: accessToken);
+  }
+}
+
 class _TestShellAuthzService extends AuthzService {
   _TestShellAuthzService({this.snapshot, this.error}) : super(_session);
 
@@ -195,6 +210,18 @@ class _TestShellPageCatalogService extends PageCatalogService {
       throw error!;
     }
     return _buildCatalog();
+  }
+}
+
+class _CountingShellPageCatalogService extends _TestShellPageCatalogService {
+  _CountingShellPageCatalogService({super.error});
+
+  int callCount = 0;
+
+  @override
+  Future<List<PageCatalogItem>> listPageCatalog() async {
+    callCount += 1;
+    return super.listPageCatalog();
   }
 }
 
@@ -258,6 +285,18 @@ class _TestShellMessageService extends MessageService {
           targetTabCode: null,
           targetRoutePayloadJson: null,
         );
+  }
+}
+
+class _CountingShellMessageService extends _TestShellMessageService {
+  _CountingShellMessageService();
+
+  int unreadCountCallCount = 0;
+
+  @override
+  Future<int> getUnreadCount() async {
+    unreadCountCallCount += 1;
+    return super.getUnreadCount();
   }
 }
 
@@ -371,7 +410,7 @@ void main() {
       onLogout: () {},
     );
 
-    await tester.tap(find.text('用户').first);
+    await tester.tap(find.byKey(const ValueKey('main-shell-menu-user')));
     await tester.pumpAndSettle();
 
     expect(
@@ -425,10 +464,117 @@ void main() {
 
     expect(find.text('页面目录加载失败，已使用本地兜底配置。'), findsOneWidget);
 
-    await tester.tap(find.text('用户').first);
+    await tester.tap(find.byKey(const ValueKey('main-shell-menu-user')));
     await tester.pumpAndSettle();
 
     expect(find.text('tabs:user_management,role_management'), findsOneWidget);
+  });
+
+  testWidgets('首页快捷跳转按可见菜单动态展示并优先携带首个可见页签', (tester) async {
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(
+        snapshot: _buildSnapshot(
+          visibleSidebarCodes: const ['user'],
+          tabCodesByParent: const {
+            'user': ['role_management', 'user_management'],
+          },
+        ),
+      ),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) => _FakeMessageWsService(
+            baseUrl: baseUrl,
+            accessToken: accessToken,
+            onEvent: onEvent,
+            onDisconnected: onDisconnected,
+          ),
+      userPageBuilder:
+          ({
+            required session,
+            required onLogout,
+            required visibleTabCodes,
+            required capabilityCodes,
+            String? preferredTabCode,
+            String? routePayloadJson,
+            VoidCallback? onVisibilityConfigSaved,
+          }) {
+            return Center(
+              child: Text(
+                'tabs:${visibleTabCodes.join(',')}|preferred:${preferredTabCode ?? '-'}|payload:${routePayloadJson ?? '-'}',
+              ),
+            );
+          },
+      onLogout: () {},
+    );
+
+    expect(
+      find.descendant(of: find.byType(GridView), matching: find.text('用户')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: find.byType(GridView), matching: find.text('产品')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.descendant(of: find.byType(GridView), matching: find.text('用户')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'tabs:user_management,role_management|preferred:user_management|payload:{"target_tab_code":"user_management"}',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('首页刷新按钮不会重拉目录且会重拉用户与未读数', (tester) async {
+    final authService = _CountingShellAuthService();
+    final pageCatalogService = _CountingShellPageCatalogService();
+    final messageService = _CountingShellMessageService();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: authService,
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: pageCatalogService,
+      messageService: messageService,
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) => _FakeMessageWsService(
+            baseUrl: baseUrl,
+            accessToken: accessToken,
+            onEvent: onEvent,
+            onDisconnected: onDisconnected,
+          ),
+      onLogout: () {},
+    );
+
+    expect(authService.callCount, 1);
+    expect(pageCatalogService.callCount, 1);
+    expect(messageService.unreadCountCallCount, 0);
+
+    await tester.tap(find.byTooltip('刷新业务数据'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(authService.callCount, 2);
+    expect(pageCatalogService.callCount, 1);
+    expect(messageService.unreadCountCallCount, 1);
+    expect(find.textContaining('上次刷新：'), findsOneWidget);
   });
 
   testWidgets('成功加载但无任何可访问模块时显示空菜单提示', (tester) async {
@@ -626,7 +772,7 @@ void main() {
       onLogout: () {},
     );
 
-    await tester.tap(find.text('消息').first);
+    await tester.tap(find.byKey(const ValueKey('main-shell-menu-message')));
     await tester.pumpAndSettle();
 
     expect(find.text('请处理账号设置'), findsWidgets);
@@ -638,6 +784,73 @@ void main() {
       find.text(
         'user-tab:account_settings|payload:{"target_tab_code":"account_settings","anchor":"account-settings-change-password-anchor"}',
       ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('无权限目标跳转会提示并保持当前页面，不会静默回退', (tester) async {
+    final message = _buildMessageItem();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(
+        snapshot: _buildSnapshot(
+          visibleSidebarCodes: const ['message'],
+          tabCodesByParent: const {
+            'message': ['message_center'],
+          },
+          moduleItems: [
+            _buildModuleItem(
+              'message',
+              capabilityCodes: const ['feature.message.jump.use'],
+            ),
+          ],
+        ),
+      ),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(
+        items: [message],
+        jumpResults: {
+          message.id: const MessageJumpResult(
+            canJump: true,
+            disabledReason: null,
+            targetPageCode: 'account_settings',
+            targetTabCode: null,
+            targetRoutePayloadJson:
+                '{"target_tab_code":"account_settings","anchor":"account-settings-change-password-anchor"}',
+          ),
+        },
+      ),
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) => _FakeMessageWsService(
+            baseUrl: baseUrl,
+            accessToken: accessToken,
+            onEvent: onEvent,
+            onDisconnected: onDisconnected,
+          ),
+      onLogout: () {},
+    );
+
+    await tester.tap(find.byKey(const ValueKey('main-shell-menu-message')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('main-shell-content-message')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('message-center-jump-301')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('您没有访问该页面的权限'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('main-shell-content-message')),
       findsOneWidget,
     );
   });

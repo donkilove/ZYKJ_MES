@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 
 class RegisterPageResult {
@@ -24,6 +25,7 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  static const int _accountMaxLength = 10;
   final _formKey = GlobalKey<FormState>();
   late final AuthService _authService;
 
@@ -59,6 +61,46 @@ class _RegisterPageState extends State<RegisterPage> {
         : trimmed;
   }
 
+  bool _containsChinese(String value) {
+    return RegExp(r'[\u4e00-\u9fff]').hasMatch(value);
+  }
+
+  String _extractErrorMessage(Object error) {
+    if (error is ApiException) {
+      return error.message.trim();
+    }
+    return error.toString().trim();
+  }
+
+  String _mapRegisterError(Object error) {
+    final raw = _extractErrorMessage(error);
+    final normalized = raw.toLowerCase();
+    if (normalized.contains('username already exists') ||
+        raw.contains('账号已存在')) {
+      return '账号已存在，请更换账号后重试。';
+    }
+    if (normalized.contains('pending approval') || raw.contains('待审批')) {
+      return '该账号已有待审批注册申请，请等待审批结果。';
+    }
+    if (normalized.contains('rejected') || raw.contains('已驳回')) {
+      return '该账号的注册申请已被驳回，请确认信息后重新提交。';
+    }
+    if (normalized.contains('account is required')) {
+      return '请输入账号后再提交。';
+    }
+    if (normalized.contains('timeout') ||
+        normalized.contains('timed out') ||
+        normalized.contains('network') ||
+        normalized.contains('connection') ||
+        normalized.contains('socket')) {
+      return '网络连接异常，请检查后重试。';
+    }
+    if (_containsChinese(raw) && raw.isNotEmpty) {
+      return raw;
+    }
+    return '提交注册申请失败，请稍后重试。';
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -91,7 +133,7 @@ class _RegisterPageState extends State<RegisterPage> {
         return;
       }
       setState(() {
-        _message = '提交注册申请失败：$error';
+        _message = _mapRegisterError(error);
       });
     } finally {
       if (mounted) {
@@ -155,14 +197,19 @@ class _RegisterPageState extends State<RegisterPage> {
                         controller: _accountController,
                         decoration: const InputDecoration(
                           labelText: '账号',
+                          helperText: '账号长度 2-10 个字符。',
                           border: OutlineInputBorder(),
                         ),
                         validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
+                          final account = value?.trim() ?? '';
+                          if (account.isEmpty) {
                             return '请输入账号';
                           }
-                          if (value.trim().length < 2) {
+                          if (account.length < 2) {
                             return '账号至少 2 个字符';
+                          }
+                          if (account.length > _accountMaxLength) {
+                            return '账号最多 $_accountMaxLength 个字符';
                           }
                           return null;
                         },
@@ -174,14 +221,20 @@ class _RegisterPageState extends State<RegisterPage> {
                         obscureText: true,
                         decoration: const InputDecoration(
                           labelText: '密码',
+                          helperText: '密码规则：至少6位；不能包含连续4位相同字符。',
+                          helperMaxLines: 2,
                           border: OutlineInputBorder(),
                         ),
                         validator: (value) {
-                          if (value == null || value.isEmpty) {
+                          final password = value ?? '';
+                          if (password.isEmpty) {
                             return '请输入密码';
                           }
-                          if (value.length < 6) {
+                          if (password.length < 6) {
                             return '密码至少 6 个字符';
+                          }
+                          if (RegExp(r'(.)\1\1\1').hasMatch(password)) {
+                            return '密码不能包含连续4位相同字符';
                           }
                           return null;
                         },

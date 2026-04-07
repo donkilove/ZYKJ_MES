@@ -2,15 +2,44 @@ import 'package:flutter/material.dart';
 
 import '../models/current_user.dart';
 
+class HomeQuickJumpEntry {
+  const HomeQuickJumpEntry({
+    required this.pageCode,
+    required this.title,
+    required this.icon,
+    this.tabCode,
+    this.routePayloadJson,
+  });
+
+  final String pageCode;
+  final String title;
+  final IconData icon;
+  final String? tabCode;
+  final String? routePayloadJson;
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
     required this.currentUser,
+    required this.shortcuts,
     required this.onNavigateToPage,
+    required this.onRefresh,
+    required this.refreshing,
+    this.refreshStatusText,
   });
 
   final CurrentUser currentUser;
-  final void Function(String pageCode) onNavigateToPage;
+  final List<HomeQuickJumpEntry> shortcuts;
+  final void Function(
+    String pageCode, {
+    String? tabCode,
+    String? routePayloadJson,
+  })
+  onNavigateToPage;
+  final Future<void> Function() onRefresh;
+  final bool refreshing;
+  final String? refreshStatusText;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -190,6 +219,7 @@ class _HomePageState extends State<HomePage> {
     required IconData icon,
     required String title,
     required Color color,
+    String? subtitle,
     VoidCallback? onTap,
   }) {
     final theme = Theme.of(context);
@@ -226,6 +256,18 @@ class _HomePageState extends State<HomePage> {
                 ),
                 textAlign: TextAlign.center,
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ],
           ),
         ),
@@ -233,9 +275,21 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Color _quickActionColor(ThemeData theme, int index) {
+    switch (index % 3) {
+      case 0:
+        return theme.colorScheme.primary;
+      case 1:
+        return theme.colorScheme.secondary;
+      default:
+        return theme.colorScheme.tertiary;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final shortcuts = widget.shortcuts;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -246,18 +300,36 @@ class _HomePageState extends State<HomePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '工作台',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '工作台',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (widget.refreshStatusText != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.refreshStatusText!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 IconButton.filledTonal(
-                  icon: const Icon(Icons.refresh),
-                  onPressed: () {
-                    setState(() {});
-                  },
-                  tooltip: '刷新',
+                  icon: widget.refreshing
+                      ? const Icon(Icons.sync)
+                      : const Icon(Icons.refresh),
+                  onPressed: widget.refreshing
+                      ? null
+                      : () => widget.onRefresh(),
+                  tooltip: widget.refreshing ? '刷新中' : '刷新业务数据',
                 ),
               ],
             ),
@@ -286,57 +358,34 @@ class _HomePageState extends State<HomePage> {
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
                   physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    _buildQuickActionCard(
-                      context,
-                      icon: Icons.home_rounded,
-                      title: '首页',
-                      color: theme.colorScheme.primary,
-                      onTap: () => widget.onNavigateToPage('home'),
-                    ),
-                    _buildQuickActionCard(
-                      context,
-                      icon: Icons.group_rounded,
-                      title: '用户',
-                      color: theme.colorScheme.secondary,
-                      onTap: () => widget.onNavigateToPage('user'),
-                    ),
-                    _buildQuickActionCard(
-                      context,
-                      icon: Icons.route_rounded,
-                      title: '工艺',
-                      color: theme.colorScheme.tertiary,
-                      onTap: () => widget.onNavigateToPage('craft'),
-                    ),
-                    _buildQuickActionCard(
-                      context,
-                      icon: Icons.inventory_2_rounded,
-                      title: '产品',
-                      color: theme.colorScheme.primary,
-                      onTap: () => widget.onNavigateToPage('product'),
-                    ),
-                    _buildQuickActionCard(
-                      context,
-                      icon: Icons.factory_rounded,
-                      title: '生产',
-                      color: theme.colorScheme.secondary,
-                      onTap: () => widget.onNavigateToPage('production'),
-                    ),
-                    _buildQuickActionCard(
-                      context,
-                      icon: Icons.verified_user_rounded,
-                      title: '品质',
-                      color: theme.colorScheme.tertiary,
-                      onTap: () => widget.onNavigateToPage('quality'),
-                    ),
-                    _buildQuickActionCard(
-                      context,
-                      icon: Icons.precision_manufacturing_rounded,
-                      title: '设备',
-                      color: theme.colorScheme.primary,
-                      onTap: () => widget.onNavigateToPage('equipment'),
-                    ),
-                  ],
+                  children: shortcuts.isEmpty
+                      ? [
+                          _buildQuickActionCard(
+                            context,
+                            icon: Icons.info_outline_rounded,
+                            title: '暂无可快捷跳转的模块',
+                            color: theme.colorScheme.outline,
+                            subtitle: '请联系管理员分配页面可见权限',
+                          ),
+                        ]
+                      : [
+                          for (var index = 0; index < shortcuts.length; index++)
+                            _buildQuickActionCard(
+                              context,
+                              icon: shortcuts[index].icon,
+                              title: shortcuts[index].title,
+                              color: _quickActionColor(theme, index),
+                              subtitle: shortcuts[index].tabCode == null
+                                  ? null
+                                  : '默认页签：${shortcuts[index].tabCode}',
+                              onTap: () => widget.onNavigateToPage(
+                                shortcuts[index].pageCode,
+                                tabCode: shortcuts[index].tabCode,
+                                routePayloadJson:
+                                    shortcuts[index].routePayloadJson,
+                              ),
+                            ),
+                        ],
                 );
               },
             ),

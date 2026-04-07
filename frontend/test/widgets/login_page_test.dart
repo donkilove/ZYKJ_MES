@@ -274,6 +274,24 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '登录'));
     await tester.pumpAndSettle();
 
-    expect(find.text('登录失败：账号或密码错误'), findsOneWidget);
+    expect(find.text('账号或密码错误，请重新输入。'), findsOneWidget);
+  });
+
+  testWidgets('登录失败时会映射驳回申请提示', (tester) async {
+    final authService = _FakeAuthService()
+      ..loginError = ApiException(
+        'Account is rejected, please resubmit registration',
+        403,
+      );
+
+    await _pumpLoginPage(tester, authService: authService);
+
+    await tester.enterText(_field('账号'), 'tester');
+    await tester.enterText(_field('密码'), 'wrong-pass');
+    await tester.ensureVisible(find.widgetWithText(FilledButton, '登录'));
+    await tester.tap(find.widgetWithText(FilledButton, '登录'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('该账号的注册申请已被驳回，请重新注册后再登录。'), findsOneWidget);
   });
 }

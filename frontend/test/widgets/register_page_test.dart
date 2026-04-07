@@ -112,7 +112,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '提交注册申请'));
     await tester.pumpAndSettle();
 
-    expect(find.text('提交注册申请失败：账号已存在'), findsOneWidget);
+    expect(find.text('账号已存在，请更换账号后重试。'), findsOneWidget);
     expect(authService.registerCalls, 1);
   });
 
@@ -140,6 +140,23 @@ void main() {
     expect(find.text('账号至少 2 个字符'), findsOneWidget);
     expect(find.text('密码至少 6 个字符'), findsOneWidget);
     expect(find.text('两次输入的密码不一致'), findsOneWidget);
+    expect(authService.registerCalls, 0);
+  });
+
+  testWidgets('注册页会校验账号最大长度和连续字符密码规则', (tester) async {
+    final authService = _FakeRegisterAuthService();
+
+    await _pumpRegisterFlow(tester, authService: authService, onResult: (_) {});
+
+    await tester.enterText(_field('接口地址'), 'http://example.test/api/v1');
+    await tester.enterText(_field('账号'), 'abcdefghijk');
+    await tester.enterText(_field('密码'), 'aaaaaa');
+    await tester.enterText(_field('确认密码'), 'aaaaaa');
+    await tester.tap(find.widgetWithText(FilledButton, '提交注册申请'));
+    await tester.pump();
+
+    expect(find.text('账号最多 10 个字符'), findsOneWidget);
+    expect(find.text('密码不能包含连续4位相同字符'), findsOneWidget);
     expect(authService.registerCalls, 0);
   });
 }

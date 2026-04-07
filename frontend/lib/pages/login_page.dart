@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/app_session.dart';
+import '../services/api_exception.dart';
 import '../services/auth_service.dart';
 import 'register_page.dart';
 
@@ -93,6 +94,65 @@ class _LoginPageState extends State<LoginPage> {
 
   String _accountText() => _accountController.text.trim();
 
+  bool _containsChinese(String value) {
+    return RegExp(r'[\u4e00-\u9fff]').hasMatch(value);
+  }
+
+  String _extractErrorMessage(Object error) {
+    if (error is ApiException) {
+      return error.message.trim();
+    }
+    return error.toString().trim();
+  }
+
+  String _mapLoginError(Object error) {
+    final raw = _extractErrorMessage(error);
+    final normalized = raw.toLowerCase();
+    if (normalized.contains('account is pending approval') ||
+        raw.contains('待审批')) {
+      return '当前账号正在审批中，请等待审批通过后再登录。';
+    }
+    if (normalized.contains('account is rejected') ||
+        normalized.contains('rejected') ||
+        raw.contains('已驳回')) {
+      return '该账号的注册申请已被驳回，请重新注册后再登录。';
+    }
+    if (normalized.contains('account is disabled') || raw.contains('停用')) {
+      return '当前账号已停用，请联系管理员处理。';
+    }
+    if (normalized.contains('incorrect username or password') ||
+        raw.contains('账号或密码错误')) {
+      return '账号或密码错误，请重新输入。';
+    }
+    if (normalized.contains('timeout') ||
+        normalized.contains('timed out') ||
+        normalized.contains('network') ||
+        normalized.contains('connection') ||
+        normalized.contains('socket')) {
+      return '网络连接异常，请检查后重试。';
+    }
+    if (_containsChinese(raw) && raw.isNotEmpty) {
+      return raw;
+    }
+    return '登录失败，请稍后重试。';
+  }
+
+  String _mapAccountLoadError(Object error) {
+    final raw = _extractErrorMessage(error);
+    final normalized = raw.toLowerCase();
+    if (normalized.contains('timeout') ||
+        normalized.contains('timed out') ||
+        normalized.contains('network') ||
+        normalized.contains('connection') ||
+        normalized.contains('socket')) {
+      return '加载账号列表失败：网络连接异常，请检查后重试。';
+    }
+    if (_containsChinese(raw) && raw.isNotEmpty) {
+      return '加载账号列表失败：$raw';
+    }
+    return '加载账号列表失败：请检查接口地址后重试。';
+  }
+
   Future<void> _loadAccounts() async {
     final baseUrl = _normalizeBaseUrl(_baseUrlController.text);
     if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
@@ -119,7 +179,7 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
       setState(() {
-        _message = '加载账号列表失败：$error';
+        _message = _mapAccountLoadError(error);
       });
     } finally {
       if (mounted) {
@@ -164,7 +224,7 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
       setState(() {
-        _message = '登录失败：$error';
+        _message = _mapLoginError(error);
       });
     } finally {
       if (mounted) {
