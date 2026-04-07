@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import Select, func, select
@@ -25,10 +26,12 @@ from app.models.user import User
 from app.models.user_session import UserSession
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.authz_service import get_permission_codes_for_role_codes
+from app.services.online_status_service import clear_user, get_user_online_snapshot
 from app.services.role_service import (
     get_role_by_code_case_insensitive,
     get_roles_by_codes,
 )
+from app.services.session_service import force_offline_sessions
 
 
 REG_STATUS_PENDING = "pending"
@@ -67,6 +70,27 @@ ROLE_PRIORITY = [
     ROLE_OPERATOR,
 ]
 ROLE_PRIORITY_INDEX = {code: index for index, code in enumerate(ROLE_PRIORITY)}
+DELETED_SCOPE_ACTIVE = "active"
+DELETED_SCOPE_DELETED = "deleted"
+DELETED_SCOPE_ALL = "all"
+VALID_DELETED_SCOPES = {
+    DELETED_SCOPE_ACTIVE,
+    DELETED_SCOPE_DELETED,
+    DELETED_SCOPE_ALL,
+}
+
+
+def normalize_deleted_scope(
+    *,
+    deleted_scope: str | None = None,
+    include_deleted: bool = False,
+) -> str:
+    normalized = (deleted_scope or "").strip().lower()
+    if normalized in VALID_DELETED_SCOPES:
+        return normalized
+    if include_deleted:
+        return DELETED_SCOPE_ALL
+    return DELETED_SCOPE_ACTIVE
 
 
 def _build_user_filter_conditions(
@@ -77,12 +101,14 @@ def _build_user_filter_conditions(
     is_online: bool | None,
     online_user_ids: set[int] | None,
     is_active: bool | None,
-    include_deleted: bool,
+    deleted_scope: str,
 ) -> tuple[list[object], bool]:
     conditions: list[object] = []
     requires_role_join = False
-    if not include_deleted:
+    if deleted_scope == DELETED_SCOPE_ACTIVE:
         conditions.append(User.is_deleted.is_(False))
+    elif deleted_scope == DELETED_SCOPE_DELETED:
+        conditions.append(User.is_deleted.is_(True))
     if keyword:
         conditions.append(User.username.ilike(f"%{keyword}%"))
     if role_code:
@@ -112,8 +138,13 @@ def query_users(
     is_online: bool | None = None,
     online_user_ids: set[int] | None = None,
     is_active: bool | None = None,
+    deleted_scope: str = DELETED_SCOPE_ACTIVE,
     include_deleted: bool = False,
 ) -> Select[tuple[User]]:
+    effective_deleted_scope = normalize_deleted_scope(
+        deleted_scope=deleted_scope,
+        include_deleted=include_deleted,
+    )
     conditions, requires_role_join = _build_user_filter_conditions(
         keyword=keyword,
         role_code=role_code,
@@ -121,7 +152,7 @@ def query_users(
         is_online=is_online,
         online_user_ids=online_user_ids,
         is_active=is_active,
-        include_deleted=include_deleted,
+        deleted_scope=effective_deleted_scope,
     )
     stmt = (
         select(User)
@@ -218,8 +249,13 @@ def list_users(
     is_online: bool | None = None,
     online_user_ids: set[int] | None = None,
     is_active: bool | None = None,
+    deleted_scope: str = DELETED_SCOPE_ACTIVE,
     include_deleted: bool = False,
 ) -> tuple[int, list[User]]:
+    effective_deleted_scope = normalize_deleted_scope(
+        deleted_scope=deleted_scope,
+        include_deleted=include_deleted,
+    )
     conditions, requires_role_join = _build_user_filter_conditions(
         keyword=keyword,
         role_code=role_code,
@@ -227,7 +263,7 @@ def list_users(
         is_online=is_online,
         online_user_ids=online_user_ids,
         is_active=is_active,
-        include_deleted=include_deleted,
+        deleted_scope=effective_deleted_scope,
     )
     count_expr = (
         func.count(func.distinct(User.id))
@@ -248,7 +284,7 @@ def list_users(
         is_online=is_online,
         online_user_ids=online_user_ids,
         is_active=is_active,
-        include_deleted=include_deleted,
+        deleted_scope=effective_deleted_scope,
     )
 
     offset = (page - 1) * page_size
@@ -341,6 +377,19 @@ _SYSTEM_ADMIN_GUARDRAIL_PERMISSION_CODES = {
 }
 
 
+@dataclass(frozen=True)
+class UserLifecycleChange:
+    forced_offline_session_count: int
+    cleared_online_status: bool
+
+
+@dataclass(frozen=True)
+class UserPasswordResetChange:
+    forced_offline_session_count: int
+    cleared_online_status: bool
+    must_change_password: bool
+
+
 def count_active_permission_admin_users(
     db: Session,
     *,
@@ -394,6 +443,50 @@ def ensure_can_deactivate_user(db: Session, user: User) -> tuple[bool, str | Non
     if remaining < 1:
         return False, "必须至少保留一个可进入功能权限配置页面的系统管理员账号"
     return True, None
+
+
+def _apply_user_active_state(
+    db: Session,
+    *,
+    user: User,
+    active: bool,
+) -> tuple[UserLifecycleChange | None, str | None]:
+    if user.is_deleted and active:
+        return None, "Deleted user cannot be enabled"
+    if user.is_active == active:
+        return UserLifecycleChange(
+            forced_offline_session_count=0,
+            cleared_online_status=False,
+        ), None
+    if not active:
+        can_deactivate, message = ensure_can_deactivate_user(db, user)
+        if not can_deactivate:
+            return None, message
+
+    forced_offline_session_count = 0
+    cleared_online_status = False
+    if not active:
+        active_session_token_ids = db.execute(
+            select(UserSession.session_token_id).where(
+                UserSession.user_id == user.id,
+                UserSession.status == "active",
+            )
+        ).scalars().all()
+        if active_session_token_ids:
+            forced_offline_session_count = force_offline_sessions(
+                db,
+                session_token_ids=list(active_session_token_ids),
+            )
+        is_online, _ = get_user_online_snapshot(user.id)
+        clear_user(user.id)
+        cleared_online_status = is_online
+
+    user.is_active = active
+    db.flush()
+    return UserLifecycleChange(
+        forced_offline_session_count=forced_offline_session_count,
+        cleared_online_status=cleared_online_status,
+    ), None
 
 
 def normalize_users_to_single_role(db: Session) -> int:
@@ -776,11 +869,14 @@ def update_user(
     user.stage_id = stage.id if stage else None
 
     if payload.is_active is not None:
-        if not payload.is_active and user.is_active:
-            can_deactivate, message = ensure_can_deactivate_user(db, user)
-            if not can_deactivate:
-                return None, message
-        user.is_active = payload.is_active
+        lifecycle_change, message = _apply_user_active_state(
+            db,
+            user=user,
+            active=payload.is_active,
+        )
+        if message:
+            return None, message
+        _ = lifecycle_change
 
     role_code_after = current_role_code
     if (
@@ -803,19 +899,18 @@ def set_user_active(
     *,
     user: User,
     active: bool,
-) -> tuple[User | None, str | None]:
-    if user.is_deleted:
-        return None, "Deleted user cannot be enabled"
-    if user.is_active == active:
-        return user, None
-    if not active:
-        can_deactivate, message = ensure_can_deactivate_user(db, user)
-        if not can_deactivate:
-            return None, message
-    user.is_active = active
+) -> tuple[tuple[User, UserLifecycleChange] | None, str | None]:
+    lifecycle_change, message = _apply_user_active_state(
+        db,
+        user=user,
+        active=active,
+    )
+    if message:
+        return None, message
+    assert lifecycle_change is not None
     db.commit()
     db.refresh(user)
-    return user, None
+    return (user, lifecycle_change), None
 
 
 def reset_user_password(
@@ -823,17 +918,17 @@ def reset_user_password(
     *,
     user: User,
     new_password: str,
-) -> tuple[User | None, str | None]:
+) -> tuple[tuple[User, UserPasswordResetChange] | None, str | None]:
     pwd_error = validate_password(new_password)
     if pwd_error:
         return None, pwd_error
+    if verify_password(new_password, user.password_hash):
+        return None, "新密码不能与当前密码相同"
     now = _now_utc()
-    user.password_hash = get_password_hash(new_password)
-    user.must_change_password = True
-    user.password_changed_at = now
-    session_rows = (
+    is_online, _ = get_user_online_snapshot(user.id)
+    active_session_token_ids = (
         db.execute(
-            select(UserSession).where(
+            select(UserSession.session_token_id).where(
                 UserSession.user_id == user.id,
                 UserSession.status == "active",
             )
@@ -841,14 +936,26 @@ def reset_user_password(
         .scalars()
         .all()
     )
-    for session_row in session_rows:
-        session_row.status = "forced_offline"
-        session_row.is_forced_offline = True
-        session_row.logout_time = now
-        session_row.last_active_at = now
+    forced_offline_session_count = 0
+    if active_session_token_ids:
+        forced_offline_session_count = force_offline_sessions(
+            db,
+            session_token_ids=list(active_session_token_ids),
+        )
+    clear_user(user.id)
+    user.password_hash = get_password_hash(new_password)
+    user.must_change_password = True
+    user.password_changed_at = now
     db.commit()
     db.refresh(user)
-    return user, None
+    return (
+        user,
+        UserPasswordResetChange(
+            forced_offline_session_count=forced_offline_session_count,
+            cleared_online_status=is_online,
+            must_change_password=user.must_change_password,
+        ),
+    ), None
 
 
 def change_user_password(
@@ -875,14 +982,56 @@ def change_user_password(
     return True, None
 
 
-def delete_user(db: Session, *, user: User) -> tuple[bool, str | None]:
+def delete_user(
+    db: Session,
+    *,
+    user: User,
+) -> tuple[tuple[User, UserLifecycleChange] | None, str | None]:
     if user.is_deleted:
-        return True, None
-    can_deactivate, message = ensure_can_deactivate_user(db, user)
-    if not can_deactivate:
-        return False, message
+        return (
+            user,
+            UserLifecycleChange(
+                forced_offline_session_count=0,
+                cleared_online_status=False,
+            ),
+        ), None
+    lifecycle_change, message = _apply_user_active_state(
+        db,
+        user=user,
+        active=False,
+    )
+    if message:
+        return None, message
+    assert lifecycle_change is not None
     user.is_deleted = True
     user.deleted_at = _now_utc()
+    db.commit()
+    db.refresh(user)
+    return (user, lifecycle_change), None
+
+
+def restore_user(
+    db: Session,
+    *,
+    user: User,
+) -> tuple[tuple[User, UserLifecycleChange] | None, str | None]:
+    if not user.is_deleted:
+        return (
+            user,
+            UserLifecycleChange(
+                forced_offline_session_count=0,
+                cleared_online_status=False,
+            ),
+        ), None
+    user.is_deleted = False
+    user.deleted_at = None
     user.is_active = False
     db.commit()
-    return True, None
+    db.refresh(user)
+    return (
+        user,
+        UserLifecycleChange(
+            forced_offline_session_count=0,
+            cleared_online_status=False,
+        ),
+    ), None

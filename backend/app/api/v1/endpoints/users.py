@@ -8,14 +8,21 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.models.user import User
+from app.models.user_session import UserSession
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.user import (
     UserCreate,
+    UserDeleteRequest,
+    UserDeleteResult,
     UserExportResult,
     UserItem,
+    UserLifecycleRequest,
+    UserLifecycleResult,
     UserListResult,
     UserOnlineStatusResult,
+    UserPasswordResetResult,
     UserResetPasswordRequest,
+    UserRestoreRequest,
     UserUpdate,
 )
 from app.services.audit_service import write_audit_log
@@ -27,6 +34,7 @@ from app.services.user_service import (
     get_user_by_id,
     list_users,
     reset_user_password,
+    restore_user,
     set_user_active,
     update_user,
 )
@@ -149,6 +157,7 @@ def get_users(
     stage_id: int | None = Query(default=None, ge=1),
     is_active: bool | None = Query(default=None),
     is_online: bool | None = Query(default=None),
+    deleted_scope: str = Query(default="active", pattern="^(active|deleted|all)$"),
     include_deleted: bool = Query(default=False),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("user.users.list")),
@@ -166,6 +175,7 @@ def get_users(
         is_online=is_online,
         online_user_ids=online_user_ids_for_filter,
         is_active=is_active,
+        deleted_scope=deleted_scope,
         include_deleted=include_deleted,
     )
     online_user_ids = _resolve_online_user_ids_for_users(
@@ -187,6 +197,8 @@ def export_users(
     stage_id: int | None = Query(default=None, ge=1),
     is_active: bool | None = Query(default=None),
     is_online: bool | None = Query(default=None),
+    deleted_scope: str = Query(default="active", pattern="^(active|deleted|all)$"),
+    include_deleted: bool = Query(default=False),
     format: str = Query(default="csv", pattern="^(csv|excel)$"),
     db: Session = Depends(get_db),
     permission_user: User = Depends(require_permission("user.users.export")),
@@ -205,7 +217,8 @@ def export_users(
         is_online=is_online,
         online_user_ids=online_user_ids_for_filter,
         is_active=is_active,
-        include_deleted=False,
+        deleted_scope=deleted_scope,
+        include_deleted=include_deleted,
     )
     online_user_ids = _resolve_online_user_ids_for_users(
         db,
@@ -372,21 +385,36 @@ def update_user_api(
     )
 
 
-@router.post("/{user_id}/enable", response_model=ApiResponse[UserItem])
+@router.post("/{user_id}/enable", response_model=ApiResponse[UserLifecycleResult])
 def enable_user_api(
     user_id: int,
+    payload: UserLifecycleRequest,
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("user.users.enable")),
-) -> ApiResponse[UserItem]:
+) -> ApiResponse[UserLifecycleResult]:
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    updated, error_message = set_user_active(db, user=user, active=True)
+    before_online_user_ids = list_online_user_ids(db, candidate_user_ids=[user.id])
+    before_data = {
+        "is_active": user.is_active,
+        "is_online": user.id in before_online_user_ids,
+        "active_session_count": int(
+            db.query(UserSession)
+            .filter(
+                UserSession.user_id == user.id,
+                UserSession.status == "active",
+            )
+            .count()
+        ),
+    }
+    lifecycle_result, error_message = set_user_active(db, user=user, active=True)
     if error_message:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
-    if not updated:
+    if not lifecycle_result:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to enable user")
+    updated, lifecycle_change = lifecycle_result
     write_audit_log(
         db,
         action_code="user.enable",
@@ -395,36 +423,65 @@ def enable_user_api(
         target_id=str(updated.id),
         target_name=updated.username,
         operator=current_user,
+        before_data=before_data,
+        after_data={
+            "is_active": updated.is_active,
+            "forced_offline_session_count": lifecycle_change.forced_offline_session_count,
+            "cleared_online_status": lifecycle_change.cleared_online_status,
+        },
         ip_address=request.client.host if request and request.client else None,
         terminal_info=request.headers.get("user-agent") if request else None,
+        remark=(payload.remark or "").strip() or None,
     )
     db.commit()
     return success_response(
-        to_user_item(
-            updated,
-            online_user_ids=list_online_user_ids(
-                db,
-                candidate_user_ids=[updated.id],
+        UserLifecycleResult(
+            user=to_user_item(
+                updated,
+                online_user_ids=list_online_user_ids(
+                    db,
+                    candidate_user_ids=[updated.id],
+                ),
             ),
+            forced_offline_session_count=lifecycle_change.forced_offline_session_count,
+            cleared_online_status=lifecycle_change.cleared_online_status,
         )
     )
 
 
-@router.post("/{user_id}/disable", response_model=ApiResponse[UserItem])
+@router.post("/{user_id}/disable", response_model=ApiResponse[UserLifecycleResult])
 def disable_user_api(
     user_id: int,
+    payload: UserLifecycleRequest,
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("user.users.disable")),
-) -> ApiResponse[UserItem]:
+) -> ApiResponse[UserLifecycleResult]:
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    updated, error_message = set_user_active(db, user=user, active=False)
+    remark = (payload.remark or "").strip()
+    if not remark:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="停用原因不能为空")
+    before_online_user_ids = list_online_user_ids(db, candidate_user_ids=[user.id])
+    before_data = {
+        "is_active": user.is_active,
+        "is_online": user.id in before_online_user_ids,
+        "active_session_count": int(
+            db.query(UserSession)
+            .filter(
+                UserSession.user_id == user.id,
+                UserSession.status == "active",
+            )
+            .count()
+        ),
+    }
+    lifecycle_result, error_message = set_user_active(db, user=user, active=False)
     if error_message:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
-    if not updated:
+    if not lifecycle_result:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to disable user")
+    updated, lifecycle_change = lifecycle_result
     write_audit_log(
         db,
         action_code="user.disable",
@@ -433,8 +490,15 @@ def disable_user_api(
         target_id=str(updated.id),
         target_name=updated.username,
         operator=current_user,
+        before_data=before_data,
+        after_data={
+            "is_active": updated.is_active,
+            "forced_offline_session_count": lifecycle_change.forced_offline_session_count,
+            "cleared_online_status": lifecycle_change.cleared_online_status,
+        },
         ip_address=request.client.host if request and request.client else None,
         terminal_info=request.headers.get("user-agent") if request else None,
+        remark=remark,
     )
     db.commit()
     create_message_for_users(
@@ -442,10 +506,10 @@ def disable_user_api(
         message_type="notice",
         priority="important",
         title="账号已被停用",
-        summary=f"账号 {updated.username} 已被管理员停用，如需恢复请联系系统管理员。",
+        summary=f"账号 {updated.username} 已被管理员停用，原因：{remark}。如需恢复请联系系统管理员。",
         content=(
             f"您的账号 {updated.username} 已被管理员 {current_user.username} 停用。"
-            "如该操作与预期不符，请联系系统管理员核实。"
+            f"停用原因：{remark}。如该操作与预期不符，请联系系统管理员核实。"
         ),
         source_module="user",
         source_type="user_disable",
@@ -458,32 +522,60 @@ def disable_user_api(
         created_by_user_id=current_user.id,
     )
     return success_response(
-        to_user_item(
-            updated,
-            online_user_ids=list_online_user_ids(
-                db,
-                candidate_user_ids=[updated.id],
+        UserLifecycleResult(
+            user=to_user_item(
+                updated,
+                online_user_ids=list_online_user_ids(
+                    db,
+                    candidate_user_ids=[updated.id],
+                ),
             ),
+            forced_offline_session_count=lifecycle_change.forced_offline_session_count,
+            cleared_online_status=lifecycle_change.cleared_online_status,
         )
     )
 
 
-@router.post("/{user_id}/reset-password", response_model=ApiResponse[UserItem])
+@router.post("/{user_id}/reset-password", response_model=ApiResponse[UserPasswordResetResult])
 def reset_password_api(
     user_id: int,
     request: Request,
     payload: UserResetPasswordRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("user.users.reset_password")),
-) -> ApiResponse[UserItem]:
+) -> ApiResponse[UserPasswordResetResult]:
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    updated, error_message = reset_user_password(db, user=user, new_password=payload.password)
+    remark = payload.remark.strip()
+    if not remark:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="重置原因不能为空")
+    before_online_user_ids = list_online_user_ids(db, candidate_user_ids=[user.id])
+    before_data = {
+        "is_online": user.id in before_online_user_ids,
+        "active_session_count": int(
+            db.query(UserSession)
+            .filter(
+                UserSession.user_id == user.id,
+                UserSession.status == "active",
+            )
+            .count()
+        ),
+        "must_change_password": user.must_change_password,
+        "password_changed_at": user.password_changed_at.isoformat()
+        if user.password_changed_at
+        else None,
+    }
+    reset_result, error_message = reset_user_password(
+        db,
+        user=user,
+        new_password=payload.password,
+    )
     if error_message:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
-    if not updated:
+    if not reset_result:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password")
+    updated, reset_change = reset_result
     write_audit_log(
         db,
         action_code="user.reset_password",
@@ -492,28 +584,69 @@ def reset_password_api(
         target_id=str(updated.id),
         target_name=updated.username,
         operator=current_user,
+        before_data=before_data,
+        after_data={
+            "forced_offline_session_count": reset_change.forced_offline_session_count,
+            "cleared_online_status": reset_change.cleared_online_status,
+            "must_change_password": reset_change.must_change_password,
+            "password_changed_at": updated.password_changed_at.isoformat()
+            if updated.password_changed_at
+            else None,
+        },
         ip_address=request.client.host if request and request.client else None,
         terminal_info=request.headers.get("user-agent") if request else None,
+        remark=remark,
     )
-    db.commit()
+    create_message_for_users(
+        db,
+        message_type="warning",
+        priority="important",
+        title="密码已被管理员重置",
+        summary=(
+            f"账号 {updated.username} 的密码已被管理员重置，旧会话已失效，"
+            "下次登录必须修改密码。"
+        ),
+        content=(
+            f"您的账号 {updated.username} 已被管理员 {current_user.username} 重置密码。"
+            f"重置原因：{remark}。旧会话已失效，下次登录必须先修改密码。"
+        ),
+        source_module="user",
+        source_type="user_reset_password",
+        source_id=str(updated.id),
+        source_code=updated.username,
+        target_page_code="user",
+        target_tab_code="account_settings",
+        recipient_user_ids=[updated.id],
+        dedupe_key=(
+            f"user_reset_password_{updated.id}_"
+            f"{int(updated.password_changed_at.timestamp()) if updated.password_changed_at else 'now'}"
+        ),
+        created_by_user_id=current_user.id,
+    )
     return success_response(
-        to_user_item(
-            updated,
-            online_user_ids=list_online_user_ids(
-                db,
-                candidate_user_ids=[updated.id],
+        UserPasswordResetResult(
+            user=to_user_item(
+                updated,
+                online_user_ids=list_online_user_ids(
+                    db,
+                    candidate_user_ids=[updated.id],
+                ),
             ),
+            forced_offline_session_count=reset_change.forced_offline_session_count,
+            must_change_password=reset_change.must_change_password,
+            cleared_online_status=reset_change.cleared_online_status,
         )
     )
 
 
-@router.delete("/{user_id}", response_model=ApiResponse[dict[str, bool]])
+@router.delete("/{user_id}", response_model=ApiResponse[UserDeleteResult])
 def delete_user_api(
     user_id: int,
+    payload: UserDeleteRequest,
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("user.users.delete")),
-) -> ApiResponse[dict[str, bool]]:
+) -> ApiResponse[UserDeleteResult]:
     if user_id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete current login user")
 
@@ -521,23 +654,128 @@ def delete_user_api(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    deleted, error_message = delete_user(db, user=user)
+    remark = payload.remark.strip()
+    before_online_user_ids = list_online_user_ids(db, candidate_user_ids=[user.id])
+    before_data = {
+        "username": user.username,
+        "role_code": user.roles[0].code if user.roles else None,
+        "stage_id": user.stage_id,
+        "is_active": user.is_active,
+        "is_deleted": user.is_deleted,
+        "is_online": user.id in before_online_user_ids,
+        "active_session_count": int(
+            db.query(UserSession)
+            .filter(
+                UserSession.user_id == user.id,
+                UserSession.status == "active",
+            )
+            .count()
+        ),
+    }
+
+    deleted_result, error_message = delete_user(db, user=user)
     if error_message:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
-    if not deleted:
+    if not deleted_result:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete user")
+    deleted, lifecycle_change = deleted_result
 
     write_audit_log(
         db,
         action_code="user.delete",
         action_name="逻辑删除用户",
         target_type="user",
-        target_id=str(user.id),
-        target_name=user.username,
+        target_id=str(deleted.id),
+        target_name=deleted.username,
         operator=current_user,
-        after_data={"is_deleted": True, "is_active": False},
+        before_data=before_data,
+        after_data={
+            "is_deleted": deleted.is_deleted,
+            "is_active": deleted.is_active,
+            "deleted_at": deleted.deleted_at.isoformat() if deleted.deleted_at else None,
+            "forced_offline_session_count": lifecycle_change.forced_offline_session_count,
+            "cleared_online_status": lifecycle_change.cleared_online_status,
+        },
         ip_address=request.client.host if request and request.client else None,
         terminal_info=request.headers.get("user-agent") if request else None,
+        remark=remark,
     )
     db.commit()
-    return success_response({"deleted": True}, message="deleted")
+    return success_response(
+        UserDeleteResult(
+            user=to_user_item(
+                deleted,
+                online_user_ids=list_online_user_ids(
+                    db,
+                    candidate_user_ids=[deleted.id],
+                ),
+            ),
+            forced_offline_session_count=lifecycle_change.forced_offline_session_count,
+            cleared_online_status=lifecycle_change.cleared_online_status,
+            deleted=True,
+        ),
+        message="deleted",
+    )
+
+
+@router.post("/{user_id}/restore", response_model=ApiResponse[UserLifecycleResult])
+def restore_user_api(
+    user_id: int,
+    payload: UserRestoreRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("user.users.restore")),
+) -> ApiResponse[UserLifecycleResult]:
+    user = get_user_by_id(db, user_id, include_deleted=True)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    remark = payload.remark.strip()
+    before_data = {
+        "username": user.username,
+        "role_code": user.roles[0].code if user.roles else None,
+        "stage_id": user.stage_id,
+        "is_active": user.is_active,
+        "is_deleted": user.is_deleted,
+        "deleted_at": user.deleted_at.isoformat() if user.deleted_at else None,
+    }
+
+    restored_result, error_message = restore_user(db, user=user)
+    if error_message:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+    if not restored_result:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to restore user")
+    restored, lifecycle_change = restored_result
+
+    write_audit_log(
+        db,
+        action_code="user.restore",
+        action_name="恢复用户",
+        target_type="user",
+        target_id=str(restored.id),
+        target_name=restored.username,
+        operator=current_user,
+        before_data=before_data,
+        after_data={
+            "is_deleted": restored.is_deleted,
+            "is_active": restored.is_active,
+            "deleted_at": restored.deleted_at.isoformat() if restored.deleted_at else None,
+        },
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
+        remark=remark,
+    )
+    db.commit()
+    return success_response(
+        UserLifecycleResult(
+            user=to_user_item(
+                restored,
+                online_user_ids=list_online_user_ids(
+                    db,
+                    candidate_user_ids=[restored.id],
+                ),
+            ),
+            forced_offline_session_count=lifecycle_change.forced_offline_session_count,
+            cleared_online_status=lifecycle_change.cleared_online_status,
+        )
+    )

@@ -29,7 +29,28 @@ class UserUpdate(BaseModel):
 
 
 class UserResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     password: str = Field(min_length=6, max_length=128)
+    remark: str = Field(min_length=1, max_length=255)
+
+
+class UserLifecycleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    remark: str | None = Field(default=None, max_length=255)
+
+
+class UserDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    remark: str = Field(min_length=1, max_length=255)
+
+
+class UserRestoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    remark: str = Field(min_length=1, max_length=255)
 
 
 class UserItem(BaseModel):
@@ -66,3 +87,23 @@ class UserExportResult(BaseModel):
 
 class UserOnlineStatusResult(BaseModel):
     user_ids: list[int]
+
+
+class UserLifecycleResult(BaseModel):
+    user: UserItem
+    forced_offline_session_count: int
+    cleared_online_status: bool
+
+
+class UserDeleteResult(BaseModel):
+    user: UserItem
+    forced_offline_session_count: int
+    cleared_online_status: bool
+    deleted: bool
+
+
+class UserPasswordResetResult(BaseModel):
+    user: UserItem
+    forced_offline_session_count: int
+    must_change_password: bool
+    cleared_online_status: bool

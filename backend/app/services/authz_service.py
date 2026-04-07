@@ -261,6 +261,7 @@ CAPABILITY_NAME_FALLBACK_ZH_BY_CODE = {
     "feature.user.user_management.lifecycle": "启用停用用户",
     "feature.user.user_management.password_reset": "重置用户密码",
     "feature.user.user_management.delete": "删除用户",
+    "feature.user.user_management.restore": "恢复用户",
     "feature.user.user_management.export": "导出用户列表",
     "feature.user.registration_approval.view": "查看注册申请",
     "feature.user.registration_approval.approve": "通过注册申请",
@@ -358,6 +359,11 @@ CAPABILITY_GROUP_META_BY_CODE = {
         "user.accounts",
         "用户管理",
         "逻辑删除用户账号",
+    ),
+    "feature.user.user_management.restore": (
+        "user.accounts",
+        "用户管理",
+        "恢复已删除用户账号",
     ),
     "feature.user.user_management.export": (
         "user.accounts",

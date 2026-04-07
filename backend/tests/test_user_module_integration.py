@@ -20,6 +20,8 @@ from app.main import app  # noqa: E402
 from app.models.audit_log import AuditLog  # noqa: E402
 from app.models.authz_change_log import AuthzChangeLogItem  # noqa: E402
 from app.models.login_log import LoginLog  # noqa: E402
+from app.models.message import Message  # noqa: E402
+from app.models.message_recipient import MessageRecipient  # noqa: E402
 from app.models.process_stage import ProcessStage  # noqa: E402
 from app.models.registration_request import RegistrationRequest  # noqa: E402
 from app.models.role import Role  # noqa: E402
@@ -189,7 +191,7 @@ class UserModuleIntegrationTest(unittest.TestCase):
         rejected_reason: str | None = None,
     ) -> RegistrationRequest:
         self._registration_request_seq += 1
-        suffix = f"{time.time_ns()}_{self._registration_request_seq}"
+        suffix = f"{int(time.time() * 1000) % 10000:04d}{self._registration_request_seq % 10}"
         request_row = RegistrationRequest(
             account=f"rg{suffix}",
             password_hash="mocked-password-hash",
@@ -585,6 +587,7 @@ class UserModuleIntegrationTest(unittest.TestCase):
         missing_disable_response = self.client.post(
             "/api/v1/users/999999/disable",
             headers=self._headers(),
+            json={"remark": "缺失用户校验"},
         )
         self.assertEqual(
             missing_disable_response.status_code,
@@ -593,24 +596,34 @@ class UserModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(missing_disable_response.json()["detail"], "User not found")
 
-        missing_delete_response = self.client.delete(
+        missing_delete_response = self.client.request(
+            "DELETE",
             "/api/v1/users/999999",
             headers=self._headers(),
+            json={"remark": "缺失用户校验"},
         )
         self.assertEqual(
             missing_delete_response.status_code, 404, missing_delete_response.text
         )
         self.assertEqual(missing_delete_response.json()["detail"], "User not found")
 
-        delete_response = self.client.delete(
+        delete_response = self.client.request(
+            "DELETE",
             f"/api/v1/users/{second_user_id}",
             headers=self._headers(),
+            json={"remark": "测试逻辑删除"},
         )
         self.assertEqual(delete_response.status_code, 200, delete_response.text)
+        self.assertTrue(delete_response.json()["data"]["deleted"])
+        self.assertEqual(
+            delete_response.json()["data"]["forced_offline_session_count"],
+            0,
+        )
 
         enable_deleted_response = self.client.post(
             f"/api/v1/users/{second_user_id}/enable",
             headers=self._headers(),
+            json={},
         )
         self.assertEqual(
             enable_deleted_response.status_code,
@@ -621,6 +634,112 @@ class UserModuleIntegrationTest(unittest.TestCase):
             enable_deleted_response.json()["detail"],
             "Deleted user cannot be enabled",
         )
+
+    def test_delete_and_restore_user_flow_tracks_reason_scope_and_session(self) -> None:
+        self._create_role_and_user()
+        assert self.user_id is not None
+        assert self.user_session_id is not None
+
+        delete_response = self.client.request(
+            "DELETE",
+            f"/api/v1/users/{self.user_id}",
+            headers=self._headers(),
+            json={"remark": "离职归档"},
+        )
+        self.assertEqual(delete_response.status_code, 200, delete_response.text)
+        delete_payload = delete_response.json()["data"]
+        self.assertTrue(delete_payload["deleted"])
+        self.assertEqual(delete_payload["user"]["id"], self.user_id)
+        self.assertTrue(delete_payload["user"]["is_deleted"])
+        self.assertFalse(delete_payload["user"]["is_active"])
+        self.assertGreaterEqual(delete_payload["forced_offline_session_count"], 1)
+
+        deleted_list_response = self.client.get(
+            "/api/v1/users",
+            headers=self._headers(),
+            params={"deleted_scope": "deleted"},
+        )
+        self.assertEqual(
+            deleted_list_response.status_code, 200, deleted_list_response.text
+        )
+        deleted_ids = {
+            int(item["id"]) for item in deleted_list_response.json()["data"]["items"]
+        }
+        self.assertIn(self.user_id, deleted_ids)
+
+        export_response = self.client.get(
+            "/api/v1/users/export",
+            headers=self._headers(),
+            params={"deleted_scope": "deleted", "format": "csv"},
+        )
+        self.assertEqual(export_response.status_code, 200, export_response.text)
+        self.assertTrue(export_response.json()["data"]["content_base64"])
+
+        db = SessionLocal()
+        try:
+            deleted_user = db.query(User).filter(User.id == self.user_id).one()
+            self.assertTrue(deleted_user.is_deleted)
+            self.assertFalse(deleted_user.is_active)
+            self.assertIsNotNone(deleted_user.deleted_at)
+            deleted_session = (
+                db.query(UserSession)
+                .filter(UserSession.session_token_id == self.user_session_id)
+                .one()
+            )
+            self.assertEqual(deleted_session.status, "forced_offline")
+            delete_audit = (
+                db.query(AuditLog)
+                .filter(
+                    AuditLog.action_code == "user.delete",
+                    AuditLog.target_id == str(self.user_id),
+                )
+                .order_by(AuditLog.id.desc())
+                .first()
+            )
+            assert delete_audit is not None
+            self.assertEqual(delete_audit.remark, "离职归档")
+        finally:
+            db.close()
+
+        restore_response = self.client.post(
+            f"/api/v1/users/{self.user_id}/restore",
+            headers=self._headers(),
+            json={"remark": "资料纠正恢复"},
+        )
+        self.assertEqual(restore_response.status_code, 200, restore_response.text)
+        restore_payload = restore_response.json()["data"]
+        self.assertEqual(restore_payload["user"]["id"], self.user_id)
+        self.assertFalse(restore_payload["user"]["is_deleted"])
+        self.assertFalse(restore_payload["user"]["is_active"])
+
+        active_list_response = self.client.get(
+            "/api/v1/users",
+            headers=self._headers(),
+            params={"deleted_scope": "active", "keyword": self.username},
+        )
+        self.assertEqual(active_list_response.status_code, 200, active_list_response.text)
+        restored_items = active_list_response.json()["data"]["items"]
+        self.assertTrue(any(int(item["id"]) == self.user_id for item in restored_items))
+
+        restored_db = SessionLocal()
+        try:
+            restored_user = restored_db.query(User).filter(User.id == self.user_id).one()
+            self.assertFalse(restored_user.is_deleted)
+            self.assertFalse(restored_user.is_active)
+            self.assertIsNone(restored_user.deleted_at)
+            restore_audit = (
+                restored_db.query(AuditLog)
+                .filter(
+                    AuditLog.action_code == "user.restore",
+                    AuditLog.target_id == str(self.user_id),
+                )
+                .order_by(AuditLog.id.desc())
+                .first()
+            )
+            assert restore_audit is not None
+            self.assertEqual(restore_audit.remark, "资料纠正恢复")
+        finally:
+            restored_db.close()
 
     def test_system_admin_guardrails_block_disabling_last_permission_admin(
         self,
@@ -648,6 +767,7 @@ class UserModuleIntegrationTest(unittest.TestCase):
             response = self.client.post(
                 f"/api/v1/users/{admin_user_id}/disable",
                 headers=self._headers(),
+                json={"remark": "管理员停用保护"},
             )
             self.assertEqual(response.status_code, 400, response.text)
             self.assertEqual(
@@ -665,6 +785,146 @@ class UserModuleIntegrationTest(unittest.TestCase):
                 restore_db.commit()
             finally:
                 restore_db.close()
+
+    def test_disable_user_closes_online_state_forces_sessions_and_records_audit(
+        self,
+    ) -> None:
+        self._create_role_and_user()
+        assert self.user_id is not None
+        assert self.user_token is not None
+        assert self.user_session_id is not None
+
+        response = self.client.post(
+            f"/api/v1/users/{self.user_id}/disable",
+            headers=self._headers(),
+            json={"remark": "夜班收口"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        response_data = response.json()["data"]
+        self.assertFalse(response_data["user"]["is_active"])
+        self.assertGreaterEqual(response_data["forced_offline_session_count"], 1)
+        self.assertTrue(response_data["cleared_online_status"])
+
+        db = SessionLocal()
+        try:
+            session_row = (
+                db.query(UserSession)
+                .filter(UserSession.session_token_id == self.user_session_id)
+                .one_or_none()
+            )
+            self.assertIsNotNone(session_row)
+            assert session_row is not None
+            self.assertEqual(session_row.status, "forced_offline")
+
+            audit_row = (
+                db.query(AuditLog)
+                .filter(
+                    AuditLog.action_code == "user.disable",
+                    AuditLog.target_id == str(self.user_id),
+                )
+                .order_by(AuditLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(audit_row)
+            assert audit_row is not None
+            self.assertEqual(audit_row.remark, "夜班收口")
+            self.assertEqual(audit_row.before_data["is_active"], True)
+            self.assertEqual(audit_row.before_data["is_online"], True)
+            self.assertGreaterEqual(audit_row.before_data["active_session_count"], 1)
+            self.assertEqual(audit_row.after_data["is_active"], False)
+            self.assertGreaterEqual(
+                audit_row.after_data["forced_offline_session_count"], 1
+            )
+            self.assertTrue(audit_row.after_data["cleared_online_status"])
+        finally:
+            db.close()
+
+        online_status_response = self.client.get(
+            f"/api/v1/users/online-status?user_id={self.user_id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            online_status_response.status_code, 200, online_status_response.text
+        )
+        self.assertNotIn(
+            self.user_id,
+            set(online_status_response.json()["data"]["user_ids"]),
+        )
+
+        profile_response = self.client.get(
+            "/api/v1/me/profile",
+            headers=self._headers(self.user_token),
+        )
+        self.assertEqual(profile_response.status_code, 401, profile_response.text)
+
+    def test_enable_user_restores_account_but_does_not_restore_online_until_relogin(
+        self,
+    ) -> None:
+        self._create_role_and_user()
+        assert self.user_id is not None
+        assert self.user_token is not None
+
+        disable_response = self.client.post(
+            f"/api/v1/users/{self.user_id}/disable",
+            headers=self._headers(),
+            json={"remark": "临时停用"},
+        )
+        self.assertEqual(disable_response.status_code, 200, disable_response.text)
+
+        enable_response = self.client.post(
+            f"/api/v1/users/{self.user_id}/enable",
+            headers=self._headers(),
+            json={"remark": "恢复班次"},
+        )
+        self.assertEqual(enable_response.status_code, 200, enable_response.text)
+        enable_data = enable_response.json()["data"]
+        self.assertTrue(enable_data["user"]["is_active"])
+        self.assertEqual(enable_data["forced_offline_session_count"], 0)
+        self.assertFalse(enable_data["cleared_online_status"])
+        self.assertFalse(enable_data["user"]["is_online"])
+
+        online_status_response = self.client.get(
+            f"/api/v1/users/online-status?user_id={self.user_id}",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            online_status_response.status_code, 200, online_status_response.text
+        )
+        self.assertNotIn(
+            self.user_id,
+            set(online_status_response.json()["data"]["user_ids"]),
+        )
+
+        stale_profile_response = self.client.get(
+            "/api/v1/me/profile",
+            headers=self._headers(self.user_token),
+        )
+        self.assertEqual(
+            stale_profile_response.status_code, 401, stale_profile_response.text
+        )
+
+        relogin_token = self._login(self.username, "Pwd@123")
+        relogin_profile_response = self.client.get(
+            "/api/v1/me/profile",
+            headers=self._headers(relogin_token),
+        )
+        self.assertEqual(
+            relogin_profile_response.status_code,
+            200,
+            relogin_profile_response.text,
+        )
+
+    def test_disable_user_requires_non_empty_remark(self) -> None:
+        self._create_role_and_user()
+        assert self.user_id is not None
+
+        response = self.client.post(
+            f"/api/v1/users/{self.user_id}/disable",
+            headers=self._headers(),
+            json={"remark": "   "},
+        )
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(response.json()["detail"], "停用原因不能为空")
 
     def test_me_session_returns_404_when_token_sid_is_missing(self) -> None:
         self._create_role_and_user()
@@ -1976,10 +2236,13 @@ class UserModuleIntegrationTest(unittest.TestCase):
         reset_response = self.client.post(
             f"/api/v1/users/{self.user_id}/reset-password",
             headers=self._headers(),
-            json={"password": reset_password},
+            json={"password": reset_password, "remark": "账号交接重置"},
         )
         self.assertEqual(reset_response.status_code, 200, reset_response.text)
-        self.assertTrue(reset_response.json()["data"]["must_change_password"])
+        reset_data = reset_response.json()["data"]
+        self.assertTrue(reset_data["must_change_password"])
+        self.assertGreaterEqual(reset_data["forced_offline_session_count"], 1)
+        self.assertTrue(reset_data["cleared_online_status"])
 
         old_profile_response = self.client.get(
             "/api/v1/me/profile",
@@ -2002,6 +2265,52 @@ class UserModuleIntegrationTest(unittest.TestCase):
 
         db = SessionLocal()
         try:
+            audit_row = (
+                db.query(AuditLog)
+                .filter(
+                    AuditLog.action_code == "user.reset_password",
+                    AuditLog.target_id == str(self.user_id),
+                )
+                .order_by(AuditLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(audit_row)
+            assert audit_row is not None
+            self.assertEqual(audit_row.remark, "账号交接重置")
+            self.assertEqual(audit_row.before_data["is_online"], True)
+            self.assertGreaterEqual(audit_row.before_data["active_session_count"], 1)
+            self.assertEqual(audit_row.before_data["must_change_password"], True)
+            self.assertEqual(audit_row.after_data["must_change_password"], True)
+            self.assertGreaterEqual(
+                audit_row.after_data["forced_offline_session_count"], 1
+            )
+            self.assertTrue(audit_row.after_data["cleared_online_status"])
+
+            reset_message = (
+                db.query(Message)
+                .filter(
+                    Message.source_type == "user_reset_password",
+                    Message.source_id == str(self.user_id),
+                )
+                .order_by(Message.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(reset_message)
+            assert reset_message is not None
+            self.assertEqual(reset_message.message_type, "warning")
+            self.assertEqual(reset_message.priority, "important")
+            self.assertEqual(reset_message.target_tab_code, "account_settings")
+            self.assertIn("账号交接重置", reset_message.content or "")
+            recipient_row = (
+                db.query(MessageRecipient)
+                .filter(
+                    MessageRecipient.message_id == reset_message.id,
+                    MessageRecipient.recipient_user_id == self.user_id,
+                )
+                .one_or_none()
+            )
+            self.assertIsNotNone(recipient_row)
+
             operator = db.query(User).filter(User.id == self.user_id).one()
             admin_user = db.query(User).filter(User.username == "admin").one()
             _, rename_error = update_user(
@@ -2022,9 +2331,11 @@ class UserModuleIntegrationTest(unittest.TestCase):
             headers=self._headers(),
         )
         self.assertEqual(admin_me_response.status_code, 200, admin_me_response.text)
-        admin_delete_response = self.client.delete(
+        admin_delete_response = self.client.request(
+            "DELETE",
             f"/api/v1/users/{admin_me_response.json()['data']['id']}",
             headers=self._headers(),
+            json={"remark": "删除当前登录用户"},
         )
         self.assertEqual(
             admin_delete_response.status_code, 400, admin_delete_response.text
@@ -2111,6 +2422,36 @@ class UserModuleIntegrationTest(unittest.TestCase):
         ).decode("utf-8-sig")
         self.assertIn(self.username, export_csv)
         self.assertNotIn(extra_username, export_csv)
+
+    def test_reset_password_rejects_same_password_and_requires_remark(self) -> None:
+        self._create_role_and_user()
+        assert self.user_id is not None
+
+        missing_remark_response = self.client.post(
+            f"/api/v1/users/{self.user_id}/reset-password",
+            headers=self._headers(),
+            json={"password": "Reset@123"},
+        )
+        self.assertEqual(
+            missing_remark_response.status_code,
+            422,
+            missing_remark_response.text,
+        )
+
+        same_password_response = self.client.post(
+            f"/api/v1/users/{self.user_id}/reset-password",
+            headers=self._headers(),
+            json={"password": "Pwd@123", "remark": "重复密码校验"},
+        )
+        self.assertEqual(
+            same_password_response.status_code,
+            400,
+            same_password_response.text,
+        )
+        self.assertEqual(
+            same_password_response.json()["detail"],
+            "新密码不能与当前密码相同",
+        )
 
     def test_users_online_status_endpoint_and_is_online_filter(self) -> None:
         self._create_role_and_user()
