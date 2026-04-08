@@ -45,3 +45,57 @@ Manual seed command remains available:
 
 - username: `admin`
 - password: `Admin@123456`
+
+## Docker 生产部署基线（单机 Compose）
+
+说明：
+
+- 新增的是容器生产启动口径，不替换现有 `start_backend.py` / `start_frontend.py` 本地开发入口。
+- 根目录 `compose.yml` 提供 `postgres`、`redis`、`backend-web`、`backend-worker` 四个服务。
+- `backend-web` 固定走 `gunicorn + uvicorn worker`，默认 `WEB_CONCURRENCY=4`，并显式禁用 reload。
+- `backend-worker` 仅运行独立 worker 入口，不承载 Web 请求。
+
+### 1. 启动
+
+在仓库根目录执行：
+
+```powershell
+docker compose up -d --build
+```
+
+### 2. 核验
+
+```powershell
+docker compose ps
+docker compose logs backend-web --tail=100
+docker compose logs backend-worker --tail=100
+```
+
+可选健康检查（按项目现有接口路径调整）：
+
+```powershell
+curl http://127.0.0.1:8000/health
+```
+
+### 3. 关键环境变量（Compose 已内置默认值）
+
+- Web 并发：`WEB_CONCURRENCY`（默认 `4`）
+- 数据库连接：`DB_HOST` `DB_PORT` `DB_NAME` `DB_USER` `DB_PASSWORD`
+- Bootstrap 连接：`DB_BOOTSTRAP_HOST` `DB_BOOTSTRAP_PORT` `DB_BOOTSTRAP_USER` `DB_BOOTSTRAP_PASSWORD`
+- 数据库连接池：`DB_POOL_SIZE` `DB_MAX_OVERFLOW` `DB_POOL_TIMEOUT_SECONDS` `DB_POOL_RECYCLE_SECONDS`
+- 后台任务开关：
+  - `backend-web`: `WEB_RUN_BOOTSTRAP=false`、`WEB_RUN_BACKGROUND_LOOPS=false`
+  - `backend-worker`: `WORKER_RUN_BOOTSTRAP=true`、`WORKER_RUN_BACKGROUND_LOOPS=true`
+  - 后台循环细分仍由 `MAINTENANCE_AUTO_GENERATE_ENABLED`、`MESSAGE_DELIVERY_MAINTENANCE_ENABLED` 控制
+
+### 4. 停止与清理
+
+```powershell
+docker compose down
+```
+
+如需同时删除数据卷（会清空 PostgreSQL/Redis 数据）：
+
+```powershell
+docker compose down -v
+```

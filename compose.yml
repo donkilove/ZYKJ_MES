@@ -1,0 +1,164 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mes_db}
+      POSTGRES_USER: ${POSTGRES_USER:-mes_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mes_password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  backend-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zykj-mes-backend:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    entrypoint:
+      - /app/docker/web-entrypoint.sh
+    environment:
+      APP_ENV: prod
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8000"
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
+      UVICORN_RELOAD: "false"
+      RELOAD: "false"
+
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-mes_db}
+      DB_USER: ${DB_USER:-mes_user}
+      DB_PASSWORD: ${DB_PASSWORD:-mes_password}
+      DB_BOOTSTRAP_HOST: ${DB_BOOTSTRAP_HOST:-postgres}
+      DB_BOOTSTRAP_PORT: ${DB_BOOTSTRAP_PORT:-5432}
+      DB_BOOTSTRAP_USER: ${DB_BOOTSTRAP_USER:-postgres}
+      DB_BOOTSTRAP_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:-mes_password}
+      DB_BOOTSTRAP_MAINTENANCE_DB: ${DB_BOOTSTRAP_MAINTENANCE_DB:-postgres}
+
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-8}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-8}
+      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-15}
+      DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
+      SESSION_TOUCH_MIN_INTERVAL_SECONDS: ${SESSION_TOUCH_MIN_INTERVAL_SECONDS:-30}
+
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SSL: ${REDIS_SSL:-false}
+      REDIS_SOCKET_TIMEOUT_SECONDS: ${REDIS_SOCKET_TIMEOUT_SECONDS:-0.2}
+      REDIS_CONNECT_TIMEOUT_SECONDS: ${REDIS_CONNECT_TIMEOUT_SECONDS:-0.2}
+      AUTHZ_PERMISSION_CACHE_REDIS_ENABLED: ${AUTHZ_PERMISSION_CACHE_REDIS_ENABLED:-true}
+      AUTHZ_PERMISSION_CACHE_PREFIX: ${AUTHZ_PERMISSION_CACHE_PREFIX:-authz:permission:v1}
+      AUTHZ_PERMISSION_CACHE_TTL_SECONDS: ${AUTHZ_PERMISSION_CACHE_TTL_SECONDS:-60}
+
+      WEB_RUN_BOOTSTRAP: "false"
+      WEB_RUN_BACKGROUND_LOOPS: "false"
+      MAINTENANCE_AUTO_GENERATE_ENABLED: "false"
+      MESSAGE_DELIVERY_MAINTENANCE_ENABLED: "false"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import socket;s=socket.create_connection(("127.0.0.1", 8000), 2);s.close()
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  backend-worker:
+    image: zykj-mes-backend:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    entrypoint:
+      - /app/docker/worker-entrypoint.sh
+    environment:
+      APP_ENV: prod
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8000"
+      UVICORN_RELOAD: "false"
+      RELOAD: "false"
+
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-mes_db}
+      DB_USER: ${DB_USER:-mes_user}
+      DB_PASSWORD: ${DB_PASSWORD:-mes_password}
+      DB_BOOTSTRAP_HOST: ${DB_BOOTSTRAP_HOST:-postgres}
+      DB_BOOTSTRAP_PORT: ${DB_BOOTSTRAP_PORT:-5432}
+      DB_BOOTSTRAP_USER: ${DB_BOOTSTRAP_USER:-postgres}
+      DB_BOOTSTRAP_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:-mes_password}
+      DB_BOOTSTRAP_MAINTENANCE_DB: ${DB_BOOTSTRAP_MAINTENANCE_DB:-postgres}
+
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-8}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-8}
+      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-15}
+      DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
+      SESSION_TOUCH_MIN_INTERVAL_SECONDS: ${SESSION_TOUCH_MIN_INTERVAL_SECONDS:-30}
+
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SSL: ${REDIS_SSL:-false}
+      REDIS_SOCKET_TIMEOUT_SECONDS: ${REDIS_SOCKET_TIMEOUT_SECONDS:-0.2}
+      REDIS_CONNECT_TIMEOUT_SECONDS: ${REDIS_CONNECT_TIMEOUT_SECONDS:-0.2}
+      AUTHZ_PERMISSION_CACHE_REDIS_ENABLED: ${AUTHZ_PERMISSION_CACHE_REDIS_ENABLED:-true}
+      AUTHZ_PERMISSION_CACHE_PREFIX: ${AUTHZ_PERMISSION_CACHE_PREFIX:-authz:permission:v1}
+      AUTHZ_PERMISSION_CACHE_TTL_SECONDS: ${AUTHZ_PERMISSION_CACHE_TTL_SECONDS:-60}
+
+      WORKER_RUN_BOOTSTRAP: "true"
+      WORKER_RUN_BACKGROUND_LOOPS: "true"
+      MAINTENANCE_AUTO_GENERATE_ENABLED: "true"
+      MESSAGE_DELIVERY_MAINTENANCE_ENABLED: "true"
+
+volumes:
+  postgres-data:
+  redis-data:
