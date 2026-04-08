@@ -87,6 +87,7 @@ curl http://127.0.0.1:8000/health
   - `backend-web`: `WEB_RUN_BOOTSTRAP=false`、`WEB_RUN_BACKGROUND_LOOPS=false`
   - `backend-worker`: `WORKER_RUN_BOOTSTRAP=true`、`WORKER_RUN_BACKGROUND_LOOPS=true`
   - 后台循环细分仍由 `MAINTENANCE_AUTO_GENERATE_ENABLED`、`MESSAGE_DELIVERY_MAINTENANCE_ENABLED` 控制
+- 若调整了 PostgreSQL 初始账号/密码，请同步 `DB_BOOTSTRAP_USER` / `DB_BOOTSTRAP_PASSWORD`，并在需要时执行一次 `docker compose down -v` 重新初始化数据卷。
 
 ### 4. 停止与清理
 
