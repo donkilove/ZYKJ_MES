@@ -3,16 +3,17 @@
 ## 目标
 
 本文档说明当前仓库已接入的 OpenCode 工具能力、对应实体、启动方式、环境变量与启用前提。
+项目根目录 `opencode.json` 已移除，不再作为仓库内配置来源；本文档保留为能力索引与本地包装命令说明，MCP 可用性以当前宿主环境实际注入结果为准。
 
 ## 工具清单
 
 | 能力 | 接入实体 | 状态 | 启动方式 | 关键环境变量/前置条件 |
 | --- | --- | --- | --- | --- |
-| 顺序思考 MCP | `opencode.json > mcp.sequential_thinking` | 已连接 | `npx -y @modelcontextprotocol/server-sequential-thinking` | 需要本机可用 `npx` |
-| Context7 文档 MCP | `opencode.json > mcp.context7` | 已连接 | 远程 `https://mcp.context7.com/mcp` | 需要可访问公网 |
-| Serena 代码 MCP | `opencode.json > mcp.serena` | 已连接 | `python -m uv tool run --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant` | 需要 `python -m uv` 可用，首次启动需联网下载 |
-| Playwright MCP | `opencode.json > mcp.playwright` | 已连接 | `npx -y @playwright/mcp@latest` | 需要本机可用 `npx` |
-| PostgreSQL MCP | `opencode.json > mcp.postgres` + `tools/project_toolkit.py postgres-mcp` | 已接入，默认启用 | `python tools/project_toolkit.py postgres-mcp` | 默认按 `MCP_POSTGRES_URL` -> `DB_*` -> `backend/.env` -> `backend/.env.example` 解析本地连接 |
+| 顺序思考 MCP | `宿主 MCP: sequential_thinking` | 已连接 | `npx -y @modelcontextprotocol/server-sequential-thinking` | 需要本机可用 `npx` |
+| Context7 文档 MCP | `宿主 MCP: context7` | 已连接 | 远程 `https://mcp.context7.com/mcp` | 需要可访问公网 |
+| Serena 代码 MCP | `宿主 MCP: serena` | 已连接 | `python -m uv tool run --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant` | 需要 `python -m uv` 可用，首次启动需联网下载 |
+| Playwright MCP | `宿主 MCP: playwright` | 已连接 | `npx -y @playwright/mcp@latest` | 需要本机可用 `npx` |
+| PostgreSQL MCP | `宿主 MCP: postgres` + `tools/project_toolkit.py postgres-mcp` | 已接入，默认启用 | `python tools/project_toolkit.py postgres-mcp` | 默认按 `MCP_POSTGRES_URL` -> `DB_*` -> `backend/.env` -> `backend/.env.example` 解析本地连接 |
 | OpenAPI 校验（包装命令，非独立 MCP） | `tools/project_toolkit.py openapi-validate` | 已接入并已验证 | `python tools/project_toolkit.py openapi-validate` | 需要本地接口服务可访问，默认 `http://127.0.0.1:8000/openapi.json` |
 | Flutter UI/集成测试（包装命令，非独立 MCP） | `tools/project_toolkit.py flutter-ui` | 已接入并已验证 | `python tools/project_toolkit.py flutter-ui [路径]` | 需要本机可用 `flutter`；默认优先 `frontend/integration_test`，不存在时退回 `frontend/test` |
 | GitHub REST API | `tools/project_toolkit.py github-api` | 已接入 | `python tools/project_toolkit.py github-api <endpoint>` | 若存在 `GITHUB_TOKEN` 则自动鉴权；缺失时回退为匿名访问公开 API |
@@ -23,19 +24,7 @@
 
 ## PostgreSQL MCP 启用方式
 
-当前配置已默认启用 PostgreSQL MCP，本地连接按以下顺序解析：
-
-```json
-"postgres": {
-  "type": "local",
-  "command": [
-    "python",
-    "tools/project_toolkit.py",
-    "postgres-mcp"
-  ],
-  "enabled": true
-}
-```
+当前仓库不再维护项目级 `opencode.json`。若宿主环境已注入 PostgreSQL MCP，本仓库侧本地连接仍按以下顺序解析：
 
 连接信息来源优先级：
 
@@ -48,7 +37,7 @@
 
 1. 确认数据库可访问且凭证有效。
 2. 按上述优先级准备本地连接来源；若仓库已有 `backend/.env`，通常无需额外设置。
-3. 在当前 Windows 环境执行 `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe mcp list` 确认已加载；若已将 OpenCode CLI 加入 `PATH`，也可直接执行 `opencode mcp list`。
+3. 若当前通过 OpenCode 宿主运行，可执行 `C:\Users\Donki\AppData\Local\OpenCode\opencode-cli.exe mcp list` 确认宿主侧已加载 `postgres`；若已将 OpenCode CLI 加入 `PATH`，也可直接执行 `opencode mcp list`。
 
 ## 常用示例
 
