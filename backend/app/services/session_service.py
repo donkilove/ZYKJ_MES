@@ -79,21 +79,28 @@ def get_session_by_token_id(db: Session, session_token_id: str) -> UserSession |
     return db.execute(stmt).scalars().first()
 
 
-def touch_session_by_token_id(db: Session, session_token_id: str) -> UserSession | None:
+def touch_session_by_token_id(
+    db: Session, session_token_id: str
+) -> tuple[UserSession | None, bool]:
     row = get_session_by_token_id(db, session_token_id)
     if not row:
-        return None
+        return None, False
     now = _now_utc()
     if row.status != "active":
-        return row
+        return row, False
     if row.expires_at <= now:
         row.status = "expired"
         row.logout_time = now
         db.flush()
-        return row
+        return row, True
+    min_touch_interval = max(1, settings.session_touch_min_interval_seconds)
+    if row.last_active_at is not None:
+        elapsed_seconds = (now - row.last_active_at).total_seconds()
+        if elapsed_seconds < min_touch_interval:
+            return row, False
     row.last_active_at = now
     db.flush()
-    return row
+    return row, True
 
 
 def mark_session_logout(

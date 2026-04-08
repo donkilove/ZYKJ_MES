@@ -48,10 +48,11 @@ def get_current_user(
     if user.is_deleted or not user.is_active:
         raise credentials_error
     if session_token_id:
-        session_row = touch_session_by_token_id(db, session_token_id)
+        session_row, session_touched = touch_session_by_token_id(db, session_token_id)
+        if session_touched:
+            db.commit()
         if session_row is None or session_row.status != "active":
             raise credentials_error
-        db.commit()
     touch_user(user.id)
     return user
 

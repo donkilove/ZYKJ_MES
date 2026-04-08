@@ -2895,7 +2895,7 @@ class UserModuleIntegrationTest(unittest.TestCase):
 
         with patch(
             "app.api.deps.touch_session_by_token_id",
-            return_value=type("SessionStub", (), {"status": "active"})(),
+            return_value=(type("SessionStub", (), {"status": "active"})(), False),
         ):
             expired_session_response = self.client.get(
                 "/api/v1/me/session",

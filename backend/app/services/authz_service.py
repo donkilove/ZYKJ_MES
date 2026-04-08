@@ -1,10 +1,24 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import hashlib
+import json
+import logging
+from threading import RLock
+import time
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+
+try:
+    from redis import Redis
+    from redis.exceptions import RedisError
+except Exception:  # pragma: no cover - 依赖缺失时仅启用本地缓存回退
+    Redis = None  # type: ignore[assignment]
+
+    class RedisError(Exception):
+        pass
 
 from app.core.authz_catalog import (
     AUTHZ_RESOURCE_ACTION,
@@ -29,6 +43,7 @@ from app.core.authz_hierarchy_catalog import (
     MODULE_NAME_BY_CODE,
     module_permission_code,
 )
+from app.core.config import settings
 from app.core.rbac import (
     ROLE_DEFINITIONS,
     ROLE_OPERATOR,
@@ -74,6 +89,127 @@ _CAPABILITY_PACK_VISIBLE_MODULE_CODES = (
     "equipment",
     "message",
 )
+
+logger = logging.getLogger(__name__)
+
+_AUTHZ_PERMISSION_CACHE_ALL_MODULES = "__all__"
+_AUTHZ_PERMISSION_LOCAL_CACHE: dict[str, tuple[float, set[str]]] = {}
+_AUTHZ_PERMISSION_LOCAL_CACHE_LOCK = RLock()
+_AUTHZ_PERMISSION_REDIS_CLIENT = None
+_AUTHZ_PERMISSION_REDIS_INIT = False
+
+
+def _authz_permission_cache_ttl_seconds() -> int:
+    return max(1, settings.authz_permission_cache_ttl_seconds)
+
+
+def _authz_permission_cache_key(
+    *, normalized_roles: list[str], normalized_module_code: str | None
+) -> str:
+    module_token = normalized_module_code or _AUTHZ_PERMISSION_CACHE_ALL_MODULES
+    joined_roles = ",".join(normalized_roles)
+    digest = hashlib.sha1(f"{joined_roles}|{module_token}".encode("utf-8")).hexdigest()
+    return f"{settings.authz_permission_cache_prefix}:{digest}"
+
+
+def _get_authz_permission_cache_redis_client():
+    global _AUTHZ_PERMISSION_REDIS_INIT
+    global _AUTHZ_PERMISSION_REDIS_CLIENT
+    if _AUTHZ_PERMISSION_REDIS_INIT:
+        return _AUTHZ_PERMISSION_REDIS_CLIENT
+    _AUTHZ_PERMISSION_REDIS_INIT = True
+    if not settings.authz_permission_cache_redis_enabled:
+        return None
+    if Redis is None:
+        logger.warning("[AUTHZ_CACHE] redis 依赖不可用，使用进程内缓存回退。")
+        return None
+    try:
+        _AUTHZ_PERMISSION_REDIS_CLIENT = Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            password=settings.redis_password or None,
+            ssl=settings.redis_ssl,
+            decode_responses=True,
+            socket_timeout=max(0.05, settings.redis_socket_timeout_seconds),
+            socket_connect_timeout=max(0.05, settings.redis_connect_timeout_seconds),
+        )
+        _AUTHZ_PERMISSION_REDIS_CLIENT.ping()
+    except Exception:
+        logger.warning("[AUTHZ_CACHE] Redis 连接失败，使用进程内缓存回退。", exc_info=True)
+        _AUTHZ_PERMISSION_REDIS_CLIENT = None
+    return _AUTHZ_PERMISSION_REDIS_CLIENT
+
+
+def _get_permission_codes_from_local_cache(cache_key: str) -> set[str] | None:
+    with _AUTHZ_PERMISSION_LOCAL_CACHE_LOCK:
+        cached = _AUTHZ_PERMISSION_LOCAL_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        expire_at, value = cached
+        if expire_at <= time.monotonic():
+            _AUTHZ_PERMISSION_LOCAL_CACHE.pop(cache_key, None)
+            return None
+        return set(value)
+
+
+def _set_permission_codes_to_local_cache(
+    cache_key: str, permission_codes: set[str], ttl_seconds: int
+) -> None:
+    expire_at = time.monotonic() + max(1, ttl_seconds)
+    with _AUTHZ_PERMISSION_LOCAL_CACHE_LOCK:
+        _AUTHZ_PERMISSION_LOCAL_CACHE[cache_key] = (expire_at, set(permission_codes))
+
+
+def _get_permission_codes_from_redis_cache(cache_key: str) -> set[str] | None:
+    redis_client = _get_authz_permission_cache_redis_client()
+    if redis_client is None:
+        return None
+    try:
+        payload = redis_client.get(cache_key)
+    except RedisError:
+        logger.warning("[AUTHZ_CACHE] Redis 读取失败，使用进程内缓存回退。", exc_info=True)
+        return None
+    if not payload:
+        return None
+    try:
+        values = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(values, list):
+        return None
+    return {str(code) for code in values if str(code).strip()}
+
+
+def _set_permission_codes_to_redis_cache(
+    cache_key: str, permission_codes: set[str], ttl_seconds: int
+) -> None:
+    redis_client = _get_authz_permission_cache_redis_client()
+    if redis_client is None:
+        return
+    try:
+        redis_client.setex(
+            cache_key,
+            max(1, ttl_seconds),
+            json.dumps(sorted(permission_codes), ensure_ascii=False),
+        )
+    except RedisError:
+        logger.warning("[AUTHZ_CACHE] Redis 写入失败，使用进程内缓存回退。", exc_info=True)
+
+
+def invalidate_permission_cache() -> None:
+    with _AUTHZ_PERMISSION_LOCAL_CACHE_LOCK:
+        _AUTHZ_PERMISSION_LOCAL_CACHE.clear()
+    redis_client = _get_authz_permission_cache_redis_client()
+    if redis_client is None:
+        return
+    try:
+        key_pattern = f"{settings.authz_permission_cache_prefix}:*"
+        cache_keys = list(redis_client.scan_iter(match=key_pattern, count=200))
+        if cache_keys:
+            redis_client.delete(*cache_keys)
+    except RedisError:
+        logger.warning("[AUTHZ_CACHE] Redis 缓存清理失败。", exc_info=True)
 
 
 def _codes(*values: str | None) -> set[str]:
@@ -202,6 +338,8 @@ def _ensure_system_admin_permission_guardrail(db: Session) -> None:
         db,
         role_codes=[ROLE_SYSTEM_ADMIN],
         module_code="system",
+        use_cache=False,
+        ensure_defaults=False,
     )
     if not _SYSTEM_ADMIN_GUARDRAIL_PERMISSION_CODES.issubset(effective_codes):
         raise ValueError("系统管理员必须固定拥有功能权限配置页面访问与保存权限")
@@ -748,6 +886,7 @@ def ensure_authz_defaults(db: Session) -> None:
     revision_changed = ensure_authz_module_revision_defaults(db)
     if catalog_changed or grants_changed or revision_changed:
         db.commit()
+        invalidate_permission_cache()
 
 
 def get_authz_module_revision(db: Session, *, module_code: str) -> int:
@@ -1175,15 +1314,12 @@ def _effective_permission_codes_from_granted(
     return effective
 
 
-def _effective_permission_codes_for_role_codes(
+def _query_effective_permission_codes_for_role_codes(
     db: Session,
     *,
-    role_codes: list[str],
-    module_code: str | None = None,
+    normalized_roles: list[str],
+    normalized_module_code: str | None = None,
 ) -> set[str]:
-    normalized_roles = sorted({code for code in role_codes if code})
-    if not normalized_roles:
-        return set()
     row_by_code = _catalog_rows_by_code(db)
     granted_codes = _load_granted_permission_codes_for_roles(
         db,
@@ -1193,15 +1329,59 @@ def _effective_permission_codes_for_role_codes(
         granted_codes=granted_codes,
         row_by_code=row_by_code,
     )
-    if module_code and module_code.strip():
-        normalized_module = module_code.strip()
-        return {
-            code
-            for code in effective_codes
-            if (row := row_by_code.get(code)) is not None
-            and str(row.module_code).strip() == normalized_module
-        }
-    return effective_codes
+    if normalized_module_code is None:
+        return effective_codes
+    return {
+        code
+        for code in effective_codes
+        if (row := row_by_code.get(code)) is not None
+        and str(row.module_code).strip() == normalized_module_code
+    }
+
+
+def _effective_permission_codes_for_role_codes(
+    db: Session,
+    *,
+    role_codes: list[str],
+    module_code: str | None = None,
+    use_cache: bool = True,
+    ensure_defaults: bool = True,
+) -> set[str]:
+    normalized_roles = sorted({code for code in role_codes if code})
+    if not normalized_roles:
+        return set()
+    normalized_module = module_code.strip() if module_code and module_code.strip() else None
+    if not use_cache:
+        if ensure_defaults:
+            ensure_authz_defaults(db)
+        return _query_effective_permission_codes_for_role_codes(
+            db,
+            normalized_roles=normalized_roles,
+            normalized_module_code=normalized_module,
+        )
+
+    ttl_seconds = _authz_permission_cache_ttl_seconds()
+    cache_key = _authz_permission_cache_key(
+        normalized_roles=normalized_roles,
+        normalized_module_code=normalized_module,
+    )
+    local_cached = _get_permission_codes_from_local_cache(cache_key)
+    if local_cached is not None:
+        return local_cached
+    redis_cached = _get_permission_codes_from_redis_cache(cache_key)
+    if redis_cached is not None:
+        _set_permission_codes_to_local_cache(cache_key, redis_cached, ttl_seconds)
+        return redis_cached
+    if ensure_defaults:
+        ensure_authz_defaults(db)
+    resolved_codes = _query_effective_permission_codes_for_role_codes(
+        db,
+        normalized_roles=normalized_roles,
+        normalized_module_code=normalized_module,
+    )
+    _set_permission_codes_to_local_cache(cache_key, resolved_codes, ttl_seconds)
+    _set_permission_codes_to_redis_cache(cache_key, resolved_codes, ttl_seconds)
+    return resolved_codes
 
 
 def _list_catalog_rows_by_module(
@@ -1223,7 +1403,6 @@ def get_user_permission_codes(
     user: User,
     module_code: str | None = None,
 ) -> set[str]:
-    ensure_authz_defaults(db)
     role_codes = _user_role_codes(user)
     return _effective_permission_codes_for_role_codes(
         db,
@@ -1238,7 +1417,6 @@ def get_permission_codes_for_role_codes(
     role_codes: list[str],
     module_code: str | None = None,
 ) -> set[str]:
-    ensure_authz_defaults(db)
     return _effective_permission_codes_for_role_codes(
         db,
         role_codes=role_codes,
@@ -1255,7 +1433,6 @@ def has_permission(
     role_codes = _user_role_codes(user)
     if not role_codes:
         return False
-    ensure_authz_defaults(db)
     effective_codes = _effective_permission_codes_for_role_codes(
         db,
         role_codes=role_codes,
@@ -1606,6 +1783,7 @@ def update_role_permission_matrix(
             operator=operator,
         )
         db.commit()
+        invalidate_permission_cache()
     else:
         db.rollback()
 
@@ -2277,6 +2455,7 @@ def update_permission_hierarchy_role_config(
                 operator=operator,
             )
             db.commit()
+            invalidate_permission_cache()
         else:
             db.rollback()
     else:
@@ -2709,6 +2888,7 @@ def update_capability_pack_role_config(
                 role_results=[result],
             )
             db.commit()
+            invalidate_permission_cache()
         else:
             db.rollback()
     else:
@@ -2843,6 +3023,7 @@ def apply_capability_pack_role_configs(
             role_results=results,
         )
         db.commit()
+        invalidate_permission_cache()
     else:
         db.rollback()
 

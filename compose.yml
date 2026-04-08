@@ -7,9 +7,9 @@ services:
       - -c
       - max_connections=200
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-mes_db}
-      POSTGRES_USER: ${POSTGRES_USER:-mes_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mes_password}
+      POSTGRES_DB: ${DB_NAME:-mes_db}
+      POSTGRES_USER: ${DB_USER:-mes_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mes_password}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -66,9 +66,9 @@ services:
       DB_NAME: ${DB_NAME:-mes_db}
       DB_USER: ${DB_USER:-mes_user}
       DB_PASSWORD: ${DB_PASSWORD:-mes_password}
-      DB_BOOTSTRAP_HOST: ${DB_BOOTSTRAP_HOST:-postgres}
-      DB_BOOTSTRAP_PORT: ${DB_BOOTSTRAP_PORT:-5432}
-      DB_BOOTSTRAP_USER: ${DB_BOOTSTRAP_USER:-postgres}
+      DB_BOOTSTRAP_HOST: ${DB_HOST:-postgres}
+      DB_BOOTSTRAP_PORT: ${DB_PORT:-5432}
+      DB_BOOTSTRAP_USER: ${DB_BOOTSTRAP_USER:-mes_user}
       DB_BOOTSTRAP_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:-mes_password}
       DB_BOOTSTRAP_MAINTENANCE_DB: ${DB_BOOTSTRAP_MAINTENANCE_DB:-postgres}
 
@@ -131,9 +131,9 @@ services:
       DB_NAME: ${DB_NAME:-mes_db}
       DB_USER: ${DB_USER:-mes_user}
       DB_PASSWORD: ${DB_PASSWORD:-mes_password}
-      DB_BOOTSTRAP_HOST: ${DB_BOOTSTRAP_HOST:-postgres}
-      DB_BOOTSTRAP_PORT: ${DB_BOOTSTRAP_PORT:-5432}
-      DB_BOOTSTRAP_USER: ${DB_BOOTSTRAP_USER:-postgres}
+      DB_BOOTSTRAP_HOST: ${DB_HOST:-postgres}
+      DB_BOOTSTRAP_PORT: ${DB_PORT:-5432}
+      DB_BOOTSTRAP_USER: ${DB_BOOTSTRAP_USER:-mes_user}
       DB_BOOTSTRAP_PASSWORD: ${DB_BOOTSTRAP_PASSWORD:-mes_password}
       DB_BOOTSTRAP_MAINTENANCE_DB: ${DB_BOOTSTRAP_MAINTENANCE_DB:-postgres}
 

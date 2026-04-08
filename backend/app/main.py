@@ -16,13 +16,12 @@ from app.services.message_service import run_message_delivery_maintenance_loop
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     scheduler_task: asyncio.Task[None] | None = None
     message_maintenance_task: asyncio.Task[None] | None = None
-    run_startup_bootstrap()
-    if settings.maintenance_auto_generate_enabled:
+    if settings.web_run_bootstrap:
+        run_startup_bootstrap()
+    if settings.web_run_background_loops and settings.maintenance_auto_generate_enabled:
         scheduler_task = asyncio.create_task(run_maintenance_auto_generate_loop())
-    if settings.message_delivery_maintenance_enabled:
-        message_maintenance_task = asyncio.create_task(
-            run_message_delivery_maintenance_loop()
-        )
+    if settings.web_run_background_loops and settings.message_delivery_maintenance_enabled:
+        message_maintenance_task = asyncio.create_task(run_message_delivery_maintenance_loop())
     yield
     if message_maintenance_task:
         message_maintenance_task.cancel()
