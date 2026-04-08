@@ -13,6 +13,11 @@ import urllib.request
 from pathlib import Path
 from typing import Sequence
 
+try:
+    from perf.backend_capacity_gate import run_backend_capacity_gate
+except ModuleNotFoundError:  # pragma: no cover - python -m tools.project_toolkit 场景
+    from tools.perf.backend_capacity_gate import run_backend_capacity_gate
+
 
 # 命令行帮助改用 ASCII-first，规避 Windows 控制台中文乱码。
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -353,6 +358,10 @@ def cmd_encoding_check(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def cmd_backend_capacity_gate(args: argparse.Namespace) -> int:
+    return run_backend_capacity_gate(args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Project toolkit for local OpenCode-related development and validation tasks."
@@ -446,6 +455,95 @@ def build_parser() -> argparse.ArgumentParser:
     )
     encoding_parser.add_argument("--fix", action="store_true", help="Try to automatically fix recognized mojibake.")
     encoding_parser.set_defaults(func=cmd_encoding_check)
+
+    capacity_parser = subparsers.add_parser(
+        "backend-capacity-gate",
+        help="Run backend container capacity gate with multi-token and session-pool load.",
+        description="Run backend capacity gate against login, authz, users, production orders, and production stats endpoints.",
+    )
+    capacity_parser.add_argument(
+        "--base-url",
+        default="http://127.0.0.1:8000",
+        help="Backend base URL. Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--scenarios",
+        default="login,authz,users,production-orders,production-stats",
+        help="Comma-separated scenarios. Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--duration-seconds",
+        type=int,
+        default=90,
+        help="Measured duration in seconds (excluding warmup). Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=40,
+        help="Concurrent workers. Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--spawn-rate",
+        type=float,
+        default=10.0,
+        help="Worker ramp-up rate (workers/second). Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--token-count",
+        type=int,
+        default=40,
+        help="Token pool size. Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--session-pool-size",
+        type=int,
+        default=20,
+        help="HTTP session pool size. Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--login-user-prefix",
+        default="loadtest_",
+        help="Login username prefix used for token acquisition and login scenario. Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--password",
+        default=os.getenv("LOADTEST_PASSWORD", "Admin@123456"),
+        help="Login password. Default reads LOADTEST_PASSWORD, fallback Admin@123456.",
+    )
+    capacity_parser.add_argument(
+        "--token-file",
+        help="Optional token file path, one token per line.",
+    )
+    capacity_parser.add_argument(
+        "--warmup-seconds",
+        type=int,
+        default=15,
+        help="Warmup duration in seconds. Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--p95-ms",
+        type=float,
+        default=500.0,
+        help="P95 latency threshold in milliseconds. Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--error-rate-threshold",
+        type=float,
+        default=0.05,
+        help="Allowed error-rate threshold in [0,1). Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--output-json",
+        help="Optional output JSON path.",
+    )
+    capacity_parser.add_argument(
+        "--request-timeout-seconds",
+        type=float,
+        default=10.0,
+        help="HTTP request timeout in seconds. Default: %(default)s",
+    )
+    capacity_parser.set_defaults(func=cmd_backend_capacity_gate)
     return parser
 
 
