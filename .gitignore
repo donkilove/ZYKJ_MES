@@ -25,4 +25,5 @@ mes_client/build/
 evidence/
 .tmp_t5/
 .serena/
+.tmp_runtime/
 desktop_tests/
