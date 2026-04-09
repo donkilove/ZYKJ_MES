@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from app.core.authz_catalog import (
     PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
@@ -170,14 +170,57 @@ def query_users(
 
 
 def get_user_by_id(
-    db: Session, user_id: int, *, include_deleted: bool = False
+    db: Session,
+    user_id: int,
+    *,
+    include_deleted: bool = False,
+    load_roles: bool = True,
+    load_processes: bool = True,
+    load_stage: bool = True,
 ) -> User | None:
+    stmt = select(User).where(User.id == user_id)
+    loader_options = []
+    if load_roles:
+        loader_options.append(selectinload(User.roles))
+    if load_processes:
+        loader_options.append(selectinload(User.processes).selectinload(Process.stage))
+    if load_stage:
+        loader_options.append(selectinload(User.stage))
+    if loader_options:
+        stmt = stmt.options(*loader_options)
+    if not include_deleted:
+        stmt = stmt.where(User.is_deleted.is_(False))
+    return db.execute(stmt).scalars().first()
+
+
+def get_user_for_auth(
+    db: Session,
+    user_id: int,
+    *,
+    include_deleted: bool = False,
+) -> User | None:
+    """鉴权读链专用：仅加载鉴权与公共用户信息所需字段。"""
     stmt = (
         select(User)
         .options(
-            selectinload(User.roles),
-            selectinload(User.processes).selectinload(Process.stage),
-            selectinload(User.stage),
+            load_only(
+                User.id,
+                User.username,
+                User.full_name,
+                User.is_active,
+                User.is_deleted,
+                User.stage_id,
+                User.created_at,
+                User.last_login_at,
+                User.last_login_ip,
+                User.password_changed_at,
+            ),
+            selectinload(User.roles).load_only(
+                Role.id,
+                Role.code,
+                Role.name,
+                Role.is_enabled,
+            ),
         )
         .where(User.id == user_id)
     )
@@ -210,15 +253,23 @@ def get_user_by_username(
     *,
     include_deleted: bool = False,
     case_insensitive: bool = True,
+    load_roles: bool = True,
+    load_processes: bool = True,
+    load_stage: bool = True,
 ) -> User | None:
     normalized = normalize_username(username)
     if not normalized:
         return None
-    stmt = select(User).options(
-        selectinload(User.roles),
-        selectinload(User.processes).selectinload(Process.stage),
-        selectinload(User.stage),
-    )
+    stmt = select(User)
+    loader_options = []
+    if load_roles:
+        loader_options.append(selectinload(User.roles))
+    if load_processes:
+        loader_options.append(selectinload(User.processes).selectinload(Process.stage))
+    if load_stage:
+        loader_options.append(selectinload(User.stage))
+    if loader_options:
+        stmt = stmt.options(*loader_options)
     if case_insensitive:
         stmt = stmt.where(func.lower(User.username) == normalized.lower())
     else:
@@ -668,12 +719,17 @@ def list_registration_requests(
     status: str | None = None,
 ) -> tuple[int, list[RegistrationRequest]]:
     stmt = select(RegistrationRequest).order_by(RegistrationRequest.id.asc())
+    filters: list[object] = []
     if keyword:
-        stmt = stmt.where(RegistrationRequest.account.ilike(f"%{keyword}%"))
+        filters.append(RegistrationRequest.account.ilike(f"%{keyword}%"))
     if status:
-        stmt = stmt.where(RegistrationRequest.status == status.strip())
+        filters.append(RegistrationRequest.status == status.strip())
+    if filters:
+        stmt = stmt.where(*filters)
 
-    total_stmt = select(func.count()).select_from(stmt.subquery())
+    total_stmt = select(func.count(RegistrationRequest.id))
+    if filters:
+        total_stmt = total_stmt.where(*filters)
     total = int(db.execute(total_stmt).scalar_one())
 
     offset = (page - 1) * page_size

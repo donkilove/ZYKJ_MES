@@ -9,6 +9,28 @@ from app.models.audit_log import AuditLog
 from app.models.user import User
 
 
+def _build_audit_log_filters(
+    *,
+    operator_username: str | None = None,
+    action_code: str | None = None,
+    target_type: str | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+) -> list[object]:
+    filters: list[object] = []
+    if operator_username:
+        filters.append(AuditLog.operator_username.ilike(f"%{operator_username.strip()}%"))
+    if action_code:
+        filters.append(AuditLog.action_code == action_code.strip())
+    if target_type:
+        filters.append(AuditLog.target_type == target_type.strip())
+    if start_time:
+        filters.append(AuditLog.occurred_at >= start_time)
+    if end_time:
+        filters.append(AuditLog.occurred_at <= end_time)
+    return filters
+
+
 def write_audit_log(
     db: Session,
     *,
@@ -55,17 +77,13 @@ def query_audit_logs(
     end_time: datetime | None = None,
 ) -> Select[tuple[AuditLog]]:
     stmt = select(AuditLog).order_by(AuditLog.occurred_at.desc(), AuditLog.id.desc())
-    filters = []
-    if operator_username:
-        filters.append(AuditLog.operator_username.ilike(f"%{operator_username.strip()}%"))
-    if action_code:
-        filters.append(AuditLog.action_code == action_code.strip())
-    if target_type:
-        filters.append(AuditLog.target_type == target_type.strip())
-    if start_time:
-        filters.append(AuditLog.occurred_at >= start_time)
-    if end_time:
-        filters.append(AuditLog.occurred_at <= end_time)
+    filters = _build_audit_log_filters(
+        operator_username=operator_username,
+        action_code=action_code,
+        target_type=target_type,
+        start_time=start_time,
+        end_time=end_time,
+    )
     if filters:
         stmt = stmt.where(and_(*filters))
     return stmt
@@ -82,6 +100,13 @@ def list_audit_logs(
     start_time: datetime | None = None,
     end_time: datetime | None = None,
 ) -> tuple[int, list[AuditLog]]:
+    filters = _build_audit_log_filters(
+        operator_username=operator_username,
+        action_code=action_code,
+        target_type=target_type,
+        start_time=start_time,
+        end_time=end_time,
+    )
     stmt = query_audit_logs(
         operator_username=operator_username,
         action_code=action_code,
@@ -89,6 +114,9 @@ def list_audit_logs(
         start_time=start_time,
         end_time=end_time,
     )
-    total = int(db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one())
+    total_stmt = select(func.count(AuditLog.id))
+    if filters:
+        total_stmt = total_stmt.where(and_(*filters))
+    total = int(db.execute(total_stmt).scalar_one())
     rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     return total, rows

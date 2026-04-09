@@ -1,7 +1,18 @@
+import hashlib
+import json
+from threading import RLock
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db, require_permission
+from app.api.deps import (
+    get_current_active_user,
+    get_db,
+    require_permission,
+    require_permission_fast,
+)
 from app.core.authz_catalog import (
     PERM_AUTHZ_PERMISSION_CATALOG_VIEW,
     PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
@@ -44,6 +55,7 @@ from app.services.authz_service import (
     get_capability_pack_catalog,
     get_capability_pack_effective_explain,
     get_capability_pack_role_config,
+    get_authz_module_revision_map,
     get_permission_hierarchy_catalog,
     get_permission_hierarchy_role_config,
     get_role_permission_items,
@@ -62,6 +74,56 @@ from app.services.authz_snapshot_service import get_authz_snapshot
 router = APIRouter()
 
 LEGACY_AUTHZ_WRITE_GONE_DETAIL = "旧权限写入入口已下线，请改用能力包配置"
+_AUTHZ_ENDPOINT_RESPONSE_CACHE: dict[str, tuple[float, bytes]] = {}
+_AUTHZ_ENDPOINT_RESPONSE_CACHE_LOCK = RLock()
+_AUTHZ_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS = 20
+
+
+def _authz_endpoint_cache_key(*, cache_type: str, values: list[str]) -> str:
+    joined = "|".join(values)
+    digest = hashlib.sha1(f"{cache_type}|{joined}".encode("utf-8")).hexdigest()
+    return f"authz_endpoint:{cache_type}:{digest}"
+
+
+def _get_authz_endpoint_response_bytes(cache_key: str) -> bytes | None:
+    with _AUTHZ_ENDPOINT_RESPONSE_CACHE_LOCK:
+        cached = _AUTHZ_ENDPOINT_RESPONSE_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        expire_at, payload_bytes = cached
+        if expire_at <= time.monotonic():
+            _AUTHZ_ENDPOINT_RESPONSE_CACHE.pop(cache_key, None)
+            return None
+        return payload_bytes
+
+
+def _set_authz_endpoint_response_bytes(cache_key: str, payload: dict[str, object]) -> bytes:
+    payload_bytes = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    with _AUTHZ_ENDPOINT_RESPONSE_CACHE_LOCK:
+        _AUTHZ_ENDPOINT_RESPONSE_CACHE[cache_key] = (
+            time.monotonic() + _AUTHZ_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS,
+            payload_bytes,
+        )
+    return payload_bytes
+
+
+def _authz_revision_token(
+    db: Session,
+    *,
+    module_code: str | None,
+) -> str:
+    revision_by_module = get_authz_module_revision_map(db)
+    if module_code is None:
+        return json.dumps(
+            sorted((str(code), int(revision)) for code, revision in revision_by_module.items()),
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+    return str(int(revision_by_module.get(module_code, 0)))
 
 
 @router.get(
@@ -71,10 +133,20 @@ LEGACY_AUTHZ_WRITE_GONE_DETAIL = "旧权限写入入口已下线，请改用能�
 def get_permission_catalog_api(
     module: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_AUTHZ_PERMISSION_CATALOG_VIEW)),
-) -> ApiResponse[PermissionCatalogResult]:
+    _: None = Depends(require_permission_fast(PERM_AUTHZ_PERMISSION_CATALOG_VIEW)),
+) -> ApiResponse[PermissionCatalogResult] | Response:
+    normalized_module = module.strip() if module and module.strip() else None
+    revision_token = _authz_revision_token(db, module_code=normalized_module)
+    cache_key = _authz_endpoint_cache_key(
+        cache_type="permissions_catalog_response",
+        values=[normalized_module or "__all__", revision_token],
+    )
+    cached_bytes = _get_authz_endpoint_response_bytes(cache_key)
+    if cached_bytes is not None:
+        return Response(content=cached_bytes, media_type="application/json")
+
     rows = list_permission_catalog_rows(db, module_code=module)
-    return success_response(
+    response_payload = success_response(
         PermissionCatalogResult(
             items=[
                 PermissionCatalogItem(
@@ -88,7 +160,9 @@ def get_permission_catalog_api(
                 for row in rows
             ]
         )
-    )
+    ).model_dump(mode="json")
+    payload_bytes = _set_authz_endpoint_response_bytes(cache_key, response_payload)
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get(
@@ -223,12 +297,26 @@ def get_permission_hierarchy_catalog_api(
     module: str = Query(min_length=2, max_length=64),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_VIEW)),
-) -> ApiResponse[PermissionHierarchyCatalogResult]:
+) -> ApiResponse[PermissionHierarchyCatalogResult] | Response:
+    normalized_module = module.strip()
+    revision_token = _authz_revision_token(db, module_code=normalized_module)
+    cache_key = _authz_endpoint_cache_key(
+        cache_type="hierarchy_catalog_response",
+        values=[normalized_module, revision_token],
+    )
+    cached_bytes = _get_authz_endpoint_response_bytes(cache_key)
+    if cached_bytes is not None:
+        return Response(content=cached_bytes, media_type="application/json")
+
     try:
         payload = get_permission_hierarchy_catalog(db, module_code=module)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
-    return success_response(PermissionHierarchyCatalogResult(**payload))
+    response_payload = success_response(
+        PermissionHierarchyCatalogResult(**payload)
+    ).model_dump(mode="json")
+    payload_bytes = _set_authz_endpoint_response_bytes(cache_key, response_payload)
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get(

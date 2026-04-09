@@ -1,13 +1,20 @@
 import base64
 import csv
 import io
+import json
+import time
 from pathlib import Path
+from threading import RLock
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, require_permission
+from app.api.deps import (
+    get_current_active_user,
+    require_permission,
+    require_permission_fast_user_id,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.models.user_session import UserSession
@@ -53,6 +60,51 @@ from app.services.user_export_task_service import (
 
 
 router = APIRouter()
+_USER_EXPORT_TASKS_RESPONSE_CACHE: dict[str, tuple[float, bytes]] = {}
+_USER_EXPORT_TASKS_RESPONSE_CACHE_LOCK = RLock()
+_USER_EXPORT_TASKS_RESPONSE_CACHE_TTL_SECONDS = 2
+
+
+def _user_export_tasks_cache_key(*, user_id: int, limit: int) -> str:
+    return f"user_export_tasks:{user_id}:{limit}"
+
+
+def _get_user_export_tasks_response_bytes(cache_key: str) -> bytes | None:
+    with _USER_EXPORT_TASKS_RESPONSE_CACHE_LOCK:
+        cached = _USER_EXPORT_TASKS_RESPONSE_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        expire_at, payload_bytes = cached
+        if expire_at <= time.monotonic():
+            _USER_EXPORT_TASKS_RESPONSE_CACHE.pop(cache_key, None)
+            return None
+        return payload_bytes
+
+
+def _set_user_export_tasks_response_bytes(cache_key: str, payload: dict[str, object]) -> bytes:
+    payload_bytes = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    with _USER_EXPORT_TASKS_RESPONSE_CACHE_LOCK:
+        _USER_EXPORT_TASKS_RESPONSE_CACHE[cache_key] = (
+            time.monotonic() + _USER_EXPORT_TASKS_RESPONSE_CACHE_TTL_SECONDS,
+            payload_bytes,
+        )
+    return payload_bytes
+
+
+def _invalidate_user_export_tasks_response_cache(user_id: int) -> None:
+    key_prefix = f"user_export_tasks:{user_id}:"
+    with _USER_EXPORT_TASKS_RESPONSE_CACHE_LOCK:
+        expired_keys = [
+            key
+            for key in _USER_EXPORT_TASKS_RESPONSE_CACHE
+            if key.startswith(key_prefix)
+        ]
+        for key in expired_keys:
+            _USER_EXPORT_TASKS_RESPONSE_CACHE.pop(key, None)
 
 
 def to_user_export_task_item(task) -> UserExportTaskItem:
@@ -316,6 +368,7 @@ def create_user_export_task_api(
         terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
+    _invalidate_user_export_tasks_response_cache(int(current_user.id))
     background_tasks.add_task(run_user_export_task, int(task.id))
     return success_response(to_user_export_task_item(task), message="accepted")
 
@@ -323,15 +376,30 @@ def create_user_export_task_api(
 @router.get("/export-tasks", response_model=ApiResponse[UserExportTaskListResult])
 def list_user_export_tasks_api(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("user.users.export")),
-) -> ApiResponse[UserExportTaskListResult]:
-    tasks = list_user_export_tasks(db, created_by_user_id=int(current_user.id))
-    return success_response(
+    current_user_id: int = Depends(require_permission_fast_user_id("user.users.export")),
+) -> ApiResponse[UserExportTaskListResult] | Response:
+    task_limit = 20
+    cache_key = _user_export_tasks_cache_key(
+        user_id=int(current_user_id),
+        limit=task_limit,
+    )
+    cached_payload = _get_user_export_tasks_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
+
+    tasks = list_user_export_tasks(
+        db,
+        created_by_user_id=int(current_user_id),
+        limit=task_limit,
+    )
+    response_payload = success_response(
         UserExportTaskListResult(
             total=len(tasks),
             items=[to_user_export_task_item(task) for task in tasks],
         )
-    )
+    ).model_dump(mode="json")
+    payload_bytes = _set_user_export_tasks_response_bytes(cache_key, response_payload)
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get("/export-tasks/{task_id}", response_model=ApiResponse[UserExportTaskItem])

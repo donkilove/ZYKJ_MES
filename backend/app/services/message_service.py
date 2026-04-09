@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM_ADMIN
@@ -140,6 +140,13 @@ def _failure_reason_hint(failure_reason: str | None) -> str | None:
 
 def _is_high_priority(priority: str | None) -> bool:
     return (priority or "").strip().lower() in _HIGH_PRIORITY_LEVELS
+
+
+def _active_message_visibility_condition(*, now: datetime):
+    return and_(
+        Message.status == "active",
+        or_(Message.expires_at.is_(None), Message.expires_at > now),
+    )
 
 
 def _list_active_user_ids_by_role_codes(db: Session, role_codes: set[str]) -> list[int]:
@@ -617,10 +624,12 @@ def list_messages(
     end_time: datetime | None = None,
     todo_only: bool = False,
     active_only: bool = True,
+    run_maintenance: bool = False,
 ) -> tuple[list[MessageItem], int]:
     """查询当前用户的消息列表，返回 (items, total)"""
     now = datetime.now(UTC)
-    run_message_maintenance(db, now=now)
+    if run_maintenance:
+        run_message_maintenance(db, now=now)
     base_stmt = (
         select(Message, MessageRecipient)
         .join(MessageRecipient, MessageRecipient.message_id == Message.id)
@@ -698,52 +707,92 @@ def list_messages(
     return items, total
 
 
-def get_message_summary(db: Session, *, user_id: int) -> dict[str, int]:
+def get_message_summary(
+    db: Session,
+    *,
+    user_id: int,
+    run_maintenance: bool = False,
+) -> dict[str, int]:
     now = datetime.now(UTC)
-    run_message_maintenance(db, now=now)
-    total_count = db.execute(
-        select(func.count())
+    if run_maintenance:
+        run_message_maintenance(db, now=now)
+    active_condition = _active_message_visibility_condition(now=now)
+    normalized_priority = func.lower(func.coalesce(Message.priority, ""))
+    total_count, unread_count, todo_unread_count, urgent_unread_count = db.execute(
+        select(
+            func.count().label("total_count"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                active_condition,
+                                MessageRecipient.is_read.is_(False),
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("unread_count"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                active_condition,
+                                Message.message_type == "todo",
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("todo_unread_count"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                active_condition,
+                                normalized_priority.in_(sorted(_HIGH_PRIORITY_LEVELS)),
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("urgent_unread_count"),
+        )
         .select_from(MessageRecipient)
         .join(Message, Message.id == MessageRecipient.message_id)
         .where(
             MessageRecipient.recipient_user_id == user_id,
             MessageRecipient.is_deleted.is_(False),
         )
-    ).scalar_one()
-    active_stmt = (
-        select(Message, MessageRecipient)
-        .join(MessageRecipient, MessageRecipient.message_id == Message.id)
-        .where(
-            MessageRecipient.recipient_user_id == user_id,
-            MessageRecipient.is_deleted.is_(False),
-            Message.status == "active",
-            or_(Message.expires_at.is_(None), Message.expires_at > now),
-        )
-    )
-    rows = db.execute(active_stmt).all()
-    unread_count = 0
-    todo_unread_count = 0
-    urgent_unread_count = 0
-    for msg, recipient in rows:
-        if msg.message_type == "todo":
-            todo_unread_count += 1
-        if _is_high_priority(msg.priority):
-            urgent_unread_count += 1
-        if recipient.is_read:
-            continue
-        unread_count += 1
+    ).one()
     return {
-        "total_count": total_count,
-        "unread_count": unread_count,
-        "todo_unread_count": todo_unread_count,
-        "urgent_unread_count": urgent_unread_count,
+        "total_count": int(total_count),
+        "unread_count": int(unread_count),
+        "todo_unread_count": int(todo_unread_count),
+        "urgent_unread_count": int(urgent_unread_count),
     }
 
 
-def get_unread_count(db: Session, *, user_id: int) -> int:
+def get_unread_count(
+    db: Session,
+    *,
+    user_id: int,
+    run_maintenance: bool = False,
+) -> int:
     """获取当前用户未读消息数"""
     now = datetime.now(UTC)
-    run_message_maintenance(db, now=now)
+    if run_maintenance:
+        run_message_maintenance(db, now=now)
+    active_condition = _active_message_visibility_condition(now=now)
     stmt = (
         select(func.count())
         .select_from(MessageRecipient)
@@ -752,8 +801,7 @@ def get_unread_count(db: Session, *, user_id: int) -> int:
             MessageRecipient.recipient_user_id == user_id,
             MessageRecipient.is_read.is_(False),
             MessageRecipient.is_deleted.is_(False),
-            Message.status == "active",
-            or_(Message.expires_at.is_(None), Message.expires_at > now),
+            active_condition,
         )
     )
     return db.execute(stmt).scalar_one()
@@ -820,9 +868,11 @@ def get_message_detail(
     user_id: int,
     message_id: int,
     current_user: User | None = None,
+    run_maintenance: bool = False,
 ) -> MessageDetailResult | None:
     now = datetime.now(UTC)
-    run_message_maintenance(db, now=now)
+    if run_maintenance:
+        run_message_maintenance(db, now=now)
     row = _get_message_and_recipient_for_user(
         db, user_id=user_id, message_id=message_id
     )
@@ -853,9 +903,11 @@ def get_message_jump_target(
     user_id: int,
     message_id: int,
     current_user: User | None = None,
+    run_maintenance: bool = False,
 ) -> MessageJumpResult | None:
     now = datetime.now(UTC)
-    run_message_maintenance(db, now=now)
+    if run_maintenance:
+        run_message_maintenance(db, now=now)
     row = _get_message_and_recipient_for_user(
         db, user_id=user_id, message_id=message_id
     )

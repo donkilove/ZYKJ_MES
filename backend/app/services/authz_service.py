@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import copy
 from collections import defaultdict
+from dataclasses import dataclass
 import hashlib
 import json
 import logging
-from threading import RLock
+from threading import Event, RLock
 import time
 
 from sqlalchemy import select
@@ -95,12 +97,103 @@ logger = logging.getLogger(__name__)
 _AUTHZ_PERMISSION_CACHE_ALL_MODULES = "__all__"
 _AUTHZ_PERMISSION_LOCAL_CACHE: dict[str, tuple[float, set[str]]] = {}
 _AUTHZ_PERMISSION_LOCAL_CACHE_LOCK = RLock()
+_AUTHZ_PERMISSION_INFLIGHT: dict[str, Event] = {}
+_AUTHZ_PERMISSION_INFLIGHT_LOCK = RLock()
+_AUTHZ_READ_LOCAL_CACHE: dict[str, tuple[float, object]] = {}
+_AUTHZ_READ_LOCAL_CACHE_LOCK = RLock()
+_AUTHZ_READ_INFLIGHT: dict[str, Event] = {}
+_AUTHZ_READ_INFLIGHT_LOCK = RLock()
+_AUTHZ_DEFAULTS_READY = False
+_AUTHZ_DEFAULTS_READY_LOCK = RLock()
 _AUTHZ_PERMISSION_REDIS_CLIENT = None
 _AUTHZ_PERMISSION_REDIS_INIT = False
 
 
+@dataclass(frozen=True, slots=True)
+class PermissionCatalogRow:
+    permission_code: str
+    permission_name: str
+    module_code: str
+    resource_type: str
+    parent_permission_code: str | None
+    is_enabled: bool
+
+
 def _authz_permission_cache_ttl_seconds() -> int:
     return max(1, settings.authz_permission_cache_ttl_seconds)
+
+
+def _authz_read_cache_ttl_seconds() -> int:
+    return max(5, min(60, settings.authz_permission_cache_ttl_seconds))
+
+
+def _authz_read_cache_key(*, cache_type: str, values: list[str]) -> str:
+    joined = "|".join(values)
+    digest = hashlib.sha1(f"{cache_type}|{joined}".encode("utf-8")).hexdigest()
+    return f"{settings.authz_permission_cache_prefix}:read:{cache_type}:{digest}"
+
+
+def _get_authz_read_cache(cache_key: str, *, copy_payload: bool = False):
+    with _AUTHZ_READ_LOCAL_CACHE_LOCK:
+        cached = _AUTHZ_READ_LOCAL_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        expire_at, payload = cached
+        if expire_at <= time.monotonic():
+            _AUTHZ_READ_LOCAL_CACHE.pop(cache_key, None)
+            return None
+        if copy_payload:
+            return copy.deepcopy(payload)
+        return payload
+
+
+def _set_authz_read_cache(
+    cache_key: str, payload: object, *, copy_payload: bool = False
+) -> None:
+    expire_at = time.monotonic() + _authz_read_cache_ttl_seconds()
+    with _AUTHZ_READ_LOCAL_CACHE_LOCK:
+        if copy_payload:
+            _AUTHZ_READ_LOCAL_CACHE[cache_key] = (expire_at, copy.deepcopy(payload))
+            return
+        _AUTHZ_READ_LOCAL_CACHE[cache_key] = (expire_at, payload)
+
+
+def _get_or_build_authz_read_cache(
+    cache_key: str,
+    builder,
+    *,
+    copy_payload: bool = False,
+):
+    cached = _get_authz_read_cache(cache_key, copy_payload=copy_payload)
+    if cached is not None:
+        return cached
+
+    event: Event | None = None
+    while True:
+        with _AUTHZ_READ_INFLIGHT_LOCK:
+            cached = _get_authz_read_cache(cache_key, copy_payload=copy_payload)
+            if cached is not None:
+                return cached
+            event = _AUTHZ_READ_INFLIGHT.get(cache_key)
+            if event is None:
+                event = Event()
+                _AUTHZ_READ_INFLIGHT[cache_key] = event
+                break
+        event.wait(timeout=max(0.05, float(_authz_read_cache_ttl_seconds())))
+        cached = _get_authz_read_cache(cache_key, copy_payload=copy_payload)
+        if cached is not None:
+            return cached
+
+    try:
+        payload = builder()
+        _set_authz_read_cache(cache_key, payload, copy_payload=copy_payload)
+        return payload
+    finally:
+        with _AUTHZ_READ_INFLIGHT_LOCK:
+            current = _AUTHZ_READ_INFLIGHT.get(cache_key)
+            if current is event:
+                _AUTHZ_READ_INFLIGHT.pop(cache_key, None)
+                event.set()
 
 
 def _authz_permission_cache_key(
@@ -161,6 +254,57 @@ def _set_permission_codes_to_local_cache(
         _AUTHZ_PERMISSION_LOCAL_CACHE[cache_key] = (expire_at, set(permission_codes))
 
 
+def _get_or_build_permission_codes_cache(
+    cache_key: str,
+    *,
+    ttl_seconds: int,
+    builder,
+) -> set[str]:
+    local_cached = _get_permission_codes_from_local_cache(cache_key)
+    if local_cached is not None:
+        return local_cached
+    redis_cached = _get_permission_codes_from_redis_cache(cache_key)
+    if redis_cached is not None:
+        _set_permission_codes_to_local_cache(cache_key, redis_cached, ttl_seconds)
+        return redis_cached
+
+    event: Event | None = None
+    while True:
+        with _AUTHZ_PERMISSION_INFLIGHT_LOCK:
+            local_cached = _get_permission_codes_from_local_cache(cache_key)
+            if local_cached is not None:
+                return local_cached
+            redis_cached = _get_permission_codes_from_redis_cache(cache_key)
+            if redis_cached is not None:
+                _set_permission_codes_to_local_cache(cache_key, redis_cached, ttl_seconds)
+                return redis_cached
+            event = _AUTHZ_PERMISSION_INFLIGHT.get(cache_key)
+            if event is None:
+                event = Event()
+                _AUTHZ_PERMISSION_INFLIGHT[cache_key] = event
+                break
+        event.wait(timeout=max(0.05, float(ttl_seconds)))
+        local_cached = _get_permission_codes_from_local_cache(cache_key)
+        if local_cached is not None:
+            return local_cached
+        redis_cached = _get_permission_codes_from_redis_cache(cache_key)
+        if redis_cached is not None:
+            _set_permission_codes_to_local_cache(cache_key, redis_cached, ttl_seconds)
+            return redis_cached
+
+    try:
+        resolved_codes = builder()
+        _set_permission_codes_to_local_cache(cache_key, resolved_codes, ttl_seconds)
+        _set_permission_codes_to_redis_cache(cache_key, resolved_codes, ttl_seconds)
+        return resolved_codes
+    finally:
+        with _AUTHZ_PERMISSION_INFLIGHT_LOCK:
+            current = _AUTHZ_PERMISSION_INFLIGHT.get(cache_key)
+            if current is event:
+                _AUTHZ_PERMISSION_INFLIGHT.pop(cache_key, None)
+                event.set()
+
+
 def _get_permission_codes_from_redis_cache(cache_key: str) -> set[str] | None:
     redis_client = _get_authz_permission_cache_redis_client()
     if redis_client is None:
@@ -200,6 +344,12 @@ def _set_permission_codes_to_redis_cache(
 def invalidate_permission_cache() -> None:
     with _AUTHZ_PERMISSION_LOCAL_CACHE_LOCK:
         _AUTHZ_PERMISSION_LOCAL_CACHE.clear()
+    with _AUTHZ_PERMISSION_INFLIGHT_LOCK:
+        _AUTHZ_PERMISSION_INFLIGHT.clear()
+    with _AUTHZ_READ_LOCAL_CACHE_LOCK:
+        _AUTHZ_READ_LOCAL_CACHE.clear()
+    with _AUTHZ_READ_INFLIGHT_LOCK:
+        _AUTHZ_READ_INFLIGHT.clear()
     redis_client = _get_authz_permission_cache_redis_client()
     if redis_client is None:
         return
@@ -210,6 +360,18 @@ def invalidate_permission_cache() -> None:
             redis_client.delete(*cache_keys)
     except RedisError:
         logger.warning("[AUTHZ_CACHE] Redis 缓存清理失败。", exc_info=True)
+
+
+def _ensure_authz_defaults_once(db: Session) -> None:
+    global _AUTHZ_DEFAULTS_READY
+
+    if _AUTHZ_DEFAULTS_READY:
+        return
+    with _AUTHZ_DEFAULTS_READY_LOCK:
+        if _AUTHZ_DEFAULTS_READY:
+            return
+        ensure_authz_defaults(db)
+        _AUTHZ_DEFAULTS_READY = True
 
 
 def _codes(*values: str | None) -> set[str]:
@@ -881,16 +1043,20 @@ def ensure_authz_module_revision_defaults(db: Session) -> bool:
 
 
 def ensure_authz_defaults(db: Session) -> None:
+    global _AUTHZ_DEFAULTS_READY
+
     catalog_changed = ensure_permission_catalog_defaults(db)
     grants_changed = ensure_role_permission_defaults(db)
     revision_changed = ensure_authz_module_revision_defaults(db)
     if catalog_changed or grants_changed or revision_changed:
         db.commit()
         invalidate_permission_cache()
+    with _AUTHZ_DEFAULTS_READY_LOCK:
+        _AUTHZ_DEFAULTS_READY = True
 
 
 def get_authz_module_revision(db: Session, *, module_code: str) -> int:
-    ensure_authz_defaults(db)
+    _ensure_authz_defaults_once(db)
     normalized_module = _normalize_module_code(module_code)
     row = (
         db.execute(
@@ -909,12 +1075,30 @@ def get_authz_module_revision(db: Session, *, module_code: str) -> int:
 
 
 def get_authz_module_revision_map(db: Session) -> dict[str, int]:
-    ensure_authz_defaults(db)
+    _ensure_authz_defaults_once(db)
+    cache_key = _authz_read_cache_key(
+        cache_type="authz_module_revision_map",
+        values=["all"],
+    )
+    cached_payload = _get_authz_read_cache(cache_key)
+    if cached_payload is not None:
+        return dict(cached_payload)
     rows = db.execute(select(AuthzModuleRevision)).scalars().all()
     revision_by_module = {str(row.module_code): int(row.revision) for row in rows}
     for item in MODULE_DEFINITIONS:
         revision_by_module.setdefault(str(item.module_code), 0)
+    _set_authz_read_cache(cache_key, revision_by_module)
     return revision_by_module
+
+
+def _authz_read_revision_state(db: Session) -> tuple[dict[str, int], str]:
+    revision_by_module = get_authz_module_revision_map(db)
+    revision_token = json.dumps(
+        sorted((str(module_code), int(revision)) for module_code, revision in revision_by_module.items()),
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return revision_by_module, revision_token
 
 
 def _bump_authz_module_revision(
@@ -1059,22 +1243,77 @@ def list_permission_catalog_rows(
     db: Session,
     *,
     module_code: str | None = None,
-) -> list[PermissionCatalog]:
-    ensure_authz_defaults(db)
-    stmt = select(PermissionCatalog).where(PermissionCatalog.is_enabled.is_(True))
+) -> list[PermissionCatalogRow]:
+    _ensure_authz_defaults_once(db)
+    normalized_module = None
     if module_code and module_code.strip():
-        stmt = stmt.where(PermissionCatalog.module_code == module_code.strip())
-    stmt = stmt.order_by(
-        PermissionCatalog.module_code.asc(),
-        PermissionCatalog.resource_type.asc(),
-        PermissionCatalog.permission_code.asc(),
+        normalized_module = module_code.strip()
+    cache_key = _authz_read_cache_key(
+        cache_type="permission_catalog_rows",
+        values=[normalized_module or _AUTHZ_PERMISSION_CACHE_ALL_MODULES],
     )
-    return db.execute(stmt).scalars().all()
+    rows = _get_or_build_authz_read_cache(
+        cache_key,
+        lambda: tuple(
+            PermissionCatalogRow(
+                permission_code=str(permission_code),
+                permission_name=str(permission_name or ""),
+                module_code=str(module_code or ""),
+                resource_type=str(resource_type or ""),
+                parent_permission_code=(
+                    str(parent_permission_code) if parent_permission_code else None
+                ),
+                is_enabled=bool(is_enabled),
+            )
+            for (
+                permission_code,
+                permission_name,
+                module_code,
+                resource_type,
+                parent_permission_code,
+                is_enabled,
+            ) in db.execute(
+                (
+                    select(
+                        PermissionCatalog.permission_code,
+                        PermissionCatalog.permission_name,
+                        PermissionCatalog.module_code,
+                        PermissionCatalog.resource_type,
+                        PermissionCatalog.parent_permission_code,
+                        PermissionCatalog.is_enabled,
+                    )
+                    .where(PermissionCatalog.is_enabled.is_(True))
+                    .where(
+                        PermissionCatalog.module_code == normalized_module
+                        if normalized_module
+                        else True
+                    )
+                    .order_by(
+                        PermissionCatalog.module_code.asc(),
+                        PermissionCatalog.resource_type.asc(),
+                        PermissionCatalog.permission_code.asc(),
+                    )
+                )
+            ).all()
+        ),
+    )
+    return rows
 
 
 def list_permission_modules(db: Session) -> list[str]:
-    rows = list_permission_catalog_rows(db)
-    return sorted({row.module_code for row in rows if row.module_code})
+    cache_key = _authz_read_cache_key(
+        cache_type="permission_modules",
+        values=["all"],
+    )
+    modules = _get_or_build_authz_read_cache(
+        cache_key,
+        lambda: tuple(
+            sorted(
+                {row.module_code for row in list_permission_catalog_rows(db) if row.module_code}
+            )
+        ),
+    )
+    return list(modules)
 
 
 def _normalize_module_code(module_code: str) -> str:
@@ -1159,7 +1398,7 @@ def _catalog_rows_by_code(
     db: Session,
     *,
     module_code: str | None = None,
-) -> dict[str, PermissionCatalog]:
+) -> dict[str, PermissionCatalogRow]:
     rows = list_permission_catalog_rows(db, module_code=module_code)
     return {row.permission_code: row for row in rows}
 
@@ -1345,7 +1584,7 @@ def _effective_permission_codes_for_role_codes(
     role_codes: list[str],
     module_code: str | None = None,
     use_cache: bool = True,
-    ensure_defaults: bool = True,
+    ensure_defaults: bool = False,
 ) -> set[str]:
     normalized_roles = sorted({code for code in role_codes if code})
     if not normalized_roles:
@@ -1353,9 +1592,9 @@ def _effective_permission_codes_for_role_codes(
     normalized_module = module_code.strip() if module_code and module_code.strip() else None
     if not use_cache:
         if ensure_defaults:
-            ensure_authz_defaults(db)
+            _ensure_authz_defaults_once(db)
         return _query_effective_permission_codes_for_role_codes(
-            db,
+            db=db,
             normalized_roles=normalized_roles,
             normalized_module_code=normalized_module,
         )
@@ -1365,28 +1604,22 @@ def _effective_permission_codes_for_role_codes(
         normalized_roles=normalized_roles,
         normalized_module_code=normalized_module,
     )
-    local_cached = _get_permission_codes_from_local_cache(cache_key)
-    if local_cached is not None:
-        return local_cached
-    redis_cached = _get_permission_codes_from_redis_cache(cache_key)
-    if redis_cached is not None:
-        _set_permission_codes_to_local_cache(cache_key, redis_cached, ttl_seconds)
-        return redis_cached
     if ensure_defaults:
-        ensure_authz_defaults(db)
-    resolved_codes = _query_effective_permission_codes_for_role_codes(
-        db,
-        normalized_roles=normalized_roles,
-        normalized_module_code=normalized_module,
+        _ensure_authz_defaults_once(db)
+    return _get_or_build_permission_codes_cache(
+        cache_key,
+        ttl_seconds=ttl_seconds,
+        builder=lambda: _query_effective_permission_codes_for_role_codes(
+            db=db,
+            normalized_roles=normalized_roles,
+            normalized_module_code=normalized_module,
+        ),
     )
-    _set_permission_codes_to_local_cache(cache_key, resolved_codes, ttl_seconds)
-    _set_permission_codes_to_redis_cache(cache_key, resolved_codes, ttl_seconds)
-    return resolved_codes
 
 
 def _list_catalog_rows_by_module(
     db: Session, *, module_code: str
-) -> list[PermissionCatalog]:
+) -> list[PermissionCatalogRow]:
     rows = list_permission_catalog_rows(db, module_code=module_code)
     if not rows:
         raise ValueError(f"module_code is invalid: {module_code}")
@@ -1402,12 +1635,14 @@ def get_user_permission_codes(
     *,
     user: User,
     module_code: str | None = None,
+    ensure_defaults: bool = False,
 ) -> set[str]:
     role_codes = _user_role_codes(user)
     return _effective_permission_codes_for_role_codes(
         db,
         role_codes=role_codes,
         module_code=module_code,
+        ensure_defaults=ensure_defaults,
     )
 
 
@@ -1421,6 +1656,7 @@ def get_permission_codes_for_role_codes(
         db,
         role_codes=role_codes,
         module_code=module_code,
+        ensure_defaults=True,
     )
 
 
@@ -1436,6 +1672,7 @@ def has_permission(
     effective_codes = _effective_permission_codes_for_role_codes(
         db,
         role_codes=role_codes,
+        ensure_defaults=False,
     )
     return permission_code in effective_codes
 
@@ -1446,12 +1683,31 @@ def get_role_permission_items(
     role_code: str,
     module_code: str | None = None,
 ) -> tuple[str, list[dict[str, object]]]:
-    ensure_authz_defaults(db)
+    normalized_module = _normalize_module_code(module_code) if module_code else None
+    _ensure_authz_defaults_once(db)
+    revision_token = (
+        str(get_authz_module_revision(db, module_code=normalized_module))
+        if normalized_module
+        else json.dumps(
+            sorted(get_authz_module_revision_map(db).items()),
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+    )
+    cache_key = _authz_read_cache_key(
+        cache_type="role_permission_items",
+        values=[role_code.strip(), normalized_module or _AUTHZ_PERMISSION_CACHE_ALL_MODULES, revision_token],
+    )
+    cached_payload = _get_authz_read_cache(cache_key)
+    if cached_payload is not None:
+        role_name, items = cached_payload
+        return str(role_name), list(items)
+
     role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
     if role_row is None:
         raise ValueError(f"Role not found: {role_code}")
 
-    catalog_rows = list_permission_catalog_rows(db, module_code=module_code)
+    catalog_rows = list_permission_catalog_rows(db, module_code=normalized_module)
     catalog_codes = [row.permission_code for row in catalog_rows]
     parent_by_code = {
         row.permission_code: (
@@ -1507,7 +1763,9 @@ def get_role_permission_items(
                 "is_enabled": bool(row.is_enabled),
             }
         )
-    return role_row.name, items
+    result = (role_row.name, items)
+    _set_authz_read_cache(cache_key, result)
+    return result
 
 
 def get_role_permission_matrix(
@@ -1516,89 +1774,98 @@ def get_role_permission_matrix(
     module_code: str,
 ) -> dict[str, object]:
     normalized_module = _normalize_module_code(module_code)
-    ensure_authz_defaults(db)
-    catalog_rows = _list_catalog_rows_by_module(db, module_code=normalized_module)
-    module_codes = list_permission_modules(db)
-    valid_codes = [row.permission_code for row in catalog_rows]
-
-    role_rows = (
-        db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
+    _ensure_authz_defaults_once(db)
+    revision = get_authz_module_revision(db, module_code=normalized_module)
+    cache_key = _authz_read_cache_key(
+        cache_type="role_permission_matrix",
+        values=[normalized_module, str(revision)],
     )
-    role_rows.sort(key=_role_sort_key)
-    role_codes = [row.code for row in role_rows]
 
-    grants_by_role: dict[str, set[str]] = defaultdict(set)
-    if role_codes and valid_codes:
-        grant_rows = (
-            db.execute(
-                select(RolePermissionGrant).where(
-                    RolePermissionGrant.role_code.in_(role_codes),
-                    RolePermissionGrant.permission_code.in_(valid_codes),
-                    RolePermissionGrant.granted.is_(True),
+    def _build_payload() -> dict[str, object]:
+        catalog_rows = _list_catalog_rows_by_module(db, module_code=normalized_module)
+        module_codes = list_permission_modules(db)
+        valid_codes = [row.permission_code for row in catalog_rows]
+
+        role_rows = (
+            db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
+        )
+        role_rows.sort(key=_role_sort_key)
+        role_codes = [row.code for row in role_rows]
+
+        grants_by_role: dict[str, set[str]] = defaultdict(set)
+        if role_codes and valid_codes:
+            grant_rows = (
+                db.execute(
+                    select(RolePermissionGrant).where(
+                        RolePermissionGrant.role_code.in_(role_codes),
+                        RolePermissionGrant.permission_code.in_(valid_codes),
+                        RolePermissionGrant.granted.is_(True),
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        for row in grant_rows:
-            grants_by_role[row.role_code].add(row.permission_code)
+            for row in grant_rows:
+                grants_by_role[row.role_code].add(row.permission_code)
 
-    valid_code_set = set(valid_codes)
-    parent_by_code = {
-        row.permission_code: (
-            row.parent_permission_code
-            if row.parent_permission_code in valid_code_set
-            else None
-        )
-        for row in catalog_rows
-    }
-    module_permission_by_code = {
-        row.permission_code: MODULE_PERMISSION_BY_MODULE_CODE.get(
-            str(row.module_code).strip(),
-            module_permission_code(str(row.module_code).strip()),
-        )
-        for row in catalog_rows
-    }
-
-    role_items: list[dict[str, object]] = []
-    for role_row in role_rows:
-        requested_codes = _guard_role_permission_codes(
-            role_code=role_row.code,
-            permission_codes=grants_by_role.get(role_row.code, set()),
-            allowed_codes=valid_code_set,
-            hierarchy_only=False,
-        )
-        granted_codes, _, _ = _normalize_permission_codes_with_dependencies(
-            requested_codes=requested_codes,
-            parent_by_code=parent_by_code,
-            module_permission_by_code=module_permission_by_code,
-        )
-        role_items.append(
-            {
-                "role_code": role_row.code,
-                "role_name": role_row.name,
-                "readonly": False,
-                "is_system_admin": role_row.code == ROLE_SYSTEM_ADMIN,
-                "granted_permission_codes": sorted(granted_codes),
-            }
-        )
-
-    return {
-        "module_code": normalized_module,
-        "module_codes": module_codes,
-        "permissions": [
-            {
-                "permission_code": row.permission_code,
-                "permission_name": row.permission_name,
-                "module_code": row.module_code,
-                "resource_type": row.resource_type,
-                "parent_permission_code": row.parent_permission_code,
-                "is_enabled": bool(row.is_enabled),
-            }
+        valid_code_set = set(valid_codes)
+        parent_by_code = {
+            row.permission_code: (
+                row.parent_permission_code
+                if row.parent_permission_code in valid_code_set
+                else None
+            )
             for row in catalog_rows
-        ],
-        "role_items": role_items,
-    }
+        }
+        module_permission_by_code = {
+            row.permission_code: MODULE_PERMISSION_BY_MODULE_CODE.get(
+                str(row.module_code).strip(),
+                module_permission_code(str(row.module_code).strip()),
+            )
+            for row in catalog_rows
+        }
+
+        role_items: list[dict[str, object]] = []
+        for role_row in role_rows:
+            requested_codes = _guard_role_permission_codes(
+                role_code=role_row.code,
+                permission_codes=grants_by_role.get(role_row.code, set()),
+                allowed_codes=valid_code_set,
+                hierarchy_only=False,
+            )
+            granted_codes, _, _ = _normalize_permission_codes_with_dependencies(
+                requested_codes=requested_codes,
+                parent_by_code=parent_by_code,
+                module_permission_by_code=module_permission_by_code,
+            )
+            role_items.append(
+                {
+                    "role_code": role_row.code,
+                    "role_name": role_row.name,
+                    "readonly": False,
+                    "is_system_admin": role_row.code == ROLE_SYSTEM_ADMIN,
+                    "granted_permission_codes": sorted(granted_codes),
+                }
+            )
+
+        return {
+            "module_code": normalized_module,
+            "module_codes": module_codes,
+            "permissions": [
+                {
+                    "permission_code": row.permission_code,
+                    "permission_name": row.permission_name,
+                    "module_code": row.module_code,
+                    "resource_type": row.resource_type,
+                    "parent_permission_code": row.parent_permission_code,
+                    "is_enabled": bool(row.is_enabled),
+                }
+                for row in catalog_rows
+            ],
+            "role_items": role_items,
+        }
+
+    return _get_or_build_authz_read_cache(cache_key, builder=_build_payload)
 
 
 def update_role_permission_matrix(
@@ -1828,7 +2095,7 @@ def replace_role_permissions_for_module(
     return updated_count, before_codes, after_codes
 
 
-def _module_permission_catalog_rows(db: Session) -> list[PermissionCatalog]:
+def _module_permission_catalog_rows(db: Session) -> list[PermissionCatalogRow]:
     rows = list_permission_catalog_rows(db)
     return [row for row in rows if row.resource_type == AUTHZ_RESOURCE_MODULE]
 
@@ -2338,7 +2605,15 @@ def get_permission_hierarchy_catalog(
     module_code: str,
 ) -> dict[str, object]:
     normalized_module = _normalize_module_code(module_code)
-    ensure_authz_defaults(db)
+    _ensure_authz_defaults_once(db)
+    _revision_by_module, revision_token = _authz_read_revision_state(db)
+    cache_key = _authz_read_cache_key(
+        cache_type="permission_hierarchy_catalog",
+        values=[normalized_module, revision_token],
+    )
+    cached_payload = _get_authz_read_cache(cache_key)
+    if cached_payload is not None:
+        return dict(cached_payload)
     available_module_codes = sorted(
         {
             row.module_code
@@ -2349,7 +2624,7 @@ def get_permission_hierarchy_catalog(
     if normalized_module not in available_module_codes:
         raise ValueError(f"module_code is invalid: {normalized_module}")
 
-    return {
+    result = {
         "module_code": normalized_module,
         "module_codes": available_module_codes,
         "module_permission_code": MODULE_PERMISSION_BY_MODULE_CODE.get(
@@ -2360,6 +2635,8 @@ def get_permission_hierarchy_catalog(
         "pages": _page_items_for_module(normalized_module),
         "features": _feature_items_for_module(normalized_module),
     }
+    _set_authz_read_cache(cache_key, result)
+    return result
 
 
 def get_permission_hierarchy_role_config(
@@ -2369,7 +2646,15 @@ def get_permission_hierarchy_role_config(
     module_code: str,
 ) -> dict[str, object]:
     normalized_module = _normalize_module_code(module_code)
-    ensure_authz_defaults(db)
+    _ensure_authz_defaults_once(db)
+    _revision_by_module, revision_token = _authz_read_revision_state(db)
+    cache_key = _authz_read_cache_key(
+        cache_type="permission_hierarchy_role_config",
+        values=[normalized_module, role_code, revision_token],
+    )
+    cached_payload = _get_authz_read_cache(cache_key)
+    if cached_payload is not None:
+        return dict(cached_payload)
     role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
     if role_row is None:
         raise ValueError(f"Role not found: {role_code}")
@@ -2388,7 +2673,7 @@ def get_permission_hierarchy_role_config(
         granted_codes=granted_codes,
         row_by_code=row_by_code,
     )
-    return {
+    result = {
         "role_code": role_row.code,
         "role_name": role_row.name,
         "readonly": False,
@@ -2407,6 +2692,8 @@ def get_permission_hierarchy_role_config(
             effective_codes.intersection(module_features)
         ),
     }
+    _set_authz_read_cache(cache_key, result)
+    return result
 
 
 def update_permission_hierarchy_role_config(
@@ -2550,20 +2837,26 @@ def get_capability_pack_catalog(
     *,
     module_code: str,
 ) -> dict[str, object]:
-    ensure_authz_defaults(db)
+    normalized_module = _normalize_module_code(module_code)
+    _ensure_authz_defaults_once(db)
+    revision_by_module, revision_token = _authz_read_revision_state(db)
+    cache_key = _authz_read_cache_key(
+        cache_type="capability_pack_catalog",
+        values=[normalized_module, revision_token],
+    )
+    cached_payload = _get_authz_read_cache(cache_key)
+    if cached_payload is not None:
+        return dict(cached_payload)
     normalized_module, available_module_codes = _normalize_capability_pack_module_code(
         db,
-        module_code=module_code,
+        module_code=normalized_module,
     )
 
-    return {
+    result = {
         "module_code": normalized_module,
         "module_codes": available_module_codes,
         "module_name": _module_display_name(normalized_module),
-        "module_revision": get_authz_module_revision(
-            db,
-            module_code=normalized_module,
-        ),
+        "module_revision": revision_by_module.get(normalized_module, 0),
         "module_permission_code": MODULE_PERMISSION_BY_MODULE_CODE.get(
             normalized_module,
             module_permission_code(normalized_module),
@@ -2571,6 +2864,8 @@ def get_capability_pack_catalog(
         "capability_packs": _capability_items_for_module(normalized_module),
         "role_templates": _capability_role_template_items(normalized_module),
     }
+    _set_authz_read_cache(cache_key, result)
+    return result
 
 
 def get_capability_pack_role_config(
@@ -2579,9 +2874,19 @@ def get_capability_pack_role_config(
     role_code: str,
     module_code: str,
 ) -> dict[str, object]:
+    normalized_module = _normalize_module_code(module_code)
+    _ensure_authz_defaults_once(db)
+    _revision_by_module, revision_token = _authz_read_revision_state(db)
+    cache_key = _authz_read_cache_key(
+        cache_type="capability_pack_role_config",
+        values=[normalized_module, role_code, revision_token],
+    )
+    cached_payload = _get_authz_read_cache(cache_key)
+    if cached_payload is not None:
+        return dict(cached_payload)
     normalized_module, _ = _normalize_capability_pack_module_code(
         db,
-        module_code=module_code,
+        module_code=normalized_module,
     )
     config = get_permission_hierarchy_role_config(
         db,
@@ -2601,7 +2906,7 @@ def get_capability_pack_role_config(
             module_capability_codes
         )
     )
-    return {
+    result = {
         "role_code": config["role_code"],
         "role_name": config["role_name"],
         "readonly": config["readonly"]
@@ -2616,6 +2921,8 @@ def get_capability_pack_role_config(
         "effective_page_permission_codes": config["effective_page_permission_codes"],
         "auto_linked_dependencies": [],
     }
+    _set_authz_read_cache(cache_key, result)
+    return result
 
 
 def _capability_request_to_granted_codes(
@@ -3048,10 +3355,19 @@ def get_capability_pack_effective_explain(
     role_code: str,
     module_code: str,
 ) -> dict[str, object]:
-    ensure_authz_defaults(db)
+    normalized_module = _normalize_module_code(module_code)
+    _ensure_authz_defaults_once(db)
+    _revision_by_module, revision_token = _authz_read_revision_state(db)
+    cache_key = _authz_read_cache_key(
+        cache_type="capability_pack_effective_explain",
+        values=[normalized_module, role_code, revision_token],
+    )
+    cached_payload = _get_authz_read_cache(cache_key)
+    if cached_payload is not None:
+        return dict(cached_payload)
     normalized_module, _ = _normalize_capability_pack_module_code(
         db,
-        module_code=module_code,
+        module_code=normalized_module,
     )
     role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
     if role_row is None:
@@ -3123,7 +3439,7 @@ def get_capability_pack_effective_explain(
             }
         )
 
-    return {
+    result = {
         "role_code": role_row.code,
         "role_name": role_row.name,
         "module_code": normalized_module,
@@ -3136,6 +3452,8 @@ def get_capability_pack_effective_explain(
         ),
         "capability_items": capability_reasons,
     }
+    _set_authz_read_cache(cache_key, result)
+    return result
 
 
 def validate_permission_code(permission_code: str) -> PermissionCatalogItem:

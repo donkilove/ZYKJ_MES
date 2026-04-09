@@ -9,6 +9,7 @@ from app.schemas.common import ApiResponse, success_response
 from app.schemas.role import RoleCreate, RoleItem, RoleListResult, RoleUpdate
 from app.services.audit_service import write_audit_log
 from app.services.role_service import (
+    count_active_users_for_role_ids,
     count_active_users_for_role,
     create_role,
     delete_role,
@@ -30,8 +31,18 @@ def _normalize_role_output(role: Role) -> tuple[str, bool]:
     return role_type, is_builtin
 
 
-def to_role_item(db: Session, role: Role) -> RoleItem:
+def to_role_item(
+    db: Session,
+    role: Role,
+    *,
+    user_count: int | None = None,
+) -> RoleItem:
     role_type, is_builtin = _normalize_role_output(role)
+    resolved_user_count = (
+        count_active_users_for_role(db, role.id)
+        if user_count is None
+        else user_count
+    )
     return RoleItem(
         id=role.id,
         code=role.code,
@@ -40,7 +51,7 @@ def to_role_item(db: Session, role: Role) -> RoleItem:
         role_type=role_type,
         is_builtin=is_builtin,
         is_enabled=role.is_enabled,
-        user_count=count_active_users_for_role(db, role.id),
+        user_count=resolved_user_count,
         created_at=role.created_at,
         updated_at=role.updated_at,
     )
@@ -55,7 +66,21 @@ def get_roles(
     _: User = Depends(require_permission("user.roles.list")),
 ) -> ApiResponse[RoleListResult]:
     total, roles = list_roles(db, page, page_size, keyword)
-    result = RoleListResult(total=total, items=[to_role_item(db, role) for role in roles])
+    user_count_by_role_id = count_active_users_for_role_ids(
+        db,
+        [role.id for role in roles],
+    )
+    result = RoleListResult(
+        total=total,
+        items=[
+            to_role_item(
+                db,
+                role,
+                user_count=user_count_by_role_id.get(role.id, 0),
+            )
+            for role in roles
+        ],
+    )
     return success_response(result)
 
 

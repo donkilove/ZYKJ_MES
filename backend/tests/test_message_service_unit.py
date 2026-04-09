@@ -21,6 +21,9 @@ class _FakeScalarResult:
         self._one = one
         self._all_rows = all_rows or []
 
+    def one(self):
+        return self._one
+
     def scalar_one(self):
         return self._one
 
@@ -166,15 +169,17 @@ class MessageServiceUnitTest(unittest.TestCase):
         db = MagicMock()
         db.execute.return_value.one_or_none.return_value = (msg, recipient)
 
-        result = message_service.get_message_jump_target(
-            db,
-            user_id=1,
-            message_id=17,
-        )
+        with patch.object(message_service, "run_message_maintenance") as maintenance:
+            result = message_service.get_message_jump_target(
+                db,
+                user_id=1,
+                message_id=17,
+            )
 
         self.assertIsNotNone(result)
         self.assertFalse(result.can_jump)
         self.assertEqual(result.disabled_reason, "missing_target")
+        maintenance.assert_not_called()
 
     def test_resolve_message_status_supports_legacy_source_unavailable_value(self):
         msg = SimpleNamespace(
@@ -300,15 +305,17 @@ class MessageServiceUnitTest(unittest.TestCase):
         db = MagicMock()
         db.execute.return_value.one_or_none.return_value = (msg, recipient)
 
-        detail = message_service.get_message_detail(
-            db,
-            user_id=1,
-            message_id=15,
-        )
+        with patch.object(message_service, "run_message_maintenance") as maintenance:
+            detail = message_service.get_message_detail(
+                db,
+                user_id=1,
+                message_id=15,
+            )
 
         self.assertIsNotNone(detail)
         self.assertEqual(detail.delivery_status, "failed")
         self.assertIn("重试", detail.failure_reason_hint)
+        maintenance.assert_not_called()
 
     def test_get_message_jump_target_returns_disabled_reason_for_inactive_message(self):
         now = datetime.now(UTC)
@@ -324,45 +331,55 @@ class MessageServiceUnitTest(unittest.TestCase):
         db = MagicMock()
         db.execute.return_value.one_or_none.return_value = (msg, recipient)
 
-        result = message_service.get_message_jump_target(
-            db,
-            user_id=1,
-            message_id=16,
-        )
+        with patch.object(message_service, "run_message_maintenance") as maintenance:
+            result = message_service.get_message_jump_target(
+                db,
+                user_id=1,
+                message_id=16,
+            )
 
         self.assertIsNotNone(result)
         self.assertFalse(result.can_jump)
         self.assertEqual(result.disabled_reason, "archived")
+        maintenance.assert_not_called()
 
     def test_get_message_summary_counts_active_todo_and_high_priority(self):
-        now = datetime.now(UTC)
-        rows = [
-            (
-                SimpleNamespace(message_type="todo", priority="important"),
-                SimpleNamespace(is_read=True),
-            ),
-            (
-                SimpleNamespace(message_type="todo", priority="normal"),
-                SimpleNamespace(is_read=False),
-            ),
-            (
-                SimpleNamespace(message_type="notice", priority="urgent"),
-                SimpleNamespace(is_read=False),
-            ),
-        ]
         db = MagicMock()
-        db.execute.side_effect = [
-            _FakeScalarResult(one=5),
-            SimpleNamespace(all=lambda: rows),
-        ]
+        db.execute.return_value = _FakeScalarResult(one=(5, 2, 2, 2))
 
-        with patch.object(message_service, "run_message_maintenance"):
+        with patch.object(message_service, "run_message_maintenance") as maintenance:
             summary = message_service.get_message_summary(db, user_id=1)
 
         self.assertEqual(summary["total_count"], 5)
         self.assertEqual(summary["unread_count"], 2)
         self.assertEqual(summary["todo_unread_count"], 2)
         self.assertEqual(summary["urgent_unread_count"], 2)
+        maintenance.assert_not_called()
+        self.assertEqual(db.execute.call_count, 1)
+
+    def test_get_unread_count_does_not_run_maintenance_by_default(self):
+        db = MagicMock()
+        db.execute.return_value = _FakeScalarResult(one=3)
+
+        with patch.object(message_service, "run_message_maintenance") as maintenance:
+            unread = message_service.get_unread_count(db, user_id=1)
+
+        self.assertEqual(unread, 3)
+        maintenance.assert_not_called()
+
+    def test_get_unread_count_can_run_maintenance_when_requested(self):
+        db = MagicMock()
+        db.execute.return_value = _FakeScalarResult(one=4)
+
+        with patch.object(message_service, "run_message_maintenance") as maintenance:
+            unread = message_service.get_unread_count(
+                db,
+                user_id=1,
+                run_maintenance=True,
+            )
+
+        self.assertEqual(unread, 4)
+        maintenance.assert_called_once()
 
     def test_source_record_exists_supports_non_numeric_registered_source(self):
         msg = SimpleNamespace(

@@ -1,5 +1,5 @@
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.core.rbac import ROLE_DEFINITIONS
 from app.models.associations import user_roles
@@ -11,7 +11,7 @@ BUILTIN_ROLE_CODES = {str(item["code"]) for item in ROLE_DEFINITIONS}
 
 
 def query_roles(keyword: str | None):
-    stmt = select(Role).options(selectinload(Role.users)).where(Role.is_deleted.is_(False)).order_by(Role.id.asc())
+    stmt = select(Role).where(Role.is_deleted.is_(False)).order_by(Role.id.asc())
     if keyword:
         like_pattern = f"%{keyword}%"
         stmt = stmt.where(
@@ -21,12 +21,12 @@ def query_roles(keyword: str | None):
 
 
 def get_role_by_id(db: Session, role_id: int) -> Role | None:
-    stmt = select(Role).options(selectinload(Role.users)).where(Role.id == role_id, Role.is_deleted.is_(False))
+    stmt = select(Role).where(Role.id == role_id, Role.is_deleted.is_(False))
     return db.execute(stmt).scalars().first()
 
 
 def get_role_by_code(db: Session, code: str) -> Role | None:
-    stmt = select(Role).options(selectinload(Role.users)).where(Role.code == code, Role.is_deleted.is_(False))
+    stmt = select(Role).where(Role.code == code, Role.is_deleted.is_(False))
     return db.execute(stmt).scalars().first()
 
 
@@ -34,7 +34,10 @@ def get_role_by_code_case_insensitive(db: Session, code: str) -> Role | None:
     normalized = code.strip().lower()
     if not normalized:
         return None
-    stmt = select(Role).options(selectinload(Role.users)).where(func.lower(Role.code) == normalized, Role.is_deleted.is_(False))
+    stmt = select(Role).where(
+        func.lower(Role.code) == normalized,
+        Role.is_deleted.is_(False),
+    )
     return db.execute(stmt).scalars().first()
 
 
@@ -61,12 +64,21 @@ def get_roles_by_codes(db: Session, codes: list[str]) -> tuple[list[Role], list[
 
 
 def list_roles(db: Session, page: int, page_size: int, keyword: str | None) -> tuple[int, list[Role]]:
-    base_stmt = query_roles(keyword)
-    total_stmt = select(func.count()).select_from(base_stmt.subquery())
-    total = db.execute(total_stmt).scalar_one()
+    filters = [Role.is_deleted.is_(False)]
+    if keyword:
+        like_pattern = f"%{keyword}%"
+        filters.append(Role.code.ilike(like_pattern) | Role.name.ilike(like_pattern))
+    total_stmt = select(func.count(Role.id)).where(*filters)
+    total = int(db.execute(total_stmt).scalar_one())
 
     offset = (page - 1) * page_size
-    stmt = base_stmt.offset(offset).limit(page_size)
+    stmt = (
+        select(Role)
+        .where(*filters)
+        .order_by(Role.id.asc())
+        .offset(offset)
+        .limit(page_size)
+    )
     roles = db.execute(stmt).scalars().all()
     return total, roles
 
@@ -142,18 +154,34 @@ def update_role(db: Session, role: Role, payload: RoleUpdate) -> tuple[Role | No
 
 
 def count_active_users_for_role(db: Session, role_id: int) -> int:
+    return count_active_users_for_role_ids(db, [role_id]).get(role_id, 0)
+
+
+def count_active_users_for_role_ids(
+    db: Session,
+    role_ids: list[int],
+) -> dict[int, int]:
     from app.models.user import User
 
+    unique_role_ids = sorted({role_id for role_id in role_ids if role_id > 0})
+    if not unique_role_ids:
+        return {}
+
     stmt = (
-        select(func.count(User.id))
+        select(
+            user_roles.c.role_id,
+            func.count(User.id),
+        )
         .select_from(User)
         .join(user_roles, user_roles.c.user_id == User.id)
         .where(
-            user_roles.c.role_id == role_id,
+            user_roles.c.role_id.in_(unique_role_ids),
             User.is_deleted.is_(False),
         )
+        .group_by(user_roles.c.role_id)
     )
-    return int(db.execute(stmt).scalar_one())
+    rows = db.execute(stmt).all()
+    return {int(role_id): int(count) for role_id, count in rows}
 
 
 def delete_role(db: Session, role: Role) -> tuple[bool, str | None]:

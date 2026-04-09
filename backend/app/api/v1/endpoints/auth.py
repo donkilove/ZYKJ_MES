@@ -2,13 +2,19 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, oauth2_scheme, require_permission
 from app.core.config import settings
 from app.core.rbac import ROLE_SYSTEM_ADMIN
-from app.core.security import create_access_token, decode_access_token, verify_password
+from app.core.security import (
+    create_access_token,
+    decode_access_token,
+    verify_password_cached,
+)
 from app.db.session import get_db
+from app.models.process_stage import ProcessStage
 from app.models.registration_request import RegistrationRequest
 from app.models.user import User
 from app.schemas.auth import (
@@ -29,10 +35,12 @@ from app.services.audit_service import write_audit_log
 from app.services.message_service import create_message_for_users
 from app.services.online_status_service import clear_user, touch_user
 from app.services.session_service import (
+    cleanup_expired_login_logs_if_due,
     create_login_log,
-    create_user_session,
-    delete_expired_login_logs,
+    create_or_reuse_user_session,
     mark_session_logout,
+    remember_active_session_token,
+    should_record_success_login,
 )
 from app.services.user_service import (
     approve_registration_request,
@@ -74,12 +82,19 @@ def login(
     ip_address = request.client.host if request and request.client else None
     terminal_info = request.headers.get("user-agent") if request else None
 
-    user = get_user_by_username(db, username, include_deleted=True)
+    user = get_user_by_username(
+        db,
+        username,
+        include_deleted=True,
+        load_roles=False,
+        load_processes=False,
+        load_stage=False,
+    )
     if not user:
-        latest_request = get_registration_request_by_account(db, username)
         detail = "Incorrect username or password"
         status_code = status.HTTP_401_UNAUTHORIZED
         reason = detail
+        latest_request = get_registration_request_by_account(db, username)
         if latest_request and latest_request.status == "pending":
             detail = "Account is pending approval"
             status_code = status.HTTP_403_FORBIDDEN
@@ -117,7 +132,11 @@ def login(
         db.commit()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
-    if not verify_password(form_data.password, user.password_hash):
+    if not verify_password_cached(
+        form_data.password,
+        user.password_hash,
+        cache_scope=f"user:{user.id}",
+    ):
         create_login_log(
             db,
             username=username,
@@ -133,26 +152,35 @@ def login(
             detail="Incorrect username or password",
         )
 
-    session_row = create_user_session(
+    session_row = create_or_reuse_user_session(
         db,
         user=user,
         ip_address=ip_address,
         terminal_info=terminal_info,
     )
-    create_login_log(
-        db,
-        username=username,
+    if should_record_success_login(
         user_id=user.id,
-        success=True,
         ip_address=ip_address,
         terminal_info=terminal_info,
-        session_token_id=session_row.session_token_id,
-    )
+    ):
+        create_login_log(
+            db,
+            username=username,
+            user_id=user.id,
+            success=True,
+            ip_address=ip_address,
+            terminal_info=terminal_info,
+            session_token_id=session_row.session_token_id,
+        )
     user.last_login_at = session_row.login_time
     user.last_login_ip = ip_address
     user.last_login_terminal = terminal_info
-    delete_expired_login_logs(db)
+    cleanup_expired_login_logs_if_due(db)
     db.commit()
+    remember_active_session_token(
+        session_row.session_token_id,
+        expires_at=session_row.expires_at,
+    )
 
     touch_user(user.id)
     token = create_access_token(
@@ -498,7 +526,15 @@ def reject_registration(
 @router.get("/me", response_model=ApiResponse[CurrentUserResult])
 def get_current_login_user(
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> ApiResponse[CurrentUserResult]:
+    stage_name = None
+    if current_user.stage_id is not None:
+        stage_name = (
+            db.execute(
+                select(ProcessStage.name).where(ProcessStage.id == current_user.stage_id)
+            ).scalar_one_or_none()
+        )
     return success_response(
         CurrentUserResult(
             id=current_user.id,
@@ -507,6 +543,6 @@ def get_current_login_user(
             role_code=current_user.roles[0].code if current_user.roles else None,
             role_name=current_user.roles[0].name if current_user.roles else None,
             stage_id=current_user.stage_id,
-            stage_name=current_user.stage.name if current_user.stage else None,
+            stage_name=stage_name,
         )
     )

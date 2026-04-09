@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     db_name: str = "mes_db"
     db_user: str = "mes_user"
     db_password: str = "mes_password"
-    db_pool_size: int = 8
-    db_max_overflow: int = 8
-    db_pool_timeout_seconds: int = 15
+    db_pool_size: int = 6
+    db_max_overflow: int = 4
+    db_pool_timeout_seconds: int = 5
     db_pool_recycle_seconds: int = 1800
 
     redis_host: str = "127.0.0.1"

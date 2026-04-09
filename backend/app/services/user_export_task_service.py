@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import csv
 import io
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from threading import RLock
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -29,6 +31,9 @@ USER_EXPORT_STATUS_EXPIRED = "expired"
 USER_EXPORT_PROCESSING_TIMEOUT_MINUTES = 30
 USER_EXPORT_RETENTION_DAYS = 7
 USER_EXPORT_TASK_LIST_LIMIT = 20
+_USER_EXPORT_TASK_CLEANUP_LOCK = RLock()
+_USER_EXPORT_TASK_CLEANUP_NEXT_AT = 0.0
+_USER_EXPORT_TASK_CLEANUP_MIN_INTERVAL_SECONDS = 60
 RUNTIME_EXPORT_DIR = (
     Path(__file__).resolve().parents[2] / "runtime_exports" / "user"
 )
@@ -149,7 +154,7 @@ def _build_excel_bytes(rows: list[list[str]]) -> bytes:
     return buffer.getvalue()
 
 
-def cleanup_user_export_tasks(db: Session) -> None:
+def _run_cleanup_user_export_tasks(db: Session) -> None:
     now = _now_utc()
     changed = False
     ensure_user_export_runtime_dir()
@@ -177,6 +182,28 @@ def cleanup_user_export_tasks(db: Session) -> None:
             changed = True
     if changed:
         db.commit()
+
+
+def cleanup_user_export_tasks(
+    db: Session,
+    *,
+    min_interval_seconds: int = _USER_EXPORT_TASK_CLEANUP_MIN_INTERVAL_SECONDS,
+) -> None:
+    global _USER_EXPORT_TASK_CLEANUP_NEXT_AT
+
+    interval_seconds = max(1, min_interval_seconds)
+    now_monotonic = time.monotonic()
+    with _USER_EXPORT_TASK_CLEANUP_LOCK:
+        if now_monotonic < _USER_EXPORT_TASK_CLEANUP_NEXT_AT:
+            return
+        _USER_EXPORT_TASK_CLEANUP_NEXT_AT = now_monotonic + interval_seconds
+
+    try:
+        _run_cleanup_user_export_tasks(db)
+    except Exception:
+        with _USER_EXPORT_TASK_CLEANUP_LOCK:
+            _USER_EXPORT_TASK_CLEANUP_NEXT_AT = 0.0
+        raise
 
 
 def create_user_export_task(
