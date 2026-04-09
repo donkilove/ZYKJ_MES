@@ -51,8 +51,8 @@
 - 所有沟通、代码注释、文档与新增文件默认使用中文，编码为 UTF-8（无 BOM）。
 - 每次任务开始与结束都要更新 `evidence/` 或等效项目日志。
 - 每次对外回复开头提供“前置说明”；若存在外部调用，在末尾补“工具调用简报”。
-- 编码前必须完成 Sequential-Thinking 分析；若工具不可用，必须记录降级原因、触发时间、替代动作与残余风险。
-- 工作流状态统一使用 `update_plan` 或 `TodoWrite` 维护；若工具不可用，允许在任务日志中维护步骤、状态、验收标准与更新时间。
+- 编码前默认优先使用 `Sequential Thinking` 完成任务拆解、边界澄清与失败重试前复盘；若当前会话未注入该工具，则必须以书面拆解代替，并记录降级原因、触发时间、替代动作与残余风险。
+- 工作流状态优先使用当前会话可见的计划工具（如 `TodoWrite` 或等效能力）维护；若均不可用，允许在任务日志中维护步骤、状态、验收标准与更新时间。
 - 仅运行安全命令，禁止破坏性清理、泄露密钥、令牌或内部敏感链接。
 - 默认采取破坏性改动并拒绝向后兼容，但必须在交付中明确迁移口径；若无迁移需求，统一写“无迁移，直接替换”。
 
@@ -156,25 +156,44 @@
 
 ### 7.1 默认工具口径
 
-- Sequential Thinking：任务拆解、边界澄清、失败重试前复盘。
-- `update_plan` 或 `TodoWrite`：维护步骤、状态与验收标准。
-- Serena：代码与文档定位、引用追踪、精确编辑。
-- Context7：外部官方文档与规范补证。
-- `web.run`：仅在 Serena 与 Context7 不足时作为外部检索降级工具。
-- PowerShell / shell：安全命令执行、本地文本检索、测试与验证。
+- `Sequential Thinking`：默认优先用于任务拆解、边界澄清、失败重试前复盘；不可用时以书面拆解代替。
+- 当前会话可见的计划工具（如 `TodoWrite` 或等效能力）：维护步骤、状态与验收标准。
+- 语义代码工具（如 `Serena`）：默认优先用于代码与文档定位、引用追踪、精确编辑；不可用时退回本地检索链。
+- 外部官方文档工具（如 `Context7`）：默认优先用于官方文档与规范补证；不可用时退回仓库文档与网页抓取工具。
+- 外部网页抓取工具（如 `webfetch` 或等效能力）：默认仅在仓库文档与官方文档工具不足时作为补充检索工具；不可用时以离线经验结论或人工检索代替，并标注时效与局限。
+- PyCharm IDE 工具（如 `pycharm_*`）：若当前在 PyCharm 集成环境中工作，默认优先用于语义级代码定位、精确编辑、IDE 索引结构查看、文件问题检查、运行现成 Run Configuration 与构建验证。
+- PowerShell / shell：优先用于安全命令执行、git 状态与差异检查、`docker`、`npm`、`pnpm`、`flutter`、`pytest`、`gh`、`bru`、`trivy`、`syft` 等宿主命令，以及需要真实 shell 输出作为交付证据的场景。
+
+#### 7.1.1 PyCharm 工具优先场景
+
+以下场景仅在当前会话已确认处于 PyCharm 集成环境中工作时生效；若当前不在 PyCharm 集成环境中工作，或相关 `pycharm_*` 工具未暴露，则退回本地检索链、编辑工具与终端验证链。
+
+1. 找类、方法、符号引用：优先使用 `pycharm_search_symbol`、`pycharm_get_symbol_info`。
+2. 精确改代码：优先使用 `pycharm_replace_text_in_file`、`pycharm_rename_refactoring`。
+3. 查看 IDE 已索引的项目结构：优先使用 `pycharm_list_directory_tree`、`pycharm_find_files_by_name_keyword`。
+4. 查看文件问题：优先使用 `pycharm_get_file_problems`。
+5. 运行现成的 Run Configuration：优先使用 `pycharm_get_run_configurations`、`pycharm_execute_run_configuration`。
+6. 构建验证：优先使用 `pycharm_build_project`。
+
+#### 7.1.2 终端优先场景
+
+1. `git status`、`git diff`、`git log`。
+2. `docker`、`npm`、`pnpm`、`flutter`、`pytest`。
+3. `gh`、`bru`、`trivy`、`syft`。
+4. 需要真实 shell 输出作为交付证据的时候。
 
 ### 7.2 分类与默认验证
 
 | 分类编码   | 任务类型            | 默认执行口径                                | 默认验证口径                                 |
 |--------|-----------------|---------------------------------------|----------------------------------------|
-| CAT-01 | 后端模型/接口/迁移联动    | Sequential Thinking、Serena、数据库或接口工具   | 数据库核对、Bruno、OpenAPI 校验                 |
-| CAT-02 | 前后端契约同步         | Sequential Thinking、Serena、契约工具       | OpenAPI 校验、页面联动验证                      |
-| CAT-03 | Flutter 页面/交互改造 | Sequential Thinking、Serena、Flutter 工具 | `flutter test`、`integration_test`、页面验证 |
-| CAT-04 | 权限与可见性联动        | Sequential Thinking、Serena            | 接口授权验证 + 页面显隐验证                        |
-| CAT-05 | 本地联调与启动         | Sequential Thinking、Serena、联调工具       | 健康检查、抓包、数据库抽检                          |
-| CAT-06 | 中文、编码与文档一致性     | Sequential Thinking、Serena            | 至少一条真实显示或文本结果验证                        |
-| CAT-07 | 接口联调、复现、抓包排障    | Sequential Thinking、Serena、调试工具       | 请求样本、抓包或会话证据                           |
-| CAT-08 | 发布前审计与协作        | Sequential Thinking、审计工具              | SBOM、漏洞扫描、远端协作结果                       |
+| CAT-01 | 后端模型/接口/迁移联动    | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索、数据库或接口工具 | 数据库核对、Bruno 或等效接口验证、OpenAPI 校验 |
+| CAT-02 | 前后端契约同步         | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索、契约工具 | OpenAPI 校验、页面联动验证 |
+| CAT-03 | Flutter 页面/交互改造 | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索、Flutter 工具 | `flutter test`、`integration_test`、页面验证 |
+| CAT-04 | 权限与可见性联动        | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索 | 接口授权验证 + 页面显隐验证 |
+| CAT-05 | 本地联调与启动         | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索、联调工具 | 健康检查、抓包、数据库抽检 |
+| CAT-06 | 中文、编码与文档一致性     | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索 | 至少一条真实显示或文本结果验证 |
+| CAT-07 | 接口联调、复现、抓包排障    | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索、调试工具 | 请求样本、抓包或会话证据 |
+| CAT-08 | 发布前审计与协作        | `Sequential Thinking` 或书面拆解、审计工具或等效命令 | SBOM、漏洞扫描、远端协作结果 |
 
 ### 7.3 验证门禁
 
@@ -190,10 +209,11 @@
 
 ### 7.4 工具降级规则
 
-- Sequential Thinking 不可用：以书面拆解代替，并写入 evidence。
-- Serena 不可用：退回安全文本检索与最小 patch 编辑，并记录无法做语义级定位的影响。
-- Context7 不可用：使用仓库既有文档与离线经验结论，并标注时效与不确定性。
-- 数据库、页面、抓包、扫描类工具不可用：退回静态核对或人工步骤脚本，但必须说明未完成的真实验证边界。
+- `Sequential Thinking` 未注入或不可用：以书面拆解代替，并写入 evidence。
+- 语义代码工具（如 `Serena`）未注入或不可用：退回 `glob`、`grep`、`read`、`pycharm_*` 与最小 patch 编辑，并记录无法做语义级定位的影响。
+- 外部官方文档工具（如 `Context7`）未注入或不可用：使用仓库既有文档、`webfetch` 或离线经验结论，并标注时效与不确定性。
+- 计划工具不可用：在任务日志或 evidence 中维护步骤、状态、验收标准与更新时间。
+- 数据库、页面、抓包、扫描类工具未注入、未暴露、权限缺失或返回异常：退回静态核对或人工步骤脚本，但必须说明未完成的真实验证边界。
 
 ## 8. 质量与交付标准
 
@@ -362,14 +382,14 @@
 
 ## 11. 支撑文档与索引
 
-### 11.1 直接支撑文档
+### 11.1 当前配置入口
 
-- `docs/opencode_tooling_bundle.md`：项目内工具能力接入说明。
-- `docs/host_tooling_bundle.md`：本机辅助工具安装与验证说明。
+- `opencode.json`：项目级 OpenCode 配置与 MCP 注册入口。
+- `evidence/`：任务日志、工具化验证日志与整改留痕目录。
 
 ### 11.2 历史收口说明
 
-历史指挥官文档体系已完成收口，不再作为并列规则源；当前仅保留本文件作为唯一规则入口。
+历史指挥官文档体系与旧工具说明文档已完成收口，不再作为并列规则源；当前仅保留本文件作为唯一规则入口，工具接入状态以 `opencode.json` 与宿主实测结果为准。
 
 ## 12. 适用结论
 
