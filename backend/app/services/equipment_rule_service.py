@@ -16,6 +16,42 @@ from app.schemas.equipment_rule import (
 )
 
 
+_EQUIPMENT_RULE_LIST_COLUMNS = (
+    EquipmentRule.id,
+    EquipmentRule.equipment_id,
+    EquipmentRule.equipment_type,
+    EquipmentRule.equipment_code,
+    EquipmentRule.equipment_name,
+    EquipmentRule.rule_code,
+    EquipmentRule.rule_name,
+    EquipmentRule.rule_type,
+    EquipmentRule.condition_desc,
+    EquipmentRule.is_enabled,
+    EquipmentRule.effective_at,
+    EquipmentRule.remark,
+    EquipmentRule.created_at,
+    EquipmentRule.updated_at,
+)
+_EQUIPMENT_RUNTIME_PARAMETER_LIST_COLUMNS = (
+    EquipmentRuntimeParameter.id,
+    EquipmentRuntimeParameter.equipment_id,
+    EquipmentRuntimeParameter.equipment_type,
+    EquipmentRuntimeParameter.equipment_code,
+    EquipmentRuntimeParameter.equipment_name,
+    EquipmentRuntimeParameter.param_code,
+    EquipmentRuntimeParameter.param_name,
+    EquipmentRuntimeParameter.unit,
+    EquipmentRuntimeParameter.standard_value,
+    EquipmentRuntimeParameter.upper_limit,
+    EquipmentRuntimeParameter.lower_limit,
+    EquipmentRuntimeParameter.effective_at,
+    EquipmentRuntimeParameter.is_enabled,
+    EquipmentRuntimeParameter.remark,
+    EquipmentRuntimeParameter.created_at,
+    EquipmentRuntimeParameter.updated_at,
+)
+
+
 def _to_rule_item(row: EquipmentRule) -> EquipmentRuleItem:
     return EquipmentRuleItem(
         id=row.id,
@@ -32,6 +68,25 @@ def _to_rule_item(row: EquipmentRule) -> EquipmentRuleItem:
         remark=row.remark,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def _to_rule_item_from_mapping(row: dict[str, object]) -> EquipmentRuleItem:
+    return EquipmentRuleItem(
+        id=row["id"],
+        equipment_id=row["equipment_id"],
+        equipment_type=row["equipment_type"],
+        equipment_code=row["equipment_code"],
+        equipment_name=row["equipment_name"],
+        rule_code=row["rule_code"],
+        rule_name=row["rule_name"],
+        rule_type=row["rule_type"],
+        condition_desc=row["condition_desc"],
+        is_enabled=row["is_enabled"],
+        effective_at=row["effective_at"],
+        remark=row["remark"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
     )
 
 
@@ -53,6 +108,27 @@ def _to_param_item(row: EquipmentRuntimeParameter) -> EquipmentRuntimeParameterI
         remark=row.remark,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def _to_param_item_from_mapping(row: dict[str, object]) -> EquipmentRuntimeParameterItem:
+    return EquipmentRuntimeParameterItem(
+        id=row["id"],
+        equipment_id=row["equipment_id"],
+        equipment_type=row["equipment_type"],
+        equipment_code=row["equipment_code"],
+        equipment_name=row["equipment_name"],
+        param_code=row["param_code"],
+        param_name=row["param_name"],
+        unit=row["unit"],
+        standard_value=row["standard_value"],
+        upper_limit=row["upper_limit"],
+        lower_limit=row["lower_limit"],
+        effective_at=row["effective_at"],
+        is_enabled=row["is_enabled"],
+        remark=row["remark"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
     )
 
 
@@ -113,25 +189,29 @@ def list_equipment_rules(
     page: int = 1,
     page_size: int = 20,
 ) -> EquipmentRuleListResult:
-    stmt = select(EquipmentRule)
+    filters = []
     if equipment_id is not None:
-        stmt = stmt.where(EquipmentRule.equipment_id == equipment_id)
+        filters.append(EquipmentRule.equipment_id == equipment_id)
     if is_enabled is not None:
-        stmt = stmt.where(EquipmentRule.is_enabled == is_enabled)
+        filters.append(EquipmentRule.is_enabled == is_enabled)
     if keyword:
         like = f"%{keyword.strip()}%"
-        stmt = stmt.where(EquipmentRule.rule_name.ilike(like))
-    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        filters.append(EquipmentRule.rule_name.ilike(like))
+    stmt = select(*_EQUIPMENT_RULE_LIST_COLUMNS).where(*filters)
+    total = db.scalar(select(func.count(EquipmentRule.id)).where(*filters)) or 0
     rows = (
         db.execute(
             stmt.order_by(EquipmentRule.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
-        .scalars()
+        .mappings()
         .all()
     )
-    return EquipmentRuleListResult(total=total, items=[_to_rule_item(r) for r in rows])
+    return EquipmentRuleListResult(
+        total=total,
+        items=[_to_rule_item_from_mapping(row) for row in rows],
+    )
 
 
 def create_equipment_rule(
@@ -232,33 +312,37 @@ def list_runtime_parameters(
     page: int = 1,
     page_size: int = 20,
 ) -> EquipmentRuntimeParameterListResult:
-    stmt = select(EquipmentRuntimeParameter)
+    filters = []
     if equipment_id is not None:
-        stmt = stmt.where(EquipmentRuntimeParameter.equipment_id == equipment_id)
+        filters.append(EquipmentRuntimeParameter.equipment_id == equipment_id)
     if equipment_type and equipment_type.strip():
-        stmt = stmt.where(
+        filters.append(
             EquipmentRuntimeParameter.equipment_type == equipment_type.strip()
         )
     if is_enabled is not None:
-        stmt = stmt.where(EquipmentRuntimeParameter.is_enabled == is_enabled)
+        filters.append(EquipmentRuntimeParameter.is_enabled == is_enabled)
     if keyword:
         like = f"%{keyword.strip()}%"
-        stmt = stmt.where(
+        filters.append(
             EquipmentRuntimeParameter.param_name.ilike(like)
             | EquipmentRuntimeParameter.param_code.ilike(like)
         )
-    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    stmt = select(*_EQUIPMENT_RUNTIME_PARAMETER_LIST_COLUMNS).where(*filters)
+    total = (
+        db.scalar(select(func.count(EquipmentRuntimeParameter.id)).where(*filters)) or 0
+    )
     rows = (
         db.execute(
             stmt.order_by(EquipmentRuntimeParameter.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
-        .scalars()
+        .mappings()
         .all()
     )
     return EquipmentRuntimeParameterListResult(
-        total=total, items=[_to_param_item(r) for r in rows]
+        total=total,
+        items=[_to_param_item_from_mapping(row) for row in rows],
     )
 
 

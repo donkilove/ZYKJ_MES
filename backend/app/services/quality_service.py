@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import base64
+import copy
 import csv
 import io
+import threading
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
+from time import monotonic
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import event, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
@@ -25,6 +28,53 @@ from app.models.repair_cause import RepairCause
 from app.models.repair_order import RepairOrder
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
 from app.models.user import User
+
+_QUALITY_ROWS_LOCAL_CACHE: dict[
+    tuple[object, ...], tuple[float, list[dict[str, object]]]
+] = {}
+_QUALITY_RELATED_TOTALS_LOCAL_CACHE: dict[
+    tuple[object, ...], tuple[float, dict[str, Any]]
+] = {}
+_QUALITY_STATS_CACHE_LOCK = threading.Lock()
+_QUALITY_STATS_DIRTY_FLAG = "quality_stats_dirty"
+_QUALITY_STATS_DIRTY_MODELS = (
+    FirstArticleRecord,
+    ProductionScrapStatistics,
+    RepairOrder,
+    RepairDefectPhenomenon,
+)
+
+
+def _clear_quality_stats_local_cache() -> None:
+    with _QUALITY_STATS_CACHE_LOCK:
+        _QUALITY_ROWS_LOCAL_CACHE.clear()
+        _QUALITY_RELATED_TOTALS_LOCAL_CACHE.clear()
+
+
+@event.listens_for(Session, "before_flush")
+def _track_quality_stats_writes(
+    session: Session,
+    _flush_context,
+    _instances,
+) -> None:
+    if session.info.get(_QUALITY_STATS_DIRTY_FLAG):
+        return
+    for collection in (session.new, session.dirty, session.deleted):
+        if any(isinstance(obj, _QUALITY_STATS_DIRTY_MODELS) for obj in collection):
+            session.info[_QUALITY_STATS_DIRTY_FLAG] = True
+            return
+
+
+@event.listens_for(Session, "after_commit")
+def _invalidate_quality_stats_cache_after_commit(session: Session) -> None:
+    if not session.info.pop(_QUALITY_STATS_DIRTY_FLAG, False):
+        return
+    _clear_quality_stats_local_cache()
+
+
+@event.listens_for(Session, "after_rollback")
+def _clear_quality_stats_dirty_flag_after_rollback(session: Session) -> None:
+    session.info.pop(_QUALITY_STATS_DIRTY_FLAG, None)
 
 
 def _build_datetime_range_filters(
@@ -146,6 +196,114 @@ def _coerce_int(value: object, default: int = 0) -> int:
     return default
 
 
+def _quality_stats_cache_ttl_seconds() -> float:
+    configured = getattr(settings, "quality_stats_cache_ttl_seconds", 5)
+    try:
+        ttl = float(configured)
+    except (TypeError, ValueError):
+        ttl = 5.0
+    return max(0.0, ttl)
+
+
+def _normalize_cache_text(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def _quality_stats_cache_key(
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    product_name: str | None,
+    process_code: str | None,
+    operator_username: str | None,
+    result_filter: str | None = None,
+) -> tuple[object, ...]:
+    return (
+        start_date,
+        end_date,
+        _normalize_cache_text(product_name),
+        _normalize_cache_text(process_code),
+        _normalize_cache_text(operator_username),
+        _normalize_cache_text(result_filter),
+    )
+
+
+def _row_value(row: object, name: str, default: object = None) -> object:
+    if isinstance(row, dict):
+        return row.get(name, default)
+    return getattr(row, name, default)
+
+
+def _row_process_code(row: object) -> str:
+    code = str(_row_value(row, "process_code", "") or "").strip()
+    if code:
+        return code
+    process_row = _row_value(row, "order_process")
+    return str(getattr(process_row, "process_code", "") or "").strip()
+
+
+def _row_process_name(row: object) -> str:
+    process_name = str(_row_value(row, "process_name", "") or "").strip()
+    if process_name:
+        return process_name
+    process_row = _row_value(row, "order_process")
+    return str(getattr(process_row, "process_name", "") or "").strip()
+
+
+def _row_operator_user_id(row: object) -> int | None:
+    user_id = _row_value(row, "operator_user_id")
+    if user_id is None:
+        return None
+    normalized = _coerce_int(user_id, 0)
+    return normalized if normalized > 0 else None
+
+
+def _row_operator_username(row: object) -> str:
+    username = str(_row_value(row, "operator_username", "") or "").strip()
+    if username:
+        return username
+    operator = _row_value(row, "operator")
+    return str(getattr(operator, "username", "") or "").strip()
+
+
+def _row_result(row: object) -> str:
+    return str(_row_value(row, "result", "") or "").strip().lower()
+
+
+def _row_created_at(row: object) -> datetime | None:
+    value = _row_value(row, "created_at")
+    return value if isinstance(value, datetime) else None
+
+
+def _row_order_id(row: object) -> int | None:
+    order_id = _row_value(row, "order_id")
+    if order_id is None:
+        return None
+    normalized = _coerce_int(order_id, 0)
+    return normalized if normalized > 0 else None
+
+
+def _row_product_id(row: object) -> int | None:
+    product_id = _row_value(row, "product_id")
+    if product_id is not None:
+        normalized = _coerce_int(product_id, 0)
+        return normalized if normalized > 0 else None
+    order = _row_value(row, "order")
+    if order is None:
+        return None
+    normalized = _coerce_int(getattr(order, "product_id", None), 0)
+    return normalized if normalized > 0 else None
+
+
+def _row_product_name(row: object) -> str:
+    name = str(_row_value(row, "product_name", "") or "").strip()
+    if name:
+        return name
+    order = _row_value(row, "order")
+    product = getattr(order, "product", None) if order is not None else None
+    return str(getattr(product, "name", "") or "").strip()
+
+
 def _aggregate_quality_related_totals(
     db: Session,
     *,
@@ -155,6 +313,21 @@ def _aggregate_quality_related_totals(
     process_code: str | None = None,
     operator_username: str | None = None,
 ) -> dict[str, Any]:
+    cache_key = _quality_stats_cache_key(
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+    )
+    ttl_seconds = _quality_stats_cache_ttl_seconds()
+    now = monotonic()
+    if ttl_seconds > 0:
+        with _QUALITY_STATS_CACHE_LOCK:
+            cached = _QUALITY_RELATED_TOTALS_LOCAL_CACHE.get(cache_key)
+            if cached is not None and cached[0] > now:
+                return copy.deepcopy(cached[1])
+
     scrap_by_product: dict[int, int] = {}
     scrap_by_process: dict[str, int] = {}
     scrap_by_operator: dict[str, int] = {}
@@ -337,7 +510,7 @@ def _aggregate_quality_related_totals(
                 defect_by_operator.get(operator_key, 0)
             ) + quantity
 
-    return {
+    result = {
         "scrap_by_product": scrap_by_product,
         "scrap_by_process": scrap_by_process,
         "scrap_by_operator": scrap_by_operator,
@@ -356,6 +529,13 @@ def _aggregate_quality_related_totals(
         "covered_process_keys": {"all": covered_process_keys},
         "covered_operator_keys": {"all": covered_operator_keys},
     }
+    if ttl_seconds > 0:
+        with _QUALITY_STATS_CACHE_LOCK:
+            _QUALITY_RELATED_TOTALS_LOCAL_CACHE[cache_key] = (
+                now + ttl_seconds,
+                copy.deepcopy(result),
+            )
+    return result
 
 
 def _append_exact_or_like_filter(
@@ -599,23 +779,45 @@ def _load_first_article_rows(
     process_code: str | None = None,
     operator_username: str | None = None,
     result_filter: str | None = None,
-) -> list[FirstArticleRecord]:
+) -> list[dict[str, object]]:
+    cache_key = _quality_stats_cache_key(
+        start_date=start_date,
+        end_date=end_date,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+        result_filter=result_filter,
+    )
+    ttl_seconds = _quality_stats_cache_ttl_seconds()
+    now = monotonic()
+    if ttl_seconds > 0:
+        with _QUALITY_STATS_CACHE_LOCK:
+            cached = _QUALITY_ROWS_LOCAL_CACHE.get(cache_key)
+            if cached is not None and cached[0] > now:
+                return [dict(item) for item in cached[1]]
+
     filters = _build_created_at_filters(start_date=start_date, end_date=end_date)
     stmt = (
-        select(FirstArticleRecord)
-        .join(FirstArticleRecord.order)
-        .join(ProductionOrder.product)
-        .join(FirstArticleRecord.order_process)
-        .join(FirstArticleRecord.operator)
-        .where(*filters)
-        .options(
-            selectinload(FirstArticleRecord.order).selectinload(
-                ProductionOrder.product
-            ),
-            selectinload(FirstArticleRecord.order_process),
-            selectinload(FirstArticleRecord.operator),
+        select(
+            FirstArticleRecord.order_id.label("order_id"),
+            ProductionOrder.product_id.label("product_id"),
+            Product.name.label("product_name"),
+            ProductionOrderProcess.process_code.label("process_code"),
+            ProductionOrderProcess.process_name.label("process_name"),
+            FirstArticleRecord.operator_user_id.label("operator_user_id"),
+            User.username.label("operator_username"),
+            FirstArticleRecord.result.label("result"),
+            FirstArticleRecord.created_at.label("created_at"),
         )
-        .order_by(FirstArticleRecord.created_at.desc(), FirstArticleRecord.id.desc())
+        .select_from(FirstArticleRecord)
+        .join(ProductionOrder, ProductionOrder.id == FirstArticleRecord.order_id)
+        .join(Product, Product.id == ProductionOrder.product_id)
+        .join(
+            ProductionOrderProcess,
+            ProductionOrderProcess.id == FirstArticleRecord.order_process_id,
+        )
+        .join(User, User.id == FirstArticleRecord.operator_user_id)
+        .where(*filters)
     )
     if product_name and product_name.strip():
         stmt = stmt.where(Product.name.ilike(f"%{product_name.strip()}%"))
@@ -628,7 +830,14 @@ def _load_first_article_rows(
     normalized_result = (result_filter or "").strip().lower()
     if normalized_result in ("passed", "failed"):
         stmt = stmt.where(FirstArticleRecord.result == normalized_result)
-    return db.execute(stmt).scalars().all()
+    rows = [dict(row._mapping) for row in db.execute(stmt).all()]
+    if ttl_seconds > 0:
+        with _QUALITY_STATS_CACHE_LOCK:
+            _QUALITY_ROWS_LOCAL_CACHE[cache_key] = (
+                now + ttl_seconds,
+                [dict(item) for item in rows],
+            )
+    return rows
 
 
 def get_quality_overview(
@@ -659,17 +868,21 @@ def get_quality_overview(
         operator_username=operator_username,
     )
     first_article_total = len(rows)
-    passed_total = sum(1 for row in rows if row.result == "passed")
-    failed_total = sum(1 for row in rows if row.result == "failed")
-    latest_first_article_at = max((row.created_at for row in rows), default=None)
+    passed_total = sum(1 for row in rows if _row_result(row) == "passed")
+    failed_total = sum(1 for row in rows if _row_result(row) == "failed")
+    latest_first_article_at = max(
+        (created_at for created_at in (_row_created_at(row) for row in rows) if created_at),
+        default=None,
+    )
 
-    covered_order_ids = {row.order_id for row in rows}
-    covered_process_codes = {
-        row.order_process.process_code
-        for row in rows
-        if row.order_process is not None and row.order_process.process_code
+    covered_order_ids = {
+        order_id for order_id in (_row_order_id(row) for row in rows) if order_id is not None
     }
-    covered_operator_ids = {row.operator_user_id for row in rows}
+    covered_process_codes = {
+        process_key
+        for process_key in (_normalize_process_key(_row_process_code(row)) for row in rows)
+        if process_key
+    }
     related_order_ids = related_totals.get("covered_order_ids", {}).get("all", set())
     related_process_keys = related_totals.get("covered_process_keys", {}).get(
         "all", set()
@@ -687,8 +900,8 @@ def get_quality_overview(
     for row in rows:
         covered_operator_keys.add(
             _normalize_operator_key(
-                user_id=row.operator_user_id,
-                username=row.operator.username if row.operator else "",
+                user_id=_row_operator_user_id(row),
+                username=_row_operator_username(row),
             )
         )
 
@@ -736,9 +949,8 @@ def get_quality_process_stats(
     )
     grouped: dict[str, dict[str, object]] = {}
     for row in rows:
-        process_row = row.order_process
-        process_key = process_row.process_code if process_row else ""
-        process_name = process_row.process_name if process_row else ""
+        process_key = _normalize_process_key(_row_process_code(row))
+        process_name = _row_process_name(row)
         if process_key not in grouped:
             grouped[process_key] = {
                 "process_code": process_key,
@@ -755,12 +967,16 @@ def get_quality_process_stats(
 
         item = grouped[process_key]
         item["first_article_total"] = _coerce_int(item["first_article_total"]) + 1
-        if row.result == "passed":
+        if _row_result(row) == "passed":
             item["passed_total"] = _coerce_int(item["passed_total"]) + 1
-        elif row.result == "failed":
+        elif _row_result(row) == "failed":
             item["failed_total"] = _coerce_int(item["failed_total"]) + 1
-        if item["latest_first_article_at"] is None:
-            item["latest_first_article_at"] = row.created_at
+        created_at = _row_created_at(row)
+        if created_at is not None and (
+            item["latest_first_article_at"] is None
+            or created_at > item["latest_first_article_at"]
+        ):
+            item["latest_first_article_at"] = created_at
 
     for process_key, process_name in related_totals["process_name_by_code"].items():
         grouped.setdefault(
@@ -833,9 +1049,9 @@ def get_quality_operator_stats(
     )
     grouped: dict[str, dict[str, object]] = {}
     for row in rows:
-        operator_name = row.operator.username if row.operator else ""
+        operator_name = _row_operator_username(row)
         operator_key = _normalize_operator_key(
-            user_id=row.operator_user_id,
+            user_id=_row_operator_user_id(row),
             username=operator_name,
         )
         if not operator_key:
@@ -843,7 +1059,7 @@ def get_quality_operator_stats(
         item = grouped.get(operator_key)
         if item is None:
             item = {
-                "operator_user_id": row.operator_user_id,
+                "operator_user_id": _row_operator_user_id(row),
                 "operator_username": operator_name,
                 "first_article_total": 0,
                 "passed_total": 0,
@@ -857,12 +1073,16 @@ def get_quality_operator_stats(
             grouped[operator_key] = item
 
         item["first_article_total"] = _coerce_int(item["first_article_total"]) + 1
-        if row.result == "passed":
+        if _row_result(row) == "passed":
             item["passed_total"] = _coerce_int(item["passed_total"]) + 1
-        elif row.result == "failed":
+        elif _row_result(row) == "failed":
             item["failed_total"] = _coerce_int(item["failed_total"]) + 1
-        if item["latest_first_article_at"] is None:
-            item["latest_first_article_at"] = row.created_at
+        created_at = _row_created_at(row)
+        if created_at is not None and (
+            item["latest_first_article_at"] is None
+            or created_at > item["latest_first_article_at"]
+        ):
+            item["latest_first_article_at"] = created_at
 
     for operator_key, meta in related_totals["operator_meta_by_key"].items():
         grouped.setdefault(
@@ -1127,17 +1347,16 @@ def get_quality_product_stats(
 
     grouped: dict[int, dict[str, Any]] = {}
     for row in rows:
-        order = row.order
-        if order is None:
+        product_id = _row_product_id(row)
+        if product_id is None:
             continue
-        product = order.product
-        if product is None:
+        product_name_value = _row_product_name(row)
+        if not product_name_value:
             continue
-        pid = product.id
-        if pid not in grouped:
-            grouped[pid] = {
-                "product_id": pid,
-                "product_name": product.name,
+        if product_id not in grouped:
+            grouped[product_id] = {
+                "product_id": product_id,
+                "product_name": product_name_value,
                 "first_article_total": 0,
                 "passed_total": 0,
                 "failed_total": 0,
@@ -1146,11 +1365,11 @@ def get_quality_product_stats(
                 "scrap_total": 0,
                 "repair_total": 0,
             }
-        item = grouped[pid]
+        item = grouped[product_id]
         item["first_article_total"] = int(item["first_article_total"]) + 1
-        if row.result == "passed":
+        if _row_result(row) == "passed":
             item["passed_total"] = int(item["passed_total"]) + 1
-        elif row.result == "failed":
+        elif _row_result(row) == "failed":
             item["failed_total"] = int(item["failed_total"]) + 1
 
     scrap_rows = db.execute(

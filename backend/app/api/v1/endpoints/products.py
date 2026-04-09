@@ -4,14 +4,16 @@ import csv
 import io
 import json
 import logging
+import time
 import urllib.parse
+from threading import RLock
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permission
+from app.api.deps import require_permission, require_permission_fast
 from app.core.security import verify_password
 from app.db.session import get_db
 from app.models.product import Product
@@ -90,6 +92,69 @@ from app.services.product_service import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_PRODUCT_READ_RESPONSE_CACHE: dict[str, tuple[float, bytes]] = {}
+_PRODUCT_READ_RESPONSE_CACHE_LOCK = RLock()
+_PRODUCT_READ_RESPONSE_CACHE_TTL_SECONDS = 10
+_PRODUCT_DETAIL_RESPONSE_CACHE_TTL_SECONDS = 15
+_PRODUCT_PARAMETER_RESPONSE_CACHE_TTL_SECONDS = 15
+_PRODUCT_IMPACT_RESPONSE_CACHE_TTL_SECONDS = 10
+_PRODUCT_HISTORY_RESPONSE_CACHE_TTL_SECONDS = 10
+
+
+def _product_read_cache_key(
+    product_id: int,
+    cache_type: str,
+    payload: dict[str, object] | None = None,
+) -> str:
+    encoded_payload = json.dumps(
+        payload or {},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"product_read:{product_id}:{cache_type}:{encoded_payload}"
+
+
+def _get_product_read_cached_response_bytes(cache_key: str) -> bytes | None:
+    with _PRODUCT_READ_RESPONSE_CACHE_LOCK:
+        cached = _PRODUCT_READ_RESPONSE_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        expire_at, payload_bytes = cached
+        if expire_at <= time.monotonic():
+            _PRODUCT_READ_RESPONSE_CACHE.pop(cache_key, None)
+            return None
+        return payload_bytes
+
+
+def _set_product_read_cached_response_bytes(
+    cache_key: str,
+    payload: dict[str, object],
+    *,
+    ttl_seconds: int = _PRODUCT_READ_RESPONSE_CACHE_TTL_SECONDS,
+) -> bytes:
+    payload_bytes = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    resolved_ttl_seconds = max(1, int(ttl_seconds))
+    with _PRODUCT_READ_RESPONSE_CACHE_LOCK:
+        _PRODUCT_READ_RESPONSE_CACHE[cache_key] = (
+            time.monotonic() + resolved_ttl_seconds,
+            payload_bytes,
+        )
+    return payload_bytes
+
+
+def _invalidate_product_read_cache(product_id: int) -> None:
+    key_prefix = f"product_read:{product_id}:"
+    with _PRODUCT_READ_RESPONSE_CACHE_LOCK:
+        expired_keys = [
+            key for key in _PRODUCT_READ_RESPONSE_CACHE if key.startswith(key_prefix)
+        ]
+        for key in expired_keys:
+            _PRODUCT_READ_RESPONSE_CACHE.pop(key, None)
 
 
 def to_product_item(
@@ -610,8 +675,12 @@ def create_product_api(
 def get_product_detail_api(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.products.list")),
-) -> ApiResponse[ProductItem]:
+    _: None = Depends(require_permission_fast("product.products.list")),
+) -> ApiResponse[ProductItem] | Response:
+    cache_key = _product_read_cache_key(product_id, "detail_item")
+    cached_payload = _get_product_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(
@@ -620,21 +689,41 @@ def get_product_detail_api(
     latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(
         product.id
     )
-    return success_response(to_product_item(product, latest_history))
+    response_payload = success_response(
+        to_product_item(product, latest_history)
+    ).model_dump(mode="json")
+    payload_bytes = _set_product_read_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_PRODUCT_DETAIL_RESPONSE_CACHE_TTL_SECONDS,
+    )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get("/{product_id}/detail", response_model=ApiResponse[ProductDetailResult])
 def get_product_detail_bundle_api(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.products.list")),
-) -> ApiResponse[ProductDetailResult]:
+    _: None = Depends(require_permission_fast("product.products.list")),
+) -> ApiResponse[ProductDetailResult] | Response:
+    cache_key = _product_read_cache_key(product_id, "detail_bundle")
+    cached_payload = _get_product_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
         )
-    return success_response(_build_product_detail_result(db=db, product=product))
+    response_payload = success_response(
+        _build_product_detail_result(db=db, product=product)
+    ).model_dump(mode="json")
+    payload_bytes = _set_product_read_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_PRODUCT_DETAIL_RESPONSE_CACHE_TTL_SECONDS,
+    )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.put("/{product_id}", response_model=ApiResponse[ProductItem])
@@ -717,6 +806,7 @@ def update_product_api(
         },
     )
     db.commit()
+    _invalidate_product_read_cache(product.id)
     latest_history = get_latest_history_map_by_product_ids(db, [product.id]).get(
         product.id
     )
@@ -755,6 +845,7 @@ def delete_product_api(
         operator=current_user,
     )
     db.commit()
+    _invalidate_product_read_cache(product_id)
     return success_response({"deleted": True}, message="deleted")
 
 
@@ -764,8 +855,12 @@ def delete_product_api(
 def get_product_parameters(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.parameters.view")),
-) -> ApiResponse[ProductParameterListResult]:
+    _: None = Depends(require_permission_fast("product.parameters.view")),
+) -> ApiResponse[ProductParameterListResult] | Response:
+    cache_key = _product_read_cache_key(product_id, "parameters_current")
+    cached_payload = _get_product_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(
@@ -782,7 +877,7 @@ def get_product_parameters(
         product=product,
         version=revision.version,
     )
-    return success_response(
+    response_payload = success_response(
         _to_parameter_list_result(
             product=product,
             parameter_scope="version",
@@ -791,7 +886,13 @@ def get_product_parameters(
             lifecycle_status=revision.lifecycle_status,
             parameters=parameters,
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_product_read_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_PRODUCT_PARAMETER_RESPONSE_CACHE_TTL_SECONDS,
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get(
@@ -802,8 +903,16 @@ def get_product_version_parameters_api(
     product_id: int,
     version: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.parameters.view")),
-) -> ApiResponse[ProductParameterListResult]:
+    _: None = Depends(require_permission_fast("product.parameters.view")),
+) -> ApiResponse[ProductParameterListResult] | Response:
+    cache_key = _product_read_cache_key(
+        product_id,
+        "parameters_version",
+        {"version": version},
+    )
+    cached_payload = _get_product_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(
@@ -817,7 +926,7 @@ def get_product_version_parameters_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
-    return success_response(
+    response_payload = success_response(
         _to_parameter_list_result(
             product=product,
             parameter_scope="version",
@@ -826,7 +935,13 @@ def get_product_version_parameters_api(
             lifecycle_status=revision.lifecycle_status,
             parameters=parameters,
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_product_read_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_PRODUCT_PARAMETER_RESPONSE_CACHE_TTL_SECONDS,
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get(
@@ -836,8 +951,12 @@ def get_product_version_parameters_api(
 def get_effective_product_parameters_api(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.parameters.view")),
-) -> ApiResponse[ProductParameterListResult]:
+    _: None = Depends(require_permission_fast("product.parameters.view")),
+) -> ApiResponse[ProductParameterListResult] | Response:
+    cache_key = _product_read_cache_key(product_id, "parameters_effective")
+    cached_payload = _get_product_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(
@@ -850,7 +969,7 @@ def get_effective_product_parameters_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
-    return success_response(
+    response_payload = success_response(
         _to_parameter_list_result(
             product=product,
             parameter_scope="effective",
@@ -859,7 +978,13 @@ def get_effective_product_parameters_api(
             lifecycle_status=revision.lifecycle_status,
             parameters=parameters,
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_product_read_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_PRODUCT_PARAMETER_RESPONSE_CACHE_TTL_SECONDS,
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.put(
@@ -907,6 +1032,7 @@ def update_parameters(
         },
     )
     db.commit()
+    _invalidate_product_read_cache(product.id)
     return success_response(
         ProductParameterUpdateResult(
             parameter_scope="version",
@@ -966,6 +1092,7 @@ def update_product_version_parameters_api(
         },
     )
     db.commit()
+    _invalidate_product_read_cache(product.id)
     return success_response(
         ProductParameterUpdateResult(
             parameter_scope="version",
@@ -987,8 +1114,20 @@ def get_product_impact_analysis(
     target_status: str | None = Query(default=None),
     target_version: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.impact.analysis")),
-) -> ApiResponse[ProductImpactAnalysisResult]:
+    _: None = Depends(require_permission_fast("product.impact.analysis")),
+) -> ApiResponse[ProductImpactAnalysisResult] | Response:
+    cache_key = _product_read_cache_key(
+        product_id,
+        "impact_analysis",
+        {
+            "operation": operation,
+            "target_status": target_status,
+            "target_version": target_version,
+        },
+    )
+    cached_payload = _get_product_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(
@@ -1011,7 +1150,7 @@ def get_product_impact_analysis(
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
-    return success_response(
+    response_payload = success_response(
         ProductImpactAnalysisResult(
             operation=result.operation,
             target_status=result.target_status,
@@ -1030,7 +1169,13 @@ def get_product_impact_analysis(
                 for item in result.items
             ],
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_product_read_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_PRODUCT_IMPACT_RESPONSE_CACHE_TTL_SECONDS,
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.post("/{product_id}/lifecycle", response_model=ApiResponse[ProductItem])
@@ -1095,6 +1240,7 @@ def update_product_lifecycle(
         after_data={"lifecycle_status": payload.target_status},
     )
     db.commit()
+    _invalidate_product_read_cache(product.id)
     return success_response(to_product_item(updated, None), message="updated")
 
 
@@ -1185,6 +1331,7 @@ def create_product_version_api(
         },
     )
     db.commit()
+    _invalidate_product_read_cache(product.id)
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
@@ -1245,6 +1392,7 @@ def copy_product_version_api(
         },
     )
     db.commit()
+    _invalidate_product_read_cache(product.id)
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
@@ -1300,6 +1448,7 @@ def activate_product_version_api(
         after_data={"version": version},
     )
     db.commit()
+    _invalidate_product_read_cache(product.id)
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
@@ -1365,6 +1514,7 @@ def disable_product_version_api(
         after_data={"version": version},
     )
     db.commit()
+    _invalidate_product_read_cache(product.id)
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
     from app.models.product_revision import ProductRevision as _PR
@@ -1413,6 +1563,7 @@ def delete_product_version_api(
         after_data={"version": version},
     )
     db.commit()
+    _invalidate_product_read_cache(product.id)
     return success_response({"deleted": True}, message="deleted")
 
 
@@ -1442,6 +1593,7 @@ def update_product_version_note_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    _invalidate_product_read_cache(product.id)
     return success_response(_to_version_item(revision))
 
 
@@ -1537,6 +1689,7 @@ def rollback_product_api(
         },
     )
     db.commit()
+    _invalidate_product_read_cache(product.id)
     refreshed = get_product_by_id(db, product.id) or product
     return success_response(
         ProductRollbackResult(
@@ -1556,8 +1709,16 @@ def get_parameter_history(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.parameter_history.list")),
-) -> ApiResponse[ProductParameterHistoryListResult]:
+    _: None = Depends(require_permission_fast("product.parameter_history.list")),
+) -> ApiResponse[ProductParameterHistoryListResult] | Response:
+    cache_key = _product_read_cache_key(
+        product_id,
+        "parameter_history",
+        {"page": page, "page_size": page_size},
+    )
+    cached_payload = _get_product_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(
@@ -1571,7 +1732,15 @@ def get_parameter_history(
         page_size=page_size,
     )
     items = [_to_history_item(product=product, row=row) for row in rows]
-    return success_response(ProductParameterHistoryListResult(total=total, items=items))
+    response_payload = success_response(
+        ProductParameterHistoryListResult(total=total, items=items)
+    ).model_dump(mode="json")
+    payload_bytes = _set_product_read_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_PRODUCT_HISTORY_RESPONSE_CACHE_TTL_SECONDS,
+    )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get(
@@ -1584,8 +1753,16 @@ def get_version_parameter_history(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("product.parameter_history.list")),
-) -> ApiResponse[ProductParameterHistoryListResult]:
+    _: None = Depends(require_permission_fast("product.parameter_history.list")),
+) -> ApiResponse[ProductParameterHistoryListResult] | Response:
+    cache_key = _product_read_cache_key(
+        product_id,
+        "parameter_history_version",
+        {"version": version, "page": page, "page_size": page_size},
+    )
+    cached_payload = _get_product_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     product = get_product_by_id(db, product_id)
     if not product:
         raise HTTPException(
@@ -1605,7 +1782,7 @@ def get_version_parameter_history(
         page_size=page_size,
     )
     items = [_to_history_item(product=product, row=row) for row in rows]
-    return success_response(
+    response_payload = success_response(
         ProductParameterHistoryListResult(
             version=revision.version,
             version_label=revision.version_label,
@@ -1613,7 +1790,13 @@ def get_version_parameter_history(
             total=total,
             items=items,
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_product_read_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_PRODUCT_HISTORY_RESPONSE_CACHE_TTL_SECONDS,
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 def _make_csv_response(rows: list[list[str]], filename: str) -> StreamingResponse:

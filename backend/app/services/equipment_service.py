@@ -72,6 +72,13 @@ class MaintenanceAutoGenerateTrace:
     message: str | None = None
 
 
+@dataclass(slots=True, frozen=True)
+class EquipmentOwnerProjection:
+    id: int
+    username: str
+    full_name: str | None
+
+
 def _normalize_name(name: str, *, field_name: str) -> str:
     normalized = name.strip()
     if not normalized:
@@ -288,10 +295,10 @@ def list_equipment(
     location_keyword: str | None = None,
     owner_name: str | None = None,
 ) -> tuple[int, list[Equipment]]:
-    stmt = select(Equipment)
+    filters = []
     if keyword:
         like_pattern = f"%{keyword.strip()}%"
-        stmt = stmt.where(
+        filters.append(
             or_(
                 Equipment.code.ilike(like_pattern),
                 Equipment.name.ilike(like_pattern),
@@ -301,14 +308,14 @@ def list_equipment(
             )
         )
     if enabled is not None:
-        stmt = stmt.where(Equipment.is_enabled.is_(enabled))
+        filters.append(Equipment.is_enabled.is_(enabled))
     if location_keyword:
-        stmt = stmt.where(Equipment.location.ilike(f"%{location_keyword.strip()}%"))
+        filters.append(Equipment.location.ilike(f"%{location_keyword.strip()}%"))
     if owner_name:
-        stmt = stmt.where(Equipment.owner_name == owner_name.strip())
+        filters.append(Equipment.owner_name == owner_name.strip())
 
-    stmt = stmt.order_by(Equipment.id.asc())
-    total_stmt = select(func.count()).select_from(stmt.subquery())
+    stmt = select(Equipment).where(*filters).order_by(Equipment.id.asc())
+    total_stmt = select(func.count(Equipment.id)).where(*filters)
     total = db.execute(total_stmt).scalar_one()
 
     offset = (page - 1) * page_size
@@ -425,22 +432,43 @@ def delete_equipment(db: Session, *, row: Equipment) -> None:
     db.commit()
 
 
-def list_active_system_admin_owners(db: Session) -> list[User]:
+def list_active_system_admin_owners(db: Session) -> list[EquipmentOwnerProjection]:
     stmt = (
-        select(User)
+        select(User.id, User.username, User.full_name)
         .join(User.roles)
         .where(
             Role.code == ROLE_SYSTEM_ADMIN,
             User.is_active.is_(True),
         )
+        .distinct()
         .order_by(User.username.asc())
     )
-    return db.execute(stmt).scalars().unique().all()
+    rows = db.execute(stmt).all()
+    return [
+        EquipmentOwnerProjection(
+            id=row.id,
+            username=row.username,
+            full_name=row.full_name,
+        )
+        for row in rows
+    ]
 
 
-def list_active_owners(db: Session) -> list[User]:
-    stmt = select(User).where(User.is_active.is_(True)).order_by(User.username.asc())
-    return db.execute(stmt).scalars().all()
+def list_active_owners(db: Session) -> list[EquipmentOwnerProjection]:
+    stmt = (
+        select(User.id, User.username, User.full_name)
+        .where(User.is_active.is_(True))
+        .order_by(User.username.asc())
+    )
+    rows = db.execute(stmt).all()
+    return [
+        EquipmentOwnerProjection(
+            id=row.id,
+            username=row.username,
+            full_name=row.full_name,
+        )
+        for row in rows
+    ]
 
 
 def get_equipment_detail(
@@ -490,20 +518,21 @@ def get_equipment_detail(
     active_plan_count = 0
     active_plans: list[MaintenancePlan] = []
     if can_view_plans:
-        plan_stmt = select(MaintenancePlan).where(
+        plan_filters = [
             MaintenancePlan.equipment_id == equipment_id,
             MaintenancePlan.is_enabled.is_(True),
-        )
+        ]
         if not can_view_all_scope:
             if not stage_code_set:
-                plan_stmt = None
+                plan_filters = []
             else:
-                plan_stmt = plan_stmt.where(
+                plan_filters.append(
                     MaintenancePlan.execution_process_code.in_(stage_code_set)
                 )
-        if plan_stmt is not None:
+        if plan_filters:
+            plan_stmt = select(MaintenancePlan).where(*plan_filters)
             active_plan_count = db.execute(
-                select(func.count()).select_from(plan_stmt.subquery())
+                select(func.count(MaintenancePlan.id)).where(*plan_filters)
             ).scalar_one()
             active_plans = (
                 db.execute(
@@ -523,20 +552,21 @@ def get_equipment_detail(
     pending_work_order_count = 0
     pending_work_orders: list[MaintenanceWorkOrder] = []
     if can_view_executions:
-        work_order_stmt = select(MaintenanceWorkOrder).where(
+        work_order_filters = [
             MaintenanceWorkOrder.source_equipment_id == equipment_id,
             MaintenanceWorkOrder.status.in_(WORK_ORDER_STATUS_ACTIVE),
-        )
+        ]
         if not can_view_all_scope:
             if not stage_code_set:
-                work_order_stmt = None
+                work_order_filters = []
             else:
-                work_order_stmt = work_order_stmt.where(
+                work_order_filters.append(
                     MaintenanceWorkOrder.source_execution_process_code.in_(stage_code_set)
                 )
-        if work_order_stmt is not None:
+        if work_order_filters:
+            work_order_stmt = select(MaintenanceWorkOrder).where(*work_order_filters)
             pending_work_order_count = db.execute(
-                select(func.count()).select_from(work_order_stmt.subquery())
+                select(func.count(MaintenanceWorkOrder.id)).where(*work_order_filters)
             ).scalar_one()
             pending_work_orders = (
                 db.execute(
@@ -609,17 +639,17 @@ def list_maintenance_items(
     enabled: bool | None,
     category: str | None = None,
 ) -> tuple[int, list[MaintenanceItem]]:
-    stmt = select(MaintenanceItem)
+    filters = []
     if keyword:
         like_pattern = f"%{keyword.strip()}%"
-        stmt = stmt.where(MaintenanceItem.name.ilike(like_pattern))
+        filters.append(MaintenanceItem.name.ilike(like_pattern))
     if enabled is not None:
-        stmt = stmt.where(MaintenanceItem.is_enabled.is_(enabled))
+        filters.append(MaintenanceItem.is_enabled.is_(enabled))
     if category:
-        stmt = stmt.where(MaintenanceItem.category == category.strip())
+        filters.append(MaintenanceItem.category == category.strip())
 
-    stmt = stmt.order_by(MaintenanceItem.id.asc())
-    total_stmt = select(func.count()).select_from(stmt.subquery())
+    stmt = select(MaintenanceItem).where(*filters).order_by(MaintenanceItem.id.asc())
+    total_stmt = select(func.count(MaintenanceItem.id)).where(*filters)
     total = db.execute(total_stmt).scalar_one()
 
     offset = (page - 1) * page_size
@@ -796,9 +826,7 @@ def list_maintenance_plans(
             MaintenancePlan.default_executor_user_id == default_executor_user_id
         )
 
-    count_stmt = select(func.count()).select_from(
-        select(MaintenancePlan.id).where(*filters).subquery()
-    )
+    count_stmt = select(func.count(MaintenancePlan.id)).where(*filters)
     total = db.execute(count_stmt).scalar_one()
 
     offset = (page - 1) * page_size
@@ -1303,10 +1331,10 @@ def list_work_orders(
             MaintenanceWorkOrder.source_execution_process_code == stage_code_filter
         )
 
-    stmt = select(MaintenanceWorkOrder)
+    stmt_filters = list(filters)
     if keyword:
         like_pattern = f"%{keyword.strip()}%"
-        stmt = stmt.where(
+        stmt_filters.append(
             or_(
                 MaintenanceWorkOrder.source_equipment_name.ilike(like_pattern),
                 MaintenanceWorkOrder.source_item_name.ilike(like_pattern),
@@ -1314,9 +1342,9 @@ def list_work_orders(
                 MaintenanceWorkOrder.result_remark.ilike(like_pattern),
             )
         )
-    stmt = stmt.where(*filters)
+    stmt = select(MaintenanceWorkOrder).where(*stmt_filters)
 
-    total_stmt = select(func.count()).select_from(stmt.subquery())
+    total_stmt = select(func.count(MaintenanceWorkOrder.id)).where(*stmt_filters)
     total = db.execute(total_stmt).scalar_one()
 
     offset = (page - 1) * page_size
@@ -1387,10 +1415,10 @@ def list_maintenance_records(
         end_dt = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=UTC)
         filters.append(MaintenanceRecord.completed_at < end_dt)
 
-    stmt = select(MaintenanceRecord).where(*filters)
+    stmt_filters = list(filters)
     if keyword:
         like_pattern = f"%{keyword.strip()}%"
-        stmt = stmt.where(
+        stmt_filters.append(
             or_(
                 MaintenanceRecord.source_equipment_name.ilike(like_pattern),
                 MaintenanceRecord.source_item_name.ilike(like_pattern),
@@ -1399,8 +1427,9 @@ def list_maintenance_records(
                 MaintenanceRecord.executor_username.ilike(like_pattern),
             )
         )
+    stmt = select(MaintenanceRecord).where(*stmt_filters)
 
-    total_stmt = select(func.count()).select_from(stmt.subquery())
+    total_stmt = select(func.count(MaintenanceRecord.id)).where(*stmt_filters)
     total = db.execute(total_stmt).scalar_one()
 
     offset = (page - 1) * page_size

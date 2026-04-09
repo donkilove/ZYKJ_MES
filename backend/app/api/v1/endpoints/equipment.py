@@ -1,12 +1,25 @@
+import json
+import time
 from datetime import date as date_type
+from threading import RLock
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_any_permission, require_permission
+from app.api.deps import (
+    require_any_permission,
+    require_any_permission_fast,
+    require_permission,
+    require_permission_fast,
+    require_permission_fast_user,
+)
 from app.db.session import get_db
+from app.models.associations import user_processes
 from app.models.equipment import Equipment
+from app.models.process import Process
+from app.models.process_stage import ProcessStage
 from app.models.equipment_rule import EquipmentRule
 from app.models.equipment_runtime_parameter import EquipmentRuntimeParameter
 from app.models.maintenance_item import MaintenanceItem
@@ -105,6 +118,106 @@ from app.services.authz_service import has_permission
 
 
 router = APIRouter()
+_EQUIPMENT_OWNER_OPTIONS_RESPONSE_CACHE: dict[str, tuple[float, bytes]] = {}
+_EQUIPMENT_OWNER_OPTIONS_RESPONSE_CACHE_LOCK = RLock()
+_EQUIPMENT_OWNER_OPTIONS_RESPONSE_CACHE_TTL_SECONDS = 5
+_EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE: dict[str, tuple[float, bytes]] = {}
+_EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE_LOCK = RLock()
+_EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS = 3
+_EQUIPMENT_USER_STAGE_CODES_CACHE: dict[int, tuple[float, list[str]]] = {}
+_EQUIPMENT_USER_STAGE_CODES_CACHE_LOCK = RLock()
+_EQUIPMENT_USER_STAGE_CODES_CACHE_TTL_SECONDS = 30
+_EQUIPMENT_PLANS_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS = 20
+_EQUIPMENT_EXECUTIONS_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS = 10
+_EQUIPMENT_RECORDS_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS = 10
+_EQUIPMENT_RULES_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS = 20
+_EQUIPMENT_RUNTIME_PARAMETERS_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS = 20
+
+
+def _equipment_owner_options_cache_key(cache_type: str) -> str:
+    return f"equipment_owner_options:{cache_type}"
+
+
+def _get_equipment_owner_options_cached_response_bytes(cache_key: str) -> bytes | None:
+    with _EQUIPMENT_OWNER_OPTIONS_RESPONSE_CACHE_LOCK:
+        cached = _EQUIPMENT_OWNER_OPTIONS_RESPONSE_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        expire_at, payload_bytes = cached
+        if expire_at <= time.monotonic():
+            _EQUIPMENT_OWNER_OPTIONS_RESPONSE_CACHE.pop(cache_key, None)
+            return None
+        return payload_bytes
+
+
+def _set_equipment_owner_options_cached_response_bytes(
+    cache_key: str, payload: dict[str, object]
+) -> bytes:
+    payload_bytes = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    with _EQUIPMENT_OWNER_OPTIONS_RESPONSE_CACHE_LOCK:
+        _EQUIPMENT_OWNER_OPTIONS_RESPONSE_CACHE[cache_key] = (
+            time.monotonic() + _EQUIPMENT_OWNER_OPTIONS_RESPONSE_CACHE_TTL_SECONDS,
+            payload_bytes,
+        )
+    return payload_bytes
+
+
+def _equipment_list_cache_key(cache_type: str, payload: dict[str, object]) -> str:
+    encoded_payload = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"equipment_list:{cache_type}:{encoded_payload}"
+
+
+def _get_equipment_list_cached_response_bytes(cache_key: str) -> bytes | None:
+    with _EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE_LOCK:
+        cached = _EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        expire_at, payload_bytes = cached
+        if expire_at <= time.monotonic():
+            _EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE.pop(cache_key, None)
+            return None
+        return payload_bytes
+
+
+def _set_equipment_list_cached_response_bytes(
+    cache_key: str,
+    payload: dict[str, object],
+    *,
+    ttl_seconds: int = _EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS,
+) -> bytes:
+    payload_bytes = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    resolved_ttl_seconds = max(1, int(ttl_seconds))
+    with _EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE_LOCK:
+        _EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE[cache_key] = (
+            time.monotonic() + resolved_ttl_seconds,
+            payload_bytes,
+        )
+    return payload_bytes
+
+
+def _invalidate_equipment_list_cached_response(cache_type: str) -> None:
+    key_prefix = f"equipment_list:{cache_type}:"
+    with _EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE_LOCK:
+        expired_keys = [
+            key
+            for key in _EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE.keys()
+            if key.startswith(key_prefix)
+        ]
+        for key in expired_keys:
+            _EQUIPMENT_LIST_ENDPOINT_RESPONSE_CACHE.pop(key, None)
 
 
 def _current_user_role_codes(current_user: User) -> list[str]:
@@ -112,12 +225,35 @@ def _current_user_role_codes(current_user: User) -> list[str]:
 
 
 def _current_user_stage_codes(db: Session, current_user: User) -> list[str]:
-    return sorted(
-        resolve_user_stage_codes(
-            db,
-            process_codes=[process.code for process in current_user.processes],
+    return _current_user_stage_codes_by_user_id(db, current_user.id)
+
+
+def _current_user_stage_codes_by_user_id(db: Session, user_id: int) -> list[str]:
+    now_monotonic = time.monotonic()
+    with _EQUIPMENT_USER_STAGE_CODES_CACHE_LOCK:
+        cached = _EQUIPMENT_USER_STAGE_CODES_CACHE.get(user_id)
+        if cached is not None:
+            expire_at, stage_codes = cached
+            if expire_at > now_monotonic:
+                return list(stage_codes)
+            _EQUIPMENT_USER_STAGE_CODES_CACHE.pop(user_id, None)
+
+    process_codes = (
+        db.execute(
+            select(Process.code)
+            .join(user_processes, Process.id == user_processes.c.process_id)
+            .where(user_processes.c.user_id == user_id)
         )
+        .scalars()
+        .all()
     )
+    stage_codes = sorted(resolve_user_stage_codes(db, process_codes=list(process_codes)))
+    with _EQUIPMENT_USER_STAGE_CODES_CACHE_LOCK:
+        _EQUIPMENT_USER_STAGE_CODES_CACHE[user_id] = (
+            now_monotonic + _EQUIPMENT_USER_STAGE_CODES_CACHE_TTL_SECONDS,
+            list(stage_codes),
+        )
+    return stage_codes
 
 
 def _raise_visibility_error(error: ValueError) -> None:
@@ -182,6 +318,56 @@ def to_maintenance_plan_item(db: Session, row: MaintenancePlan) -> MaintenancePl
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def _build_maintenance_plan_items(
+    db: Session, rows: list[MaintenancePlan]
+) -> list[MaintenancePlanItem]:
+    stage_codes = {
+        (row.execution_process_code or "").strip()
+        for row in rows
+        if (row.execution_process_code or "").strip()
+    }
+    stage_name_by_code: dict[str, str] = {}
+    if stage_codes:
+        stage_name_by_code = {
+            code: name
+            for code, name in db.execute(
+                select(ProcessStage.code, ProcessStage.name).where(
+                    ProcessStage.code.in_(stage_codes)
+                )
+            ).all()
+        }
+    items: list[MaintenancePlanItem] = []
+    for row in rows:
+        execution_process_code = row.execution_process_code or ""
+        execution_process_name = stage_name_by_code.get(
+            execution_process_code,
+            execution_process_code,
+        )
+        items.append(
+            MaintenancePlanItem(
+                id=row.id,
+                equipment_id=row.equipment_id,
+                equipment_name=row.equipment.name if row.equipment else "-",
+                item_id=row.item_id,
+                item_name=row.item.name if row.item else "-",
+                cycle_days=row.cycle_days,
+                execution_process_code=execution_process_code,
+                execution_process_name=execution_process_name,
+                estimated_duration_minutes=row.estimated_duration_minutes,
+                start_date=row.start_date,
+                next_due_date=row.next_due_date,
+                default_executor_user_id=row.default_executor_user_id,
+                default_executor_username=(
+                    row.default_executor.username if row.default_executor else None
+                ),
+                is_enabled=row.is_enabled,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+        )
+    return items
 
 
 def to_work_order_item(row: MaintenanceWorkOrder) -> MaintenanceWorkOrderItem:
@@ -333,10 +519,15 @@ def _build_record_detail(
 @router.get("/admin-owners", response_model=ApiResponse[EquipmentOwnerOptionListResult])
 def get_admin_owners(
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("equipment.admin_owners.list")),
-) -> ApiResponse[EquipmentOwnerOptionListResult]:
+    _: None = Depends(require_permission_fast("equipment.admin_owners.list")),
+) -> ApiResponse[EquipmentOwnerOptionListResult] | Response:
+    cache_key = _equipment_owner_options_cache_key("admin_owners")
+    cached_payload = _get_equipment_owner_options_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
+
     users = list_active_system_admin_owners(db)
-    return success_response(
+    response_payload = success_response(
         EquipmentOwnerOptionListResult(
             total=len(users),
             items=[
@@ -346,7 +537,11 @@ def get_admin_owners(
                 for user in users
             ],
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_equipment_owner_options_cached_response_bytes(
+        cache_key, response_payload
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get("/ledger", response_model=ApiResponse[EquipmentLedgerListResult])
@@ -517,8 +712,22 @@ def get_maintenance_items(
     enabled: bool | None = Query(default=None),
     category: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("equipment.items.list")),
-) -> ApiResponse[MaintenanceItemListResult]:
+    _: None = Depends(require_permission_fast("equipment.items.list")),
+) -> ApiResponse[MaintenanceItemListResult] | Response:
+    cache_key = _equipment_list_cache_key(
+        "items",
+        {
+            "page": page,
+            "page_size": page_size,
+            "keyword": (keyword or "").strip(),
+            "enabled": enabled,
+            "category": (category or "").strip(),
+        },
+    )
+    cached_payload = _get_equipment_list_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
+
     total, rows = list_maintenance_items(
         db,
         page=page,
@@ -527,12 +736,18 @@ def get_maintenance_items(
         enabled=enabled,
         category=category,
     )
-    return success_response(
+    response_payload = success_response(
         MaintenanceItemListResult(
             total=total,
             items=[to_maintenance_item(row) for row in rows],
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_equipment_list_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_EQUIPMENT_RULES_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS,
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.post(
@@ -651,8 +866,24 @@ def get_maintenance_plans(
     execution_process_code: str | None = Query(default=None),
     default_executor_user_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("equipment.plans.list")),
-) -> ApiResponse[MaintenancePlanListResult]:
+    _: None = Depends(require_permission_fast("equipment.plans.list")),
+) -> ApiResponse[MaintenancePlanListResult] | Response:
+    cache_key = _equipment_list_cache_key(
+        "plans",
+        {
+            "page": page,
+            "page_size": page_size,
+            "equipment_id": equipment_id,
+            "item_id": item_id,
+            "enabled": enabled,
+            "execution_process_code": (execution_process_code or "").strip(),
+            "default_executor_user_id": default_executor_user_id,
+        },
+    )
+    cached_payload = _get_equipment_list_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
+
     total, rows = list_maintenance_plans(
         db,
         page=page,
@@ -663,12 +894,18 @@ def get_maintenance_plans(
         execution_process_code=execution_process_code,
         default_executor_user_id=default_executor_user_id,
     )
-    return success_response(
+    response_payload = success_response(
         MaintenancePlanListResult(
             total=total,
-            items=[to_maintenance_plan_item(db, row) for row in rows],
+            items=_build_maintenance_plan_items(db, rows),
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_equipment_list_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_EQUIPMENT_PLANS_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS,
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.post(
@@ -695,6 +932,7 @@ def create_maintenance_plan_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    _invalidate_equipment_list_cached_response("plans")
     return success_response(to_maintenance_plan_item(db, row), message="created")
 
 
@@ -725,6 +963,7 @@ def update_maintenance_plan_api(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    _invalidate_equipment_list_cached_response("plans")
     return success_response(to_maintenance_plan_item(db, updated), message="updated")
 
 
@@ -741,6 +980,7 @@ def toggle_maintenance_plan_api(
             status_code=status.HTTP_404_NOT_FOUND, detail="Maintenance plan not found"
         )
     updated = toggle_maintenance_plan(db, row=row, enabled=payload.enabled)
+    _invalidate_equipment_list_cached_response("plans")
     return success_response(to_maintenance_plan_item(db, updated), message="updated")
 
 
@@ -759,6 +999,7 @@ def delete_maintenance_plan_api(
         delete_maintenance_plan(db, row=row)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+    _invalidate_equipment_list_cached_response("plans")
     return success_response({"deleted": True}, message="deleted")
 
 
@@ -785,6 +1026,8 @@ def generate_plan_work_order_api(
     next_due_date = (
         refreshed_plan.next_due_date if refreshed_plan else row.next_due_date
     )
+    _invalidate_equipment_list_cached_response("plans")
+    _invalidate_equipment_list_cached_response("executions")
     return success_response(
         MaintenancePlanGenerateResult(
             created=created,
@@ -808,8 +1051,29 @@ def get_maintenance_executions(
     due_date_end: date_type | None = Query(default=None),
     stage_code: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("equipment.executions.list")),
-) -> ApiResponse[MaintenanceWorkOrderListResult]:
+    current_user: User = Depends(require_permission_fast_user("equipment.executions.list")),
+) -> ApiResponse[MaintenanceWorkOrderListResult] | Response:
+    current_user_role_codes = [role.code for role in current_user.roles]
+    current_user_stage_codes = _current_user_stage_codes_by_user_id(db, current_user.id)
+    cache_key = _equipment_list_cache_key(
+        "executions",
+        {
+            "page": page,
+            "page_size": page_size,
+            "status": (status_filter or "").strip(),
+            "keyword": (keyword or "").strip(),
+            "mine": mine or mine_only,
+            "due_date_start": due_date_start.isoformat() if due_date_start else None,
+            "due_date_end": due_date_end.isoformat() if due_date_end else None,
+            "stage_code": (stage_code or "").strip(),
+            "role_codes": sorted(current_user_role_codes),
+            "stage_codes": current_user_stage_codes,
+        },
+    )
+    cached_payload = _get_equipment_list_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
+
     try:
         total, rows = list_work_orders(
             db,
@@ -819,13 +1083,8 @@ def get_maintenance_executions(
             keyword=keyword,
             mine=mine or mine_only,
             current_user_id=current_user.id,
-            current_user_role_codes=[role.code for role in current_user.roles],
-            current_user_stage_codes=sorted(
-                resolve_user_stage_codes(
-                    db,
-                    process_codes=[process.code for process in current_user.processes],
-                )
-            ),
+            current_user_role_codes=current_user_role_codes,
+            current_user_stage_codes=current_user_stage_codes,
             done_only=False,
             executor_user_id=None,
             start_date=None,
@@ -836,12 +1095,18 @@ def get_maintenance_executions(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
-    return success_response(
+    response_payload = success_response(
         MaintenanceWorkOrderListResult(
             total=total,
             items=[to_work_order_item(row) for row in rows],
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_equipment_list_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_EQUIPMENT_EXECUTIONS_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS,
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.post(
@@ -868,6 +1133,7 @@ def start_maintenance_execution(
         )
     except ValueError as error:
         _raise_visibility_error(error)
+    _invalidate_equipment_list_cached_response("executions")
     return success_response(to_work_order_item(updated), message="started")
 
 
@@ -913,6 +1179,8 @@ def complete_maintenance_execution(
         },
     )
     db.commit()
+    _invalidate_equipment_list_cached_response("executions")
+    _invalidate_equipment_list_cached_response("records")
     return success_response(to_work_order_item(updated), message="completed")
 
 
@@ -927,13 +1195,33 @@ def get_maintenance_records(
     start_date: date_type | None = Query(default=None),
     end_date: date_type | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("equipment.records.list")),
-) -> ApiResponse[MaintenanceRecordListResult]:
+    current_user: User = Depends(require_permission_fast_user("equipment.records.list")),
+) -> ApiResponse[MaintenanceRecordListResult] | Response:
     if start_date is not None and end_date is not None and start_date > end_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="start_date cannot be greater than end_date",
         )
+    current_user_role_codes = _current_user_role_codes(current_user)
+    current_user_stage_codes = _current_user_stage_codes_by_user_id(db, current_user.id)
+    cache_key = _equipment_list_cache_key(
+        "records",
+        {
+            "page": page,
+            "page_size": page_size,
+            "keyword": (keyword or "").strip(),
+            "executor_id": executor_id,
+            "result_summary": (result_summary or "").strip(),
+            "equipment_id": equipment_id,
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            "role_codes": sorted(current_user_role_codes),
+            "stage_codes": current_user_stage_codes,
+        },
+    )
+    cached_payload = _get_equipment_list_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
 
     try:
         total, rows = list_maintenance_records(
@@ -944,27 +1232,33 @@ def get_maintenance_records(
             executor_user_id=executor_id,
             result_summary=result_summary,
             equipment_id=equipment_id,
-            current_user_role_codes=_current_user_role_codes(current_user),
-            current_user_stage_codes=_current_user_stage_codes(db, current_user),
+            current_user_role_codes=current_user_role_codes,
+            current_user_stage_codes=current_user_stage_codes,
             start_date=start_date,
             end_date=end_date,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
-    return success_response(
+    response_payload = success_response(
         MaintenanceRecordListResult(
             total=total,
             items=[to_maintenance_record_item(row) for row in rows],
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_equipment_list_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_EQUIPMENT_RECORDS_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS,
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get("/owners", response_model=ApiResponse[EquipmentOwnerOptionListResult])
 def get_all_owners(
     db: Session = Depends(get_db),
-    _: User = Depends(
-        require_any_permission(
+    _: None = Depends(
+        require_any_permission_fast(
             [
                 "equipment.admin_owners.list",
                 "equipment.plan_owner_options.list",
@@ -972,9 +1266,14 @@ def get_all_owners(
             ]
         )
     ),
-) -> ApiResponse[EquipmentOwnerOptionListResult]:
+) -> ApiResponse[EquipmentOwnerOptionListResult] | Response:
+    cache_key = _equipment_owner_options_cache_key("owners")
+    cached_payload = _get_equipment_owner_options_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
+
     users = list_active_owners(db)
-    return success_response(
+    response_payload = success_response(
         EquipmentOwnerOptionListResult(
             total=len(users),
             items=[
@@ -984,7 +1283,11 @@ def get_all_owners(
                 for user in users
             ],
         )
+    ).model_dump(mode="json")
+    payload_bytes = _set_equipment_owner_options_cached_response_bytes(
+        cache_key, response_payload
     )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get(
@@ -1111,6 +1414,7 @@ def cancel_maintenance_execution(
         after_data={"status": "cancelled"},
     )
     db.commit()
+    _invalidate_equipment_list_cached_response("executions")
     return success_response(to_work_order_item(updated), message="cancelled")
 
 
@@ -1252,8 +1556,22 @@ def list_equipment_rules_api(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("equipment.rules.list")),
-) -> ApiResponse[EquipmentRuleListResult]:
+    _: None = Depends(require_permission_fast("equipment.rules.list")),
+) -> ApiResponse[EquipmentRuleListResult] | Response:
+    cache_key = _equipment_list_cache_key(
+        "rules",
+        {
+            "equipment_id": equipment_id,
+            "keyword": (keyword or "").strip(),
+            "is_enabled": is_enabled,
+            "page": page,
+            "page_size": page_size,
+        },
+    )
+    cached_payload = _get_equipment_list_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
+
     result = list_equipment_rules(
         db,
         equipment_id=equipment_id,
@@ -1262,7 +1580,13 @@ def list_equipment_rules_api(
         page=page,
         page_size=page_size,
     )
-    return success_response(result)
+    response_payload = success_response(result).model_dump(mode="json")
+    payload_bytes = _set_equipment_list_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_EQUIPMENT_RULES_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS,
+    )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.post("/rules", response_model=ApiResponse[EquipmentRuleItem])
@@ -1289,6 +1613,7 @@ def create_equipment_rule_api(
     )
     db.commit()
     db.refresh(row)
+    _invalidate_equipment_list_cached_response("rules")
     return success_response(_Item.model_validate(row, from_attributes=True))
 
 
@@ -1322,6 +1647,7 @@ def update_equipment_rule_api(
     )
     db.commit()
     db.refresh(row)
+    _invalidate_equipment_list_cached_response("rules")
     return success_response(_Item.model_validate(row, from_attributes=True))
 
 
@@ -1352,6 +1678,7 @@ def toggle_equipment_rule_api(
     )
     db.commit()
     db.refresh(row)
+    _invalidate_equipment_list_cached_response("rules")
     return success_response(_Item.model_validate(row, from_attributes=True))
 
 
@@ -1378,6 +1705,7 @@ def delete_equipment_rule_api(
         operator=current_user,
     )
     db.commit()
+    _invalidate_equipment_list_cached_response("rules")
     return success_response(None, message="deleted")
 
 
@@ -1396,8 +1724,23 @@ def list_runtime_parameters_api(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("equipment.runtime_parameters.list")),
-) -> ApiResponse[EquipmentRuntimeParameterListResult]:
+    _: None = Depends(require_permission_fast("equipment.runtime_parameters.list")),
+) -> ApiResponse[EquipmentRuntimeParameterListResult] | Response:
+    cache_key = _equipment_list_cache_key(
+        "runtime_parameters",
+        {
+            "equipment_id": equipment_id,
+            "equipment_type": (equipment_type or "").strip(),
+            "keyword": (keyword or "").strip(),
+            "is_enabled": is_enabled,
+            "page": page,
+            "page_size": page_size,
+        },
+    )
+    cached_payload = _get_equipment_list_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
+
     result = list_runtime_parameters(
         db,
         equipment_id=equipment_id,
@@ -1407,7 +1750,13 @@ def list_runtime_parameters_api(
         page=page,
         page_size=page_size,
     )
-    return success_response(result)
+    response_payload = success_response(result).model_dump(mode="json")
+    payload_bytes = _set_equipment_list_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_EQUIPMENT_RUNTIME_PARAMETERS_LIST_ENDPOINT_RESPONSE_CACHE_TTL_SECONDS,
+    )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.post(
@@ -1438,6 +1787,7 @@ def create_runtime_parameter_api(
     )
     db.commit()
     db.refresh(row)
+    _invalidate_equipment_list_cached_response("runtime_parameters")
     return success_response(_Item.model_validate(row, from_attributes=True))
 
 
@@ -1476,6 +1826,7 @@ def update_runtime_parameter_api(
     )
     db.commit()
     db.refresh(row)
+    _invalidate_equipment_list_cached_response("runtime_parameters")
     return success_response(_Item.model_validate(row, from_attributes=True))
 
 
@@ -1504,6 +1855,7 @@ def delete_runtime_parameter_api(
         operator=current_user,
     )
     db.commit()
+    _invalidate_equipment_list_cached_response("runtime_parameters")
     return success_response(None, message="deleted")
 
 
@@ -1539,4 +1891,5 @@ def toggle_runtime_parameter_api(
     )
     db.commit()
     db.refresh(row)
+    _invalidate_equipment_list_cached_response("runtime_parameters")
     return success_response(_Item.model_validate(row, from_attributes=True))

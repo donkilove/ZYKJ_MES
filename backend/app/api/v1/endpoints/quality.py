@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 from datetime import date
+import time
+from threading import RLock
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permission
+from app.api.deps import require_permission, require_permission_fast
 from app.core.authz_catalog import (
     PERM_QUALITY_REPAIR_ORDERS_COMPLETE,
     PERM_QUALITY_REPAIR_ORDERS_DETAIL,
@@ -110,8 +113,62 @@ from app.models.repair_order import RepairOrder
 
 
 router = APIRouter()
+_QUALITY_READ_RESPONSE_CACHE: dict[str, tuple[float, bytes]] = {}
+_QUALITY_READ_RESPONSE_CACHE_LOCK = RLock()
+_QUALITY_READ_RESPONSE_CACHE_TTL_SECONDS = 10
+_QUALITY_SUPPLIER_RESPONSE_CACHE_TTL_SECONDS = 15
 
 PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW = "page.quality_supplier_management.view"
+
+
+def _quality_read_cache_key(
+    cache_type: str,
+    payload: dict[str, object] | None = None,
+) -> str:
+    encoded_payload = json.dumps(
+        payload or {},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"quality_read:{cache_type}:{encoded_payload}"
+
+
+def _get_quality_read_cached_response_bytes(cache_key: str) -> bytes | None:
+    with _QUALITY_READ_RESPONSE_CACHE_LOCK:
+        cached = _QUALITY_READ_RESPONSE_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        expire_at, payload_bytes = cached
+        if expire_at <= time.monotonic():
+            _QUALITY_READ_RESPONSE_CACHE.pop(cache_key, None)
+            return None
+        return payload_bytes
+
+
+def _set_quality_read_cached_response_bytes(
+    cache_key: str,
+    payload: dict[str, object],
+    *,
+    ttl_seconds: int = _QUALITY_READ_RESPONSE_CACHE_TTL_SECONDS,
+) -> bytes:
+    payload_bytes = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    resolved_ttl_seconds = max(1, int(ttl_seconds))
+    with _QUALITY_READ_RESPONSE_CACHE_LOCK:
+        _QUALITY_READ_RESPONSE_CACHE[cache_key] = (
+            time.monotonic() + resolved_ttl_seconds,
+            payload_bytes,
+        )
+    return payload_bytes
+
+
+def _invalidate_quality_read_cache() -> None:
+    with _QUALITY_READ_RESPONSE_CACHE_LOCK:
+        _QUALITY_READ_RESPONSE_CACHE.clear()
 
 
 def _to_supplier_item(row) -> SupplierItem:
@@ -486,8 +543,22 @@ def get_quality_process_stats_api(
     operator_username: str | None = Query(default=None),
     result: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("quality.stats.processes")),
-) -> ApiResponse[QualityProcessStatsResult]:
+    _: None = Depends(require_permission_fast("quality.stats.processes")),
+) -> ApiResponse[QualityProcessStatsResult] | Response:
+    cache_key = _quality_read_cache_key(
+        "stats_processes",
+        {
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            "product_name": product_name,
+            "process_code": process_code,
+            "operator_username": operator_username,
+            "result": result,
+        },
+    )
+    cached_payload = _get_quality_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     _validate_date_range(start_date, end_date)
     rows = get_quality_process_stats(
         db,
@@ -498,11 +569,13 @@ def get_quality_process_stats_api(
         operator_username=operator_username,
         result_filter=result,
     )
-    return success_response(
+    response_payload = success_response(
         QualityProcessStatsResult(
             items=[QualityProcessStatItem(**item) for item in rows]
         )
-    )
+    ).model_dump(mode="json")
+    payload_bytes = _set_quality_read_cached_response_bytes(cache_key, response_payload)
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get("/stats/operators", response_model=ApiResponse[QualityOperatorStatsResult])
@@ -589,8 +662,22 @@ def get_quality_trend_api(
     operator_username: str | None = Query(default=None),
     result: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("quality.trend")),
-) -> ApiResponse[QualityTrendResult]:
+    _: None = Depends(require_permission_fast("quality.trend")),
+) -> ApiResponse[QualityTrendResult] | Response:
+    cache_key = _quality_read_cache_key(
+        "trend",
+        {
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            "product_name": product_name,
+            "process_code": process_code,
+            "operator_username": operator_username,
+            "result": result,
+        },
+    )
+    cached_payload = _get_quality_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     _validate_date_range(start_date, end_date)
     rows = get_quality_trend(
         db,
@@ -601,9 +688,11 @@ def get_quality_trend_api(
         operator_username=operator_username,
         result_filter=result,
     )
-    return success_response(
+    response_payload = success_response(
         QualityTrendResult(items=[QualityTrendItem(**item) for item in rows])
-    )
+    ).model_dump(mode="json")
+    payload_bytes = _set_quality_read_cached_response_bytes(cache_key, response_payload)
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.post("/trend/export", response_model=ApiResponse[QualityStatsExportResult])
@@ -672,8 +761,24 @@ def get_quality_scrap_statistics_api(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_QUALITY_SCRAP_STATISTICS_LIST)),
-) -> ApiResponse[ScrapStatisticsListResult]:
+    _: None = Depends(require_permission_fast(PERM_QUALITY_SCRAP_STATISTICS_LIST)),
+) -> ApiResponse[ScrapStatisticsListResult] | Response:
+    cache_key = _quality_read_cache_key(
+        "scrap_statistics",
+        {
+            "keyword": keyword,
+            "progress": progress,
+            "product_name": product_name,
+            "process_code": process_code,
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            "page": page,
+            "page_size": page_size,
+        },
+    )
+    cached_payload = _get_quality_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     _validate_date_range(start_date, end_date)
     total, rows = list_scrap_statistics(
         db,
@@ -688,12 +793,14 @@ def get_quality_scrap_statistics_api(
             end_date=end_date,
         ),
     )
-    return success_response(
+    response_payload = success_response(
         ScrapStatisticsListResult(
             total=total,
             items=[_to_quality_scrap_statistics_item(row) for row in rows],
         )
-    )
+    ).model_dump(mode="json")
+    payload_bytes = _set_quality_read_cached_response_bytes(cache_key, response_payload)
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get("/suppliers", response_model=ApiResponse[SupplierListResult])
@@ -713,14 +820,24 @@ def list_suppliers_api(
 def get_supplier_detail_api(
     supplier_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)),
-) -> ApiResponse[SupplierItem]:
+    _: None = Depends(require_permission_fast(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)),
+) -> ApiResponse[SupplierItem] | Response:
+    cache_key = _quality_read_cache_key("supplier_detail", {"supplier_id": supplier_id})
+    cached_payload = _get_quality_read_cached_response_bytes(cache_key)
+    if cached_payload is not None:
+        return Response(content=cached_payload, media_type="application/json")
     row = get_supplier_by_id(db, supplier_id)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="供应商不存在"
         )
-    return success_response(_to_supplier_item(row))
+    response_payload = success_response(_to_supplier_item(row)).model_dump(mode="json")
+    payload_bytes = _set_quality_read_cached_response_bytes(
+        cache_key,
+        response_payload,
+        ttl_seconds=_QUALITY_SUPPLIER_RESPONSE_CACHE_TTL_SECONDS,
+    )
+    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.post(
@@ -763,6 +880,7 @@ def create_supplier_api(
     except Exception:
         db.rollback()
         raise
+    _invalidate_quality_read_cache()
     return success_response(_to_supplier_item(row))
 
 
@@ -811,6 +929,7 @@ def update_supplier_api(
     except Exception:
         db.rollback()
         raise
+    _invalidate_quality_read_cache()
     return success_response(_to_supplier_item(row))
 
 
@@ -847,6 +966,7 @@ def delete_supplier_api(
     except Exception:
         db.rollback()
         raise
+    _invalidate_quality_read_cache()
     return success_response({"message": "供应商已删除"})
 
 
