@@ -1,0 +1,30 @@
+{
+  "scenarios": [
+    {
+      "name": "me-profile",
+      "method": "GET",
+      "path": "/api/v1/me/profile",
+      "requires_auth": true,
+      "headers": {},
+      "query": {},
+      "json_body": null,
+      "form_body": null,
+      "success_statuses": [
+        200
+      ]
+    },
+    {
+      "name": "messages-summary",
+      "method": "GET",
+      "path": "/api/v1/messages/summary",
+      "requires_auth": true,
+      "headers": {},
+      "query": {},
+      "json_body": null,
+      "form_body": null,
+      "success_statuses": [
+        200
+      ]
+    }
+  ]
+}

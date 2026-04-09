@@ -20,12 +20,18 @@ DEFAULT_SCENARIOS = (
     "production-stats",
 )
 
-AUTH_SCENARIOS = {
-    "authz",
-    "users",
-    "production-orders",
-    "production-stats",
-}
+
+@dataclass
+class ScenarioSpec:
+    name: str
+    method: str
+    path: str
+    requires_auth: bool = True
+    headers: dict[str, str] = field(default_factory=dict)
+    query: dict[str, str] = field(default_factory=dict)
+    json_body: Any | None = None
+    form_body: dict[str, str] | None = None
+    success_statuses: set[int] | None = None
 
 
 @dataclass
@@ -70,11 +76,146 @@ def _normalize_base_url(raw_base_url: str) -> str:
     return base_url
 
 
-def _parse_scenarios(raw: str) -> list[str]:
+def _builtin_scenarios() -> dict[str, ScenarioSpec]:
+    return {
+        "login": ScenarioSpec(
+            name="login",
+            method="POST",
+            path="/api/v1/auth/login",
+            requires_auth=False,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            success_statuses={200},
+        ),
+        "authz": ScenarioSpec(
+            name="authz",
+            method="GET",
+            path="/api/v1/authz/permissions/me",
+            query={"module": "user"},
+        ),
+        "users": ScenarioSpec(
+            name="users",
+            method="GET",
+            path="/api/v1/users",
+            query={"page": "1", "page_size": "20"},
+        ),
+        "production-orders": ScenarioSpec(
+            name="production-orders",
+            method="GET",
+            path="/api/v1/production/orders",
+            query={"page": "1", "page_size": "20"},
+        ),
+        "production-stats": ScenarioSpec(
+            name="production-stats",
+            method="GET",
+            path="/api/v1/production/stats/overview",
+        ),
+    }
+
+
+def _normalize_mapping(raw: Any, *, field_name: str) -> dict[str, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"{field_name} must be an object")
+    return {str(key): str(value) for key, value in raw.items()}
+
+
+def _normalize_success_statuses(raw: Any) -> set[int] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise ValueError("success_statuses must be an array")
+    statuses: set[int] = set()
+    for item in raw:
+        if not isinstance(item, int):
+            raise ValueError("success_statuses values must be integers")
+        statuses.add(item)
+    return statuses
+
+
+def _normalize_scenario(raw: Any) -> ScenarioSpec:
+    if not isinstance(raw, dict):
+        raise ValueError("scenario item must be an object")
+    name = str(raw.get("name") or "").strip()
+    method = str(raw.get("method") or "GET").strip().upper()
+    path = str(raw.get("path") or "").strip()
+    if not name:
+        raise ValueError("scenario.name is required")
+    if not path:
+        raise ValueError(f"scenario[{name}].path is required")
+    if not path.startswith("/"):
+        raise ValueError(f"scenario[{name}].path must start with '/'")
+    if not method:
+        raise ValueError(f"scenario[{name}].method is required")
+    requires_auth = bool(raw.get("requires_auth", True))
+    headers = _normalize_mapping(raw.get("headers"), field_name=f"scenario[{name}].headers")
+    query = _normalize_mapping(raw.get("query"), field_name=f"scenario[{name}].query")
+    json_body = raw.get("json_body")
+    form_body_raw = raw.get("form_body")
+    form_body = (
+        _normalize_mapping(form_body_raw, field_name=f"scenario[{name}].form_body")
+        if form_body_raw is not None
+        else None
+    )
+    if json_body is not None and form_body is not None:
+        raise ValueError(f"scenario[{name}] cannot set both json_body and form_body")
+    success_statuses = _normalize_success_statuses(raw.get("success_statuses"))
+    return ScenarioSpec(
+        name=name,
+        method=method,
+        path=path,
+        requires_auth=requires_auth,
+        headers=headers,
+        query=query,
+        json_body=json_body,
+        form_body=form_body,
+        success_statuses=success_statuses,
+    )
+
+
+def _load_scenarios_from_file(raw_path: str) -> dict[str, ScenarioSpec]:
+    path = Path(raw_path).resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"scenario config file not found: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(payload, dict):
+        raw_scenarios = payload.get("scenarios")
+    else:
+        raw_scenarios = payload
+    if not isinstance(raw_scenarios, list):
+        raise ValueError("scenario config must contain a 'scenarios' array")
+    loaded: dict[str, ScenarioSpec] = {}
+    for item in raw_scenarios:
+        scenario = _normalize_scenario(item)
+        if scenario.name in loaded:
+            raise ValueError(f"duplicate scenario name in config: {scenario.name}")
+        loaded[scenario.name] = scenario
+    if not loaded:
+        raise ValueError("scenario config has no scenario definitions")
+    return loaded
+
+
+def _build_scenario_registry(args) -> dict[str, ScenarioSpec]:
+    registry = _builtin_scenarios()
+    scenario_config_file = getattr(args, "scenario_config_file", None)
+    if not scenario_config_file:
+        return registry
+    custom = _load_scenarios_from_file(scenario_config_file)
+    overlap = sorted(name for name in custom if name in registry)
+    if overlap:
+        raise ValueError(
+            "custom scenario names conflict with built-in scenarios: "
+            + ", ".join(overlap)
+        )
+    registry.update(custom)
+    return registry
+
+
+def _parse_scenarios(raw: str, *, available: set[str]) -> list[str]:
     values = [item.strip() for item in raw.split(",") if item.strip()]
     if not values:
         raise ValueError("at least one scenario is required")
-    unknown = [item for item in values if item not in DEFAULT_SCENARIOS]
+    unknown = [item for item in values if item not in available]
     if unknown:
         raise ValueError(f"unsupported scenarios: {', '.join(unknown)}")
     return values
@@ -159,22 +300,33 @@ async def _build_token_pool(
     return tokens
 
 
-async def _request_with_token(
+async def _request_scenario(
     *,
     client: httpx.AsyncClient,
-    method: str,
-    url: str,
-    token: str,
+    base_url: str,
+    scenario: ScenarioSpec,
+    token: str | None,
 ) -> tuple[bool, str, float]:
     started_at = time.perf_counter()
     try:
+        headers = dict(scenario.headers)
+        if scenario.requires_auth:
+            if not token:
+                return False, "NO_TOKEN", 0.0
+            headers.setdefault("Authorization", f"Bearer {token}")
         response = await client.request(
-            method,
-            url,
-            headers={"Authorization": f"Bearer {token}"},
+            scenario.method,
+            f"{base_url}{scenario.path}",
+            headers=headers,
+            params=scenario.query or None,
+            json=scenario.json_body,
+            data=scenario.form_body,
         )
         latency_ms = (time.perf_counter() - started_at) * 1000.0
-        success = 200 <= response.status_code < 400
+        if scenario.success_statuses is None:
+            success = 200 <= response.status_code < 400
+        else:
+            success = response.status_code in scenario.success_statuses
         return success, str(response.status_code), latency_ms
     except Exception:
         latency_ms = (time.perf_counter() - started_at) * 1000.0
@@ -184,12 +336,17 @@ async def _request_with_token(
 async def _execute_scenario(
     *,
     scenario: str,
+    scenario_registry: dict[str, ScenarioSpec],
     client: httpx.AsyncClient,
     base_url: str,
     token_pool: list[str],
     login_usernames: list[str],
     password: str,
 ) -> tuple[bool, str, float]:
+    scenario_spec = scenario_registry.get(scenario)
+    if scenario_spec is None:
+        return False, "UNSUPPORTED_SCENARIO", 0.0
+
     if scenario == "login":
         username = random.choice(login_usernames)
         token, status, latency_ms = await _login_once(
@@ -204,44 +361,22 @@ async def _execute_scenario(
             token_pool.append(token)
         return token is not None, status, latency_ms
 
-    if scenario in AUTH_SCENARIOS and not token_pool:
+    if scenario_spec.requires_auth and not token_pool:
         return False, "NO_TOKEN", 0.0
 
-    token = random.choice(token_pool)
-    if scenario == "authz":
-        return await _request_with_token(
-            client=client,
-            method="GET",
-            url=f"{base_url}/api/v1/authz/permissions/me?module=user",
-            token=token,
-        )
-    if scenario == "users":
-        return await _request_with_token(
-            client=client,
-            method="GET",
-            url=f"{base_url}/api/v1/users?page=1&page_size=20",
-            token=token,
-        )
-    if scenario == "production-orders":
-        return await _request_with_token(
-            client=client,
-            method="GET",
-            url=f"{base_url}/api/v1/production/orders?page=1&page_size=20",
-            token=token,
-        )
-    if scenario == "production-stats":
-        return await _request_with_token(
-            client=client,
-            method="GET",
-            url=f"{base_url}/api/v1/production/stats/overview",
-            token=token,
-        )
-    return False, "UNSUPPORTED_SCENARIO", 0.0
+    token = random.choice(token_pool) if scenario_spec.requires_auth else None
+    return await _request_scenario(
+        client=client,
+        base_url=base_url,
+        scenario=scenario_spec,
+        token=token,
+    )
 
 
 async def _run_capacity_gate(args) -> dict[str, Any]:
     base_url = _normalize_base_url(args.base_url)
-    scenarios = _parse_scenarios(args.scenarios)
+    scenario_registry = _build_scenario_registry(args)
+    scenarios = _parse_scenarios(args.scenarios, available=set(scenario_registry))
     if args.concurrency < 1:
         raise ValueError("concurrency must be >= 1")
     if args.duration_seconds < 1:
@@ -302,6 +437,7 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
 
             success, status, latency_ms = await _execute_scenario(
                 scenario=scenario,
+                scenario_registry=scenario_registry,
                 client=client,
                 base_url=base_url,
                 token_pool=token_pool,
@@ -373,4 +509,3 @@ def run_backend_capacity_gate(args) -> int:
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["gate_passed"] else 1
-

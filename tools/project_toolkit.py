@@ -459,7 +459,7 @@ def build_parser() -> argparse.ArgumentParser:
     capacity_parser = subparsers.add_parser(
         "backend-capacity-gate",
         help="Run backend container capacity gate with multi-token and session-pool load.",
-        description="Run backend capacity gate against login, authz, users, production orders, and production stats endpoints.",
+        description="Run backend capacity gate against built-in scenarios or custom scenarios from JSON config.",
     )
     capacity_parser.add_argument(
         "--base-url",
@@ -469,7 +469,11 @@ def build_parser() -> argparse.ArgumentParser:
     capacity_parser.add_argument(
         "--scenarios",
         default="login,authz,users,production-orders,production-stats",
-        help="Comma-separated scenarios. Default: %(default)s",
+        help="Comma-separated scenario names. Can mix built-in scenarios and names loaded from --scenario-config-file. Default: %(default)s",
+    )
+    capacity_parser.add_argument(
+        "--scenario-config-file",
+        help="Optional JSON scenario config path. Supports scenario fields: name, method, path, requires_auth, headers, query, json_body, form_body, success_statuses.",
     )
     capacity_parser.add_argument(
         "--duration-seconds",
