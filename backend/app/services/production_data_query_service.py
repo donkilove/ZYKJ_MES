@@ -191,7 +191,7 @@ def _load_relevant_records(
         )
         .order_by(ProductionRecord.created_at.asc(), ProductionRecord.id.asc())
     )
-    return db.execute(stmt).scalars().all()
+    return list(db.execute(stmt).scalars().all())
 
 
 def _build_last_process_order_map(
@@ -811,7 +811,7 @@ def export_manual_production_data_csv(
 
 
 def list_stage_options_for_filters(db: Session) -> list[ProcessStage]:
-    return (
+    return list(
         db.execute(
             select(ProcessStage)
             .where(ProcessStage.is_enabled.is_(True))
@@ -833,4 +833,4 @@ def list_manual_export_events(
         .order_by(OrderEventLog.created_at.desc(), OrderEventLog.id.desc())
         .limit(limit)
     )
-    return db.execute(stmt).scalars().all()
+    return list(db.execute(stmt).scalars().all())

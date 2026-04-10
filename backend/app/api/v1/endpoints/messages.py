@@ -63,9 +63,7 @@ def api_unread_count(
     ),
 ) -> ApiResponse[UnreadCountResult]:
     count = get_unread_count(db, user_id=current_user_id)
-    return success_response(
-        UnreadCountResult(unread_count=count)
-    )
+    return success_response(UnreadCountResult(unread_count=count))
 
 
 @router.get("/summary", response_model=ApiResponse[MessageSummaryResult])
@@ -76,9 +74,7 @@ def api_message_summary(
     ),
 ) -> ApiResponse[MessageSummaryResult]:
     payload = get_message_summary(db, user_id=current_user_id)
-    return success_response(
-        MessageSummaryResult(**payload)
-    )
+    return success_response(MessageSummaryResult(**payload))
 
 
 @router.get("", response_model=ApiResponse[MessageListResult])
@@ -292,7 +288,7 @@ async def api_run_message_maintenance(
         target_id=str(current_user.id),
         target_name=current_user.username,
         operator=current_user,
-        after_data=result,
+        after_data=dict(result),  # type: ignore[reportArgumentType]
     )
     db.commit()
     return success_response(MessageMaintenanceResult(**result))
@@ -348,7 +344,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
         sub = str(payload.get("sub", "")).strip()
         if sub:
             user_id = int(sub)
-    except Exception:
+    except ValueError:
         await websocket.close(code=4001)
         return
 
@@ -385,7 +381,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         pass
-    except Exception:
+    except RuntimeError:
         logger.exception("[MSG_WS] 用户 %s WebSocket 异常", user_id)
     finally:
         await message_connection_manager.disconnect(websocket, user_id)

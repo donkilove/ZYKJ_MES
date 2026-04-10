@@ -6,7 +6,10 @@ from threading import Lock, RLock
 import time
 from uuid import uuid4
 
+from typing import Any
+
 from sqlalchemy import and_, delete, func, select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.associations import user_roles
@@ -32,7 +35,9 @@ _SESSION_ACTIVE_LOCAL_CACHE_LOCK = RLock()
 _SUCCESS_LOGIN_LOG_LOCAL_CACHE: dict[str, float] = {}
 _SUCCESS_LOGIN_LOG_LOCAL_CACHE_LOCK = RLock()
 _SUCCESS_LOGIN_LOG_MIN_INTERVAL_SECONDS = 60
-_PRIMARY_ROLE_META_LOCAL_CACHE: dict[int, tuple[float, tuple[str | None, str | None]]] = {}
+_PRIMARY_ROLE_META_LOCAL_CACHE: dict[
+    int, tuple[float, tuple[str | None, str | None]]
+] = {}
 _PRIMARY_ROLE_META_LOCAL_CACHE_LOCK = RLock()
 _PRIMARY_ROLE_META_CACHE_TTL_SECONDS = 30
 
@@ -77,8 +82,8 @@ def _build_login_log_filters(
     success: bool | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-) -> list[object]:
-    filters: list[object] = []
+) -> list[Any]:
+    filters: list[Any] = []
     if username:
         filters.append(LoginLog.username.ilike(f"%{username.strip()}%"))
     if success is not None:
@@ -94,8 +99,8 @@ def _build_online_session_filters(
     *,
     keyword: str | None = None,
     status_filter: str | None = None,
-) -> list[object]:
-    filters: list[object] = [User.is_deleted.is_(False)]
+) -> list[Any]:
+    filters: list[Any] = [User.is_deleted.is_(False)]
     if keyword:
         filters.append(User.username.ilike(f"%{keyword.strip()}%"))
     if status_filter:
@@ -175,7 +180,9 @@ def _session_touch_interval_seconds() -> int:
     )
 
 
-def _cap_session_cache_ttl(ttl_seconds: int, expires_at: datetime, now: datetime) -> int:
+def _cap_session_cache_ttl(
+    ttl_seconds: int, expires_at: datetime, now: datetime
+) -> int:
     remaining = (expires_at - now).total_seconds()
     if remaining <= 0:
         return 1
@@ -433,7 +440,7 @@ def cleanup_expired_sessions(db: Session) -> int:
             last_active_at=now,
         )
     )
-    return int(result.rowcount or 0)
+    return int(result.rowcount or 0)  # type: ignore[reportAttributeAccessIssue]
 
 
 def cleanup_expired_sessions_if_due(
@@ -452,13 +459,15 @@ def cleanup_expired_sessions_if_due(
 
     try:
         return cleanup_expired_sessions(db)
-    except Exception:
+    except SQLAlchemyError:
         with _SESSION_CLEANUP_LOCK:
             _SESSION_CLEANUP_NEXT_AT = 0.0
         raise
 
 
-def get_user_current_session(db: Session, *, session_token_id: str) -> UserSession | None:
+def get_user_current_session(
+    db: Session, *, session_token_id: str
+) -> UserSession | None:
     cleanup_expired_sessions_if_due(db)
     return get_session_by_token_id(db, session_token_id)
 
@@ -592,7 +601,9 @@ def list_login_logs(
     if filters:
         total_stmt = total_stmt.where(and_(*filters))
     total = int(db.execute(total_stmt).scalar_one())
-    rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+    rows = list(
+        db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+    )
     return total, rows
 
 
@@ -604,12 +615,9 @@ def force_offline_sessions(
     if not session_token_ids:
         return 0
     now = _now_utc()
-    stmt = (
-        select(UserSession)
-        .where(
-            UserSession.session_token_id.in_(session_token_ids),
-            UserSession.status == "active",
-        )
+    stmt = select(UserSession).where(
+        UserSession.session_token_id.in_(session_token_ids),
+        UserSession.status == "active",
     )
     rows = db.execute(stmt).scalars().all()
     for row in rows:
@@ -626,7 +634,7 @@ def force_offline_sessions(
 def delete_expired_login_logs(db: Session) -> int:
     deadline = _now_utc() - timedelta(days=settings.login_log_retention_days)
     result = db.execute(delete(LoginLog).where(LoginLog.login_time < deadline))
-    return int(result.rowcount or 0)
+    return int(result.rowcount or 0)  # type: ignore[reportAttributeAccessIssue]
 
 
 def cleanup_expired_login_logs_if_due(
@@ -645,7 +653,7 @@ def cleanup_expired_login_logs_if_due(
 
     try:
         return delete_expired_login_logs(db)
-    except Exception:
+    except SQLAlchemyError:
         with _LOGIN_LOG_CLEANUP_LOCK:
             _LOGIN_LOG_CLEANUP_NEXT_AT = 0.0
         raise

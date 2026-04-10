@@ -12,7 +12,8 @@ from app.services import audit_service, role_service, session_service, user_serv
 
 
 class ListQueryOptimizationUnitTest(unittest.TestCase):
-    def _prepare_db(self, *, total: int = 0) -> MagicMock:
+    @staticmethod
+    def _prepare_db(*, total: int = 0) -> MagicMock:
         db = MagicMock()
         total_result = MagicMock()
         total_result.scalar_one.return_value = total

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from collections import defaultdict
 import hashlib
 import json
@@ -121,7 +123,7 @@ def _load_catalog_meta(
     cache_key = _authz_snapshot_catalog_cache_key(revision_token)
     cached = _get_authz_snapshot_from_cache(cache_key)
     if cached is not None:
-        cached_modules, cached_row_by_code = cached
+        cached_modules, cached_row_by_code = cached  # type: ignore[reportGeneralTypeIssues]
         return list(cached_modules), dict(cached_row_by_code)
 
     catalog_rows = list_permission_catalog_rows(db)
@@ -189,7 +191,7 @@ def get_authz_snapshot(
             revision_token=revision_token,
         ),
     )
-    return dict(result)
+    return dict(result)  # type: ignore[reportArgumentType]
 
 
 def _build_authz_snapshot(

@@ -227,6 +227,7 @@ def _ensure_pipeline_sequence_gate(
     sub_order: ProductionSubOrder,
     current_instance: OrderSubOrderPipelineInstance | None,
 ) -> None:
+    _ = sub_order
     if current_instance is None:
         return
     previous_process = _lock_previous_process(
@@ -243,7 +244,6 @@ def _ensure_pipeline_sequence_gate(
     ):
         return
     pipeline_link_id = (current_instance.pipeline_link_id or "").strip()
-    previous_instance = None
     if pipeline_link_id:
         previous_instance = get_active_pipeline_instance_for_link_id(
             db,
@@ -708,7 +708,7 @@ def end_production(
     defect_quantity = 0
     if defect_items:
         defect_quantity = sum(
-            int(item.get("quantity") or 0)
+            int(item.get("quantity") or 0)  # type: ignore[reportArgumentType]
             for item in defect_items
             if isinstance(item, dict)
         )

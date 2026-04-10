@@ -9,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    require_any_permission,
     require_any_permission_fast,
     require_permission,
     require_permission_fast,
@@ -247,7 +246,9 @@ def _current_user_stage_codes_by_user_id(db: Session, user_id: int) -> list[str]
         .scalars()
         .all()
     )
-    stage_codes = sorted(resolve_user_stage_codes(db, process_codes=list(process_codes)))
+    stage_codes = sorted(
+        resolve_user_stage_codes(db, process_codes=list(process_codes))
+    )
     with _EQUIPMENT_USER_STAGE_CODES_CACHE_LOCK:
         _EQUIPMENT_USER_STAGE_CODES_CACHE[user_id] = (
             now_monotonic + _EQUIPMENT_USER_STAGE_CODES_CACHE_TTL_SECONDS,
@@ -256,14 +257,14 @@ def _current_user_stage_codes_by_user_id(db: Session, user_id: int) -> list[str]
     return stage_codes
 
 
-def _raise_visibility_error(error: ValueError) -> None:
+def _build_visibility_error(error: ValueError) -> HTTPException:
     detail = str(error)
     error_status = (
         status.HTTP_403_FORBIDDEN
         if detail == "Access denied"
         else status.HTTP_400_BAD_REQUEST
     )
-    raise HTTPException(status_code=error_status, detail=detail)
+    return HTTPException(status_code=error_status, detail=detail)
 
 
 def to_equipment_item(row: Equipment) -> EquipmentLedgerItem:
@@ -1051,7 +1052,9 @@ def get_maintenance_executions(
     due_date_end: date_type | None = Query(default=None),
     stage_code: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission_fast_user("equipment.executions.list")),
+    current_user: User = Depends(
+        require_permission_fast_user("equipment.executions.list")
+    ),
 ) -> ApiResponse[MaintenanceWorkOrderListResult] | Response:
     current_user_role_codes = [role.code for role in current_user.roles]
     current_user_stage_codes = _current_user_stage_codes_by_user_id(db, current_user.id)
@@ -1132,7 +1135,7 @@ def start_maintenance_execution(
             current_user_stage_codes=_current_user_stage_codes(db, current_user),
         )
     except ValueError as error:
-        _raise_visibility_error(error)
+        raise _build_visibility_error(error) from error
     _invalidate_equipment_list_cached_response("executions")
     return success_response(to_work_order_item(updated), message="started")
 
@@ -1164,7 +1167,7 @@ def complete_maintenance_execution(
             attachment_link=payload.attachment_link,
         )
     except ValueError as error:
-        _raise_visibility_error(error)
+        raise _build_visibility_error(error) from error
     write_audit_log(
         db,
         action_code="equipment.work_order.complete",
@@ -1195,7 +1198,9 @@ def get_maintenance_records(
     start_date: date_type | None = Query(default=None),
     end_date: date_type | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission_fast_user("equipment.records.list")),
+    current_user: User = Depends(
+        require_permission_fast_user("equipment.records.list")
+    ),
 ) -> ApiResponse[MaintenanceRecordListResult] | Response:
     if start_date is not None and end_date is not None and start_date > end_date:
         raise HTTPException(
@@ -1375,7 +1380,7 @@ def get_work_order_detail_api(
             current_user_stage_codes=_current_user_stage_codes(db, current_user),
         )
     except ValueError as error:
-        _raise_visibility_error(error)
+        raise _build_visibility_error(error) from error
     return success_response(_build_work_order_detail(db, row))
 
 
@@ -1402,7 +1407,7 @@ def cancel_maintenance_execution(
             current_user_stage_codes=_current_user_stage_codes(db, current_user),
         )
     except ValueError as error:
-        _raise_visibility_error(error)
+        raise _build_visibility_error(error) from error
     write_audit_log(
         db,
         action_code="equipment.work_order.cancel",
@@ -1439,7 +1444,7 @@ def get_maintenance_record_detail_api(
             current_user_stage_codes=_current_user_stage_codes(db, current_user),
         )
     except ValueError as error:
-        _raise_visibility_error(error)
+        raise _build_visibility_error(error) from error
     return success_response(_build_record_detail(db, row))
 
 

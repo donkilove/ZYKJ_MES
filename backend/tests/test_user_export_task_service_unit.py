@@ -15,12 +15,17 @@ class UserExportTaskServiceUnitTest(unittest.TestCase):
     def setUp(self) -> None:
         user_export_task_service._USER_EXPORT_TASK_CLEANUP_NEXT_AT = 0.0
 
-    def test_cleanup_user_export_tasks_throttles_repeated_calls(self) -> None:
+    @staticmethod
+    def test_cleanup_user_export_tasks_throttles_repeated_calls() -> None:
         db = MagicMock()
 
         with (
-            patch.object(user_export_task_service.time, "monotonic", side_effect=[10.0, 15.0]),
-            patch.object(user_export_task_service, "_run_cleanup_user_export_tasks") as run_cleanup,
+            patch.object(
+                user_export_task_service.time, "monotonic", side_effect=[10.0, 15.0]
+            ),
+            patch.object(
+                user_export_task_service, "_run_cleanup_user_export_tasks"
+            ) as run_cleanup,
         ):
             user_export_task_service.cleanup_user_export_tasks(
                 db,

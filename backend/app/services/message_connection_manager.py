@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections import defaultdict
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class MessageConnectionManager:
             try:
                 await ws.send_json(payload)
                 delivered = True
-            except Exception:
+            except (RuntimeError, WebSocketDisconnect):
                 dead.append(ws)
                 failure_reason = "send_json_failed"
         if dead:

@@ -6,6 +6,8 @@ import logging
 from datetime import datetime, timedelta, timezone, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.core.config import settings
 from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.db.session import SessionLocal
@@ -130,7 +132,7 @@ async def run_maintenance_auto_generate_loop() -> None:
                         recipient_user_ids=recipient_ids,
                         dedupe_key=f"maint_wo_created_{wo.id}",
                     )
-        except Exception:
+        except (ValueError, SQLAlchemyError):
             logger.exception("[MAINT_SCHED] Auto generation failed.")
         finally:
             db.close()

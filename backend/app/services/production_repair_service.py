@@ -6,7 +6,7 @@ import io
 import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import func, or_, select
@@ -130,7 +130,8 @@ def _sanitize_defect_items(
             {
                 "phenomenon": phenomenon,
                 "quantity": quantity,
-                "production_record_id": int(item.get("production_record_id") or 0) or None,
+                "production_record_id": int(item.get("production_record_id") or 0)
+                or None,
                 "production_time": item.get("production_time"),
             }
         )
@@ -196,19 +197,20 @@ def _load_order_with_process(
     order_id: int,
     order_process_id: int,
 ) -> tuple[ProductionOrder, ProductionOrderProcess]:
-    order = (
+    order = cast(
+        ProductionOrder | None,
         db.execute(
             select(ProductionOrder)
             .where(ProductionOrder.id == order_id)
-            .options(selectinload(ProductionOrder.product))
             .with_for_update()
         )
         .scalars()
-        .first()
+        .first(),
     )
     if order is None:
         raise ValueError("Order not found")
-    process_row = (
+    process_row = cast(
+        ProductionOrderProcess | None,
         db.execute(
             select(ProductionOrderProcess)
             .where(
@@ -218,7 +220,7 @@ def _load_order_with_process(
             .with_for_update()
         )
         .scalars()
-        .first()
+        .first(),
     )
     if process_row is None:
         raise ValueError("Order process not found")
@@ -236,7 +238,7 @@ def create_repair_order(
     auto_created: bool,
 ) -> RepairOrder:
     defects = _sanitize_defect_items(defect_items)
-    repair_quantity = int(sum(int(item["quantity"]) for item in defects))
+    repair_quantity = int(sum(int(d_item["quantity"]) for d_item in defects))
     if repair_quantity <= 0:
         raise ValueError("defect_items must contain at least one positive quantity")
     normalized_production_quantity = _normalize_quantity(
@@ -278,14 +280,16 @@ def create_repair_order(
 
     production_record_by_id: dict[int, ProductionRecord] = {}
     production_record_ids = {
-        int(item["production_record_id"])
-        for item in defects
-        if item.get("production_record_id")
+        int(rec_item["production_record_id"])
+        for rec_item in defects
+        if rec_item.get("production_record_id")
     }
     if production_record_ids:
         production_record_rows = (
             db.execute(
-                select(ProductionRecord).where(ProductionRecord.id.in_(production_record_ids))
+                select(ProductionRecord).where(
+                    cast(Any, ProductionRecord.id).in_(production_record_ids)
+                )
             )
             .scalars()
             .all()
@@ -295,28 +299,32 @@ def create_repair_order(
     for item in defects:
         production_record_id = item.get("production_record_id")
         production_record = (
-            production_record_by_id.get(int(production_record_id))
+            production_record_by_id.get(int(cast(Any, production_record_id)))
             if production_record_id
             else None
         )
         production_time = item.get("production_time")
         if not isinstance(production_time, datetime):
-            production_time = production_record.created_at if production_record else event_time
+            production_time = (
+                production_record.created_at if production_record else event_time
+            )
         db.add(
             RepairDefectPhenomenon(
-                repair_order_id=repair_row.id,
-                production_record_id=production_record.id if production_record else None,
-                order_id=order.id,
-                order_code=order.order_code,
-                product_id=order.product_id,
-                product_name=order.product.name if order.product else "",
-                process_id=process_row.id,
-                process_code=process_row.process_code,
-                process_name=process_row.process_name,
+                repair_order_id=int(repair_row.id),
+                production_record_id=int(production_record.id)
+                if production_record
+                else None,
+                order_id=int(order.id),
+                order_code=str(order.order_code),
+                product_id=int(order.product_id),
+                product_name=str(order.product.name) if order.product else "",
+                process_id=int(process_row.id),
+                process_code=str(process_row.process_code),
+                process_name=str(process_row.process_name),
                 phenomenon=str(item["phenomenon"]),
                 quantity=int(item["quantity"]),
-                operator_user_id=sender.id if sender else None,
-                operator_username=sender.username if sender else None,
+                operator_user_id=int(sender.id) if sender else None,
+                operator_username=str(sender.username) if sender else None,
                 production_time=production_time,
             )
         )
@@ -436,7 +444,7 @@ def complete_repair_order(
         raise ValueError("Source process snapshot is missing")
 
     source_rank = process_order_rank.get(
-        source_process.id, int(source_process.process_order)
+        int(source_process.id), int(source_process.process_order)
     )
     for item in normalized_returns:
         target_process = process_map_by_id.get(int(item["target_order_process_id"]))
@@ -492,24 +500,24 @@ def complete_repair_order(
         qty = int(item["quantity"])
         db.add(
             RepairReturnRoute(
-                repair_order_id=repair_row.id,
-                source_order_id=repair_row.source_order_id,
-                source_process_id=source_process.id,
-                source_process_code=source_process.process_code,
-                source_process_name=source_process.process_name,
-                target_process_id=target_process.id,
-                target_process_code=target_process.process_code,
-                target_process_name=target_process.process_name,
+                repair_order_id=int(repair_row.id),
+                source_order_id=int(repair_row.source_order_id),
+                source_process_id=int(source_process.id),
+                source_process_code=str(source_process.process_code),
+                source_process_name=str(source_process.process_name),
+                target_process_id=int(target_process.id),
+                target_process_code=str(target_process.process_code),
+                target_process_name=str(target_process.process_name),
                 return_quantity=qty,
-                operator_user_id=operator.id,
-                operator_username=operator.username,
+                operator_user_id=int(operator.id),
+                operator_username=str(operator.username),
             )
         )
         target_process.visible_quantity = int(target_process.visible_quantity) + qty
         if (
             target_process.status == PROCESS_STATUS_COMPLETED
-            and target_process.visible_quantity > target_process.completed_quantity
-        ):
+            and int(target_process.visible_quantity) > int(target_process.completed_quantity)
+        ) :
             target_process.status = (
                 PROCESS_STATUS_PARTIAL
                 if int(target_process.completed_quantity) > 0
@@ -518,17 +526,17 @@ def complete_repair_order(
         ensure_sub_orders_visible_quantity(
             db,
             process_row=target_process,
-            target_visible_quantity=target_process.visible_quantity,
+            target_visible_quantity=int(target_process.visible_quantity),
         )
         affected_process_ids.add(target_process.id)
-        if target_process.id != source_process.id:
+        if int(target_process.id) != int(source_process.id):
             source_process.visible_quantity = max(
                 int(source_process.completed_quantity),
                 int(source_process.visible_quantity) - qty,
             )
             if (
                 source_process.status == PROCESS_STATUS_COMPLETED
-                and source_process.visible_quantity > source_process.completed_quantity
+                and int(source_process.visible_quantity) > int(source_process.completed_quantity)
             ):
                 source_process.status = (
                     PROCESS_STATUS_PARTIAL
@@ -538,15 +546,18 @@ def complete_repair_order(
             ensure_sub_orders_visible_quantity(
                 db,
                 process_row=source_process,
-                target_visible_quantity=source_process.visible_quantity,
+                target_visible_quantity=int(source_process.visible_quantity),
             )
             affected_process_ids.add(source_process.id)
 
     if scrap_replenished and scrap_quantity > 0 and source_order is not None:
-        first_process = min(
-            source_order.processes,
-            key=lambda row: (row.process_order, row.id),
-            default=None,
+        first_process = cast(
+            ProductionOrderProcess | None,
+            min(
+                source_order.processes,
+                key=lambda row: (row.process_order, row.id),
+                default=None,
+            ),
         )
         if first_process is not None:
             first_process.visible_quantity = (
@@ -564,7 +575,7 @@ def complete_repair_order(
             ensure_sub_orders_visible_quantity(
                 db,
                 process_row=first_process,
-                target_visible_quantity=first_process.visible_quantity,
+                target_visible_quantity=int(first_process.visible_quantity),
             )
             affected_process_ids.add(first_process.id)
 
@@ -581,7 +592,8 @@ def complete_repair_order(
         )
     if scrap_reason_bucket:
         for reason, qty in scrap_reason_bucket.items():
-            existing = (
+            existing = cast(
+                ProductionScrapStatistics | None,
                 db.execute(
                     select(ProductionScrapStatistics)
                     .where(
@@ -596,7 +608,7 @@ def complete_repair_order(
                     .with_for_update()
                 )
                 .scalars()
-                .first()
+                .first(),
             )
             if existing is None:
                 db.add(
@@ -692,11 +704,15 @@ def complete_repair_order(
                 db.execute(
                     select(ProductionScrapStatistics)
                     .where(
-                        ProductionScrapStatistics.order_id == repair_row.source_order_id,
+                        ProductionScrapStatistics.order_id
+                        == repair_row.source_order_id,
                         ProductionScrapStatistics.process_id
                         == repair_row.source_order_process_id,
                     )
-                    .order_by(ProductionScrapStatistics.applied_at.desc(), ProductionScrapStatistics.id.desc())
+                    .order_by(
+                        ProductionScrapStatistics.applied_at.desc(),
+                        ProductionScrapStatistics.id.desc(),
+                    )
                 )
                 .scalars()
                 .first()
@@ -757,11 +773,11 @@ def list_repair_orders(
         like_value = f"%{keyword}%"
         stmt = stmt.where(
             or_(
-                RepairOrder.repair_order_code.ilike(like_value),
-                RepairOrder.source_order_code.ilike(like_value),
-                RepairOrder.product_name.ilike(like_value),
-                RepairOrder.source_process_name.ilike(like_value),
-                RepairOrder.sender_username.ilike(like_value),
+                cast(Any, RepairOrder.repair_order_code).ilike(like_value),
+                cast(Any, RepairOrder.source_order_code).ilike(like_value),
+                cast(Any, RepairOrder.product_name).ilike(like_value),
+                cast(Any, RepairOrder.source_process_name).ilike(like_value),
+                cast(Any, RepairOrder.sender_username).ilike(like_value),
             )
         )
     rows = (
@@ -776,7 +792,7 @@ def list_repair_orders(
     )
     total = len(rows)
     offset = (page - 1) * page_size
-    return total, rows[offset : offset + page_size]
+    return total, list(rows[offset : offset + page_size])
 
 
 def get_repair_order_by_id(db: Session, *, repair_order_id: int) -> RepairOrder | None:
@@ -871,10 +887,10 @@ def list_scrap_statistics(
         like_value = f"%{keyword}%"
         stmt = stmt.where(
             or_(
-                ProductionScrapStatistics.order_code.ilike(like_value),
-                ProductionScrapStatistics.product_name.ilike(like_value),
-                ProductionScrapStatistics.process_name.ilike(like_value),
-                ProductionScrapStatistics.scrap_reason.ilike(like_value),
+                cast(Any, ProductionScrapStatistics.order_code).ilike(like_value),
+                cast(Any, ProductionScrapStatistics.product_name).ilike(like_value),
+                cast(Any, ProductionScrapStatistics.process_name).ilike(like_value),
+                cast(Any, ProductionScrapStatistics.scrap_reason).ilike(like_value),
             )
         )
     if product_name:
@@ -893,7 +909,19 @@ def list_scrap_statistics(
     )
     total = len(rows)
     offset = (page - 1) * page_size
-    return total, rows[offset : offset + page_size]
+    return total, list(rows[offset : offset + page_size])
+
+
+def _build_export_response(
+    *, prefix: str, rows_count: int, content_base64: str
+) -> dict[str, Any]:
+    """构建导出响应对象"""
+    return {
+        "file_name": f"{prefix}_{_now_utc().strftime('%Y%m%d_%H%M%S')}.csv",
+        "mime_type": "text/csv",
+        "content_base64": content_base64,
+        "exported_count": rows_count,
+    }
 
 
 def _build_csv_base64(headers: list[str], rows: list[list[Any]]) -> str:
@@ -911,6 +939,7 @@ def export_scrap_statistics_csv(
     filters: ScrapStatisticsFilters,
     operator: User,
 ) -> dict[str, Any]:
+    _ = operator
     _, rows = list_scrap_statistics(
         db,
         page=1,
@@ -952,12 +981,11 @@ def export_scrap_statistics_csv(
         ],
         csv_rows,
     )
-    return {
-        "file_name": f"production_scrap_statistics_{_now_utc().strftime('%Y%m%d_%H%M%S')}.csv",
-        "mime_type": "text/csv",
-        "content_base64": content_base64,
-        "exported_count": len(rows),
-    }
+    return _build_export_response(
+        prefix="production_scrap_statistics",
+        rows_count=len(rows),
+        content_base64=content_base64,
+    )
 
 
 def export_repair_orders_csv(
@@ -1018,7 +1046,7 @@ def export_repair_orders_csv(
         csv_rows,
     )
     unique_order_ids = sorted(
-        {int(row.source_order_id) for row in rows if row.source_order_id}
+        {int(cast(Any, r.source_order_id)) for r in rows if r.source_order_id}
     )
     for order_id in unique_order_ids:
         add_order_event_log(
@@ -1030,14 +1058,12 @@ def export_repair_orders_csv(
             operator_user_id=operator.id,
             payload={
                 "exported_count": len(rows),
-                "repair_order_ids": [int(row.id) for row in rows],
+                "repair_order_ids": [int(r.id) for r in rows],
             },
         )
     db.commit()
-    now = _now_utc()
-    return {
-        "file_name": f"repair_orders_{now.strftime('%Y%m%d_%H%M%S')}.csv",
-        "mime_type": "text/csv",
-        "content_base64": content_base64,
-        "exported_count": len(rows),
-    }
+    return _build_export_response(
+        prefix="repair_orders",
+        rows_count=len(rows),
+        content_base64=content_base64,
+    )

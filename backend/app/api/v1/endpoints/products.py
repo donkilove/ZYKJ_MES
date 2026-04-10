@@ -11,6 +11,7 @@ from threading import RLock
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response, StreamingResponse
 from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permission, require_permission_fast
@@ -19,6 +20,7 @@ from app.db.session import get_db
 from app.models.product import Product
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.product_parameter_history import ProductParameterHistory
+from app.models.product_revision import ProductRevision
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
@@ -50,7 +52,6 @@ from app.schemas.product import (
     ProductVersionCompareResult,
     ProductVersionCopyRequest,
     ProductVersionDiffItem,
-    ProductVersionDisableRequest,
     ProductVersionItem,
     ProductVersionListResult,
     ProductVersionNoteUpdateRequest,
@@ -66,7 +67,6 @@ from app.services.product_service import (
     delete_product,
     delete_product_version,
     disable_product_version,
-    ensure_product_parameter_template_initialized,
     get_current_revision,
     get_effective_product_parameters,
     get_effective_revision,
@@ -76,7 +76,6 @@ from app.services.product_service import (
     get_product_version_parameters,
     get_product_version,
     list_parameter_history,
-    list_product_parameters,
     list_product_parameter_versions,
     list_product_versions,
     list_products,
@@ -288,7 +287,7 @@ def _to_parameter_list_result(
         ProductParameterItem(
             name=str(getattr(parameter, "param_key")),
             category=str(getattr(parameter, "param_category")),
-            type=str(getattr(parameter, "param_type")),
+            type=str(getattr(parameter, "param_type")),  # type: ignore[reportArgumentType]
             value=str(getattr(parameter, "param_value")),
             description=str(getattr(parameter, "param_description") or ""),
             sort_order=int(getattr(parameter, "sort_order")),
@@ -299,7 +298,7 @@ def _to_parameter_list_result(
     return ProductParameterListResult(
         product_id=product.id,
         product_name=product.name,
-        parameter_scope=parameter_scope,
+        parameter_scope=parameter_scope,  # type: ignore[reportArgumentType]
         version=version,
         version_label=version_label,
         lifecycle_status=lifecycle_status,
@@ -333,7 +332,7 @@ def _build_product_detail_result(
 
     latest_version_changed_at: datetime | None = None
     for row in versions:
-        candidate = row.updated_at or row.effective_at or row.created_at
+        candidate = row.updated_at or getattr(row, "effective_at", None) or row.created_at
         if latest_version_changed_at is None or candidate > latest_version_changed_at:
             latest_version_changed_at = candidate
 
@@ -1136,7 +1135,7 @@ def get_product_impact_analysis(
 
     try:
         query = ProductImpactAnalysisQuery(
-            operation=operation,
+            operation=operation,  # type: ignore[reportArgumentType]
             target_status=target_status,
             target_version=target_version,
         )
@@ -1245,7 +1244,7 @@ def update_product_lifecycle(
 
 
 def _to_version_item(
-    row: "ProductRevision",
+    row: ProductRevision,
     *,
     effective_at: datetime | None = None,
 ) -> ProductVersionItem:
@@ -1334,13 +1333,16 @@ def create_product_version_api(
     _invalidate_product_read_cache(product.id)
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
-    from app.models.product_revision import ProductRevision as _PR
+    from app.models.product_revision import ProductRevision
 
     revision = (
         db.execute(
-            select(_PR)
-            .where(_PR.id == revision.id)
-            .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+            select(ProductRevision)
+            .where(ProductRevision.id == revision.id)
+            .options(
+                selectinload(ProductRevision.created_by),
+                selectinload(ProductRevision.source_revision),
+            )
         )
         .scalars()
         .first()
@@ -1395,13 +1397,16 @@ def copy_product_version_api(
     _invalidate_product_read_cache(product.id)
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
-    from app.models.product_revision import ProductRevision as _PR
+    from app.models.product_revision import ProductRevision
 
     revision = (
         db.execute(
-            select(_PR)
-            .where(_PR.id == revision.id)
-            .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+            select(ProductRevision)
+            .where(ProductRevision.id == revision.id)
+            .options(
+                selectinload(ProductRevision.created_by),
+                selectinload(ProductRevision.source_revision),
+            )
         )
         .scalars()
         .first()
@@ -1451,13 +1456,16 @@ def activate_product_version_api(
     _invalidate_product_read_cache(product.id)
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
-    from app.models.product_revision import ProductRevision as _PR
+    from app.models.product_revision import ProductRevision
 
     revision = (
         db.execute(
-            select(_PR)
-            .where(_PR.id == revision.id)
-            .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+            select(ProductRevision)
+            .where(ProductRevision.id == revision.id)
+            .options(
+                selectinload(ProductRevision.created_by),
+                selectinload(ProductRevision.source_revision),
+            )
         )
         .scalars()
         .first()
@@ -1472,7 +1480,7 @@ def activate_product_version_api(
             revision=_to_version_item(revision),
             operator=current_user,
         )
-    except Exception:
+    except (ValueError, SQLAlchemyError):
         db.rollback()
         logger.exception(
             "[MSG] 产品版本发布消息创建失败: product_id=%s version=%s",
@@ -1517,13 +1525,16 @@ def disable_product_version_api(
     _invalidate_product_read_cache(product.id)
     from sqlalchemy.orm import selectinload
     from sqlalchemy import select
-    from app.models.product_revision import ProductRevision as _PR
+    from app.models.product_revision import ProductRevision
 
     revision = (
         db.execute(
-            select(_PR)
-            .where(_PR.id == revision.id)
-            .options(selectinload(_PR.created_by), selectinload(_PR.source_revision))
+            select(ProductRevision)
+            .where(ProductRevision.id == revision.id)
+            .options(
+                selectinload(ProductRevision.created_by),
+                selectinload(ProductRevision.source_revision),
+            )
         )
         .scalars()
         .first()
@@ -1834,7 +1845,7 @@ def export_products(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("product.products.export")),
 ) -> StreamingResponse:
-    _, products, latest_map = list_products(
+    _total, products, latest_map = list_products(
         db,
         1,
         10000,
@@ -1927,7 +1938,7 @@ def export_product_parameters(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("product.parameters.export")),
 ) -> StreamingResponse:
-    _, products, latest_history_map = list_products(
+    _total, products, latest_history_map = list_products(
         db,
         1,
         10000,

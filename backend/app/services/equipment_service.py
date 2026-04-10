@@ -255,7 +255,9 @@ def _build_record_stage_scope_filter(stage_code_set: set[str]):
             ),
             MaintenanceRecord.work_order_id.in_(
                 select(MaintenanceWorkOrder.id).where(
-                    MaintenanceWorkOrder.source_execution_process_code.in_(stage_code_set)
+                    MaintenanceWorkOrder.source_execution_process_code.in_(
+                        stage_code_set
+                    )
                 )
             ),
         ),
@@ -319,7 +321,7 @@ def list_equipment(
     total = db.execute(total_stmt).scalar_one()
 
     offset = (page - 1) * page_size
-    rows = db.execute(stmt.offset(offset).limit(page_size)).scalars().all()
+    rows = list(db.execute(stmt.offset(offset).limit(page_size)).scalars().all())
     return total, rows
 
 
@@ -534,7 +536,7 @@ def get_equipment_detail(
             active_plan_count = db.execute(
                 select(func.count(MaintenancePlan.id)).where(*plan_filters)
             ).scalar_one()
-            active_plans = (
+            active_plans = list(
                 db.execute(
                     plan_stmt.options(
                         selectinload(MaintenancePlan.equipment),
@@ -561,14 +563,16 @@ def get_equipment_detail(
                 work_order_filters = []
             else:
                 work_order_filters.append(
-                    MaintenanceWorkOrder.source_execution_process_code.in_(stage_code_set)
+                    MaintenanceWorkOrder.source_execution_process_code.in_(
+                        stage_code_set
+                    )
                 )
         if work_order_filters:
             work_order_stmt = select(MaintenanceWorkOrder).where(*work_order_filters)
             pending_work_order_count = db.execute(
                 select(func.count(MaintenanceWorkOrder.id)).where(*work_order_filters)
             ).scalar_one()
-            pending_work_orders = (
+            pending_work_orders = list(
                 db.execute(
                     work_order_stmt.options(
                         selectinload(MaintenanceWorkOrder.equipment),
@@ -596,7 +600,7 @@ def get_equipment_detail(
                     _build_record_stage_scope_filter(stage_code_set)
                 )
         if record_stmt is not None:
-            recent_records = (
+            recent_records = list(
                 db.execute(
                     record_stmt.order_by(
                         MaintenanceRecord.completed_at.desc(),
@@ -653,7 +657,7 @@ def list_maintenance_items(
     total = db.execute(total_stmt).scalar_one()
 
     offset = (page - 1) * page_size
-    rows = db.execute(stmt.offset(offset).limit(page_size)).scalars().all()
+    rows = list(db.execute(stmt.offset(offset).limit(page_size)).scalars().all())
     return total, rows
 
 
@@ -842,7 +846,7 @@ def list_maintenance_plans(
         .offset(offset)
         .limit(page_size)
     )
-    rows = db.execute(stmt).scalars().all()
+    rows = list(db.execute(stmt).scalars().all())
     return total, rows
 
 
@@ -1248,7 +1252,14 @@ def generate_due_work_orders_for_today(
     )
     db.commit()
     if include_new_orders:
-        return len(plans), created_count, existing_count, failed_count, newly_created, traces
+        return (
+            len(plans),
+            created_count,
+            existing_count,
+            failed_count,
+            newly_created,
+            traces,
+        )
     return len(plans), created_count, existing_count, failed_count, [], traces
 
 
@@ -1365,7 +1376,7 @@ def list_work_orders(
         .scalars()
         .all()
     )
-    return total, rows
+    return total, list(rows)
 
 
 def list_maintenance_records(
@@ -1445,7 +1456,7 @@ def list_maintenance_records(
         .scalars()
         .all()
     )
-    return total, rows
+    return total, list(rows)
 
 
 def start_work_order(
@@ -1571,6 +1582,7 @@ def cancel_work_order(
     current_user_role_codes: list[str],
     current_user_stage_codes: list[str],
 ) -> MaintenanceWorkOrder:
+    _ = operator
     _ensure_work_order_process_permission(
         row=row,
         current_user_role_codes=_normalize_code_set(current_user_role_codes),

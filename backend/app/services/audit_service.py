@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import Select, and_, func, select
+from datetime import UTC, datetime
+from sqlalchemy import Select, String, and_, cast as sa_cast, func, select
 from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
@@ -16,10 +17,14 @@ def _build_audit_log_filters(
     target_type: str | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-) -> list[object]:
-    filters: list[object] = []
+) -> list[Any]:
+    filters: list[Any] = []
     if operator_username:
-        filters.append(AuditLog.operator_username.ilike(f"%{operator_username.strip()}%"))
+        filters.append(
+            sa_cast(AuditLog.operator_username, String).ilike(
+                f"%{operator_username.strip()}%"
+            )
+        )
     if action_code:
         filters.append(AuditLog.action_code == action_code.strip())
     if target_type:
@@ -118,5 +123,7 @@ def list_audit_logs(
     if filters:
         total_stmt = total_stmt.where(and_(*filters))
     total = int(db.execute(total_stmt).scalar_one())
-    rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+    rows: list[AuditLog] = list(
+        db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+    )
     return total, rows

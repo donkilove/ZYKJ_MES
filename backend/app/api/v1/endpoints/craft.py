@@ -9,6 +9,7 @@ from threading import RLock
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -120,8 +121,6 @@ from app.services.craft_service import (
     get_process_references,
     get_template_references,
     list_craft_processes,
-    list_enabled_process_options,
-    list_enabled_stage_options,
     list_stages,
     list_enabled_process_options,
     list_enabled_stage_options,
@@ -752,7 +751,7 @@ def export_stages_api(
     _: User = Depends(require_permission("craft.stages.list")),
 ) -> ApiResponse[CraftExportResult]:
     result = export_stages_csv(db, keyword=keyword, enabled=enabled)
-    return success_response(CraftExportResult(**result))
+    return success_response(CraftExportResult(**result))  # type: ignore[reportArgumentType]
 
 
 @router.get("/processes/export", response_model=ApiResponse[CraftExportResult])
@@ -766,7 +765,7 @@ def export_processes_api(
     result = export_processes_csv(
         db, keyword=keyword, stage_id=stage_id, enabled=enabled
     )
-    return success_response(CraftExportResult(**result))
+    return success_response(CraftExportResult(**result))  # type: ignore[reportArgumentType]
 
 
 @router.get("/processes", response_model=ApiResponse[CraftProcessListResult])
@@ -888,7 +887,9 @@ def get_process_detail_api(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="process_id or process_code is required",
         )
-    normalized_process_code = process_code.strip() if isinstance(process_code, str) else None
+    normalized_process_code = (
+        process_code.strip() if isinstance(process_code, str) else None
+    )
     cache_key = _craft_read_cache_key(
         "process_detail",
         {"process_id": process_id, "process_code": normalized_process_code},
@@ -1160,7 +1161,7 @@ def export_craft_kanban_process_metrics_api(
         if message == "Product not found":
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
-    return success_response(CraftExportResult(**result))
+    return success_response(CraftExportResult(**result))  # type: ignore[reportArgumentType]
 
 
 @router.get("/templates", response_model=ApiResponse[ProductProcessTemplateListResult])
@@ -1236,7 +1237,7 @@ def export_template_detail_api(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
     result = export_template_detail_json(db, template=row)
-    return success_response(CraftExportResult(**result))
+    return success_response(CraftExportResult(**result))  # type: ignore[reportArgumentType]
 
 
 @router.get(
@@ -1258,7 +1259,7 @@ def export_template_version_api(
         result = export_template_version_json(db, template=row, version=version)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
-    return success_response(CraftExportResult(**result))
+    return success_response(CraftExportResult(**result))  # type: ignore[reportArgumentType]
 
 
 @router.post(
@@ -1518,7 +1519,7 @@ def publish_template_api(
             template=updated,
             operator=current_user,
         )
-    except Exception:
+    except (ValueError, SQLAlchemyError):
         db.rollback()
         logger.exception(
             "[MSG] 工艺模板发布消息创建失败: template_id=%s version=%s",
@@ -1572,7 +1573,9 @@ def list_template_versions_api(
             ),
             record_summary=_template_version_record_summary(
                 action=item.action,
-                source_version=item.source_revision.version if item.source_revision else None,
+                source_version=item.source_revision.version
+                if item.source_revision
+                else None,
             ),
             note=item.note,
             source_version=item.source_revision.version

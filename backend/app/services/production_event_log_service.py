@@ -72,7 +72,7 @@ def list_order_event_logs(
         .order_by(OrderEventLog.created_at.desc(), OrderEventLog.id.desc())
         .limit(limit)
     )
-    return db.execute(stmt).scalars().all()
+    return list(db.execute(stmt).scalars().all())
 
 
 def search_order_event_logs_by_code(
@@ -105,4 +105,4 @@ def search_order_event_logs_by_code(
     stmt = stmt.order_by(
         OrderEventLog.created_at.desc(), OrderEventLog.id.desc()
     ).limit(limit)
-    return db.execute(stmt).scalars().all()
+    return list(db.execute(stmt).scalars().all())

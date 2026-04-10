@@ -1543,7 +1543,6 @@ class EquipmentModuleIntegrationTest(unittest.TestCase):
         visible_stage = self._ensure_stage("product_testing", "成品测试")
         hidden_stage = self._ensure_stage("laser_marking", "激光打标")
         visible_process = self._create_process(stage=visible_stage, label="visible")
-        admin_headers = self._headers()
         equipment = self._create_equipment("EXECAPI")
         visible_item = self._create_item("EXEC-VISIBLE", default_cycle_days=8)
         cancel_item = self._create_item("EXEC-CANCEL", default_cycle_days=9)

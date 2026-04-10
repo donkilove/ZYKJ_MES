@@ -133,7 +133,8 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()["data"]["access_token"]
 
-    def _admin_user(self) -> User:
+    @staticmethod
+    def _admin_user() -> User:
         db = SessionLocal()
         try:
             user = db.query(User).filter(User.username == "admin").first()
@@ -322,7 +323,8 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         finally:
             db.close()
 
-    def _ensure_admin_visible_sub_order(self, order_id: int) -> None:
+    @staticmethod
+    def _ensure_admin_visible_sub_order(order_id: int) -> None:
         db = SessionLocal()
         try:
             order_row = db.get(ProductionOrder, order_id)

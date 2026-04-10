@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from typing import Any
+
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, load_only, selectinload
 
@@ -102,8 +104,8 @@ def _build_user_filter_conditions(
     online_user_ids: set[int] | None,
     is_active: bool | None,
     deleted_scope: str,
-) -> tuple[list[object], bool]:
-    conditions: list[object] = []
+) -> tuple[list[Any], bool]:
+    conditions: list[Any] = []
     requires_role_join = False
     if deleted_scope == DELETED_SCOPE_ACTIVE:
         conditions.append(User.is_deleted.is_(False))
@@ -340,7 +342,7 @@ def list_users(
 
     offset = (page - 1) * page_size
     stmt = base_stmt.offset(offset).limit(page_size)
-    users = db.execute(stmt).scalars().all()
+    users = list(db.execute(stmt).scalars().all())
     return total, users
 
 
@@ -418,7 +420,7 @@ def _resolve_processes(
         )
         .order_by(Process.id.asc())
     )
-    processes = db.execute(stmt).scalars().all()
+    processes = list(db.execute(stmt).scalars().all())
     return processes, None
 
 
@@ -719,7 +721,7 @@ def list_registration_requests(
     status: str | None = None,
 ) -> tuple[int, list[RegistrationRequest]]:
     stmt = select(RegistrationRequest).order_by(RegistrationRequest.id.asc())
-    filters: list[object] = []
+    filters: list[Any] = []
     if keyword:
         filters.append(RegistrationRequest.account.ilike(f"%{keyword}%"))
     if status:
@@ -734,7 +736,7 @@ def list_registration_requests(
 
     offset = (page - 1) * page_size
     paged_stmt = stmt.offset(offset).limit(page_size)
-    requests = db.execute(paged_stmt).scalars().all()
+    requests = list(db.execute(paged_stmt).scalars().all())
     return total, requests
 
 

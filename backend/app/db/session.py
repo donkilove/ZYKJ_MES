@@ -9,7 +9,7 @@ from app.core.config import settings
 
 def _build_engine():
     database_url = settings.database_url
-    engine_kwargs = {
+    engine_kwargs: dict[str, object] = {
         "pool_pre_ping": True,
         "future": True,
     }

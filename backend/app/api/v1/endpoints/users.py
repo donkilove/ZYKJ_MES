@@ -6,12 +6,19 @@ import time
 from pathlib import Path
 from threading import RLock
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    get_current_active_user,
     require_permission,
     require_permission_fast_user_id,
 )
@@ -81,7 +88,9 @@ def _get_user_export_tasks_response_bytes(cache_key: str) -> bytes | None:
         return payload_bytes
 
 
-def _set_user_export_tasks_response_bytes(cache_key: str, payload: dict[str, object]) -> bytes:
+def _set_user_export_tasks_response_bytes(
+    cache_key: str, payload: dict[str, object]
+) -> bytes:
     payload_bytes = json.dumps(
         payload,
         ensure_ascii=False,
@@ -149,7 +158,9 @@ def _resolve_online_user_ids_for_users(
 def to_user_item(user: User, *, online_user_ids: set[int] | None = None) -> UserItem:
     is_online = user.id in (online_user_ids or set())
     stage_name = user.stage.name if user.stage else None
-    primary_role = sorted(user.roles, key=lambda role: role.code)[0] if user.roles else None
+    primary_role = (
+        sorted(user.roles, key=lambda role: role.code)[0] if user.roles else None
+    )
     return UserItem(
         id=user.id,
         username=user.username,
@@ -214,20 +225,32 @@ def _build_excel_export(users: list[User], online_user_ids: set[int]) -> str:
     ws = wb.active
     assert ws is not None
     ws.title = "用户列表"
-    headers = ["id", "用户名", "角色", "工段", "在线状态", "账号状态", "首次登录需改密", "创建时间", "最近登录时间"]
+    headers = [
+        "id",
+        "用户名",
+        "角色",
+        "工段",
+        "在线状态",
+        "账号状态",
+        "首次登录需改密",
+        "创建时间",
+        "最近登录时间",
+    ]
     ws.append(headers)
     for user in users:
-        ws.append([
-            user.id,
-            user.username,
-            next(iter(sorted(role.name for role in user.roles)), "/"),
-            user.stage.name if user.stage else "/",
-            "在线" if user.id in online_user_ids else "离线",
-            "启用" if user.is_active else "停用",
-            "是" if user.must_change_password else "否",
-            user.created_at.isoformat(),
-            user.last_login_at.isoformat() if user.last_login_at else "",
-        ])
+        ws.append(
+            [
+                user.id,
+                user.username,
+                next(iter(sorted(role.name for role in user.roles)), "/"),
+                user.stage.name if user.stage else "/",
+                "在线" if user.id in online_user_ids else "离线",
+                "启用" if user.is_active else "停用",
+                "是" if user.must_change_password else "否",
+                user.created_at.isoformat(),
+                user.last_login_at.isoformat() if user.last_login_at else "",
+            ]
+        )
     buffer = io.BytesIO()
     wb.save(buffer)
     return base64.b64encode(buffer.getvalue()).decode("ascii")
@@ -314,7 +337,10 @@ def export_users(
     if format == "excel":
         content_base64 = _build_excel_export(users, online_user_ids)
         if not content_base64:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Excel export not available (openpyxl not installed)")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Excel export not available (openpyxl not installed)",
+            )
         return success_response(
             UserExportResult(
                 filename="users_export.xlsx",
@@ -376,7 +402,9 @@ def create_user_export_task_api(
 @router.get("/export-tasks", response_model=ApiResponse[UserExportTaskListResult])
 def list_user_export_tasks_api(
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(require_permission_fast_user_id("user.users.export")),
+    current_user_id: int = Depends(
+        require_permission_fast_user_id("user.users.export")
+    ),
 ) -> ApiResponse[UserExportTaskListResult] | Response:
     task_limit = 20
     cache_key = _user_export_tasks_cache_key(
@@ -414,7 +442,9 @@ def get_user_export_task_api(
         created_by_user_id=int(current_user.id),
     )
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="导出任务不存在")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="导出任务不存在"
+        )
     return success_response(to_user_export_task_item(task))
 
 
@@ -430,14 +460,22 @@ def download_user_export_task_api(
         created_by_user_id=int(current_user.id),
     )
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="导出任务不存在")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="导出任务不存在"
+        )
     if task.status != USER_EXPORT_STATUS_SUCCEEDED:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导出任务尚未完成")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="导出任务尚未完成"
+        )
     if not task.storage_path or not task.file_name or not task.mime_type:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导出文件不存在，请重新导出")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="导出文件不存在，请重新导出"
+        )
     file_path = Path(task.storage_path)
     if not file_path.exists():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="导出文件已过期，请重新导出")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="导出文件已过期，请重新导出"
+        )
     headers = {
         "Content-Disposition": f'attachment; filename="{task.file_name}"',
         "Content-Type": task.mime_type,
@@ -449,7 +487,9 @@ def download_user_export_task_api(
     )
 
 
-@router.post("", response_model=ApiResponse[UserItem], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=ApiResponse[UserItem], status_code=status.HTTP_201_CREATED
+)
 def create_user_api(
     payload: UserCreate,
     request: Request,
@@ -458,9 +498,14 @@ def create_user_api(
 ) -> ApiResponse[UserItem]:
     user, error_message = create_user(db, payload)
     if error_message:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
     if not user:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create user")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create user",
+        )
 
     write_audit_log(
         db,
@@ -514,7 +559,9 @@ def get_user_detail(
 ) -> ApiResponse[UserItem]:
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
     return success_response(
         to_user_item(
             user,
@@ -536,7 +583,9 @@ def update_user_api(
 ) -> ApiResponse[UserItem]:
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     before_data = {
         "username": user.username,
@@ -552,9 +601,14 @@ def update_user_api(
         operator=current_user,
     )
     if error_message:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
     if not updated:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update user")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user",
+        )
 
     write_audit_log(
         db,
@@ -597,7 +651,9 @@ def enable_user_api(
 ) -> ApiResponse[UserLifecycleResult]:
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
     before_online_user_ids = list_online_user_ids(db, candidate_user_ids=[user.id])
     before_data = {
         "is_active": user.is_active,
@@ -613,9 +669,14 @@ def enable_user_api(
     }
     lifecycle_result, error_message = set_user_active(db, user=user, active=True)
     if error_message:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
     if not lifecycle_result:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to enable user")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to enable user",
+        )
     updated, lifecycle_change = lifecycle_result
     write_audit_log(
         db,
@@ -661,10 +722,14 @@ def disable_user_api(
 ) -> ApiResponse[UserLifecycleResult]:
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
     remark = (payload.remark or "").strip()
     if not remark:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="停用原因不能为空")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="停用原因不能为空"
+        )
     before_online_user_ids = list_online_user_ids(db, candidate_user_ids=[user.id])
     before_data = {
         "is_active": user.is_active,
@@ -680,9 +745,14 @@ def disable_user_api(
     }
     lifecycle_result, error_message = set_user_active(db, user=user, active=False)
     if error_message:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
     if not lifecycle_result:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to disable user")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to disable user",
+        )
     updated, lifecycle_change = lifecycle_result
     write_audit_log(
         db,
@@ -738,7 +808,9 @@ def disable_user_api(
     )
 
 
-@router.post("/{user_id}/reset-password", response_model=ApiResponse[UserPasswordResetResult])
+@router.post(
+    "/{user_id}/reset-password", response_model=ApiResponse[UserPasswordResetResult]
+)
 def reset_password_api(
     user_id: int,
     request: Request,
@@ -748,10 +820,14 @@ def reset_password_api(
 ) -> ApiResponse[UserPasswordResetResult]:
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
     remark = payload.remark.strip()
     if not remark:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="重置原因不能为空")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="重置原因不能为空"
+        )
     before_online_user_ids = list_online_user_ids(db, candidate_user_ids=[user.id])
     before_data = {
         "is_online": user.id in before_online_user_ids,
@@ -774,9 +850,14 @@ def reset_password_api(
         new_password=payload.password,
     )
     if error_message:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
     if not reset_result:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset password",
+        )
     updated, reset_change = reset_result
     write_audit_log(
         db,
@@ -850,11 +931,16 @@ def delete_user_api(
     current_user: User = Depends(require_permission("user.users.delete")),
 ) -> ApiResponse[UserDeleteResult]:
     if user_id == current_user.id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete current login user")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete current login user",
+        )
 
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     remark = payload.remark.strip()
     before_online_user_ids = list_online_user_ids(db, candidate_user_ids=[user.id])
@@ -877,9 +963,14 @@ def delete_user_api(
 
     deleted_result, error_message = delete_user(db, user=user)
     if error_message:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
     if not deleted_result:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete user")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete user",
+        )
     deleted, lifecycle_change = deleted_result
 
     write_audit_log(
@@ -894,7 +985,9 @@ def delete_user_api(
         after_data={
             "is_deleted": deleted.is_deleted,
             "is_active": deleted.is_active,
-            "deleted_at": deleted.deleted_at.isoformat() if deleted.deleted_at else None,
+            "deleted_at": deleted.deleted_at.isoformat()
+            if deleted.deleted_at
+            else None,
             "forced_offline_session_count": lifecycle_change.forced_offline_session_count,
             "cleared_online_status": lifecycle_change.cleared_online_status,
         },
@@ -930,7 +1023,9 @@ def restore_user_api(
 ) -> ApiResponse[UserLifecycleResult]:
     user = get_user_by_id(db, user_id, include_deleted=True)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     remark = payload.remark.strip()
     before_data = {
@@ -944,9 +1039,14 @@ def restore_user_api(
 
     restored_result, error_message = restore_user(db, user=user)
     if error_message:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
     if not restored_result:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to restore user")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to restore user",
+        )
     restored, lifecycle_change = restored_result
 
     write_audit_log(
@@ -961,7 +1061,9 @@ def restore_user_api(
         after_data={
             "is_deleted": restored.is_deleted,
             "is_active": restored.is_active,
-            "deleted_at": restored.deleted_at.isoformat() if restored.deleted_at else None,
+            "deleted_at": restored.deleted_at.isoformat()
+            if restored.deleted_at
+            else None,
         },
         ip_address=request.client.host if request and request.client else None,
         terminal_info=request.headers.get("user-agent") if request else None,

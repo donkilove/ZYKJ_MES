@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.message import Message
 
 
 class MessageRecipient(Base, TimestampMixin):
@@ -46,7 +50,7 @@ class MessageRecipient(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True, index=True
     )
 
-    message: Mapped["Message"] = relationship("Message", back_populates="recipients")
+    message: Mapped[Message] = relationship("Message", back_populates="recipients")
 
     __table_args__ = (
         UniqueConstraint(

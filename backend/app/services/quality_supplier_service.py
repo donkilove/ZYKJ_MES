@@ -37,7 +37,7 @@ def list_suppliers(
         stmt = stmt.where(Supplier.is_enabled == enabled)
     stmt = stmt.order_by(Supplier.is_enabled.desc(), Supplier.updated_at.desc(), Supplier.id.desc())
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
-    rows = db.execute(stmt).scalars().all()
+    rows = list(db.execute(stmt).scalars().all())
     return total, rows
 
 

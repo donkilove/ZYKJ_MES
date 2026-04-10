@@ -16,7 +16,10 @@ from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.me import ChangePasswordRequest, CurrentSessionResult, ProfileResult
 from app.services.audit_service import write_audit_log
-from app.services.session_service import get_current_session_projection, mark_session_logout
+from app.services.session_service import (
+    get_current_session_projection,
+    mark_session_logout,
+)
 from app.services.user_service import change_user_password
 
 
@@ -56,13 +59,13 @@ def _set_my_session_response_bytes(cache_key: str, payload: dict[str, object]) -
     return payload_bytes
 
 
-def _invalidate_my_session_response_cache_by_session_token_id(session_token_id: str) -> None:
+def _invalidate_my_session_response_cache_by_session_token_id(
+    session_token_id: str,
+) -> None:
     key_suffix = f":{session_token_id}"
     with _ME_SESSION_RESPONSE_CACHE_LOCK:
         expired_keys = [
-            key
-            for key in _ME_SESSION_RESPONSE_CACHE
-            if key.endswith(key_suffix)
+            key for key in _ME_SESSION_RESPONSE_CACHE if key.endswith(key_suffix)
         ]
         for key in expired_keys:
             _ME_SESSION_RESPONSE_CACHE.pop(key, None)
@@ -75,11 +78,9 @@ def get_my_profile(
 ) -> ApiResponse[ProfileResult]:
     stage_name = None
     if current_user.stage_id is not None:
-        stage_name = (
-            db.execute(
-                select(ProcessStage.name).where(ProcessStage.id == current_user.stage_id)
-            ).scalar_one_or_none()
-        )
+        stage_name = db.execute(
+            select(ProcessStage.name).where(ProcessStage.id == current_user.stage_id)
+        ).scalar_one_or_none()
     return success_response(
         ProfileResult(
             id=current_user.id,
@@ -122,11 +123,10 @@ def change_my_password(
             status_code=status.HTTP_400_BAD_REQUEST, detail=error or "修改密码失败"
         )
 
-    sid = None
     try:
         payload_token = decode_access_token(token)
         sid = str(payload_token.get("sid") or "").strip() or None
-    except Exception:
+    except ValueError:
         sid = None
     if sid:
         _invalidate_my_session_response_cache_by_session_token_id(sid)
@@ -161,7 +161,7 @@ def get_my_session(
         payload_token = decode_access_token(token)
         sid = str(payload_token.get("sid") or "").strip() or None
         user_id = int(str(payload_token.get("sub") or "").strip())
-    except Exception:
+    except ValueError:
         raise credentials_error
     if not sid:
         raise HTTPException(

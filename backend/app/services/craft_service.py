@@ -6,6 +6,7 @@ import io
 import json
 from datetime import UTC, datetime
 from dataclasses import dataclass
+from typing import Any, cast
 from math import ceil
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -275,12 +276,12 @@ def list_stages(
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(
             or_(
-                ProcessStage.code.ilike(like_pattern),
-                ProcessStage.name.ilike(like_pattern),
+                cast(Any, ProcessStage.code).ilike(like_pattern),
+                cast(Any, ProcessStage.name).ilike(like_pattern),
             )
         )
     if enabled is not None:
-        stmt = stmt.where(ProcessStage.is_enabled.is_(enabled))
+        stmt = stmt.where(cast(Any, ProcessStage.is_enabled).is_(enabled))
 
     stmt = stmt.order_by(ProcessStage.sort_order.asc(), ProcessStage.id.asc())
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
@@ -293,7 +294,7 @@ def list_stages(
         .scalars()
         .all()
     )
-    return int(total), rows
+    return int(total), list(rows)
 
 
 def create_stage(
@@ -459,21 +460,21 @@ def list_craft_processes(
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(
             or_(
-                Process.code.ilike(like_pattern),
-                Process.name.ilike(like_pattern),
+                cast(Any, Process.code).ilike(like_pattern),
+                cast(Any, Process.name).ilike(like_pattern),
             )
         )
     if stage_id is not None:
         stmt = stmt.where(Process.stage_id == stage_id)
     if enabled is not None:
-        stmt = stmt.where(Process.is_enabled.is_(enabled))
+        stmt = stmt.where(cast(Any, Process.is_enabled).is_(enabled))
 
     stmt = stmt.order_by(Process.id.asc())
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     rows = (
         db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     )
-    return int(total), rows
+    return int(total), list(rows)
 
 
 def _ensure_process_name_unique_in_stage(
@@ -618,7 +619,7 @@ def _set_product_default_template(
         db.execute(
             select(ProductProcessTemplate).where(
                 ProductProcessTemplate.product_id == product_id,
-                ProductProcessTemplate.is_enabled.is_(True),
+                cast(Any, ProductProcessTemplate.is_enabled).is_(True),
                 ProductProcessTemplate.lifecycle_status == TEMPLATE_LIFECYCLE_PUBLISHED,
             )
         )
@@ -640,20 +641,20 @@ def _load_template_step_process_map(
     process_ids = {item.process_id for item in steps}
 
     stage_rows = (
-        db.execute(select(ProcessStage).where(ProcessStage.id.in_(stage_ids)))
+        db.execute(select(ProcessStage).where(cast(Any, ProcessStage.id).in_(stage_ids)))
         .scalars()
         .all()
     )
     process_rows = (
-        db.execute(select(Process).where(Process.id.in_(process_ids))).scalars().all()
+        db.execute(select(Process).where(cast(Any, Process.id).in_(process_ids))).scalars().all()
     )
     stage_by_id = {row.id: row for row in stage_rows}
     process_by_id = {row.id: row for row in process_rows}
 
     result: list[TemplateStepResolvedItem] = []
     for item in sorted(steps, key=lambda payload: payload.step_order):
-        stage = stage_by_id.get(item.stage_id)
-        process = process_by_id.get(item.process_id)
+        stage = cast(ProcessStage | None, stage_by_id.get(item.stage_id))
+        process = cast(Process | None, process_by_id.get(item.process_id))
         if not stage:
             raise ValueError(f"Stage not found: {item.stage_id}")
         if not process:
@@ -796,16 +797,16 @@ def list_templates(
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(
             or_(
-                Product.name.ilike(like_pattern),
-                ProductProcessTemplate.template_name.ilike(like_pattern),
+                cast(Any, Product.name).ilike(like_pattern),
+                cast(Any, ProductProcessTemplate.template_name).ilike(like_pattern),
             )
         )
     if product_category is not None and product_category.strip():
         stmt = stmt.where(Product.category == product_category.strip())
     if is_default is not None:
-        stmt = stmt.where(ProductProcessTemplate.is_default.is_(is_default))
+        stmt = stmt.where(cast(Any, ProductProcessTemplate.is_default).is_(is_default))
     if enabled is not None:
-        stmt = stmt.where(ProductProcessTemplate.is_enabled.is_(enabled))
+        stmt = stmt.where(cast(Any, ProductProcessTemplate.is_enabled).is_(enabled))
     if lifecycle_status is not None:
         stmt = stmt.where(
             ProductProcessTemplate.lifecycle_status
@@ -823,7 +824,7 @@ def list_templates(
     rows = (
         db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     )
-    return int(total), rows
+    return int(total), list(rows)
 
 
 def _build_user_stage_reference_items(
@@ -838,7 +839,7 @@ def _build_user_stage_reference_items(
         users = db.execute(
             select(User, ProcessStage)
             .join(ProcessStage, ProcessStage.id == User.stage_id)
-            .where(User.stage_id.in_(stage_ids), User.is_deleted.is_(False))
+            .where(cast(Any, User.stage_id).in_(stage_ids), cast(Any, User.is_deleted).is_(False))
             .order_by(ProcessStage.sort_order.asc(), User.id.asc())
         ).all()
         for user, stage in users:
@@ -960,7 +961,7 @@ def list_template_versions(
     *,
     template_id: int,
 ) -> list[ProductProcessTemplateRevision]:
-    return (
+    return list(
         db.execute(
             select(ProductProcessTemplateRevision)
             .where(ProductProcessTemplateRevision.template_id == template_id)
@@ -1133,7 +1134,7 @@ def list_system_master_template_versions(
     db: Session,
 ) -> SystemMasterTemplateVersionResult:
     def _load_rows() -> list[CraftSystemMasterTemplateRevision]:
-        return (
+        return list(
             db.execute(
                 select(CraftSystemMasterTemplateRevision)
                 .where(
@@ -1215,8 +1216,9 @@ def create_template(
     steps: list[dict[str, object]],
     operator: User,
 ) -> ProductProcessTemplate:
-    product = (
-        db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    product = cast(
+        Product | None,
+        db.execute(select(Product).where(Product.id == product_id)).scalars().first(),
     )
     if not product:
         raise ValueError("Product not found")
@@ -1226,7 +1228,7 @@ def create_template(
             select(ProductProcessTemplate).where(
                 ProductProcessTemplate.product_id == product_id,
                 ProductProcessTemplate.template_name == normalized_name,
-                ProductProcessTemplate.is_enabled.is_(True),
+                cast(Any, ProductProcessTemplate.is_enabled).is_(True),
             )
         )
         .scalars()
@@ -1268,7 +1270,7 @@ def _count_future_production_records(
         select(func.count())
         .select_from(ProductionRecord)
         .where(
-            ProductionRecord.order_process_id.in_(order_process_ids),
+            cast(Any, ProductionRecord.order_process_id).in_(order_process_ids),
             ProductionRecord.production_quantity > 0,
         )
     ).scalar_one()
@@ -1460,7 +1462,7 @@ def update_template(
     sync_orders: bool,
     operator: User,
 ) -> tuple[ProductProcessTemplate, TemplateSyncResult]:
-    del sync_orders  # Sync is handled by explicit publish/rollback actions.
+    _ = sync_orders  # Sync is handled by explicit publish/rollback actions.
     if template.lifecycle_status != TEMPLATE_LIFECYCLE_DRAFT:
         raise ValueError("已发布或已归档模板不可直接编辑，请先创建草稿后再修改")
 
@@ -1471,7 +1473,7 @@ def update_template(
                 ProductProcessTemplate.product_id == template.product_id,
                 ProductProcessTemplate.template_name == normalized_name,
                 ProductProcessTemplate.id != template.id,
-                ProductProcessTemplate.is_enabled.is_(True),
+                cast(Any, ProductProcessTemplate.is_enabled).is_(True),
             )
         )
         .scalars()
@@ -1599,7 +1601,6 @@ def analyze_template_impact(
         dry_run=True,
     )
     reason_by_order_id = {item.order_id: item.reason for item in preview.reasons}
-    status_by_order_id = {item.order_id: item.order_status for item in preview.reasons}
     blocked_order_ids = set(reason_by_order_id.keys())
 
     active_orders = db.execute(
@@ -1930,8 +1931,9 @@ def get_craft_kanban_process_metrics(
     end_date: datetime | None = None,
 ) -> CraftKanbanProcessMetricsResult:
     normalized_limit = max(1, min(int(limit), CRAFT_KANBAN_SAMPLE_LIMIT_MAX))
-    product = (
-        db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    product = cast(
+        Product | None,
+        db.execute(select(Product).where(Product.id == product_id)).scalars().first(),
     )
     if product is None:
         raise ValueError("Product not found")
@@ -1941,9 +1943,9 @@ def get_craft_kanban_process_metrics(
         ProductionOrderProcess.status == PROCESS_STATUS_COMPLETED,
     ]
     if stage_id is not None:
-        filters.append(ProductionOrderProcess.stage_id == stage_id)
+        filters.append(cast(Any, ProductionOrderProcess.stage_id) == stage_id)
     if process_id is not None:
-        filters.append(ProductionOrderProcess.process_id == process_id)
+        filters.append(cast(Any, ProductionOrderProcess.process_id) == process_id)
     if start_date is not None:
         filters.append(
             ProductionOrderProcess.updated_at >= _normalize_kanban_datetime(start_date)
@@ -1997,7 +1999,7 @@ def get_craft_kanban_process_metrics(
     if stage_ids:
         stage_rows = db.execute(
             select(ProcessStage.id, ProcessStage.sort_order).where(
-                ProcessStage.id.in_(set(stage_ids))
+                cast(Any, ProcessStage.id).in_(set(stage_ids))
             )
         ).all()
         stage_sort_map = {
@@ -2124,16 +2126,16 @@ def export_templates(
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(
             or_(
-                Product.name.ilike(like_pattern),
-                ProductProcessTemplate.template_name.ilike(like_pattern),
+                cast(Any, Product.name).ilike(like_pattern),
+                cast(Any, ProductProcessTemplate.template_name).ilike(like_pattern),
             )
         )
     if product_category:
         stmt = stmt.where(Product.category == product_category.strip())
     if is_default is not None:
-        stmt = stmt.where(ProductProcessTemplate.is_default.is_(is_default))
+        stmt = stmt.where(cast(Any, ProductProcessTemplate.is_default).is_(is_default))
     if enabled is not None:
-        stmt = stmt.where(ProductProcessTemplate.is_enabled.is_(enabled))
+        stmt = stmt.where(cast(Any, ProductProcessTemplate.is_enabled).is_(enabled))
     if lifecycle_status is not None:
         normalized_status = _normalize_template_lifecycle_status(lifecycle_status)
         stmt = stmt.where(ProductProcessTemplate.lifecycle_status == normalized_status)
@@ -2146,13 +2148,13 @@ def export_templates(
         stmt = stmt.where(
             ProductProcessTemplate.updated_at <= _normalize_kanban_datetime(updated_to)
         )
-    return db.execute(stmt).scalars().all()
+    return list(db.execute(stmt).scalars().all())
 
 
 def import_templates(
     db: Session,
     *,
-    items: list[dict[str, object]],
+    items: list[dict[str, Any]],
     overwrite_existing: bool,
     operator: User,
 ) -> tuple[list[ProductProcessTemplate], int, int, int, list[str]]:
@@ -2171,7 +2173,7 @@ def import_templates(
                 if raw_product_id is not None:
                     product = (
                         db.execute(
-                            select(Product).where(Product.id == int(raw_product_id))
+                            select(Product).where(cast(Any, Product.id) == int(raw_product_id))
                         )
                         .scalars()
                         .first()
@@ -2200,18 +2202,19 @@ def import_templates(
                 template_name = _normalize_text(
                     str(item.get("template_name") or ""), field_name="Template name"
                 )
-                existing = (
+                existing = cast(
+                    ProductProcessTemplate | None,
                     db.execute(
                         select(ProductProcessTemplate)
                         .where(
-                            ProductProcessTemplate.product_id == product.id,
-                            ProductProcessTemplate.template_name == template_name,
+                            cast(Any, ProductProcessTemplate.product_id) == product.id,
+                            cast(Any, ProductProcessTemplate.template_name) == template_name,
                         )
                         .options(selectinload(ProductProcessTemplate.steps))
-                        .order_by(ProductProcessTemplate.id.desc())
+                        .order_by(cast(Any, ProductProcessTemplate.id).desc())
                     )
                     .scalars()
-                    .first()
+                    .first(),
                 )
                 if existing is not None and not overwrite_existing:
                     skipped += 1
@@ -2225,7 +2228,7 @@ def import_templates(
                     skipped += 1
                     continue
                 step_payload = _build_template_steps_payload(
-                    [dict(step) for step in steps]
+                    [dict(step) for step in cast(list[Any], steps)]
                 )
                 step_processes = _load_template_step_process_map(db, steps=step_payload)
 
@@ -2332,7 +2335,7 @@ def copy_template(
             select(ProductProcessTemplate).where(
                 ProductProcessTemplate.product_id == template.product_id,
                 ProductProcessTemplate.template_name == normalized_name,
-                ProductProcessTemplate.is_enabled.is_(True),
+                cast(Any, ProductProcessTemplate.is_enabled).is_(True),
             )
         )
         .scalars()
@@ -2388,8 +2391,9 @@ def copy_template_from_system_master(
     operator: User,
 ) -> ProductProcessTemplate:
     """从系统母版套版，创建指定产品的工艺模板草稿。"""
-    product = (
-        db.execute(select(Product).where(Product.id == product_id)).scalars().first()
+    product = cast(
+        Product | None,
+        db.execute(select(Product).where(Product.id == product_id)).scalars().first(),
     )
     if product is None:
         raise ValueError("Product not found")
@@ -2399,7 +2403,7 @@ def copy_template_from_system_master(
             select(ProductProcessTemplate).where(
                 ProductProcessTemplate.product_id == product.id,
                 ProductProcessTemplate.template_name == normalized_name,
-                ProductProcessTemplate.is_enabled.is_(True),
+                cast(Any, ProductProcessTemplate.is_enabled).is_(True),
             )
         )
         .scalars()
@@ -2465,7 +2469,7 @@ def copy_template_to_product(
             select(ProductProcessTemplate).where(
                 ProductProcessTemplate.product_id == target_product.id,
                 ProductProcessTemplate.template_name == normalized_name,
-                ProductProcessTemplate.is_enabled.is_(True),
+                cast(Any, ProductProcessTemplate.is_enabled).is_(True),
             )
         )
         .scalars()
@@ -2555,7 +2559,7 @@ def is_valid_stage_code(db: Session, code: str) -> bool:
         db.execute(
             select(ProcessStage.id).where(
                 ProcessStage.code == normalized,
-                ProcessStage.is_enabled.is_(True),
+                cast(Any, ProcessStage.is_enabled).is_(True),
             )
         )
         .scalars()
@@ -2565,10 +2569,10 @@ def is_valid_stage_code(db: Session, code: str) -> bool:
 
 
 def list_enabled_stage_options(db: Session) -> list[ProcessStage]:
-    return (
+    return list(
         db.execute(
             select(ProcessStage)
-            .where(ProcessStage.is_enabled.is_(True))
+            .where(cast(Any, ProcessStage.is_enabled).is_(True))
             .order_by(ProcessStage.sort_order.asc(), ProcessStage.id.asc())
         )
         .scalars()
@@ -2584,12 +2588,12 @@ def list_enabled_process_options(
     stmt = (
         select(Process)
         .options(selectinload(Process.stage))
-        .where(Process.is_enabled.is_(True))
+        .where(cast(Any, Process.is_enabled).is_(True))
     )
     if stage_id is not None:
         stmt = stmt.where(Process.stage_id == stage_id)
     stmt = stmt.order_by(Process.stage_id.asc(), Process.code.asc(), Process.id.asc())
-    return db.execute(stmt).scalars().all()
+    return list(db.execute(stmt).scalars().all())
 
 
 def resolve_user_stage_codes(db: Session, *, process_codes: list[str]) -> set[str]:
@@ -2603,9 +2607,9 @@ def resolve_user_stage_codes(db: Session, *, process_codes: list[str]) -> set[st
             select(ProcessStage.code)
             .join(
                 Process,
-                and_(Process.stage_id == ProcessStage.id, Process.is_enabled.is_(True)),
+                and_(Process.stage_id == ProcessStage.id, cast(Any, Process.is_enabled).is_(True)),
             )
-            .where(Process.code.in_(normalized_codes))
+            .where(cast(Any, Process.code).in_(normalized_codes))
         )
         .scalars()
         .all()
@@ -2717,7 +2721,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
     users = (
         db.execute(
             select(User)
-            .where(User.stage_id == stage.id, User.is_deleted.is_(False))
+            .where(User.stage_id == stage.id, cast(Any, User.is_deleted).is_(False))
             .order_by(User.id.asc())
         )
         .scalars()
@@ -2750,7 +2754,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
         system_master_templates = (
             db.execute(
                 select(CraftSystemMasterTemplate)
-                .where(CraftSystemMasterTemplate.id.in_(system_master_template_ids))
+                .where(cast(Any, CraftSystemMasterTemplate.id).in_(system_master_template_ids))
                 .order_by(CraftSystemMasterTemplate.id.asc())
             )
             .scalars()
@@ -2764,9 +2768,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                     ref_code=_reference_code(
                         f"MASTER-{template.id}", fallback_id=template.id
                     ),
-                    ref_name=template.name
-                    if hasattr(template, "name") and template.name
-                    else "系统母版",
+                    ref_name=getattr(template, "name", "系统母版") or "系统母版",
                     detail=f"v{template.version}",
                     ref_status="正在使用",
                     jump_module="craft",
@@ -2825,7 +2827,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
         templates = (
             db.execute(
                 select(ProductProcessTemplate)
-                .where(ProductProcessTemplate.id.in_(template_step_ids))
+                .where(cast(Any, ProductProcessTemplate.id).in_(template_step_ids))
                 .order_by(ProductProcessTemplate.id.asc())
             )
             .scalars()
@@ -2909,7 +2911,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
         orders = (
             db.execute(
                 select(ProductionOrder)
-                .where(ProductionOrder.id.in_(order_process_ids))
+                .where(cast(Any, ProductionOrder.id).in_(order_process_ids))
                 .order_by(ProductionOrder.id.asc())
             )
             .scalars()
@@ -2938,7 +2940,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
         maintenance_plans = (
             db.execute(
                 select(MaintenancePlan)
-                .where(MaintenancePlan.execution_process_code.in_(process_codes))
+                .where(cast(Any, MaintenancePlan.execution_process_code).in_(process_codes))
                 .order_by(MaintenancePlan.id.asc())
             )
             .scalars()
@@ -2950,7 +2952,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                     ref_type="maintenance_plan",
                     ref_id=plan.id,
                     ref_code=_reference_code(
-                        plan.plan_code if hasattr(plan, "plan_code") else None,
+                        getattr(plan, "plan_code", None),
                         fallback_id=plan.id,
                     ),
                     ref_name=f"保养计划#{plan.id}",
@@ -2966,7 +2968,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
             db.execute(
                 select(MaintenanceWorkOrder)
                 .where(
-                    MaintenanceWorkOrder.source_execution_process_code.in_(
+                    cast(Any, MaintenanceWorkOrder.source_execution_process_code).in_(
                         process_codes
                     )
                 )
@@ -2982,9 +2984,7 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                     ref_type="maintenance_order",
                     ref_id=work_order.id,
                     ref_code=_reference_code(
-                        work_order.work_order_code
-                        if hasattr(work_order, "work_order_code")
-                        else None,
+                        getattr(work_order, "work_order_code", None),
                         fallback_id=work_order.id,
                     ),
                     ref_name=f"保养工单#{work_order.id}",
@@ -3002,8 +3002,8 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 select(ProductionScrapStatistics)
                 .where(
                     or_(
-                        ProductionScrapStatistics.process_code.in_(process_codes),
-                        ProductionScrapStatistics.process_id.in_(
+                        cast(Any, ProductionScrapStatistics.process_code).in_(process_codes),
+                        cast(Any, ProductionScrapStatistics.process_id).in_(
                             [p.id for p in processes]
                         ),
                     )
@@ -3033,8 +3033,8 @@ def get_stage_references(db: Session, *, stage: ProcessStage) -> StageReferenceR
                 select(RepairDefectPhenomenon)
                 .where(
                     or_(
-                        RepairDefectPhenomenon.process_code.in_(process_codes),
-                        RepairDefectPhenomenon.process_id.in_(
+                        cast(Any, RepairDefectPhenomenon.process_code).in_(process_codes),
+                        cast(Any, RepairDefectPhenomenon.process_id).in_(
                             [p.id for p in processes]
                         ),
                     )
@@ -3084,7 +3084,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
         system_master_templates = (
             db.execute(
                 select(CraftSystemMasterTemplate)
-                .where(CraftSystemMasterTemplate.id.in_(system_master_template_ids))
+                .where(cast(Any, CraftSystemMasterTemplate.id).in_(system_master_template_ids))
                 .order_by(CraftSystemMasterTemplate.id.asc())
             )
             .scalars()
@@ -3098,9 +3098,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                     ref_code=_reference_code(
                         f"MASTER-{template.id}", fallback_id=template.id
                     ),
-                    ref_name=template.name
-                    if hasattr(template, "name") and template.name
-                    else "系统母版",
+                    ref_name=getattr(template, "name", "系统母版") or "系统母版",
                     detail=f"v{template.version}",
                     ref_status="正在使用",
                     jump_module="craft",
@@ -3159,7 +3157,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
         templates = (
             db.execute(
                 select(ProductProcessTemplate)
-                .where(ProductProcessTemplate.id.in_(template_step_ids))
+                .where(cast(Any, ProductProcessTemplate.id).in_(template_step_ids))
                 .order_by(ProductProcessTemplate.id.asc())
             )
             .scalars()
@@ -3243,7 +3241,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
         orders = (
             db.execute(
                 select(ProductionOrder)
-                .where(ProductionOrder.id.in_(order_process_ids))
+                .where(cast(Any, ProductionOrder.id).in_(order_process_ids))
                 .order_by(ProductionOrder.id.asc())
             )
             .scalars()
@@ -3283,7 +3281,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                 ref_type="maintenance_plan",
                 ref_id=plan.id,
                 ref_code=_reference_code(
-                    plan.plan_code if hasattr(plan, "plan_code") else None,
+                    getattr(plan, "plan_code", None),
                     fallback_id=plan.id,
                 ),
                 ref_name=f"保养计划#{plan.id}",
@@ -3311,9 +3309,7 @@ def get_process_references(db: Session, *, process: Process) -> ProcessReference
                 ref_type="maintenance_order",
                 ref_id=work_order.id,
                 ref_code=_reference_code(
-                    work_order.work_order_code
-                    if hasattr(work_order, "work_order_code")
-                    else None,
+                    getattr(work_order, "work_order_code", None),
                     fallback_id=work_order.id,
                 ),
                 ref_name=f"保养工单#{work_order.id}",
@@ -3492,7 +3488,7 @@ def _list_template_reuse_rows(
     *,
     template_id: int,
 ) -> list[ProductProcessTemplate]:
-    return (
+    return list(
         db.execute(
             select(ProductProcessTemplate)
             .where(ProductProcessTemplate.source_template_id == template_id)
@@ -3588,7 +3584,6 @@ def get_template_references(
     for order_id, order_code, order_status in active_orders:
         can_sync = order_status == ORDER_STATUS_PENDING
         blocked = order_status == ORDER_STATUS_IN_PROGRESS
-        active = can_sync or blocked
         ref_status = "可同步" if can_sync else ("不可同步" if blocked else "历史引用")
         items.append(
             TemplateReferenceItem(

@@ -4,10 +4,12 @@ import json
 from datetime import date
 import time
 from threading import RLock
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permission, require_permission_fast
@@ -238,6 +240,23 @@ def _to_quality_repair_order_detail_item(
     event_logs: list[OrderEventLog] | None = None,
     defect_record_map: dict[int, ProductionRecord] | None = None,
 ) -> RepairOrderDetailItem:
+    defect_rows_result: list[RepairDefectPhenomenonItem] = []
+    for item in (row.defect_rows or []):
+        rec = defect_record_map.get(item.id) if defect_record_map else None
+        defect_rows_result.append(
+            RepairDefectPhenomenonItem(
+                id=item.id,
+                phenomenon=item.phenomenon,
+                quantity=item.quantity,
+                production_record_id=rec.id if rec else None,
+                production_sub_order_id=rec.sub_order_id if rec else None,
+                production_record_type=rec.record_type if rec else None,
+                production_record_quantity=rec.production_quantity if rec else None,
+                production_record_created_at=rec.created_at if rec else None,
+                production_record_operator_user_id=rec.operator_user_id if rec else None,
+            )
+        )
+
     return RepairOrderDetailItem(
         id=row.id,
         repair_order_code=row.repair_order_code,
@@ -260,36 +279,7 @@ def _to_quality_repair_order_detail_item(
         completed_at=row.completed_at,
         repair_operator_user_id=row.repair_operator_user_id,
         repair_operator_username=row.repair_operator_username,
-        defect_rows=[
-            RepairDefectPhenomenonItem(
-                id=item.id,
-                phenomenon=item.phenomenon,
-                quantity=item.quantity,
-                production_record_id=defect_record_map.get(item.id).id
-                if defect_record_map and defect_record_map.get(item.id)
-                else None,
-                production_sub_order_id=defect_record_map.get(item.id).sub_order_id
-                if defect_record_map and defect_record_map.get(item.id)
-                else None,
-                production_record_type=defect_record_map.get(item.id).record_type
-                if defect_record_map and defect_record_map.get(item.id)
-                else None,
-                production_record_quantity=defect_record_map.get(
-                    item.id
-                ).production_quantity
-                if defect_record_map and defect_record_map.get(item.id)
-                else None,
-                production_record_created_at=defect_record_map.get(item.id).created_at
-                if defect_record_map and defect_record_map.get(item.id)
-                else None,
-                production_record_operator_user_id=defect_record_map.get(
-                    item.id
-                ).operator_user_id
-                if defect_record_map and defect_record_map.get(item.id)
-                else None,
-            )
-            for item in (row.defect_rows or [])
-        ],
+        defect_rows=defect_rows_result,
         cause_rows=[
             RepairCauseDetailItem(
                 id=item.id,
@@ -484,7 +474,7 @@ def submit_disposition_api(
     db.commit()
 
     if payload.final_judgment != "accept":
-        operator_user_id = detail.get("operator_user_id")
+        operator_user_id = cast(int | None, detail.get("operator_user_id"))
         if operator_user_id and operator_user_id != current_user.id:
             create_message_for_users(
                 db,
@@ -820,7 +810,9 @@ def list_suppliers_api(
 def get_supplier_detail_api(
     supplier_id: int,
     db: Session = Depends(get_db),
-    _: None = Depends(require_permission_fast(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)),
+    _: None = Depends(
+        require_permission_fast(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)
+    ),
 ) -> ApiResponse[SupplierItem] | Response:
     cache_key = _quality_read_cache_key("supplier_detail", {"supplier_id": supplier_id})
     cached_payload = _get_quality_read_cached_response_bytes(cache_key)
@@ -877,7 +869,7 @@ def create_supplier_api(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
-    except Exception:
+    except SQLAlchemyError:
         db.rollback()
         raise
     _invalidate_quality_read_cache()
@@ -926,7 +918,7 @@ def update_supplier_api(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
-    except Exception:
+    except SQLAlchemyError:
         db.rollback()
         raise
     _invalidate_quality_read_cache()
@@ -963,7 +955,7 @@ def delete_supplier_api(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
         ) from exc
-    except Exception:
+    except SQLAlchemyError:
         db.rollback()
         raise
     _invalidate_quality_read_cache()
@@ -1219,8 +1211,9 @@ def get_quality_repair_order_detail_api(
             unmatched_rows = list(production_rows)
             for defect_row in row.defect_rows:
                 if defect_row.production_record_id is not None:
-                    matched = production_record_map.get(
-                        int(defect_row.production_record_id)
+                    matched = cast(
+                        ProductionRecord | None,
+                        production_record_map.get(int(defect_row.production_record_id)),
                     )
                     if matched is not None:
                         defect_record_map[defect_row.id] = matched

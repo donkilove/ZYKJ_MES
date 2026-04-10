@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from typing import Any, cast
 
 from app.models.equipment import Equipment
 from app.models.equipment_rule import EquipmentRule
@@ -52,83 +53,43 @@ _EQUIPMENT_RUNTIME_PARAMETER_LIST_COLUMNS = (
 )
 
 
-def _to_rule_item(row: EquipmentRule) -> EquipmentRuleItem:
+def _to_rule_item(row: Any) -> EquipmentRuleItem:
     return EquipmentRuleItem(
-        id=row.id,
-        equipment_id=row.equipment_id,
-        equipment_type=row.equipment_type,
-        equipment_code=row.equipment_code,
-        equipment_name=row.equipment_name,
-        rule_code=row.rule_code,
-        rule_name=row.rule_name,
-        rule_type=row.rule_type,
-        condition_desc=row.condition_desc,
-        is_enabled=row.is_enabled,
-        effective_at=row.effective_at,
-        remark=row.remark,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        id=row.id if hasattr(row, "id") else row["id"],
+        equipment_id=row.equipment_id if hasattr(row, "equipment_id") else row["equipment_id"],
+        equipment_type=row.equipment_type if hasattr(row, "equipment_type") else row["equipment_type"],
+        equipment_code=row.equipment_code if hasattr(row, "equipment_code") else row["equipment_code"],
+        equipment_name=row.equipment_name if hasattr(row, "equipment_name") else row["equipment_name"],
+        rule_code=row.rule_code if hasattr(row, "rule_code") else row["rule_code"],
+        rule_name=row.rule_name if hasattr(row, "rule_name") else row["rule_name"],
+        rule_type=row.rule_type if hasattr(row, "rule_type") else row["rule_type"],
+        condition_desc=row.condition_desc if hasattr(row, "condition_desc") else row["condition_desc"],
+        is_enabled=row.is_enabled if hasattr(row, "is_enabled") else row["is_enabled"],
+        effective_at=row.effective_at if hasattr(row, "effective_at") else row["effective_at"],  # type: ignore
+        remark=row.remark if hasattr(row, "remark") else row["remark"],
+        created_at=row.created_at if hasattr(row, "created_at") else row["created_at"],
+        updated_at=row.updated_at if hasattr(row, "updated_at") else row["updated_at"],
     )
 
 
-def _to_rule_item_from_mapping(row: dict[str, object]) -> EquipmentRuleItem:
-    return EquipmentRuleItem(
-        id=row["id"],
-        equipment_id=row["equipment_id"],
-        equipment_type=row["equipment_type"],
-        equipment_code=row["equipment_code"],
-        equipment_name=row["equipment_name"],
-        rule_code=row["rule_code"],
-        rule_name=row["rule_name"],
-        rule_type=row["rule_type"],
-        condition_desc=row["condition_desc"],
-        is_enabled=row["is_enabled"],
-        effective_at=row["effective_at"],
-        remark=row["remark"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-    )
-
-
-def _to_param_item(row: EquipmentRuntimeParameter) -> EquipmentRuntimeParameterItem:
+def _to_param_item(row: Any) -> EquipmentRuntimeParameterItem:
     return EquipmentRuntimeParameterItem(
-        id=row.id,
-        equipment_id=row.equipment_id,
-        equipment_type=row.equipment_type,
-        equipment_code=row.equipment_code,
-        equipment_name=row.equipment_name,
-        param_code=row.param_code,
-        param_name=row.param_name,
-        unit=row.unit,
-        standard_value=row.standard_value,
-        upper_limit=row.upper_limit,
-        lower_limit=row.lower_limit,
-        effective_at=row.effective_at,
-        is_enabled=row.is_enabled,
-        remark=row.remark,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
-
-
-def _to_param_item_from_mapping(row: dict[str, object]) -> EquipmentRuntimeParameterItem:
-    return EquipmentRuntimeParameterItem(
-        id=row["id"],
-        equipment_id=row["equipment_id"],
-        equipment_type=row["equipment_type"],
-        equipment_code=row["equipment_code"],
-        equipment_name=row["equipment_name"],
-        param_code=row["param_code"],
-        param_name=row["param_name"],
-        unit=row["unit"],
-        standard_value=row["standard_value"],
-        upper_limit=row["upper_limit"],
-        lower_limit=row["lower_limit"],
-        effective_at=row["effective_at"],
-        is_enabled=row["is_enabled"],
-        remark=row["remark"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
+        id=row.id if hasattr(row, "id") else row["id"],
+        equipment_id=row.equipment_id if hasattr(row, "equipment_id") else row["equipment_id"],
+        equipment_type=row.equipment_type if hasattr(row, "equipment_type") else row["equipment_type"],
+        equipment_code=row.equipment_code if hasattr(row, "equipment_code") else row["equipment_code"],
+        equipment_name=row.equipment_name if hasattr(row, "equipment_name") else row["equipment_name"],
+        param_code=row.param_code if hasattr(row, "param_code") else row["param_code"],
+        param_name=row.param_name if hasattr(row, "param_name") else row["param_name"],
+        unit=row.unit if hasattr(row, "unit") else row["unit"],
+        standard_value=row.standard_value if hasattr(row, "standard_value") else row["standard_value"],  # type: ignore
+        upper_limit=row.upper_limit if hasattr(row, "upper_limit") else row["upper_limit"],  # type: ignore
+        lower_limit=row.lower_limit if hasattr(row, "lower_limit") else row["lower_limit"],  # type: ignore
+        effective_at=row.effective_at if hasattr(row, "effective_at") else row["effective_at"],  # type: ignore
+        is_enabled=row.is_enabled if hasattr(row, "is_enabled") else row["is_enabled"],
+        remark=row.remark if hasattr(row, "remark") else row["remark"],
+        created_at=row.created_at if hasattr(row, "created_at") else row["created_at"],
+        updated_at=row.updated_at if hasattr(row, "updated_at") else row["updated_at"],
     )
 
 
@@ -140,7 +101,10 @@ def _resolve_equipment_fields(
     eq = db.get(Equipment, equipment_id)
     if eq is None:
         raise ValueError("Equipment not found")
-    return eq.code, eq.name
+    return (
+        str(eq.code) if eq.code is not None else None,
+        str(eq.name) if eq.name is not None else None,
+    )
 
 
 def _normalize_required_text(value: str, *, field_name: str) -> str:
@@ -156,6 +120,7 @@ def _validate_parameter_limits(
     upper_limit,
     lower_limit,
 ) -> None:
+    _ = standard_value
     if (
         upper_limit is not None
         and lower_limit is not None
@@ -196,7 +161,7 @@ def list_equipment_rules(
         filters.append(EquipmentRule.is_enabled == is_enabled)
     if keyword:
         like = f"%{keyword.strip()}%"
-        filters.append(EquipmentRule.rule_name.ilike(like))
+        filters.append(cast(Any, EquipmentRule.rule_name).ilike(like))
     stmt = select(*_EQUIPMENT_RULE_LIST_COLUMNS).where(*filters)
     total = db.scalar(select(func.count(EquipmentRule.id)).where(*filters)) or 0
     rows = (
@@ -210,7 +175,7 @@ def list_equipment_rules(
     )
     return EquipmentRuleListResult(
         total=total,
-        items=[_to_rule_item_from_mapping(row) for row in rows],
+        items=[_to_rule_item(row) for row in rows],
     )
 
 
@@ -324,8 +289,8 @@ def list_runtime_parameters(
     if keyword:
         like = f"%{keyword.strip()}%"
         filters.append(
-            EquipmentRuntimeParameter.param_name.ilike(like)
-            | EquipmentRuntimeParameter.param_code.ilike(like)
+            cast(Any, EquipmentRuntimeParameter.param_name).ilike(like)
+            | cast(Any, EquipmentRuntimeParameter.param_code).ilike(like)
         )
     stmt = select(*_EQUIPMENT_RUNTIME_PARAMETER_LIST_COLUMNS).where(*filters)
     total = (
@@ -342,7 +307,7 @@ def list_runtime_parameters(
     )
     return EquipmentRuntimeParameterListResult(
         total=total,
-        items=[_to_param_item_from_mapping(row) for row in rows],
+        items=[_to_param_item(row) for row in rows],
     )
 
 

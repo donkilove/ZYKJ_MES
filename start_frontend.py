@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import time
 import urllib.error
@@ -19,7 +18,21 @@ LOCAL_NO_PROXY_ENTRIES = ("localhost", "127.0.0.1", "::1")
 
 
 def resolve_flutter() -> str | None:
-    in_path = shutil.which("flutter")
+    path_entries = [item for item in os.getenv("PATH", "").split(os.pathsep) if item]
+    windows_exts = os.getenv("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";")
+    in_path = None
+    for entry in path_entries:
+        candidates = [Path(entry) / "flutter"]
+        if os.name == "nt":
+            candidates.extend(
+                Path(entry) / f"flutter{ext.lower()}" for ext in windows_exts
+            )
+        for candidate in candidates:
+            if candidate.exists():
+                in_path = str(candidate)
+                break
+        if in_path:
+            break
     if in_path:
         return in_path
 

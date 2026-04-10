@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from threading import RLock
 import time
+from typing import Protocol
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -12,7 +13,10 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import TokenPayload
 from app.services.online_status_service import touch_user
-from app.services.authz_service import get_user_permission_codes, validate_permission_code
+from app.services.authz_service import (
+    get_user_permission_codes,
+    validate_permission_code,
+)
 from app.services.session_service import touch_session_by_token_id
 from app.services.user_service import get_user_for_auth
 
@@ -28,6 +32,32 @@ _SESSION_PERMISSION_DECISION_CACHE_LOCK = RLock()
 _SESSION_PERMISSION_DECISION_CACHE: dict[str, tuple[float, bool]] = {}
 _SESSION_PERMISSION_DECISION_CACHE_TTL_SECONDS = 20
 
+
+class _FastPermissionDependency(Protocol):
+    def __call__(
+        self,
+        token: str = ..., 
+        request: Request = ..., 
+        db: Session = ...,
+    ) -> None: ...
+
+
+class _FastPermissionUserDependency(Protocol):
+    def __call__(
+        self,
+        token: str = ..., 
+        request: Request = ..., 
+        db: Session = ...,
+    ) -> User: ...
+
+
+class _FastPermissionUserIdDependency(Protocol):
+    def __call__(
+        self,
+        token: str = ..., 
+        request: Request = ..., 
+        db: Session = ...,
+    ) -> int: ...
 
 def _allow_auth_user_cache(request: Request, session_token_id: str | None) -> bool:
     if not session_token_id:
@@ -82,7 +112,9 @@ def _forget_cached_auth_user(session_token_id: str | None) -> None:
         _AUTH_USER_CACHE.pop(session_token_id, None)
 
 
-def _session_permission_cache_key(*, session_token_id: str, permission_code: str) -> str:
+def _session_permission_cache_key(
+    *, session_token_id: str, permission_code: str
+) -> str:
     return f"{session_token_id}|{permission_code}"
 
 
@@ -169,7 +201,7 @@ def _decode_user_and_session_from_token(token: str) -> tuple[int, str | None]:
         payload = decode_access_token(token)
         token_data = TokenPayload(sub=payload.get("sub", ""))
         session_token_id = str(payload.get("sid") or "").strip() or None
-    except Exception:
+    except ValueError:
         raise credentials_error
     if not token_data.sub:
         raise credentials_error
@@ -251,11 +283,14 @@ def _authorize_permission_fast(
         session_token_id=sid,
         permission_code=permission_code,
     )
-    session_decision = _get_cached_session_permission_decision(session_permission_cache_key)
+    session_decision = _get_cached_session_permission_decision(
+        session_permission_cache_key
+    )
     if session_decision is not None:
         if not session_decision:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-        user: User | None = None
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            )
         if return_user:
             user = _load_valid_user_for_request(
                 db,
@@ -286,7 +321,9 @@ def _authorize_permission_fast(
         _set_cached_permission_decision(decision_cache_key, decision)
     _set_cached_session_permission_decision(session_permission_cache_key, decision)
     if not decision:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
     touch_user(user.id)
     if return_user:
         return user.id, user
@@ -322,7 +359,9 @@ def require_role_codes(allowed_role_codes: list[str]) -> Callable[[User], User]:
     def dependency(current_user: User = Depends(get_current_active_user)) -> User:
         user_role_codes = {role.code for role in current_user.roles}
         if not user_role_codes.intersection(set(allowed_role_codes)):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            )
         return current_user
 
     return dependency
@@ -346,13 +385,17 @@ def require_permission(permission_code: str) -> Callable[[User, Session], User]:
             decision = permission_code in effective_codes
             _set_cached_permission_decision(cache_key, decision)
         if not decision:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            )
         return current_user
 
     return dependency
 
 
-def require_any_permission(permission_codes: list[str]) -> Callable[[User, Session], User]:
+def require_any_permission(
+    permission_codes: list[str],
+) -> Callable[[User, Session], User]:
     normalized_codes = [code for code in permission_codes if code]
     if not normalized_codes:
         raise ValueError("permission_codes is required")
@@ -376,7 +419,9 @@ def require_any_permission(permission_codes: list[str]) -> Callable[[User, Sessi
             decision = bool(normalized_code_set.intersection(effective_codes))
             _set_cached_permission_decision(cache_key, decision)
         if not decision:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            )
         return current_user
 
     return dependency
@@ -400,10 +445,14 @@ def _authorize_any_permission_fast(
         session_token_id=sid,
         permission_code=permission_key,
     )
-    session_decision = _get_cached_session_permission_decision(session_permission_cache_key)
+    session_decision = _get_cached_session_permission_decision(
+        session_permission_cache_key
+    )
     if session_decision is not None:
         if not session_decision:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            )
         touch_user(user_id)
         return user_id
 
@@ -425,14 +474,16 @@ def _authorize_any_permission_fast(
         _set_cached_permission_decision(decision_cache_key, decision)
     _set_cached_session_permission_decision(session_permission_cache_key, decision)
     if not decision:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
     touch_user(user.id)
     return user.id
 
 
 def require_any_permission_fast(
     permission_codes: list[str],
-) -> Callable[[str, Request, Session], None]:
+) -> _FastPermissionDependency:
     normalized_codes = [code for code in permission_codes if code]
     if not normalized_codes:
         raise ValueError("permission_codes is required")
@@ -457,7 +508,9 @@ def require_any_permission_fast(
     return dependency
 
 
-def require_permission_fast(permission_code: str) -> Callable[[str, Request, Session], None]:
+def require_permission_fast(
+    permission_code: str,
+) -> _FastPermissionDependency:
     validate_permission_code(permission_code)
 
     def dependency(
@@ -478,7 +531,7 @@ def require_permission_fast(permission_code: str) -> Callable[[str, Request, Ses
 
 def require_permission_fast_user(
     permission_code: str,
-) -> Callable[[str, Request, Session], User]:
+) -> _FastPermissionUserDependency:
     validate_permission_code(permission_code)
 
     def dependency(
@@ -502,7 +555,7 @@ def require_permission_fast_user(
 
 def require_permission_fast_user_id(
     permission_code: str,
-) -> Callable[[str, Request, Session], int]:
+) -> _FastPermissionUserIdDependency:
     validate_permission_code(permission_code)
 
     def dependency(

@@ -3,6 +3,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, oauth2_scheme, require_permission
@@ -60,6 +61,15 @@ from app.services.user_service import (
 router = APIRouter()
 
 
+def _request_client_host(request: Request | None) -> str | None:
+    if request is None:
+        return None
+    client = request.client
+    if client is None:
+        return None
+    return client.host
+
+
 def _to_registration_item(request: RegistrationRequest) -> RegistrationRequestItem:
     return RegistrationRequestItem(
         id=request.id,
@@ -79,7 +89,7 @@ def login(
     db: Session = Depends(get_db),
 ) -> ApiResponse[LoginResult]:
     username = form_data.username.strip()
-    ip_address = request.client.host if request and request.client else None
+    ip_address = _request_client_host(request)
     terminal_info = request.headers.get("user-agent") if request else None
 
     user = get_user_by_username(
@@ -103,9 +113,7 @@ def login(
             detail = "Registration request was rejected"
             status_code = status.HTTP_403_FORBIDDEN
             rejected_reason = (latest_request.rejected_reason or "").strip()
-            reason = (
-                f"{detail}: {rejected_reason}" if rejected_reason else detail
-            )
+            reason = f"{detail}: {rejected_reason}" if rejected_reason else detail
         create_login_log(
             db,
             username=username,
@@ -203,11 +211,10 @@ def logout(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[dict[str, bool]]:
-    sid = None
     try:
         payload = decode_access_token(token)
         sid = str(payload.get("sid") or "").strip() or None
-    except Exception:
+    except ValueError:
         sid = None
 
     if sid:
@@ -294,7 +301,7 @@ def bootstrap_admin_account(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)
         )
-    except Exception:
+    except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to bootstrap admin",
@@ -416,7 +423,7 @@ def approve_registration(
             "role_code": user.roles[0].code if user.roles else None,
             "stage_id": user.stage_id,
         },
-        ip_address=request.client.host if request and request.client else None,
+        ip_address=_request_client_host(request),
         terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
@@ -504,7 +511,7 @@ def reject_registration(
             "status": updated.status,
             "rejected_reason": updated.rejected_reason,
         },
-        ip_address=request.client.host if request and request.client else None,
+        ip_address=_request_client_host(request),
         terminal_info=request.headers.get("user-agent") if request else None,
     )
     db.commit()
@@ -530,11 +537,9 @@ def get_current_login_user(
 ) -> ApiResponse[CurrentUserResult]:
     stage_name = None
     if current_user.stage_id is not None:
-        stage_name = (
-            db.execute(
-                select(ProcessStage.name).where(ProcessStage.id == current_user.stage_id)
-            ).scalar_one_or_none()
-        )
+        stage_name = db.execute(
+            select(ProcessStage.name).where(ProcessStage.id == current_user.stage_id)
+        ).scalar_one_or_none()
     return success_response(
         CurrentUserResult(
             id=current_user.id,

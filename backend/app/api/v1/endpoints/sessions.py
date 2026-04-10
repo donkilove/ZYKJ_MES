@@ -64,7 +64,7 @@ def _sessions_login_logs_response_cache_key(
 ) -> str:
     normalized_username = (username or "").strip().lower()
     normalized_success = ""
-    if success is True:
+    if success:
         normalized_success = "1"
     elif success is False:
         normalized_success = "0"
@@ -89,7 +89,9 @@ def _get_cached_sessions_online_response(cache_key: str) -> bytes | None:
         return payload_bytes
 
 
-def _set_cached_sessions_online_response(cache_key: str, payload: dict[str, object]) -> bytes:
+def _set_cached_sessions_online_response(
+    cache_key: str, payload: dict[str, object]
+) -> bytes:
     payload_bytes = json.dumps(
         payload,
         ensure_ascii=False,
@@ -116,7 +118,9 @@ def _get_cached_sessions_login_logs_response(cache_key: str) -> bytes | None:
         return payload_bytes
 
 
-def _set_cached_sessions_login_logs_response(cache_key: str, payload: dict[str, object]) -> bytes:
+def _set_cached_sessions_login_logs_response(
+    cache_key: str, payload: dict[str, object]
+) -> bytes:
     payload_bytes = json.dumps(
         payload,
         ensure_ascii=False,
@@ -186,7 +190,9 @@ def get_login_logs(
             ],
         )
     ).model_dump(mode="json")
-    payload_bytes = _set_cached_sessions_login_logs_response(cache_key, response_payload)
+    payload_bytes = _set_cached_sessions_login_logs_response(
+        cache_key, response_payload
+    )
     return Response(content=payload_bytes, media_type="application/json")
 
 
@@ -252,13 +258,19 @@ def force_offline(
 ) -> ApiResponse[ForceOfflineResult]:
     role_codes = {role.code for role in current_user.roles}
     if ROLE_SYSTEM_ADMIN not in role_codes:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅系统管理员可执行强制下线")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="仅系统管理员可执行强制下线"
+        )
     target_session = db.execute(
-        select(UserSession).where(UserSession.session_token_id == payload.session_token_id)
+        select(UserSession).where(
+            UserSession.session_token_id == payload.session_token_id
+        )
     ).scalar_one_or_none()
     affected = force_offline_sessions(db, session_token_ids=[payload.session_token_id])
     if affected < 1:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Online session not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Online session not found"
+        )
     _invalidate_sessions_online_response_cache()
     write_audit_log(
         db,
@@ -300,14 +312,25 @@ def batch_force_offline(
     payload: BatchForceOfflineRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("user.sessions.force_offline.batch")),
+    current_user: User = Depends(
+        require_permission("user.sessions.force_offline.batch")
+    ),
 ) -> ApiResponse[ForceOfflineResult]:
     role_codes = {role.code for role in current_user.roles}
     if ROLE_SYSTEM_ADMIN not in role_codes:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅系统管理员可执行批量强制下线")
-    target_sessions = db.execute(
-        select(UserSession).where(UserSession.session_token_id.in_(payload.session_token_ids))
-    ).scalars().all()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="仅系统管理员可执行批量强制下线",
+        )
+    target_sessions = (
+        db.execute(
+            select(UserSession).where(
+                UserSession.session_token_id.in_(payload.session_token_ids)
+            )
+        )
+        .scalars()
+        .all()
+    )
     affected = force_offline_sessions(db, session_token_ids=payload.session_token_ids)
     _invalidate_sessions_online_response_cache()
     write_audit_log(
@@ -316,7 +339,10 @@ def batch_force_offline(
         action_name="批量强制下线",
         target_type="session",
         operator=current_user,
-        after_data={"session_token_ids": payload.session_token_ids, "affected": affected},
+        after_data={
+            "session_token_ids": payload.session_token_ids,
+            "affected": affected,
+        },
         ip_address=request.client.host if request.client else None,
         terminal_info=request.headers.get("user-agent"),
     )
