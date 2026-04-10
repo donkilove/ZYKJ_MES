@@ -50,9 +50,9 @@
 
 - 所有沟通、代码注释、文档与新增文件默认使用中文，编码为 UTF-8（无 BOM）。
 - 每次任务开始与结束都要更新 `evidence/` 或等效项目日志。
-- 每次对外回复开头提供“前置说明”；若存在外部调用，在末尾补“工具调用简报”。
-- 编码前默认优先使用 `Sequential Thinking` 完成任务拆解、边界澄清与失败重试前复盘；若当前会话未注入该工具，则必须以书面拆解代替，并记录降级原因、触发时间、替代动作与残余风险。
-- 工作流状态优先使用当前会话可见的计划工具（如 `TodoWrite` 或等效能力）维护；若均不可用，允许在任务日志中维护步骤、状态、验收标准与更新时间。
+- 每次对外回复开头提供“前置说明”；若默认强制优先使用的 Docker 宿主 MCP 工具（统一口径为 `MCP_DOCKER`）存在缺失、未配置、不可达、权限不足，或受更高优先级指令约束无法使用，必须在前置说明中写明缺失工具、原因、替代工具与影响范围；若存在外部调用，在末尾补“工具调用简报”。
+- 编码前必须完成 `MCP_DOCKER Sequential Thinking` 分析；若所需 `MCP_DOCKER` 工具不可用，必须记录降级原因、触发时间、替代动作、影响范围与残余风险，并在 `evidence/` 中同步留痕。
+- 工作流状态统一使用 `update_plan` 或 `TodoWrite` 维护；若工具不可用，允许在任务日志中维护步骤、状态、验收标准与更新时间。
 - 仅运行安全命令，禁止破坏性清理、泄露密钥、令牌或内部敏感链接。
 - 默认采取破坏性改动并拒绝向后兼容，但必须在交付中明确迁移口径；若无迁移需求，统一写“无迁移，直接替换”。
 
@@ -156,44 +156,32 @@
 
 ### 7.1 默认工具口径
 
-- `Sequential Thinking`：默认优先用于任务拆解、边界澄清、失败重试前复盘；不可用时以书面拆解代替。
-- 当前会话可见的计划工具（如 `TodoWrite` 或等效能力）：维护步骤、状态与验收标准。
-- 语义代码工具（如 `Serena`）：默认优先用于代码与文档定位、引用追踪、精确编辑；不可用时退回本地检索链。
-- 外部官方文档工具（如 `Context7`）：默认优先用于官方文档与规范补证；不可用时退回仓库文档与网页抓取工具。
-- 外部网页抓取工具（如 `webfetch` 或等效能力）：默认仅在仓库文档与官方文档工具不足时作为补充检索工具；不可用时以离线经验结论或人工检索代替，并标注时效与局限。
-- PyCharm IDE 工具（如 `pycharm_*`）：若当前在 PyCharm 集成环境中工作，默认优先用于语义级代码定位、精确编辑、IDE 索引结构查看、文件问题检查、运行现成 Run Configuration 与构建验证。
-- PowerShell / shell：优先用于安全命令执行、git 状态与差异检查、`docker`、`npm`、`pnpm`、`flutter`、`pytest`、`gh`、`bru`、`trivy`、`syft` 等宿主命令，以及需要真实 shell 输出作为交付证据的场景。
-
-#### 7.1.1 PyCharm 工具优先场景
-
-以下场景仅在当前会话已确认处于 PyCharm 集成环境中工作时生效；若当前不在 PyCharm 集成环境中工作，或相关 `pycharm_*` 工具未暴露，则退回本地检索链、编辑工具与终端验证链。
-
-1. 找类、方法、符号引用：优先使用 `pycharm_search_symbol`、`pycharm_get_symbol_info`。
-2. 精确改代码：优先使用 `pycharm_replace_text_in_file`、`pycharm_rename_refactoring`。
-3. 查看 IDE 已索引的项目结构：优先使用 `pycharm_list_directory_tree`、`pycharm_find_files_by_name_keyword`。
-4. 查看文件问题：优先使用 `pycharm_get_file_problems`。
-5. 运行现成的 Run Configuration：优先使用 `pycharm_get_run_configurations`、`pycharm_execute_run_configuration`。
-6. 构建验证：优先使用 `pycharm_build_project`。
-
-#### 7.1.2 终端优先场景
-
-1. `git status`、`git diff`、`git log`。
-2. `docker`、`npm`、`pnpm`、`flutter`、`pytest`。
-3. `gh`、`bru`、`trivy`、`syft`。
-4. 需要真实 shell 输出作为交付证据的时候。
+- 默认强制优先使用 Docker 提供的宿主 MCP 工具，统一口径为 `MCP_DOCKER`；若所需 `MCP_DOCKER` 工具缺失、未配置、不可达、权限不足，或受更高优先级指令约束无法使用，方可进入降级与补偿流程。
+- `MCP_DOCKER Sequential Thinking`：任务拆解、边界澄清、失败重试前复盘。
+- `update_plan` 或 `TodoWrite`：维护步骤、状态与验收标准。
+- `MCP_DOCKER ast-grep`：代码与文档结构定位、引用追踪。
+- `MCP_DOCKER Context7`：外部官方文档与规范补证。
+- `MCP_DOCKER Playwright`：页面联调、交互验证与页面证据采集。
+- `MCP_DOCKER database-server`：数据库连接、查询与抽检。
+- `MCP_DOCKER OpenAPI Toolkit`：契约读取、OpenAPI 校验、接口补证。
+- `MCP_DOCKER Git / GitHub`：仓库状态、差异、远端协作与 GitHub 结果核对。
+- `MCP_DOCKER Fetch`：在前述 `MCP_DOCKER` 能力不足时补充网页抓取。
+- `MCP_DOCKER Filesystem`：用于目录访问、本地文件读取与受控写入；若当前会话受更高优先级宿主文件工具约束，则按更高优先级执行。
+- `MCP_DOCKER Memory`：用于跨任务稳定偏好、模块关系与长期上下文补充，但不能替代 `AGENTS.md`、`evidence/` 与仓库文档。
+- 宿主安全命令与宿主文件工具：仅作为本地补偿/降级手段，用于安全命令执行、本地文本检索、文件读写、测试与验证。
 
 ### 7.2 分类与默认验证
 
 | 分类编码   | 任务类型            | 默认执行口径                                | 默认验证口径                                 |
 |--------|-----------------|---------------------------------------|----------------------------------------|
-| CAT-01 | 后端模型/接口/迁移联动    | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索、数据库或接口工具 | 数据库核对、Bruno 或等效接口验证、OpenAPI 校验 |
-| CAT-02 | 前后端契约同步         | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索、契约工具 | OpenAPI 校验、页面联动验证 |
-| CAT-03 | Flutter 页面/交互改造 | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索、Flutter 工具 | `flutter test`、`integration_test`、页面验证 |
-| CAT-04 | 权限与可见性联动        | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索 | 接口授权验证 + 页面显隐验证 |
-| CAT-05 | 本地联调与启动         | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索、联调工具 | 健康检查、抓包、数据库抽检 |
-| CAT-06 | 中文、编码与文档一致性     | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索 | 至少一条真实显示或文本结果验证 |
-| CAT-07 | 接口联调、复现、抓包排障    | `Sequential Thinking` 或书面拆解、语义代码工具或本地检索、调试工具 | 请求样本、抓包或会话证据 |
-| CAT-08 | 发布前审计与协作        | `Sequential Thinking` 或书面拆解、审计工具或等效命令 | SBOM、漏洞扫描、远端协作结果 |
+| CAT-01 | 后端模型/接口/迁移联动    | `MCP_DOCKER Sequential Thinking`、`MCP_DOCKER ast-grep`、`MCP_DOCKER database-server`、`MCP_DOCKER OpenAPI Toolkit` | 数据库核对、Bruno、OpenAPI 校验                 |
+| CAT-02 | 前后端契约同步         | `MCP_DOCKER Sequential Thinking`、`MCP_DOCKER ast-grep`、`MCP_DOCKER OpenAPI Toolkit` | OpenAPI 校验、页面联动验证                      |
+| CAT-03 | Flutter 页面/交互改造 | `MCP_DOCKER Sequential Thinking`、`MCP_DOCKER ast-grep`、`MCP_DOCKER Playwright`、Flutter 工具 | `flutter test`、`integration_test`、页面验证 |
+| CAT-04 | 权限与可见性联动        | `MCP_DOCKER Sequential Thinking`、`MCP_DOCKER ast-grep`、`MCP_DOCKER OpenAPI Toolkit` | 接口授权验证 + 页面显隐验证                        |
+| CAT-05 | 本地联调与启动         | `MCP_DOCKER Sequential Thinking`、`MCP_DOCKER ast-grep`、`MCP_DOCKER Playwright`、`MCP_DOCKER database-server` | 健康检查、抓包、数据库抽检                          |
+| CAT-06 | 中文、编码与文档一致性     | `MCP_DOCKER Sequential Thinking`、`MCP_DOCKER ast-grep` | 至少一条真实显示或文本结果验证                        |
+| CAT-07 | 接口联调、复现、抓包排障    | `MCP_DOCKER Sequential Thinking`、`MCP_DOCKER OpenAPI Toolkit`、`MCP_DOCKER Playwright`、`MCP_DOCKER Fetch` | 请求样本、抓包或会话证据                           |
+| CAT-08 | 发布前审计与协作        | `MCP_DOCKER Sequential Thinking`、`MCP_DOCKER Git / GitHub`、审计工具 | SBOM、漏洞扫描、远端协作结果                       |
 
 ### 7.3 验证门禁
 
@@ -209,11 +197,13 @@
 
 ### 7.4 工具降级规则
 
-- `Sequential Thinking` 未注入或不可用：以书面拆解代替，并写入 evidence。
-- 语义代码工具（如 `Serena`）未注入或不可用：退回 `glob`、`grep`、`read`、`pycharm_*` 与最小 patch 编辑，并记录无法做语义级定位的影响。
-- 外部官方文档工具（如 `Context7`）未注入或不可用：使用仓库既有文档、`webfetch` 或离线经验结论，并标注时效与不确定性。
-- 计划工具不可用：在任务日志或 evidence 中维护步骤、状态、验收标准与更新时间。
-- 数据库、页面、抓包、扫描类工具未注入、未暴露、权限缺失或返回异常：退回静态核对或人工步骤脚本，但必须说明未完成的真实验证边界。
+- 所需 `MCP_DOCKER` 工具缺失、未配置、不可达、权限不足，或受更高优先级指令约束无法使用：先在前置说明写明缺失工具、原因、替代工具与影响范围，再在 `evidence/` 中同步记录降级与补偿。
+- `MCP_DOCKER Sequential Thinking` 不可用：以书面拆解代替，并写入 `evidence/`。
+- `MCP_DOCKER ast-grep` 不可用：退回宿主安全文本检索、宿主文件工具与最小 patch 编辑，并记录无法做结构化/语义级定位的影响。
+- `MCP_DOCKER Context7`、`MCP_DOCKER Fetch` 不可用：使用仓库既有文档、离线经验结论或宿主安全网页检索补偿，并标注时效与不确定性。
+- `MCP_DOCKER Filesystem` 不可用：退回宿主文件工具，并明确当次目录访问范围与写权限边界；若当前会话本就受更高优先级文件工具约束，则继续按该约束执行。
+- `MCP_DOCKER Memory` 不可用：退回 `AGENTS.md`、`evidence/` 与仓库文档补齐上下文；正式规则、过程留痕与交付结论不得由 Memory 替代。
+- `MCP_DOCKER database-server`、`MCP_DOCKER Playwright`、`MCP_DOCKER OpenAPI Toolkit`、`MCP_DOCKER Git / GitHub` 等验证类工具不可用：退回宿主安全命令、宿主文件工具、本地包装命令或人工步骤脚本，但必须说明未完成的真实验证边界。
 
 ## 8. 质量与交付标准
 
@@ -276,6 +266,13 @@
 - 需求基线：<路径列表>
 - 代码范围：<目录或模块列表>
 
+## 1.1 前置说明
+- 默认主线工具：<默认强制优先使用的 `MCP_DOCKER` 工具列表>
+- 缺失工具：<若无则写“无”>
+- 缺失/降级原因：<若无则写“无”>
+- 替代工具：<若无则写“无”>
+- 影响范围：<若无则写“无”>
+
 ## 2. 任务目标、范围与非目标
 ### 任务目标
 1. <目标1>
@@ -310,6 +307,7 @@
 | 1 | <任务名> | <现象> | <根因> | <动作> | <结果> |
 
 ## 7. 工具降级、硬阻塞与限制
+- 默认 `MCP_DOCKER` 主线：<本任务默认优先使用的 `MCP_DOCKER` 工具>
 - 不可用工具：<若无则写“无”>
 - 降级原因：<若无则写“无”>
 - 替代流程：<若无则写“无”>
@@ -344,7 +342,7 @@
 ## 2. 工具触发记录
 | 序号 | 阶段 | 工具 | 触发类型 | 触发原因 | 预期产出 | 记录时间 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | <启动/执行/验证> | <工具名> | <默认/补充/降级> | <原因> | <产出> | <时间> |
+| 1 | <启动/执行/验证> | <工具名> | <默认 `MCP_DOCKER` / 补充 / 降级> | <原因> | <产出> | <时间> |
 
 ## 3. 执行留痕
 | 序号 | 工具 | 操作对象 | 实际动作 | 结果摘要 | 输出物 |
@@ -366,6 +364,7 @@
 | 1 | <阶段> | <现象> | <根因> | <动作> | <工具> | <结果> |
 
 ## 6. 降级/阻塞/代记
+- 前置说明是否已披露默认 `MCP_DOCKER` 缺失与影响：是 / 否
 - 工具降级：<若无则写“无”>
 - 阻塞记录：<若无则写“无”>
 - evidence 代记：<是否代记、责任人、时间、来源、适用结论>
@@ -382,14 +381,14 @@
 
 ## 11. 支撑文档与索引
 
-### 11.1 当前配置入口
+### 11.1 直接支撑文档
 
-- `opencode.json`：项目级 OpenCode 配置与 MCP 注册入口。
-- `evidence/`：任务日志、工具化验证日志与整改留痕目录。
+- `docs/opencode_tooling_bundle.md`：项目内工具能力接入说明。
+- `docs/host_tooling_bundle.md`：本机辅助工具安装与验证说明。
 
 ### 11.2 历史收口说明
 
-历史指挥官文档体系与旧工具说明文档已完成收口，不再作为并列规则源；当前仅保留本文件作为唯一规则入口，工具接入状态以 `opencode.json` 与宿主实测结果为准。
+历史指挥官文档体系已完成收口，不再作为并列规则源；当前仅保留本文件作为唯一规则入口。
 
 ## 12. 适用结论
 
