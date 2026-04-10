@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -16,9 +17,7 @@ DEFAULT_ENV_FILE = BACKEND_DIR / ".env"
 LOCAL_NO_PROXY_ENTRIES = ("localhost", "127.0.0.1", "::1")
 DEFAULT_POSTGRES_PORT = 5432
 DEFAULT_POSTGRES_START_TIMEOUT_SECONDS = 20.0
-DEFAULT_POSTGRES_LOG_FILE = (
-    Path.home() / ".local" / "state" / "postgresql" / "postgresql-start_backend.log"
-)
+DEFAULT_POSTGRES_LOG_FILE = Path.home() / ".local" / "state" / "postgresql" / "postgresql-start_backend.log"
 
 
 @dataclass(frozen=True)
@@ -43,43 +42,15 @@ def resolve_python() -> str:
 
 
 def find_executable(name: str) -> str | None:
-    path_entries = [item for item in os.getenv("PATH", "").split(os.pathsep) if item]
-    windows_exts = os.getenv("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";")
-    resolved = None
-    for entry in path_entries:
-        candidates = [Path(entry) / name]
-        if os.name == "nt" and not Path(name).suffix:
-            candidates.extend(
-                Path(entry) / f"{name}{ext.lower()}" for ext in windows_exts
-            )
-        for candidate in candidates:
-            if candidate.exists():
-                resolved = str(candidate)
-                break
-        if resolved:
-            break
+    resolved = shutil.which(name)
     if resolved:
         return resolved
 
     candidates = [
         ROOT_DIR / ".venv" / "Scripts" / f"{name}.exe",
         ROOT_DIR / ".venv" / "bin" / name,
-        Path.home()
-        / ".local"
-        / "share"
-        / "micromamba"
-        / "envs"
-        / "zykj-postgres"
-        / "bin"
-        / name,
-        Path.home()
-        / ".local"
-        / "share"
-        / "micromamba"
-        / "envs"
-        / "zykj-dev"
-        / "bin"
-        / name,
+        Path.home() / ".local" / "share" / "micromamba" / "envs" / "zykj-postgres" / "bin" / name,
+        Path.home() / ".local" / "share" / "micromamba" / "envs" / "zykj-dev" / "bin" / name,
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -110,9 +81,7 @@ def load_env_file(path: Path) -> dict[str, str]:
     return values
 
 
-def resolve_setting(
-    env: dict[str, str], env_file_values: dict[str, str], key: str, default: str
-) -> str:
+def resolve_setting(env: dict[str, str], env_file_values: dict[str, str], key: str, default: str) -> str:
     for env_key in (key, key.lower()):
         value = env.get(env_key)
         if value not in (None, ""):
@@ -173,9 +142,7 @@ def discover_pgdata(env: dict[str, str]) -> Path | None:
         return None
 
     candidates: list[Path] = []
-    for version_dir in sorted(
-        base_dir.iterdir(), key=lambda item: item.name, reverse=True
-    ):
+    for version_dir in sorted(base_dir.iterdir(), key=lambda item: item.name, reverse=True):
         data_dir = version_dir / "data"
         if data_dir.exists() and (data_dir / "PG_VERSION").exists():
             candidates.append(data_dir)
@@ -191,9 +158,7 @@ def resolve_postgres_log_file(env: dict[str, str]) -> Path:
     return DEFAULT_POSTGRES_LOG_FILE
 
 
-def resolve_postgres_targets(
-    env: dict[str, str], env_file_values: dict[str, str]
-) -> list[PostgresTarget]:
+def resolve_postgres_targets(env: dict[str, str], env_file_values: dict[str, str]) -> list[PostgresTarget]:
     targets: list[PostgresTarget] = []
     seen: set[tuple[str, int]] = set()
 
@@ -205,18 +170,11 @@ def resolve_postgres_targets(
         targets.append(PostgresTarget(label=label, host=host, port=port))
 
     db_host = resolve_setting(env, env_file_values, "DB_HOST", "127.0.0.1")
-    db_port = parse_int(
-        resolve_setting(env, env_file_values, "DB_PORT", str(DEFAULT_POSTGRES_PORT)),
-        DEFAULT_POSTGRES_PORT,
-    )
-    bootstrap_enabled = parse_bool(
-        resolve_setting(env, env_file_values, "BOOTSTRAP_ON_STARTUP", "true"), True
-    )
+    db_port = parse_int(resolve_setting(env, env_file_values, "DB_PORT", str(DEFAULT_POSTGRES_PORT)), DEFAULT_POSTGRES_PORT)
+    bootstrap_enabled = parse_bool(resolve_setting(env, env_file_values, "BOOTSTRAP_ON_STARTUP", "true"), True)
 
     if bootstrap_enabled:
-        bootstrap_host = resolve_setting(
-            env, env_file_values, "DB_BOOTSTRAP_HOST", db_host
-        )
+        bootstrap_host = resolve_setting(env, env_file_values, "DB_BOOTSTRAP_HOST", db_host)
         bootstrap_port = parse_int(
             resolve_setting(env, env_file_values, "DB_BOOTSTRAP_PORT", str(db_port)),
             db_port,
@@ -239,27 +197,21 @@ def ensure_postgresql_ready(
     not_ready_targets: list[PostgresTarget] = []
     for target in targets:
         if can_connect(target.host, target.port):
-            print(
-                f"[INFO] PostgreSQL 检查通过：{target.label} {target.host}:{target.port} 可连接。"
-            )
+            print(f"[INFO] PostgreSQL 检查通过：{target.label} {target.host}:{target.port} 可连接。")
         else:
             not_ready_targets.append(target)
 
     if not not_ready_targets:
         return
 
-    remote_targets = [
-        target for target in not_ready_targets if not is_local_db_host(target.host)
-    ]
+    remote_targets = [target for target in not_ready_targets if not is_local_db_host(target.host)]
     for target in remote_targets:
         print(
             f"[WARN] PostgreSQL 未就绪：{target.label} {target.host}:{target.port} 不可连接，"
             "且不是本机地址，脚本不会自动拉起远程数据库。"
         )
 
-    local_targets = [
-        target for target in not_ready_targets if is_local_db_host(target.host)
-    ]
+    local_targets = [target for target in not_ready_targets if is_local_db_host(target.host)]
     if not local_targets:
         return
 
@@ -270,9 +222,7 @@ def ensure_postgresql_ready(
 
     pgdata = discover_pgdata(env)
     if pgdata is None:
-        print(
-            "[WARN] 未找到 PGDATA 或可识别的数据目录，无法自动拉起本地 PostgreSQL，将继续尝试启动后端。"
-        )
+        print("[WARN] 未找到 PGDATA 或可识别的数据目录，无法自动拉起本地 PostgreSQL，将继续尝试启动后端。")
         return
 
     log_file = resolve_postgres_log_file(env)
@@ -289,9 +239,7 @@ def ensure_postgresql_ready(
 
     for target in local_targets:
         if wait_for_port(target.host, target.port, timeout_seconds):
-            print(
-                f"[INFO] PostgreSQL 已就绪：{target.label} {target.host}:{target.port} 可连接。"
-            )
+            print(f"[INFO] PostgreSQL 已就绪：{target.label} {target.host}:{target.port} 可连接。")
         else:
             print(
                 f"[WARN] PostgreSQL 仍未就绪：{target.label} {target.host}:{target.port} 不可连接。"
@@ -346,12 +294,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="0.0.0.0", help="监听地址，默认：0.0.0.0")
     parser.add_argument("--port", type=int, default=8000, help="监听端口，默认：8000")
     reload_group = parser.add_mutually_exclusive_group()
-    reload_group.add_argument(
-        "--reload", dest="reload", action="store_true", help="启用热重载。"
-    )
-    reload_group.add_argument(
-        "--no-reload", dest="reload", action="store_false", help="禁用热重载。"
-    )
+    reload_group.add_argument("--reload", dest="reload", action="store_true", help="启用热重载。")
+    reload_group.add_argument("--no-reload", dest="reload", action="store_false", help="禁用热重载。")
     parser.add_argument(
         "--skip-postgres-check",
         action="store_true",

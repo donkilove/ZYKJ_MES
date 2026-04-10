@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,9 +23,7 @@ except ModuleNotFoundError:  # pragma: no cover - python -m tools.project_toolki
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ENV = REPO_ROOT / "backend" / ".env"
 BACKEND_ENV_EXAMPLE = REPO_ROOT / "backend" / ".env.example"
-BACKEND_MOJIBAKE_SCRIPT = (
-    REPO_ROOT / "backend" / "scripts" / "check_chinese_mojibake.py"
-)
+BACKEND_MOJIBAKE_SCRIPT = REPO_ROOT / "backend" / "scripts" / "check_chinese_mojibake.py"
 FRONTEND_MOJIBAKE_SCRIPT = (
     REPO_ROOT / "backend" / "scripts" / "check_frontend_chinese_mojibake.py"
 )
@@ -70,15 +69,8 @@ def _build_postgres_url() -> str:
     backend_env = _load_backend_env()
     defaults = _load_env_example()
     host = os.getenv("DB_HOST") or backend_env.get("DB_HOST") or defaults.get("DB_HOST")
-    port = (
-        os.getenv("DB_PORT")
-        or backend_env.get("DB_PORT")
-        or defaults.get("DB_PORT")
-        or "5432"
-    )
-    db_name = (
-        os.getenv("DB_NAME") or backend_env.get("DB_NAME") or defaults.get("DB_NAME")
-    )
+    port = os.getenv("DB_PORT") or backend_env.get("DB_PORT") or defaults.get("DB_PORT") or "5432"
+    db_name = os.getenv("DB_NAME") or backend_env.get("DB_NAME") or defaults.get("DB_NAME")
     user = os.getenv("DB_USER") or backend_env.get("DB_USER") or defaults.get("DB_USER")
     password = os.getenv("DB_PASSWORD")
     if password is None:
@@ -103,36 +95,18 @@ def _build_postgres_url() -> str:
             + ", ".join(missing)
         )
 
-    assert user is not None
-    assert db_name is not None
     user_info = urllib.parse.quote(user, safe="")
     if password:
         user_info = f"{user_info}:{urllib.parse.quote(password, safe='')}"
     return (
-        f"postgresql://{user_info}@{host}:{port}/{urllib.parse.quote(db_name, safe='')}"
+        f"postgresql://{user_info}@{host}:{port}/"
+        f"{urllib.parse.quote(db_name, safe='')}"
     )
 
 
 def _find_npx_binary() -> str:
-    def search_path(binary_name: str) -> str | None:
-        path_entries = [
-            item for item in os.getenv("PATH", "").split(os.pathsep) if item
-        ]
-        windows_exts = os.getenv("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";")
-        for entry in path_entries:
-            base = Path(entry) / binary_name
-            candidates = [base]
-            if os.name == "nt" and not Path(binary_name).suffix:
-                candidates.extend(
-                    Path(entry) / f"{binary_name}{ext.lower()}" for ext in windows_exts
-                )
-            for candidate in candidates:
-                if candidate.exists():
-                    return str(candidate)
-        return None
-
     for candidate_name in ("npx.cmd", "npx.exe", "npx"):
-        path_binary = search_path(candidate_name)
+        path_binary = shutil.which(candidate_name)
         if path_binary:
             return path_binary
 
@@ -149,19 +123,7 @@ def _find_npx_binary() -> str:
 
 
 def _find_rg_binary() -> str:
-    path_entries = [item for item in os.getenv("PATH", "").split(os.pathsep) if item]
-    windows_exts = os.getenv("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";")
-    path_binary = None
-    for entry in path_entries:
-        candidates = [Path(entry) / "rg"]
-        if os.name == "nt":
-            candidates.extend(Path(entry) / f"rg{ext.lower()}" for ext in windows_exts)
-        for candidate in candidates:
-            if candidate.exists():
-                path_binary = str(candidate)
-                break
-        if path_binary:
-            break
+    path_binary = shutil.which("rg")
     if path_binary:
         return path_binary
 
@@ -351,9 +313,7 @@ def cmd_http_probe(args: argparse.Namespace) -> int:
     data: bytes | None = None
     if args.json_body is not None:
         try:
-            json_payload = json.dumps(
-                json.loads(args.json_body), ensure_ascii=False
-            ).encode("utf-8")
+            json_payload = json.dumps(json.loads(args.json_body), ensure_ascii=False).encode("utf-8")
         except json.JSONDecodeError as error:
             _print_error(f"JSON Body 解析失败：{error}")
             return 2
@@ -424,14 +384,8 @@ def build_parser() -> argparse.ArgumentParser:
         "openapi-validate",
         help="Fetch and validate an OpenAPI document.",
     )
-    openapi_parser.add_argument(
-        "--url",
-        default=DEFAULT_OPENAPI_URL,
-        help="OpenAPI JSON URL. Default: %(default)s",
-    )
-    openapi_parser.add_argument(
-        "--timeout", type=int, default=15, help="HTTP timeout in seconds."
-    )
+    openapi_parser.add_argument("--url", default=DEFAULT_OPENAPI_URL, help="OpenAPI JSON URL. Default: %(default)s")
+    openapi_parser.add_argument("--timeout", type=int, default=15, help="HTTP timeout in seconds.")
     openapi_parser.set_defaults(func=cmd_openapi_validate)
 
     flutter_parser = subparsers.add_parser(
@@ -439,9 +393,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run Flutter UI or integration tests. Default target is frontend/integration_test, then frontend/test if integration_test is absent.",
         description="Run Flutter UI or integration tests. Default target is frontend/integration_test, then frontend/test if integration_test is absent.",
     )
-    flutter_parser.add_argument(
-        "path", nargs="?", help="Optional test file or directory."
-    )
+    flutter_parser.add_argument("path", nargs="?", help="Optional test file or directory.")
     flutter_parser.set_defaults(func=cmd_flutter_ui)
 
     github_parser = subparsers.add_parser(
@@ -449,16 +401,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Call the GitHub REST API. Uses GITHUB_TOKEN when present and falls back to anonymous public API access when absent.",
         description="Call the GitHub REST API. Uses GITHUB_TOKEN when present and falls back to anonymous public API access when absent.",
     )
-    github_parser.add_argument(
-        "endpoint", help="REST endpoint, for example repos/owner/repo/issues."
-    )
-    github_parser.add_argument(
-        "--method", default="GET", help="HTTP method. Default: GET."
-    )
+    github_parser.add_argument("endpoint", help="REST endpoint, for example repos/owner/repo/issues.")
+    github_parser.add_argument("--method", default="GET", help="HTTP method. Default: GET.")
     github_parser.add_argument("--body", help="JSON string request body.")
-    github_parser.add_argument(
-        "--timeout", type=int, default=20, help="HTTP timeout in seconds."
-    )
+    github_parser.add_argument("--timeout", type=int, default=20, help="HTTP timeout in seconds.")
     github_parser.set_defaults(func=cmd_github_api)
 
     search_parser = subparsers.add_parser(
@@ -467,19 +413,11 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run ripgrep-based code search. Locates rg from PATH first, then common Windows install locations.",
     )
     search_parser.add_argument("pattern", help="ripgrep search pattern.")
-    search_parser.add_argument(
-        "path", nargs="?", default=".", help="Search path. Default: repository root."
-    )
+    search_parser.add_argument("path", nargs="?", default=".", help="Search path. Default: repository root.")
     search_parser.add_argument("--include", help="File glob filter, for example *.py.")
-    search_parser.add_argument(
-        "--count", action="store_true", help="Show match count for each file."
-    )
-    search_parser.add_argument(
-        "--stats", action="store_true", help="Show ripgrep statistics."
-    )
-    search_parser.add_argument(
-        "--ignore-case", action="store_true", help="Ignore case."
-    )
+    search_parser.add_argument("--count", action="store_true", help="Show match count for each file.")
+    search_parser.add_argument("--stats", action="store_true", help="Show ripgrep statistics.")
+    search_parser.add_argument("--ignore-case", action="store_true", help="Ignore case.")
     search_parser.add_argument(
         "--files-with-matches",
         action="store_true",
@@ -493,9 +431,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run ast-grep structural search.",
     )
     struct_parser.add_argument("pattern", help="ast-grep pattern.")
-    struct_parser.add_argument(
-        "path", nargs="?", default=".", help="Scan path. Default: repository root."
-    )
+    struct_parser.add_argument("path", nargs="?", default=".", help="Scan path. Default: repository root.")
     struct_parser.set_defaults(func=cmd_code_struct_search)
 
     probe_parser = subparsers.add_parser(
@@ -503,29 +439,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run a local HTTP probe.",
     )
     probe_parser.add_argument("url", help="Target URL to probe.")
-    probe_parser.add_argument(
-        "--method", default="GET", help="HTTP method. Default: GET."
-    )
+    probe_parser.add_argument("--method", default="GET", help="HTTP method. Default: GET.")
     probe_parser.add_argument(
         "--header",
         action="append",
         help="Request header in 'Key: Value' format. Repeat as needed.",
     )
     probe_parser.add_argument("--json-body", help="JSON string request body.")
-    probe_parser.add_argument(
-        "--timeout", type=int, default=15, help="HTTP timeout in seconds."
-    )
+    probe_parser.add_argument("--timeout", type=int, default=15, help="HTTP timeout in seconds.")
     probe_parser.set_defaults(func=cmd_http_probe)
 
     encoding_parser = subparsers.add_parser(
         "encoding-check",
         help="Run the encoding/mojibake checks.",
     )
-    encoding_parser.add_argument(
-        "--fix",
-        action="store_true",
-        help="Try to automatically fix recognized mojibake.",
-    )
+    encoding_parser.add_argument("--fix", action="store_true", help="Try to automatically fix recognized mojibake.")
     encoding_parser.set_defaults(func=cmd_encoding_check)
 
     capacity_parser = subparsers.add_parser(

@@ -65,9 +65,7 @@ def _percentile(values: list[float], percentile: int) -> float:
     if not values:
         return 0.0
     sorted_values = sorted(values)
-    rank = max(
-        0, min(len(sorted_values) - 1, int((len(sorted_values) - 1) * percentile / 100))
-    )
+    rank = max(0, min(len(sorted_values) - 1, int((len(sorted_values) - 1) * percentile / 100)))
     return round(float(sorted_values[rank]), 2)
 
 
@@ -150,9 +148,7 @@ def _normalize_scenario(raw: Any) -> ScenarioSpec:
     if not method:
         raise ValueError(f"scenario[{name}].method is required")
     requires_auth = bool(raw.get("requires_auth", True))
-    headers = _normalize_mapping(
-        raw.get("headers"), field_name=f"scenario[{name}].headers"
-    )
+    headers = _normalize_mapping(raw.get("headers"), field_name=f"scenario[{name}].headers")
     query = _normalize_mapping(raw.get("query"), field_name=f"scenario[{name}].query")
     json_body = raw.get("json_body")
     form_body_raw = raw.get("form_body")
@@ -274,7 +270,7 @@ async def _login_once(
         if not token:
             return None, status, latency_ms
         return token, status, latency_ms
-    except (httpx.HTTPError, ValueError):
+    except Exception:
         latency_ms = (time.perf_counter() - request_start) * 1000.0
         return None, "EXC", latency_ms
 
@@ -332,7 +328,7 @@ async def _request_scenario(
         else:
             success = response.status_code in scenario.success_statuses
         return success, str(response.status_code), latency_ms
-    except httpx.HTTPError:
+    except Exception:
         latency_ms = (time.perf_counter() - started_at) * 1000.0
         return False, "EXC", latency_ms
 
@@ -419,9 +415,7 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
         )
 
     login_pool_size = max(args.session_pool_size, args.token_count)
-    login_usernames = [
-        f"{args.login_user_prefix}{index + 1}" for index in range(login_pool_size)
-    ]
+    login_usernames = [f"{args.login_user_prefix}{index + 1}" for index in range(login_pool_size)]
 
     measure_bucket = MetricBucket()
     scenario_bucket: dict[str, MetricBucket] = {
@@ -453,9 +447,7 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
 
             total_bucket.record(latency_ms=latency_ms, status=status, success=success)
             if time.monotonic() >= warmup_deadline:
-                measure_bucket.record(
-                    latency_ms=latency_ms, status=status, success=success
-                )
+                measure_bucket.record(latency_ms=latency_ms, status=status, success=success)
                 scenario_bucket[scenario].record(
                     latency_ms=latency_ms,
                     status=status,
@@ -470,9 +462,7 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
                 await asyncio.sleep(1.0 / args.spawn_rate)
         await asyncio.gather(*tasks)
     finally:
-        await asyncio.gather(
-            *(client.aclose() for client in clients), return_exceptions=True
-        )
+        await asyncio.gather(*(client.aclose() for client in clients), return_exceptions=True)
 
     measured = measure_bucket.to_dict()
     threshold_pass = (
