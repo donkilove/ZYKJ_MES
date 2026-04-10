@@ -19,7 +19,6 @@ class SessionServiceUnitTest(unittest.TestCase):
         session_service._SESSION_CLEANUP_NEXT_AT = 0.0
         session_service._SESSION_ACTIVE_LOCAL_CACHE.clear()
         session_service._SUCCESS_LOGIN_LOG_LOCAL_CACHE.clear()
-        session_service._PRIMARY_ROLE_META_LOCAL_CACHE.clear()
 
     def test_touch_session_throttles_when_interval_not_elapsed(self) -> None:
         now = datetime(2026, 4, 8, 12, 0, tzinfo=UTC)
@@ -301,28 +300,6 @@ class SessionServiceUnitTest(unittest.TestCase):
         cleanup.assert_called_once_with(db)
         get_by_sid.assert_called_once_with(db, "sid-1")
 
-    def test_get_current_session_projection_returns_lightweight_projection(self) -> None:
-        db = MagicMock()
-        now = datetime(2026, 4, 8, 12, 0, tzinfo=UTC)
-        execute_result = MagicMock()
-        execute_result.mappings.return_value.first.return_value = {
-            "session_token_id": "sid-1",
-            "user_id": 7,
-            "login_time": now - timedelta(minutes=3),
-            "last_active_at": now - timedelta(seconds=10),
-            "expires_at": now + timedelta(minutes=10),
-            "status": "active",
-        }
-        db.execute.return_value = execute_result
-
-        row = session_service.get_current_session_projection(db, session_token_id="sid-1")
-
-        self.assertIsInstance(row, session_service.CurrentSessionProjection)
-        assert row is not None
-        self.assertEqual(row.session_token_id, "sid-1")
-        self.assertEqual(row.user_id, 7)
-        self.assertEqual(row.status, "active")
-
     def test_touch_session_caps_cache_ttl_to_remaining_lifetime(self) -> None:
         now = datetime(2026, 4, 8, 12, 0, tzinfo=UTC)
         row = SimpleNamespace(
@@ -457,18 +434,6 @@ class SessionServiceUnitTest(unittest.TestCase):
         self.assertIsNone(rows[0].stage_id)
         self.assertIsNone(rows[0].stage_name)
         list_roles.assert_called_once_with(db, [9])
-
-    def test_list_primary_role_meta_by_user_ids_uses_local_cache(self) -> None:
-        db = MagicMock()
-        db.execute.return_value.all.return_value = [(7, "operator", "操作员")]
-
-        with patch.object(session_service.time, "monotonic", side_effect=[10.0, 11.0]):
-            first = session_service._list_primary_role_meta_by_user_ids(db, [7, 7])
-            second = session_service._list_primary_role_meta_by_user_ids(db, [7])
-
-        self.assertEqual(first, {7: ("operator", "操作员")})
-        self.assertEqual(second, {7: ("operator", "操作员")})
-        db.execute.assert_called_once()
 
 
 if __name__ == "__main__":

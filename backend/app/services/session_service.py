@@ -6,10 +6,7 @@ from threading import Lock, RLock
 import time
 from uuid import uuid4
 
-from typing import Any
-
 from sqlalchemy import and_, delete, func, select, update
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.associations import user_roles
@@ -35,11 +32,6 @@ _SESSION_ACTIVE_LOCAL_CACHE_LOCK = RLock()
 _SUCCESS_LOGIN_LOG_LOCAL_CACHE: dict[str, float] = {}
 _SUCCESS_LOGIN_LOG_LOCAL_CACHE_LOCK = RLock()
 _SUCCESS_LOGIN_LOG_MIN_INTERVAL_SECONDS = 60
-_PRIMARY_ROLE_META_LOCAL_CACHE: dict[
-    int, tuple[float, tuple[str | None, str | None]]
-] = {}
-_PRIMARY_ROLE_META_LOCAL_CACHE_LOCK = RLock()
-_PRIMARY_ROLE_META_CACHE_TTL_SECONDS = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,24 +58,14 @@ class OnlineSessionProjection:
     status: str
 
 
-@dataclass(frozen=True, slots=True)
-class CurrentSessionProjection:
-    session_token_id: str
-    user_id: int
-    login_time: datetime
-    last_active_at: datetime
-    expires_at: datetime
-    status: str
-
-
 def _build_login_log_filters(
     *,
     username: str | None = None,
     success: bool | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-) -> list[Any]:
-    filters: list[Any] = []
+) -> list[object]:
+    filters: list[object] = []
     if username:
         filters.append(LoginLog.username.ilike(f"%{username.strip()}%"))
     if success is not None:
@@ -99,8 +81,8 @@ def _build_online_session_filters(
     *,
     keyword: str | None = None,
     status_filter: str | None = None,
-) -> list[Any]:
-    filters: list[Any] = [User.is_deleted.is_(False)]
+) -> list[object]:
+    filters: list[object] = [User.is_deleted.is_(False)]
     if keyword:
         filters.append(User.username.ilike(f"%{keyword.strip()}%"))
     if status_filter:
@@ -118,30 +100,12 @@ def _list_primary_role_meta_by_user_ids(
     unique_user_ids = sorted({user_id for user_id in user_ids if user_id > 0})
     if not unique_user_ids:
         return {}
-    now_monotonic = time.monotonic()
-    result: dict[int, tuple[str | None, str | None]] = {}
-    missing_user_ids: list[int] = []
-    with _PRIMARY_ROLE_META_LOCAL_CACHE_LOCK:
-        for user_id in unique_user_ids:
-            cached = _PRIMARY_ROLE_META_LOCAL_CACHE.get(user_id)
-            if cached is None:
-                missing_user_ids.append(user_id)
-                continue
-            expire_at, role_meta = cached
-            if expire_at <= now_monotonic:
-                _PRIMARY_ROLE_META_LOCAL_CACHE.pop(user_id, None)
-                missing_user_ids.append(user_id)
-                continue
-            result[user_id] = role_meta
-    if not missing_user_ids:
-        return result
-
     primary_role_subquery = (
         select(
             user_roles.c.user_id.label("user_id"),
             func.min(user_roles.c.role_id).label("role_id"),
         )
-        .where(user_roles.c.user_id.in_(missing_user_ids))
+        .where(user_roles.c.user_id.in_(unique_user_ids))
         .group_by(user_roles.c.user_id)
         .subquery()
     )
@@ -152,17 +116,10 @@ def _list_primary_role_meta_by_user_ids(
             Role.name,
         ).join(Role, Role.id == primary_role_subquery.c.role_id)
     ).all()
-    fetched_role_meta = {
+    return {
         int(user_id): (role_code, role_name)
         for user_id, role_code, role_name in role_rows
     }
-    expire_at = now_monotonic + _PRIMARY_ROLE_META_CACHE_TTL_SECONDS
-    with _PRIMARY_ROLE_META_LOCAL_CACHE_LOCK:
-        for user_id in missing_user_ids:
-            role_meta = fetched_role_meta.get(user_id, (None, None))
-            _PRIMARY_ROLE_META_LOCAL_CACHE[user_id] = (expire_at, role_meta)
-            result[user_id] = role_meta
-    return result
 
 
 def _now_utc() -> datetime:
@@ -180,9 +137,7 @@ def _session_touch_interval_seconds() -> int:
     )
 
 
-def _cap_session_cache_ttl(
-    ttl_seconds: int, expires_at: datetime, now: datetime
-) -> int:
+def _cap_session_cache_ttl(ttl_seconds: int, expires_at: datetime, now: datetime) -> int:
     remaining = (expires_at - now).total_seconds()
     if remaining <= 0:
         return 1
@@ -440,7 +395,7 @@ def cleanup_expired_sessions(db: Session) -> int:
             last_active_at=now,
         )
     )
-    return int(result.rowcount or 0)  # type: ignore[reportAttributeAccessIssue]
+    return int(result.rowcount or 0)
 
 
 def cleanup_expired_sessions_if_due(
@@ -459,48 +414,15 @@ def cleanup_expired_sessions_if_due(
 
     try:
         return cleanup_expired_sessions(db)
-    except SQLAlchemyError:
+    except Exception:
         with _SESSION_CLEANUP_LOCK:
             _SESSION_CLEANUP_NEXT_AT = 0.0
         raise
 
 
-def get_user_current_session(
-    db: Session, *, session_token_id: str
-) -> UserSession | None:
+def get_user_current_session(db: Session, *, session_token_id: str) -> UserSession | None:
     cleanup_expired_sessions_if_due(db)
     return get_session_by_token_id(db, session_token_id)
-
-
-def get_current_session_projection(
-    db: Session,
-    *,
-    session_token_id: str,
-) -> CurrentSessionProjection | None:
-    row = (
-        db.execute(
-            select(
-                UserSession.session_token_id,
-                UserSession.user_id,
-                UserSession.login_time,
-                UserSession.last_active_at,
-                UserSession.expires_at,
-                UserSession.status,
-            ).where(UserSession.session_token_id == session_token_id)
-        )
-        .mappings()
-        .first()
-    )
-    if row is None:
-        return None
-    return CurrentSessionProjection(
-        session_token_id=row["session_token_id"],
-        user_id=row["user_id"],
-        login_time=row["login_time"],
-        last_active_at=row["last_active_at"],
-        expires_at=row["expires_at"],
-        status=row["status"],
-    )
 
 
 def list_online_sessions(
@@ -601,9 +523,7 @@ def list_login_logs(
     if filters:
         total_stmt = total_stmt.where(and_(*filters))
     total = int(db.execute(total_stmt).scalar_one())
-    rows = list(
-        db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
-    )
+    rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     return total, rows
 
 
@@ -615,9 +535,12 @@ def force_offline_sessions(
     if not session_token_ids:
         return 0
     now = _now_utc()
-    stmt = select(UserSession).where(
-        UserSession.session_token_id.in_(session_token_ids),
-        UserSession.status == "active",
+    stmt = (
+        select(UserSession)
+        .where(
+            UserSession.session_token_id.in_(session_token_ids),
+            UserSession.status == "active",
+        )
     )
     rows = db.execute(stmt).scalars().all()
     for row in rows:
@@ -634,7 +557,7 @@ def force_offline_sessions(
 def delete_expired_login_logs(db: Session) -> int:
     deadline = _now_utc() - timedelta(days=settings.login_log_retention_days)
     result = db.execute(delete(LoginLog).where(LoginLog.login_time < deadline))
-    return int(result.rowcount or 0)  # type: ignore[reportAttributeAccessIssue]
+    return int(result.rowcount or 0)
 
 
 def cleanup_expired_login_logs_if_due(
@@ -653,7 +576,7 @@ def cleanup_expired_login_logs_if_due(
 
     try:
         return delete_expired_login_logs(db)
-    except SQLAlchemyError:
+    except Exception:
         with _LOGIN_LOG_CLEANUP_LOCK:
             _LOGIN_LOG_CLEANUP_NEXT_AT = 0.0
         raise

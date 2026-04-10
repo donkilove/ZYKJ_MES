@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -1239,7 +1239,7 @@ async def run_message_delivery_maintenance_loop() -> None:
             stats = await run_message_delivery_maintenance_once(limit=200)
             if any(value > 0 for value in stats.values()):
                 logger.info("[MSG_MAINT] 本轮维护完成：%s", stats)
-        except (RuntimeError, ValueError, SQLAlchemyError):
+        except Exception:
             logger.exception("[MSG_MAINT] 消息投递维护循环执行失败")
         await asyncio.sleep(interval_seconds)
 

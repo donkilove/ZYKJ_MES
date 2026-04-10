@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import cast
 
-from sqlalchemy import String, cast as sa_cast, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.core.production_constants import (
@@ -51,7 +50,6 @@ def _get_order_and_process_for_update(
     )
     if not order:
         raise ValueError("Order not found")
-    order_row = cast(ProductionOrder, order)
     process_row = (
         db.execute(
             select(ProductionOrderProcess)
@@ -66,8 +64,7 @@ def _get_order_and_process_for_update(
     )
     if not process_row:
         raise ValueError("Order process not found")
-    process_model = cast(ProductionOrderProcess, process_row)
-    return order_row, process_model
+    return order, process_row
 
 
 def _ensure_target_sub_order_exists(
@@ -215,9 +212,7 @@ def list_assist_authorizations(
             ProductionAssistAuthorization.order_id == ProductionOrder.id,
             isouter=True,
         )
-        stmt = stmt.where(
-            sa_cast(ProductionOrder.order_code, String).ilike(f"%{order_code}%")
-        )
+        stmt = stmt.where(ProductionOrder.order_code.ilike(f"%{order_code}%"))
     if process_name:
         stmt = stmt.join(
             ProductionOrderProcess,
@@ -225,32 +220,24 @@ def list_assist_authorizations(
             isouter=True,
         )
         stmt = stmt.where(
-            sa_cast(ProductionOrderProcess.process_name, String).ilike(
-                f"%{process_name}%"
-            )
+            ProductionOrderProcess.process_name.ilike(f"%{process_name}%")
         )
     if requester_username:
-        requester_user_alias = aliased(User)
+        RequesterUser = aliased(User)
         stmt = stmt.join(
-            requester_user_alias,
-            ProductionAssistAuthorization.requester_user_id == requester_user_alias.id,
+            RequesterUser,
+            ProductionAssistAuthorization.requester_user_id == RequesterUser.id,
             isouter=True,
         )
-        stmt = stmt.where(
-            sa_cast(requester_user_alias.username, String).ilike(
-                f"%{requester_username}%"
-            )
-        )
+        stmt = stmt.where(RequesterUser.username.ilike(f"%{requester_username}%"))
     if helper_username:
-        helper_user_alias = aliased(User)
+        HelperUser = aliased(User)
         stmt = stmt.join(
-            helper_user_alias,
-            ProductionAssistAuthorization.helper_user_id == helper_user_alias.id,
+            HelperUser,
+            ProductionAssistAuthorization.helper_user_id == HelperUser.id,
             isouter=True,
         )
-        stmt = stmt.where(
-            sa_cast(helper_user_alias.username, String).ilike(f"%{helper_username}%")
-        )
+        stmt = stmt.where(HelperUser.username.ilike(f"%{helper_username}%"))
     if created_at_from:
         stmt = stmt.where(ProductionAssistAuthorization.created_at >= created_at_from)
     if created_at_to:
@@ -269,7 +256,7 @@ def list_assist_authorizations(
             )
         )
 
-    rows: list[ProductionAssistAuthorization] = list(db.execute(stmt).scalars().all())
+    rows = db.execute(stmt).scalars().all()
     total = len(rows)
     offset = (page - 1) * page_size
     return total, rows[offset : offset + page_size]
@@ -296,30 +283,26 @@ def get_usable_assist_authorization_for_operation(
     )
     if row is None:
         raise ValueError("Assist authorization not found")
-    authorization = cast(ProductionAssistAuthorization, row)
-    if authorization.status != ASSIST_STATUS_APPROVED:
+    if row.status != ASSIST_STATUS_APPROVED:
         raise ValueError("Assist authorization is not approved")
-    if (
-        authorization.order_id != order_id
-        or authorization.order_process_id != order_process_id
-    ):
+    if row.order_id != order_id or row.order_process_id != order_process_id:
         raise ValueError("Assist authorization does not match order process")
-    if authorization.target_operator_user_id != target_operator_user_id:
+    if row.target_operator_user_id != target_operator_user_id:
         raise ValueError("Assist authorization target operator mismatch")
-    if authorization.helper_user_id != helper_user_id:
+    if row.helper_user_id != helper_user_id:
         raise ValueError("Assist authorization helper mismatch")
 
     if operation == ASSIST_OP_FIRST_ARTICLE:
-        if authorization.first_article_used_at is not None:
+        if row.first_article_used_at is not None:
             raise ValueError("First-article assist authorization already used")
-        if authorization.end_production_used_at is not None:
+        if row.end_production_used_at is not None:
             raise ValueError("Assist authorization already consumed")
     elif operation == ASSIST_OP_END_PRODUCTION:
-        if authorization.end_production_used_at is not None:
+        if row.end_production_used_at is not None:
             raise ValueError("End-production assist authorization already used")
     else:
         raise ValueError("Unsupported assist operation")
-    return authorization
+    return row
 
 
 def mark_assist_authorization_used(
@@ -328,7 +311,6 @@ def mark_assist_authorization_used(
     authorization_row: ProductionAssistAuthorization,
     operation: str,
 ) -> None:
-    _ = db
     if operation == ASSIST_OP_FIRST_ARTICLE:
         authorization_row.first_article_used_at = datetime.now(timezone.utc)
         return

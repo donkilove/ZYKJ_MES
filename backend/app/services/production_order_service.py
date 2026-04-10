@@ -6,7 +6,6 @@ import io
 import json
 from collections.abc import Iterable
 from datetime import UTC, date, datetime
-from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import exists, func, or_, select, update
@@ -14,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.production_constants import (
     ORDER_STATUS_COMPLETED,
+    ORDER_STATUS_IN_PROGRESS,
     ORDER_STATUS_PENDING,
     PROCESS_STATUS_COMPLETED,
     PROCESS_STATUS_IN_PROGRESS,
@@ -69,9 +69,9 @@ def _message_recipient_user_ids_for_order(
             select(User.id)
             .join(User.roles)
             .where(
-                cast(Any, User.is_deleted).is_(False),
-                cast(Any, User.is_active).is_(True),
-                cast(Any, Role.code).in_((ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN)),
+                User.is_deleted.is_(False),
+                User.is_active.is_(True),
+                Role.code.in_((ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN)),
             )
             .distinct()
         )
@@ -88,7 +88,7 @@ def _notify_order_changed(
     db: Session,
     *,
     order: ProductionOrder,
-    operator: User | None,
+    operator: User,
     event_code: str,
     title: str,
     summary: str,
@@ -119,7 +119,7 @@ def _notify_order_changed(
         ),
         recipient_user_ids=recipient_user_ids,
         dedupe_key=f"production_order_{event_code}_{order.id}_{int(order.updated_at.timestamp()) if order.updated_at else 'now'}",
-        created_by_user_id=operator.id if operator else None,
+        created_by_user_id=operator.id,
     )
 
 
@@ -232,7 +232,7 @@ def get_active_pipeline_instance_for_sub_order(
             .where(
                 OrderSubOrderPipelineInstance.sub_order_id == sub_order_id,
                 OrderSubOrderPipelineInstance.order_process_id == order_process_id,
-                cast(Any, OrderSubOrderPipelineInstance.is_active).is_(True),
+                OrderSubOrderPipelineInstance.is_active.is_(True),
             )
             .order_by(OrderSubOrderPipelineInstance.id.asc())
         )
@@ -289,7 +289,7 @@ def _resolve_processes_by_codes(
         return [], []
     stmt = (
         select(Process)
-        .where(cast(Any, Process.code).in_(process_codes))
+        .where(Process.code.in_(process_codes))
         .options(selectinload(Process.stage))
     )
     rows = db.execute(stmt).scalars().all()
@@ -305,7 +305,7 @@ def _resolve_template(
     template_id: int,
     product_id: int,
 ) -> ProductProcessTemplate:
-    template: ProductProcessTemplate | None = (
+    template = (
         db.execute(
             select(ProductProcessTemplate)
             .where(ProductProcessTemplate.id == template_id)
@@ -314,7 +314,7 @@ def _resolve_template(
         .scalars()
         .first()
     )
-    if template is None:
+    if not template:
         raise ValueError("Template not found")
     if template.product_id != product_id:
         raise ValueError("Template does not belong to selected product")
@@ -354,22 +354,22 @@ def _resolve_steps_from_payload(
     ordered_steps = sorted(process_steps, key=lambda item: int(item["step_order"]))
     stage_ids = {int(item["stage_id"]) for item in ordered_steps}
     process_ids = {int(item["process_id"]) for item in ordered_steps}
-    stage_rows: list[ProcessStage] = list(
-        db.execute(select(ProcessStage).where(cast(Any, ProcessStage.id).in_(stage_ids)))
+    stage_rows = (
+        db.execute(select(ProcessStage).where(ProcessStage.id.in_(stage_ids)))
         .scalars()
         .all()
     )
-    process_rows: list[Process] = list(
+    process_rows = (
         db.execute(
             select(Process)
-            .where(cast(Any, Process.id).in_(process_ids))
+            .where(Process.id.in_(process_ids))
             .options(selectinload(Process.stage))
         )
         .scalars()
         .all()
     )
-    stage_by_id: dict[int, ProcessStage] = {row.id: row for row in stage_rows}
-    process_by_id: dict[int, Process] = {row.id: row for row in process_rows}
+    stage_by_id = {row.id: row for row in stage_rows}
+    process_by_id = {row.id: row for row in process_rows}
 
     results: list[tuple[ProcessStage, Process]] = []
     for row in ordered_steps:
@@ -377,9 +377,9 @@ def _resolve_steps_from_payload(
         process_id = int(row["process_id"])
         stage = stage_by_id.get(stage_id)
         process = process_by_id.get(process_id)
-        if stage is None:
+        if not stage:
             raise ValueError(f"Stage not found: {stage_id}")
-        if process is None:
+        if not process:
             raise ValueError(f"Process not found: {process_id}")
         if process.stage_id != stage.id:
             raise ValueError(
@@ -417,7 +417,7 @@ def _resolve_route_steps(
         stage_by_code = {
             row.code: row
             for row in db.execute(
-                select(ProcessStage).where(cast(Any, ProcessStage.is_enabled).is_(True))
+                select(ProcessStage).where(ProcessStage.is_enabled.is_(True))
             )
             .scalars()
             .all()
@@ -438,7 +438,7 @@ def _resolve_route_steps(
         for step in sorted(template.steps, key=lambda item: item.step_order):
             process = process_by_code.get(step.process_code)
             stage = stage_by_code.get(step.stage_code)
-            if process is None or stage is None:
+            if not process or not stage:
                 raise ValueError("Template contains invalid stage/process")
             results.append((stage, process))
         if not results:
@@ -465,7 +465,7 @@ def _list_operator_users_by_process_code(db: Session, process_code: str) -> list
         .join(User.roles)
         .join(User.processes)
         .where(
-            cast(Any, User.is_active).is_(True),
+            User.is_active.is_(True),
             Process.code == process_code,
         )
         .order_by(User.id.asc())
@@ -648,13 +648,14 @@ def _backfill_historical_release_quantity(
     if previous_process_row is None:
         return False
 
-    previous_completed_quantity = int(previous_process_row.completed_quantity)
-    order_quantity = int(order.quantity)
-    current_completed_quantity = int(process_row.completed_quantity)
-    current_visible_quantity = int(process_row.visible_quantity)
-    released_visible_quantity = min(previous_completed_quantity, order_quantity)
-    target_visible_quantity = max(current_completed_quantity, released_visible_quantity)
-    if target_visible_quantity <= current_visible_quantity:
+    released_visible_quantity = min(
+        previous_process_row.completed_quantity, order.quantity
+    )
+    target_visible_quantity = max(
+        process_row.completed_quantity,
+        released_visible_quantity,
+    )
+    if target_visible_quantity <= process_row.visible_quantity:
         return False
 
     process_row.visible_quantity = target_visible_quantity
@@ -682,7 +683,7 @@ def _backfill_operator_sub_orders(
             .where(
                 ProductionOrder.status != ORDER_STATUS_COMPLETED,
                 ProductionOrderProcess.status != PROCESS_STATUS_COMPLETED,
-                cast(Any, ProductionOrderProcess.process_code).in_(process_codes),
+                ProductionOrderProcess.process_code.in_(process_codes),
             )
             .order_by(ProductionOrderProcess.id.asc())
         )
@@ -784,7 +785,7 @@ def can_user_access_order_detail(
         exists().where(
             ProductionAssistAuthorization.order_id == order_id,
             ProductionAssistAuthorization.helper_user_id == current_user.id,
-            cast(Any, ProductionAssistAuthorization.status).in_(
+            ProductionAssistAuthorization.status.in_(
                 [ASSIST_STATUS_APPROVED, ASSIST_STATUS_CONSUMED]
             ),
         )
@@ -803,7 +804,7 @@ def _invalidate_pipeline_instances_for_order(
         update(OrderSubOrderPipelineInstance)
         .where(
             OrderSubOrderPipelineInstance.order_id == order_id,
-            cast(Any, OrderSubOrderPipelineInstance.is_active).is_(True),
+            OrderSubOrderPipelineInstance.is_active.is_(True),
         )
         .values(
             is_active=False,
@@ -813,7 +814,7 @@ def _invalidate_pipeline_instances_for_order(
         )
     )
     result = db.execute(stmt)
-    return int(getattr(result, "rowcount", 0))
+    return int(result.rowcount or 0)
 
 
 def _create_pipeline_instances_for_order(
@@ -829,7 +830,7 @@ def _create_pipeline_instances_for_order(
         .join(ProductionSubOrder.order_process)
         .where(
             ProductionOrderProcess.order_id == order.id,
-            cast(Any, ProductionOrderProcess.process_code).in_(selected_codes),
+            ProductionOrderProcess.process_code.in_(selected_codes),
         )
         .order_by(
             ProductionOrderProcess.process_order.asc(),
@@ -904,7 +905,7 @@ def get_active_pipeline_instance_for_process_sequence(
                 OrderSubOrderPipelineInstance.order_id == order_id,
                 OrderSubOrderPipelineInstance.order_process_id == order_process_id,
                 OrderSubOrderPipelineInstance.pipeline_seq == pipeline_seq,
-                cast(Any, OrderSubOrderPipelineInstance.is_active).is_(True),
+                OrderSubOrderPipelineInstance.is_active.is_(True),
             )
             .order_by(OrderSubOrderPipelineInstance.id.asc())
         )
@@ -934,7 +935,7 @@ def get_active_pipeline_instance_for_link_id(
                 OrderSubOrderPipelineInstance.order_id == order_id,
                 OrderSubOrderPipelineInstance.order_process_id == order_process_id,
                 OrderSubOrderPipelineInstance.pipeline_link_id == pipeline_link_id,
-                cast(Any, OrderSubOrderPipelineInstance.is_active).is_(True),
+                OrderSubOrderPipelineInstance.is_active.is_(True),
             )
             .order_by(OrderSubOrderPipelineInstance.id.asc())
         )
@@ -953,15 +954,14 @@ def get_order_pipeline_mode(
     *,
     order_id: int,
 ) -> dict[str, object]:
-    order = cast(
-        ProductionOrder | None,
+    order = (
         db.execute(
             select(ProductionOrder)
             .where(ProductionOrder.id == order_id)
             .options(selectinload(ProductionOrder.processes))
         )
         .scalars()
-        .first(),
+        .first()
     )
     if not order:
         raise ValueError("Order not found")
@@ -998,8 +998,7 @@ def update_order_pipeline_mode(
     ):
         raise PermissionError("Current user has no permission to update pipeline mode")
 
-    order = cast(
-        ProductionOrder | None,
+    order = (
         db.execute(
             select(ProductionOrder)
             .where(ProductionOrder.id == order_id)
@@ -1007,7 +1006,7 @@ def update_order_pipeline_mode(
             .with_for_update()
         )
         .scalars()
-        .first(),
+        .first()
     )
     if not order:
         raise ValueError("Order not found")
@@ -1164,14 +1163,14 @@ def list_orders(
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(
             or_(
-                cast(Any, ProductionOrder.order_code).ilike(like_pattern),
-                cast(Any, Product.name).ilike(like_pattern),
+                ProductionOrder.order_code.ilike(like_pattern),
+                Product.name.ilike(like_pattern),
             )
         )
     if status:
         stmt = stmt.where(ProductionOrder.status == status.strip())
     if product_name:
-        stmt = stmt.where(cast(Any, Product.name).ilike(f"%{product_name.strip()}%"))
+        stmt = stmt.where(Product.name.ilike(f"%{product_name.strip()}%"))
     if pipeline_enabled is not None:
         stmt = stmt.where(ProductionOrder.pipeline_enabled == pipeline_enabled)
     if start_date_from:
@@ -1199,7 +1198,7 @@ def list_orders(
         .scalars()
         .all()
     )
-    return total, list(rows)
+    return total, rows
 
 
 def _build_order_process_rows(
@@ -1304,7 +1303,7 @@ def _save_route_as_template(
             select(ProductProcessTemplate.id).where(
                 ProductProcessTemplate.product_id == product_id,
                 ProductProcessTemplate.template_name == normalized_template_name,
-                cast(Any, ProductProcessTemplate.is_enabled).is_(True),
+                ProductProcessTemplate.is_enabled.is_(True),
             )
         )
         .scalars()
@@ -1354,7 +1353,7 @@ def _save_route_as_template(
             db.execute(
                 select(ProductProcessTemplate).where(
                     ProductProcessTemplate.product_id == product_id,
-                    cast(Any, ProductProcessTemplate.is_enabled).is_(True),
+                    ProductProcessTemplate.is_enabled.is_(True),
                     ProductProcessTemplate.lifecycle_status == "published",
                 )
             )
@@ -1368,9 +1367,9 @@ def _save_route_as_template(
             db.execute(
                 select(ProductProcessTemplate.id).where(
                     ProductProcessTemplate.product_id == product_id,
-                    cast(Any, ProductProcessTemplate.is_enabled).is_(True),
+                    ProductProcessTemplate.is_enabled.is_(True),
                     ProductProcessTemplate.lifecycle_status == "published",
-                    cast(Any, ProductProcessTemplate.is_default).is_(True),
+                    ProductProcessTemplate.is_default.is_(True),
                 )
             )
             .scalars()
@@ -1407,9 +1406,8 @@ def create_order(
         raise ValueError("Quantity must be greater than 0")
     if get_order_by_code(db, normalized_order_code):
         raise ValueError("Order code already exists")
-    product = cast(
-        Product | None,
-        db.execute(select(Product).where(Product.id == product_id)).scalars().first(),
+    product = (
+        db.execute(select(Product).where(Product.id == product_id)).scalars().first()
     )
     if not product:
         raise ValueError("Product not found")
@@ -1438,7 +1436,7 @@ def create_order(
             db,
             product_id=product_id,
             route_steps=route_steps,
-            template_name=new_template_name or "",
+            template_name=new_template_name,
             set_default=new_template_set_default,
             operator=operator,
         )
@@ -1528,9 +1526,8 @@ def update_order(
         raise ValueError("Only pending orders can be updated")
     if quantity <= 0:
         raise ValueError("Quantity must be greater than 0")
-    product = cast(
-        Product | None,
-        db.execute(select(Product).where(Product.id == product_id)).scalars().first(),
+    product = (
+        db.execute(select(Product).where(Product.id == product_id)).scalars().first()
     )
     if not product:
         raise ValueError("Product not found")
@@ -1563,7 +1560,7 @@ def update_order(
             db,
             product_id=product_id,
             route_steps=route_steps,
-            template_name=new_template_name or "",
+            template_name=new_template_name,
             set_default=new_template_set_default,
             operator=operator,
         )
@@ -1725,7 +1722,7 @@ def _build_my_order_item(
     assist_authorization_id: int | None = None,
     can_first_article_override: bool | None = None,
     can_end_production_override: bool | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     process_remaining = max(
         process_row.visible_quantity - process_row.completed_quantity, 0
     )
@@ -1742,6 +1739,7 @@ def _build_my_order_item(
     pipeline_end_allowed = False
     pipeline_mode_enabled = bool(order.pipeline_enabled)
     pipeline_instance = None
+    pipeline_process_selected = False
     if is_operator_context and sub_order is not None and sub_order.is_visible:
         pipeline_process_selected = is_pipeline_process_selected_for_order(
             order=order,
@@ -1867,7 +1865,7 @@ def _collect_my_order_items(
     current_process_id: int | None = None,
     exact_order_id: int | None = None,
     exact_order_process_id: int | None = None,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     if view_mode not in {"own", "proxy", "assist"}:
         raise ValueError("Invalid work view mode")
 
@@ -1883,7 +1881,7 @@ def _collect_my_order_items(
             raise PermissionError("Current user has no permission for proxy view")
         if proxy_operator_user_id is None:
             raise ValueError("proxy_operator_user_id is required for proxy view")
-        proxy_operator = cast(User | None, db.get(User, proxy_operator_user_id))
+        proxy_operator = db.get(User, proxy_operator_user_id)
         if proxy_operator is None:
             raise ValueError("proxy_operator_user_id is invalid")
         # 代理视角需要按目标操作员的工序范围执行同一套历史放行回填。
@@ -1895,7 +1893,7 @@ def _collect_my_order_items(
             .join(ProductionOrderProcess.order)
             .where(
                 ProductionSubOrder.operator_user_id == proxy_operator_user_id,
-                cast(Any, ProductionSubOrder.is_visible).is_(True),
+                ProductionSubOrder.is_visible.is_(True),
                 ProductionOrder.status != ORDER_STATUS_COMPLETED,
                 ProductionOrderProcess.status != PROCESS_STATUS_COMPLETED,
             )
@@ -1917,11 +1915,11 @@ def _collect_my_order_items(
             like_pattern = f"%{keyword.strip()}%"
             stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
                 or_(
-                    cast(Any, ProductionOrder.order_code).ilike(like_pattern),
-                    cast(Any, Product.name).ilike(like_pattern),
-                    cast(Any, ProductionOrder.supplier_name).ilike(like_pattern),
-                    cast(Any, ProductionOrderProcess.process_code).ilike(like_pattern),
-                    cast(Any, ProductionOrderProcess.process_name).ilike(like_pattern),
+                    ProductionOrder.order_code.ilike(like_pattern),
+                    Product.name.ilike(like_pattern),
+                    ProductionOrder.supplier_name.ilike(like_pattern),
+                    ProductionOrderProcess.process_code.ilike(like_pattern),
+                    ProductionOrderProcess.process_name.ilike(like_pattern),
                 )
             )
         sub_orders = db.execute(stmt).scalars().all()
@@ -1946,7 +1944,7 @@ def _collect_my_order_items(
             .where(
                 ProductionAssistAuthorization.helper_user_id == current_user.id,
                 ProductionAssistAuthorization.status == ASSIST_STATUS_APPROVED,
-                cast(Any, ProductionAssistAuthorization.end_production_used_at).is_(None),
+                ProductionAssistAuthorization.end_production_used_at.is_(None),
             )
             .options(
                 selectinload(ProductionAssistAuthorization.order).selectinload(
@@ -1983,7 +1981,7 @@ def _collect_my_order_items(
                         ProductionSubOrder.order_process_id == process_row.id,
                         ProductionSubOrder.operator_user_id
                         == assist_row.target_operator_user_id,
-                        cast(Any, ProductionSubOrder.is_visible).is_(True),
+                        ProductionSubOrder.is_visible.is_(True),
                     )
                     .options(selectinload(ProductionSubOrder.operator))
                 )
@@ -2054,7 +2052,7 @@ def _collect_my_order_items(
             .join(ProductionOrderProcess.order)
             .where(
                 ProductionSubOrder.operator_user_id == current_user.id,
-                cast(Any, ProductionSubOrder.is_visible).is_(True),
+                ProductionSubOrder.is_visible.is_(True),
                 ProductionOrder.status != ORDER_STATUS_COMPLETED,
                 ProductionOrderProcess.status != PROCESS_STATUS_COMPLETED,
             )
@@ -2075,11 +2073,11 @@ def _collect_my_order_items(
             like_pattern = f"%{keyword.strip()}%"
             stmt = stmt.join(Product, Product.id == ProductionOrder.product_id).where(
                 or_(
-                    cast(Any, ProductionOrder.order_code).ilike(like_pattern),
-                    cast(Any, Product.name).ilike(like_pattern),
-                    cast(Any, ProductionOrder.supplier_name).ilike(like_pattern),
-                    cast(Any, ProductionOrderProcess.process_code).ilike(like_pattern),
-                    cast(Any, ProductionOrderProcess.process_name).ilike(like_pattern),
+                    ProductionOrder.order_code.ilike(like_pattern),
+                    Product.name.ilike(like_pattern),
+                    ProductionOrder.supplier_name.ilike(like_pattern),
+                    ProductionOrderProcess.process_code.ilike(like_pattern),
+                    ProductionOrderProcess.process_name.ilike(like_pattern),
                 )
             )
         sub_orders = db.execute(stmt).scalars().all()
@@ -2100,7 +2098,7 @@ def _collect_my_order_items(
             )
 
     if order_status is not None or current_process_id is not None:
-        filtered_items: list[dict[str, Any]] = []
+        filtered_items: list[dict[str, object]] = []
         for item in items:
             if (
                 order_status is not None
@@ -2111,7 +2109,7 @@ def _collect_my_order_items(
                 current_process_value = item.get("current_process_id")
                 try:
                     process_id_value = (
-                        int(current_process_value)  # type: ignore[reportArgumentType]
+                        int(current_process_value)
                         if current_process_value is not None
                         else 0
                     )
@@ -2136,7 +2134,7 @@ def list_my_orders(
     proxy_operator_user_id: int | None = None,
     order_status: str | None = None,
     current_process_id: int | None = None,
-) -> tuple[int, list[dict[str, Any]]]:
+) -> tuple[int, list[dict[str, object]]]:
     items = _collect_my_order_items(
         db,
         current_user=current_user,
@@ -2152,7 +2150,7 @@ def list_my_orders(
     return total, items[offset : offset + page_size]
 
 
-def _my_order_quantity_summary(item: dict[str, Any]) -> str:
+def _my_order_quantity_summary(item: dict[str, object]) -> str:
     visible_quantity = int(item.get("visible_quantity") or 0)
     process_completed_quantity = int(item.get("process_completed_quantity") or 0)
     user_assigned_quantity = item.get("user_assigned_quantity")
@@ -2183,7 +2181,7 @@ def get_my_order_context(
     current_user: User,
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
-) -> dict[str, Any] | None:
+) -> dict[str, object] | None:
     items = _collect_my_order_items(
         db,
         current_user=current_user,
@@ -2207,7 +2205,7 @@ def export_my_orders_csv(
     proxy_operator_user_id: int | None = None,
     order_status: str | None = None,
     current_process_id: int | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     items = _collect_my_order_items(
         db,
         current_user=current_user,
@@ -2279,7 +2277,7 @@ def export_orders_csv(
     start_date_to: date | None = None,
     due_date_from: date | None = None,
     due_date_to: date | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     _, rows = list_orders(
         db,
         page=1,
@@ -2386,7 +2384,7 @@ def list_pipeline_instances(
             ProductionOrder,
             ProductionOrder.id == OrderSubOrderPipelineInstance.order_id,
             isouter=False,
-        ).where(cast(Any, ProductionOrder.order_code).ilike(f"%{order_code.strip()}%"))
+        ).where(ProductionOrder.order_code.ilike(f"%{order_code.strip()}%"))
     if order_process_id is not None:
         stmt = stmt.where(
             OrderSubOrderPipelineInstance.order_process_id == order_process_id
@@ -2401,13 +2399,13 @@ def list_pipeline_instances(
             isouter=False,
         ).where(
             or_(
-                cast(Any, OrderSubOrderPipelineInstance.process_code).ilike(like_pattern),
-                cast(Any, ProductionOrderProcess.process_name).ilike(like_pattern),
+                OrderSubOrderPipelineInstance.process_code.ilike(like_pattern),
+                ProductionOrderProcess.process_name.ilike(like_pattern),
             )
         )
     if pipeline_sub_order_no is not None and pipeline_sub_order_no.strip():
         stmt = stmt.where(
-            cast(Any, OrderSubOrderPipelineInstance.pipeline_sub_order_no).ilike(
+            OrderSubOrderPipelineInstance.pipeline_sub_order_no.ilike(
                 f"%{pipeline_sub_order_no.strip()}%"
             )
         )
@@ -2421,4 +2419,4 @@ def list_pipeline_instances(
     rows = db.execute(stmt).unique().scalars().all()
     total = len(rows)
     offset = (page - 1) * page_size
-    return total, list(rows[offset : offset + page_size])
+    return total, rows[offset : offset + page_size]

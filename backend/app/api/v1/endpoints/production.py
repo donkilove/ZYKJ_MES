@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
@@ -51,6 +50,7 @@ from app.core.security import verify_password
 from app.core.rbac import (
     ROLE_OPERATOR,
     ROLE_PRODUCTION_ADMIN,
+    ROLE_QUALITY_ADMIN,
     ROLE_SYSTEM_ADMIN,
 )
 from app.db.session import get_db
@@ -187,16 +187,16 @@ from app.services.production_statistics_service import (
 router = APIRouter()
 
 
-def _build_service_error(error: Exception) -> HTTPException:
+def _raise_service_error(error: Exception) -> None:
     message = str(error)
     message_lower = message.lower()
     if isinstance(error, PermissionError):
-        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=message)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=message)
     if isinstance(error, RuntimeError):
-        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
     if "not found" in message_lower:
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
-    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
 
 def _parse_id_list_query(raw_value: str | None) -> list[int]:
@@ -364,7 +364,7 @@ def _to_assist_user_option_item(user: User) -> AssistUserOptionItem:
     )
 
 
-def _to_order_pipeline_mode_item(payload: dict[str, Any]) -> OrderPipelineModeItem:
+def _to_order_pipeline_mode_item(payload: dict[str, object]) -> OrderPipelineModeItem:
     return OrderPipelineModeItem(
         order_id=int(payload.get("order_id") or 0),
         enabled=bool(payload.get("enabled")),
@@ -495,7 +495,7 @@ def create_order_api(
             operator=current_user,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     row = get_order_by_id(db, row.id, with_relations=True) or row
     return success_response(_to_order_item(row), message="created")
 
@@ -575,7 +575,7 @@ def get_order_pipeline_mode_api(
             )
         payload = get_order_pipeline_mode(db, order_id=order_id)
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(_to_order_pipeline_mode_item(payload))
 
 
@@ -600,7 +600,7 @@ def update_order_pipeline_mode_api(
             operator=current_user,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(_to_order_pipeline_mode_item(updated), message="updated")
 
 
@@ -641,7 +641,7 @@ def update_order_api(
             operator=current_user,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     row = get_order_by_id(db, row.id, with_relations=True) or row
     return success_response(_to_order_item(row), message="updated")
 
@@ -663,7 +663,7 @@ def delete_order_api(
     try:
         delete_order(db, order=order, operator=current_user)
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response({"deleted": True}, message="deleted")
 
 
@@ -728,7 +728,7 @@ def complete_order_api(
     try:
         row = complete_order_manually(db, order=order, operator=current_user)
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(
         OrderActionResult(order_id=row.id, status=row.status, message="订单已结束"),
         message="order_completed",
@@ -783,7 +783,7 @@ def get_my_orders_api(
             current_process_id=current_process_id,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(
         MyOrderListResult(
             total=total,
@@ -822,7 +822,7 @@ def export_my_orders_api(
             current_process_id=payload.current_process_id,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(ProductionExportResult(**result))
 
 
@@ -858,7 +858,7 @@ def get_my_order_context_api(
             proxy_operator_user_id=proxy_operator_user_id,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     if item is None:
         return success_response(MyOrderContextResult(found=False, item=None))
     return success_response(MyOrderContextResult(found=True, item=MyOrderItem(**item)))
@@ -870,14 +870,13 @@ def _get_first_article_order_context(
     order_id: int,
     order_process_id: int,
 ) -> tuple[ProductionOrder, ProductionOrderProcess]:
-    order = cast(ProductionOrder | None, db.get(ProductionOrder, order_id))
+    order = db.get(ProductionOrder, order_id)
     if order is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Order not found",
         )
-    process_row = cast(
-        ProductionOrderProcess | None,
+    process_row = (
         db.execute(
             select(ProductionOrderProcess).where(
                 ProductionOrderProcess.id == order_process_id,
@@ -885,7 +884,7 @@ def _get_first_article_order_context(
             )
         )
         .scalars()
-        .first(),
+        .first()
     )
     if process_row is None:
         raise HTTPException(
@@ -923,7 +922,7 @@ def submit_first_article_api(
             assist_authorization_id=payload.assist_authorization_id,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(
         OrderActionResult(
             order_id=row.id,
@@ -955,7 +954,7 @@ def list_first_article_templates_api(
             .where(
                 FirstArticleTemplate.product_id == order.product_id,
                 FirstArticleTemplate.process_code == process_row.process_code,
-                cast(Any, FirstArticleTemplate.is_enabled).is_(True),
+                FirstArticleTemplate.is_enabled.is_(True),
             )
             .order_by(
                 FirstArticleTemplate.template_name.asc(),
@@ -992,7 +991,7 @@ def list_first_article_participant_users_api(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
 ) -> ApiResponse[FirstArticleParticipantOptionListResult]:
-    order = cast(ProductionOrder | None, db.get(ProductionOrder, order_id))
+    order = db.get(ProductionOrder, order_id)
     if order is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1001,7 +1000,7 @@ def list_first_article_participant_users_api(
     rows = (
         db.execute(
             select(User)
-            .where(cast(Any, User.is_active).is_(True), cast(Any, User.is_deleted).is_(False))
+            .where(User.is_active.is_(True), User.is_deleted.is_(False))
             .order_by(User.username.asc(), User.id.asc())
         )
         .scalars()
@@ -1032,7 +1031,7 @@ def get_first_article_parameters_api(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
 ) -> ApiResponse[FirstArticleParameterListResult]:
-    order, process_row = _get_first_article_order_context(
+    order, _ = _get_first_article_order_context(
         db,
         order_id=order_id,
         order_process_id=order_process_id,
@@ -1120,7 +1119,7 @@ def end_production_api(
             else None,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(
         OrderActionResult(
             order_id=row.id,
@@ -1200,7 +1199,7 @@ def get_today_realtime_data_api(
         )
         payload = get_today_realtime_data(db, filters=filters)
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(ProductionDataTodayRealtimeResult(**payload))
 
 
@@ -1227,7 +1226,7 @@ def get_unfinished_progress_data_api(
             order_status=order_status,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(ProductionDataUnfinishedProgressResult(**payload))
 
 
@@ -1260,7 +1259,7 @@ def get_manual_production_data_api(
         )
         payload = get_manual_production_data(db, filters=filters)
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(ProductionDataManualResult(**payload))
 
 
@@ -1290,7 +1289,7 @@ def export_manual_production_data_api(
             operator=current_user,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(ProductionDataManualExportResult(**data))
 
 
@@ -1325,7 +1324,7 @@ def get_scrap_statistics_api(
             ),
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(
         ScrapStatisticsListResult(
             total=total,
@@ -1357,7 +1356,7 @@ def export_scrap_statistics_api(
             operator=current_user,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(ProductionExportResult(**result))
 
 
@@ -1388,7 +1387,7 @@ def get_repair_orders_api(
             ),
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(
         RepairOrderListResult(
             total=total,
@@ -1423,7 +1422,7 @@ def create_manual_repair_order_api(
         db.refresh(row)
     except Exception as error:
         db.rollback()
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(_to_repair_order_item(row), message="created")
 
 
@@ -1445,7 +1444,7 @@ def get_repair_order_phenomena_summary_api(
             repair_order_id=repair_order_id,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(
         RepairOrderPhenomenaSummaryResult(
             repair_order_id=repair_order_id,
@@ -1476,7 +1475,7 @@ def complete_repair_order_api(
             operator=current_user,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(_to_repair_order_item(row), message="completed")
 
 
@@ -1501,7 +1500,7 @@ def export_repair_orders_api(
             operator=current_user,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(ProductionExportResult(**result))
 
 
@@ -1539,7 +1538,7 @@ def get_assist_authorizations_api(
             created_at_to=created_at_to,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(
         AssistAuthorizationListResult(
             total=total,
@@ -1572,7 +1571,7 @@ def create_assist_authorization_api(
             requester=current_user,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(
         _to_assist_authorization_item(row),
         message="created",
@@ -1607,8 +1606,8 @@ def get_assist_user_options_api(
         select(User)
         .join(User.roles)
         .where(
-            cast(Any, User.is_active).is_(True),
-            cast(Any, Role.code).in_(allowed_role_codes),
+            User.is_active.is_(True),
+            Role.code.in_(allowed_role_codes),
         )
         .order_by(User.id.asc())
         .distinct()
@@ -1621,8 +1620,8 @@ def get_assist_user_options_api(
         like_pattern = f"%{keyword.strip()}%"
         stmt = stmt.where(
             or_(
-                cast(Any, User.username).ilike(like_pattern),
-                cast(Any, User.full_name).ilike(like_pattern),
+                User.username.ilike(like_pattern),
+                User.full_name.ilike(like_pattern),
             )
         )
 
@@ -1638,7 +1637,7 @@ def get_assist_user_options_api(
     )
 
 
-def _to_pipeline_instance_item(row: Any) -> PipelineInstanceItem:
+def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
     return PipelineInstanceItem(
         id=row.id,
         pipeline_link_id=row.pipeline_link_id,
@@ -1659,7 +1658,7 @@ def _to_pipeline_instance_item(row: Any) -> PipelineInstanceItem:
 
 
 def _to_repair_order_detail_item(
-    row: Any, event_logs: list | None = None
+    row: object, event_logs: list | None = None
 ) -> RepairOrderDetailItem:
     from app.schemas.production import (
         RepairCauseDetailItem,
@@ -1763,7 +1762,6 @@ def export_orders_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_PROD_ORDERS_EXPORT)),
 ) -> ApiResponse[ProductionExportResult]:
-    _ = current_user
     try:
         result = export_orders_csv(
             db,
@@ -1777,7 +1775,7 @@ def export_orders_api(
             due_date_to=payload.due_date_to,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(ProductionExportResult(**result))
 
 
@@ -1812,7 +1810,7 @@ def get_pipeline_instances_api(
             page_size=page_size,
         )
     except Exception as error:
-        raise _build_service_error(error) from error
+        _raise_service_error(error)
     return success_response(
         PipelineInstanceListResult(
             total=total,

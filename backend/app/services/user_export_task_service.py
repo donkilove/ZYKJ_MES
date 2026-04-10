@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import csv
 import io
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from threading import RLock
 from uuid import uuid4
 
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.user import User
 from app.models.user_export_task import UserExportTask
+from app.schemas.user import UserDeleteResult, UserItem
 from app.services.audit_service import write_audit_log
 from app.services.session_service import list_online_user_ids
 from app.services.user_service import (
@@ -31,10 +29,9 @@ USER_EXPORT_STATUS_EXPIRED = "expired"
 USER_EXPORT_PROCESSING_TIMEOUT_MINUTES = 30
 USER_EXPORT_RETENTION_DAYS = 7
 USER_EXPORT_TASK_LIST_LIMIT = 20
-_USER_EXPORT_TASK_CLEANUP_LOCK = RLock()
-_USER_EXPORT_TASK_CLEANUP_NEXT_AT = 0.0
-_USER_EXPORT_TASK_CLEANUP_MIN_INTERVAL_SECONDS = 60
-RUNTIME_EXPORT_DIR = Path(__file__).resolve().parents[2] / "runtime_exports" / "user"
+RUNTIME_EXPORT_DIR = (
+    Path(__file__).resolve().parents[2] / "runtime_exports" / "user"
+)
 
 
 def _now_utc() -> datetime:
@@ -50,7 +47,8 @@ def _sanitize_filename_segment(value: str | None) -> str:
     if value is None:
         return ""
     normalized = "".join(
-        ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in value.strip().lower()
+        ch if ch.isalnum() or ch in {"-", "_"} else "_"
+        for ch in value.strip().lower()
     )
     return normalized.strip("_")
 
@@ -151,7 +149,7 @@ def _build_excel_bytes(rows: list[list[str]]) -> bytes:
     return buffer.getvalue()
 
 
-def _run_cleanup_user_export_tasks(db: Session) -> None:
+def cleanup_user_export_tasks(db: Session) -> None:
     now = _now_utc()
     changed = False
     ensure_user_export_runtime_dir()
@@ -160,8 +158,7 @@ def _run_cleanup_user_export_tasks(db: Session) -> None:
         if (
             task.status == USER_EXPORT_STATUS_PROCESSING
             and task.started_at is not None
-            and now - task.started_at
-            > timedelta(minutes=USER_EXPORT_PROCESSING_TIMEOUT_MINUTES)
+            and now - task.started_at > timedelta(minutes=USER_EXPORT_PROCESSING_TIMEOUT_MINUTES)
         ):
             task.status = USER_EXPORT_STATUS_FAILED
             task.failure_reason = "任务执行中断，请重新导出"
@@ -180,28 +177,6 @@ def _run_cleanup_user_export_tasks(db: Session) -> None:
             changed = True
     if changed:
         db.commit()
-
-
-def cleanup_user_export_tasks(
-    db: Session,
-    *,
-    min_interval_seconds: int = _USER_EXPORT_TASK_CLEANUP_MIN_INTERVAL_SECONDS,
-) -> None:
-    global _USER_EXPORT_TASK_CLEANUP_NEXT_AT
-
-    interval_seconds = max(1, min_interval_seconds)
-    now_monotonic = time.monotonic()
-    with _USER_EXPORT_TASK_CLEANUP_LOCK:
-        if now_monotonic < _USER_EXPORT_TASK_CLEANUP_NEXT_AT:
-            return
-        _USER_EXPORT_TASK_CLEANUP_NEXT_AT = now_monotonic + interval_seconds
-
-    try:
-        _run_cleanup_user_export_tasks(db)
-    except SQLAlchemyError:
-        with _USER_EXPORT_TASK_CLEANUP_LOCK:
-            _USER_EXPORT_TASK_CLEANUP_NEXT_AT = 0.0
-        raise
 
 
 def create_user_export_task(
@@ -244,7 +219,7 @@ def list_user_export_tasks(
         .order_by(UserExportTask.requested_at.desc(), UserExportTask.id.desc())
         .limit(limit)
     )
-    return list(db.execute(stmt).scalars().all())
+    return db.execute(stmt).scalars().all()
 
 
 def get_user_export_task(
@@ -275,8 +250,9 @@ def run_user_export_task(task_id: int) -> None:
         task.record_count = 0
         db.commit()
 
+        online_user_ids_for_filter = None
         if task.deleted_scope != DELETED_SCOPE_DELETED:
-            list_online_user_ids(db)
+            online_user_ids_for_filter = list_online_user_ids(db)
 
         stmt = query_users(
             keyword=task.keyword,
@@ -284,7 +260,7 @@ def run_user_export_task(task_id: int) -> None:
             is_active=task.is_active,
             deleted_scope=task.deleted_scope,
         )
-        users = list(db.execute(stmt).scalars().all())
+        users = db.execute(stmt).scalars().all()
         candidate_user_ids = [int(user.id) for user in users]
         online_user_ids = (
             list_online_user_ids(db, candidate_user_ids=candidate_user_ids)
@@ -302,9 +278,7 @@ def run_user_export_task(task_id: int) -> None:
         file_path = runtime_dir / file_name
         if task.format == "excel":
             content_bytes = _build_excel_bytes(rows)
-            mime_type = (
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         else:
             content_bytes = _build_csv_bytes(rows)
             mime_type = "text/csv"
@@ -315,9 +289,8 @@ def run_user_export_task(task_id: int) -> None:
         task.file_name = file_name
         task.mime_type = mime_type
         task.storage_path = str(file_path.resolve())
-        finished_at = _now_utc()
-        task.finished_at = finished_at
-        task.expires_at = finished_at + timedelta(days=USER_EXPORT_RETENTION_DAYS)
+        task.finished_at = _now_utc()
+        task.expires_at = task.finished_at + timedelta(days=USER_EXPORT_RETENTION_DAYS)
         db.commit()
 
         operator = db.get(User, task.created_by_user_id)

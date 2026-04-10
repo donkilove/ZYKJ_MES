@@ -1,20 +1,15 @@
 from __future__ import annotations
 
-from functools import wraps
 from datetime import UTC, datetime
 import json
 import logging
-import time
-from threading import RLock
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import Response
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import require_permission, require_permission_fast
+from app.api.deps import require_permission
 from app.db.session import get_db
 from app.models.craft_system_master_template import CraftSystemMasterTemplate
 from app.models.process import Process
@@ -121,6 +116,8 @@ from app.services.craft_service import (
     get_process_references,
     get_template_references,
     list_craft_processes,
+    list_enabled_process_options,
+    list_enabled_stage_options,
     list_stages,
     list_enabled_process_options,
     list_enabled_stage_options,
@@ -138,72 +135,6 @@ from app.services.craft_service import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-_CRAFT_READ_RESPONSE_CACHE: dict[str, tuple[float, bytes]] = {}
-_CRAFT_READ_RESPONSE_CACHE_LOCK = RLock()
-_CRAFT_READ_RESPONSE_CACHE_TTL_SECONDS = 10
-_CRAFT_PROCESS_RESPONSE_CACHE_TTL_SECONDS = 15
-_CRAFT_TEMPLATE_RESPONSE_CACHE_TTL_SECONDS = 15
-_CRAFT_KANBAN_RESPONSE_CACHE_TTL_SECONDS = 10
-
-
-def _craft_read_cache_key(
-    cache_type: str,
-    payload: dict[str, object] | None = None,
-) -> str:
-    encoded_payload = json.dumps(
-        payload or {},
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return f"craft_read:{cache_type}:{encoded_payload}"
-
-
-def _get_craft_read_cached_response_bytes(cache_key: str) -> bytes | None:
-    with _CRAFT_READ_RESPONSE_CACHE_LOCK:
-        cached = _CRAFT_READ_RESPONSE_CACHE.get(cache_key)
-        if cached is None:
-            return None
-        expire_at, payload_bytes = cached
-        if expire_at <= time.monotonic():
-            _CRAFT_READ_RESPONSE_CACHE.pop(cache_key, None)
-            return None
-        return payload_bytes
-
-
-def _set_craft_read_cached_response_bytes(
-    cache_key: str,
-    payload: dict[str, object],
-    *,
-    ttl_seconds: int = _CRAFT_READ_RESPONSE_CACHE_TTL_SECONDS,
-) -> bytes:
-    payload_bytes = json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    resolved_ttl_seconds = max(1, int(ttl_seconds))
-    with _CRAFT_READ_RESPONSE_CACHE_LOCK:
-        _CRAFT_READ_RESPONSE_CACHE[cache_key] = (
-            time.monotonic() + resolved_ttl_seconds,
-            payload_bytes,
-        )
-    return payload_bytes
-
-
-def _invalidate_craft_read_cache() -> None:
-    with _CRAFT_READ_RESPONSE_CACHE_LOCK:
-        _CRAFT_READ_RESPONSE_CACHE.clear()
-
-
-def _invalidate_craft_read_cache_after_success(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-        _invalidate_craft_read_cache()
-        return result
-
-    return wrapper
 
 
 def _to_stage_item(row: ProcessStage) -> ProcessStageItem:
@@ -643,7 +574,6 @@ def get_stage_light_options(
     response_model=ApiResponse[ProcessStageItem],
     status_code=status.HTTP_201_CREATED,
 )
-@_invalidate_craft_read_cache_after_success
 def create_stage_api(
     payload: ProcessStageCreate,
     db: Session = Depends(get_db),
@@ -697,7 +627,6 @@ def get_stage_detail_api(
 
 
 @router.put("/stages/{stage_id}", response_model=ApiResponse[ProcessStageItem])
-@_invalidate_craft_read_cache_after_success
 def update_stage_api(
     stage_id: int,
     payload: ProcessStageUpdate,
@@ -725,7 +654,6 @@ def update_stage_api(
 
 
 @router.delete("/stages/{stage_id}", response_model=ApiResponse[dict[str, bool]])
-@_invalidate_craft_read_cache_after_success
 def delete_stage_api(
     stage_id: int,
     db: Session = Depends(get_db),
@@ -751,7 +679,7 @@ def export_stages_api(
     _: User = Depends(require_permission("craft.stages.list")),
 ) -> ApiResponse[CraftExportResult]:
     result = export_stages_csv(db, keyword=keyword, enabled=enabled)
-    return success_response(CraftExportResult(**result))  # type: ignore[reportArgumentType]
+    return success_response(CraftExportResult(**result))
 
 
 @router.get("/processes/export", response_model=ApiResponse[CraftExportResult])
@@ -765,7 +693,7 @@ def export_processes_api(
     result = export_processes_csv(
         db, keyword=keyword, stage_id=stage_id, enabled=enabled
     )
-    return success_response(CraftExportResult(**result))  # type: ignore[reportArgumentType]
+    return success_response(CraftExportResult(**result))
 
 
 @router.get("/processes", response_model=ApiResponse[CraftProcessListResult])
@@ -776,21 +704,8 @@ def get_processes_api(
     stage_id: int | None = Query(default=None, ge=1),
     enabled: bool | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: None = Depends(require_permission_fast("craft.processes.list")),
-) -> ApiResponse[CraftProcessListResult] | Response:
-    cache_key = _craft_read_cache_key(
-        "processes",
-        {
-            "page": page,
-            "page_size": page_size,
-            "keyword": keyword,
-            "stage_id": stage_id,
-            "enabled": enabled,
-        },
-    )
-    cached_payload = _get_craft_read_cached_response_bytes(cache_key)
-    if cached_payload is not None:
-        return Response(content=cached_payload, media_type="application/json")
+    _: User = Depends(require_permission("craft.processes.list")),
+) -> ApiResponse[CraftProcessListResult]:
     total, rows = list_craft_processes(
         db,
         page=page,
@@ -799,17 +714,11 @@ def get_processes_api(
         stage_id=stage_id,
         enabled=enabled,
     )
-    response_payload = success_response(
+    return success_response(
         CraftProcessListResult(
             total=total, items=[_to_process_item(row) for row in rows]
         )
-    ).model_dump(mode="json")
-    payload_bytes = _set_craft_read_cached_response_bytes(
-        cache_key,
-        response_payload,
-        ttl_seconds=_CRAFT_PROCESS_RESPONSE_CACHE_TTL_SECONDS,
     )
-    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get("/processes/light", response_model=ApiResponse[CraftProcessLightListResult])
@@ -817,15 +726,8 @@ def get_process_light_options(
     stage_id: int | None = Query(default=None, ge=1),
     enabled: bool | None = Query(default=True),
     db: Session = Depends(get_db),
-    _: None = Depends(require_permission_fast("craft.processes.list")),
-) -> ApiResponse[CraftProcessLightListResult] | Response:
-    cache_key = _craft_read_cache_key(
-        "processes_light",
-        {"stage_id": stage_id, "enabled": enabled},
-    )
-    cached_payload = _get_craft_read_cached_response_bytes(cache_key)
-    if cached_payload is not None:
-        return Response(content=cached_payload, media_type="application/json")
+    _: User = Depends(require_permission("craft.processes.list")),
+) -> ApiResponse[CraftProcessLightListResult]:
     rows = (
         list_enabled_process_options(db, stage_id=stage_id)
         if enabled is True
@@ -838,17 +740,11 @@ def get_process_light_options(
             enabled=enabled,
         )[1]
     )
-    response_payload = success_response(
+    return success_response(
         CraftProcessLightListResult(
             total=len(rows), items=[_to_process_light_item(row) for row in rows]
         )
-    ).model_dump(mode="json")
-    payload_bytes = _set_craft_read_cached_response_bytes(
-        cache_key,
-        response_payload,
-        ttl_seconds=_CRAFT_PROCESS_RESPONSE_CACHE_TTL_SECONDS,
     )
-    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.post(
@@ -856,7 +752,6 @@ def get_process_light_options(
     response_model=ApiResponse[CraftProcessItem],
     status_code=status.HTTP_201_CREATED,
 )
-@_invalidate_craft_read_cache_after_success
 def create_process_api(
     payload: CraftProcessCreate,
     db: Session = Depends(get_db),
@@ -880,43 +775,26 @@ def get_process_detail_api(
     process_id: int | None = Query(default=None, ge=1),
     process_code: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: None = Depends(require_permission_fast("craft.processes.list")),
-) -> ApiResponse[CraftProcessItem] | Response:
+    _: User = Depends(require_permission("craft.processes.list")),
+) -> ApiResponse[CraftProcessItem]:
     if process_id is None and not (process_code or "").strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="process_id or process_code is required",
         )
-    normalized_process_code = (
-        process_code.strip() if isinstance(process_code, str) else None
-    )
-    cache_key = _craft_read_cache_key(
-        "process_detail",
-        {"process_id": process_id, "process_code": normalized_process_code},
-    )
-    cached_payload = _get_craft_read_cached_response_bytes(cache_key)
-    if cached_payload is not None:
-        return Response(content=cached_payload, media_type="application/json")
     row = None
     if process_id is not None:
         row = get_process_by_id(db, process_id)
-    elif normalized_process_code is not None:
-        row = get_process_by_code(db, normalized_process_code)
+    elif process_code is not None:
+        row = get_process_by_code(db, process_code.strip())
     if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Process not found"
         )
-    response_payload = success_response(_to_process_item(row)).model_dump(mode="json")
-    payload_bytes = _set_craft_read_cached_response_bytes(
-        cache_key,
-        response_payload,
-        ttl_seconds=_CRAFT_PROCESS_RESPONSE_CACHE_TTL_SECONDS,
-    )
-    return Response(content=payload_bytes, media_type="application/json")
+    return success_response(_to_process_item(row))
 
 
 @router.put("/processes/{process_id}", response_model=ApiResponse[CraftProcessItem])
-@_invalidate_craft_read_cache_after_success
 def update_process_api(
     process_id: int,
     payload: CraftProcessUpdate,
@@ -962,7 +840,6 @@ def update_process_api(
 
 
 @router.delete("/processes/{process_id}", response_model=ApiResponse[dict[str, bool]])
-@_invalidate_craft_read_cache_after_success
 def delete_process_api(
     process_id: int,
     db: Session = Depends(get_db),
@@ -986,25 +863,12 @@ def delete_process_api(
 )
 def get_system_master_template_api(
     db: Session = Depends(get_db),
-    _: None = Depends(require_permission_fast("craft.system_master_template.view")),
-) -> ApiResponse[SystemMasterTemplateItem | None] | Response:
-    cache_key = _craft_read_cache_key("system_master_template")
-    cached_payload = _get_craft_read_cached_response_bytes(cache_key)
-    if cached_payload is not None:
-        return Response(content=cached_payload, media_type="application/json")
+    _: User = Depends(require_permission("craft.system_master_template.view")),
+) -> ApiResponse[SystemMasterTemplateItem | None]:
     row = get_system_master_template(db)
     if row is None:
-        response_payload = success_response(None).model_dump(mode="json")
-    else:
-        response_payload = success_response(
-            _to_system_master_template_item(row)
-        ).model_dump(mode="json")
-    payload_bytes = _set_craft_read_cached_response_bytes(
-        cache_key,
-        response_payload,
-        ttl_seconds=_CRAFT_TEMPLATE_RESPONSE_CACHE_TTL_SECONDS,
-    )
-    return Response(content=payload_bytes, media_type="application/json")
+        return success_response(None)
+    return success_response(_to_system_master_template_item(row))
 
 
 @router.post(
@@ -1012,7 +876,6 @@ def get_system_master_template_api(
     response_model=ApiResponse[SystemMasterTemplateItem],
     status_code=status.HTTP_201_CREATED,
 )
-@_invalidate_craft_read_cache_after_success
 def create_system_master_template_api(
     payload: SystemMasterTemplateUpsertRequest,
     db: Session = Depends(get_db),
@@ -1034,7 +897,6 @@ def create_system_master_template_api(
 @router.put(
     "/system-master-template", response_model=ApiResponse[SystemMasterTemplateItem]
 )
-@_invalidate_craft_read_cache_after_success
 def update_system_master_template_api(
     payload: SystemMasterTemplateUpsertRequest,
     db: Session = Depends(get_db),
@@ -1061,22 +923,10 @@ def update_system_master_template_api(
 )
 def list_system_master_template_versions_api(
     db: Session = Depends(get_db),
-    _: None = Depends(require_permission_fast("craft.system_master_template.view")),
-) -> ApiResponse[SystemMasterTemplateVersionListResult] | Response:
-    cache_key = _craft_read_cache_key("system_master_template_versions")
-    cached_payload = _get_craft_read_cached_response_bytes(cache_key)
-    if cached_payload is not None:
-        return Response(content=cached_payload, media_type="application/json")
+    _: User = Depends(require_permission("craft.system_master_template.view")),
+) -> ApiResponse[SystemMasterTemplateVersionListResult]:
     result = list_system_master_template_versions(db)
-    response_payload = success_response(
-        _to_system_master_template_version_list_result(result)
-    ).model_dump(mode="json")
-    payload_bytes = _set_craft_read_cached_response_bytes(
-        cache_key,
-        response_payload,
-        ttl_seconds=_CRAFT_TEMPLATE_RESPONSE_CACHE_TTL_SECONDS,
-    )
-    return Response(content=payload_bytes, media_type="application/json")
+    return success_response(_to_system_master_template_version_list_result(result))
 
 
 @router.get(
@@ -1091,22 +941,8 @@ def get_craft_kanban_process_metrics_api(
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: None = Depends(require_permission_fast("craft.kanban.process_metrics.view")),
-) -> ApiResponse[CraftKanbanProcessMetricsResult] | Response:
-    cache_key = _craft_read_cache_key(
-        "kanban_process_metrics",
-        {
-            "product_id": product_id,
-            "limit": limit,
-            "stage_id": stage_id,
-            "process_id": process_id,
-            "start_date": start_date.isoformat() if start_date else None,
-            "end_date": end_date.isoformat() if end_date else None,
-        },
-    )
-    cached_payload = _get_craft_read_cached_response_bytes(cache_key)
-    if cached_payload is not None:
-        return Response(content=cached_payload, media_type="application/json")
+    _: User = Depends(require_permission("craft.kanban.process_metrics.view")),
+) -> ApiResponse[CraftKanbanProcessMetricsResult]:
     try:
         result = get_craft_kanban_process_metrics(
             db,
@@ -1122,15 +958,7 @@ def get_craft_kanban_process_metrics_api(
         if message == "Product not found":
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
-    response_payload = success_response(_to_kanban_result_item(result)).model_dump(
-        mode="json"
-    )
-    payload_bytes = _set_craft_read_cached_response_bytes(
-        cache_key,
-        response_payload,
-        ttl_seconds=_CRAFT_KANBAN_RESPONSE_CACHE_TTL_SECONDS,
-    )
-    return Response(content=payload_bytes, media_type="application/json")
+    return success_response(_to_kanban_result_item(result))
 
 
 @router.get(
@@ -1161,7 +989,7 @@ def export_craft_kanban_process_metrics_api(
         if message == "Product not found":
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
-    return success_response(CraftExportResult(**result))  # type: ignore[reportArgumentType]
+    return success_response(CraftExportResult(**result))
 
 
 @router.get("/templates", response_model=ApiResponse[ProductProcessTemplateListResult])
@@ -1177,26 +1005,8 @@ def get_templates_api(
     updated_from: datetime | None = Query(default=None),
     updated_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: None = Depends(require_permission_fast("craft.templates.list")),
-) -> ApiResponse[ProductProcessTemplateListResult] | Response:
-    cache_key = _craft_read_cache_key(
-        "templates",
-        {
-            "page": page,
-            "page_size": page_size,
-            "product_id": product_id,
-            "keyword": keyword,
-            "product_category": product_category,
-            "is_default": is_default,
-            "enabled": enabled,
-            "lifecycle_status": lifecycle_status,
-            "updated_from": updated_from.isoformat() if updated_from else None,
-            "updated_to": updated_to.isoformat() if updated_to else None,
-        },
-    )
-    cached_payload = _get_craft_read_cached_response_bytes(cache_key)
-    if cached_payload is not None:
-        return Response(content=cached_payload, media_type="application/json")
+    _: User = Depends(require_permission("craft.templates.list")),
+) -> ApiResponse[ProductProcessTemplateListResult]:
     total, rows = list_templates(
         db,
         page=page,
@@ -1210,17 +1020,11 @@ def get_templates_api(
         updated_from=updated_from,
         updated_to=updated_to,
     )
-    response_payload = success_response(
+    return success_response(
         ProductProcessTemplateListResult(
             total=total, items=[_to_template_item(row) for row in rows]
         )
-    ).model_dump(mode="json")
-    payload_bytes = _set_craft_read_cached_response_bytes(
-        cache_key,
-        response_payload,
-        ttl_seconds=_CRAFT_TEMPLATE_RESPONSE_CACHE_TTL_SECONDS,
     )
-    return Response(content=payload_bytes, media_type="application/json")
 
 
 @router.get(
@@ -1237,7 +1041,7 @@ def export_template_detail_api(
             status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
         )
     result = export_template_detail_json(db, template=row)
-    return success_response(CraftExportResult(**result))  # type: ignore[reportArgumentType]
+    return success_response(CraftExportResult(**result))
 
 
 @router.get(
@@ -1259,7 +1063,7 @@ def export_template_version_api(
         result = export_template_version_json(db, template=row, version=version)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
-    return success_response(CraftExportResult(**result))  # type: ignore[reportArgumentType]
+    return success_response(CraftExportResult(**result))
 
 
 @router.post(
@@ -1267,7 +1071,6 @@ def export_template_version_api(
     response_model=ApiResponse[ProductProcessTemplateDetail],
     status_code=status.HTTP_201_CREATED,
 )
-@_invalidate_craft_read_cache_after_success
 def create_template_api(
     payload: ProductProcessTemplateCreate,
     db: Session = Depends(get_db),
@@ -1355,7 +1158,6 @@ def export_templates_api(
 
 
 @router.post("/templates/import", response_model=ApiResponse[TemplateBatchImportResult])
-@_invalidate_craft_read_cache_after_success
 def import_templates_api(
     payload: TemplateBatchImportRequest,
     db: Session = Depends(get_db),
@@ -1476,7 +1278,6 @@ def get_template_impact_analysis_api(
     "/templates/{template_id}/publish",
     response_model=ApiResponse[ProductProcessTemplateUpdateResult],
 )
-@_invalidate_craft_read_cache_after_success
 def publish_template_api(
     template_id: int,
     payload: TemplatePublishRequest,
@@ -1519,7 +1320,7 @@ def publish_template_api(
             template=updated,
             operator=current_user,
         )
-    except (ValueError, SQLAlchemyError):
+    except Exception:
         db.rollback()
         logger.exception(
             "[MSG] 工艺模板发布消息创建失败: template_id=%s version=%s",
@@ -1573,9 +1374,7 @@ def list_template_versions_api(
             ),
             record_summary=_template_version_record_summary(
                 action=item.action,
-                source_version=item.source_revision.version
-                if item.source_revision
-                else None,
+                source_version=item.source_revision.version if item.source_revision else None,
             ),
             note=item.note,
             source_version=item.source_revision.version
@@ -1642,7 +1441,6 @@ def compare_template_versions_api(
     "/templates/{template_id}/rollback",
     response_model=ApiResponse[ProductProcessTemplateUpdateResult],
 )
-@_invalidate_craft_read_cache_after_success
 def rollback_template_api(
     template_id: int,
     payload: TemplateRollbackRequest,
@@ -1702,7 +1500,6 @@ def rollback_template_api(
     "/templates/{template_id}",
     response_model=ApiResponse[ProductProcessTemplateUpdateResult],
 )
-@_invalidate_craft_read_cache_after_success
 def update_template_api(
     template_id: int,
     payload: ProductProcessTemplateUpdate,
@@ -1775,7 +1572,6 @@ def update_template_api(
     "/templates/{template_id}/draft",
     response_model=ApiResponse[ProductProcessTemplateDetail],
 )
-@_invalidate_craft_read_cache_after_success
 def create_template_draft_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -1810,7 +1606,6 @@ def create_template_draft_api(
     "/templates/{template_id}/enable",
     response_model=ApiResponse[ProductProcessTemplateDetail],
 )
-@_invalidate_craft_read_cache_after_success
 def enable_template_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -1845,7 +1640,6 @@ def enable_template_api(
     "/templates/{template_id}/disable",
     response_model=ApiResponse[ProductProcessTemplateDetail],
 )
-@_invalidate_craft_read_cache_after_success
 def disable_template_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -1880,7 +1674,6 @@ def disable_template_api(
 
 
 @router.delete("/templates/{template_id}", response_model=ApiResponse[dict[str, bool]])
-@_invalidate_craft_read_cache_after_success
 def delete_template_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -1903,7 +1696,6 @@ def delete_template_api(
     response_model=ApiResponse[ProductProcessTemplateDetail],
     status_code=status.HTTP_201_CREATED,
 )
-@_invalidate_craft_read_cache_after_success
 def copy_template_api(
     template_id: int,
     body: TemplateCopyRequest,
@@ -1940,7 +1732,6 @@ def copy_template_api(
     response_model=ApiResponse[ProductProcessTemplateDetail],
     status_code=status.HTTP_201_CREATED,
 )
-@_invalidate_craft_read_cache_after_success
 def copy_template_to_product_api(
     template_id: int,
     body: TemplateCopyToProductRequest,
@@ -1985,7 +1776,6 @@ def copy_template_to_product_api(
     response_model=ApiResponse[ProductProcessTemplateDetail],
     status_code=status.HTTP_201_CREATED,
 )
-@_invalidate_craft_read_cache_after_success
 def copy_system_master_to_product_api(
     body: TemplateCopyFromMasterRequest,
     db: Session = Depends(get_db),
@@ -2025,7 +1815,6 @@ def copy_system_master_to_product_api(
     "/templates/{template_id}/archive",
     response_model=ApiResponse[ProductProcessTemplateDetail],
 )
-@_invalidate_craft_read_cache_after_success
 def archive_template_api(
     template_id: int,
     db: Session = Depends(get_db),
@@ -2057,7 +1846,6 @@ def archive_template_api(
     "/templates/{template_id}/unarchive",
     response_model=ApiResponse[ProductProcessTemplateDetail],
 )
-@_invalidate_craft_read_cache_after_success
 def unarchive_template_api(
     template_id: int,
     db: Session = Depends(get_db),

@@ -5,7 +5,7 @@ import asyncio
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -42,6 +42,7 @@ from app.api.v1.endpoints.products import (  # noqa: E402
 from app.services.message_service import (  # noqa: E402
     _push_message_created_for_recipient,
     create_message_for_users,
+    retry_failed_message_deliveries,
     run_message_maintenance,
 )
 

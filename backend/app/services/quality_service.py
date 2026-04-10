@@ -7,11 +7,11 @@ import io
 import threading
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
-from typing import Any, cast
 from time import monotonic
+from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import event, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
@@ -36,45 +36,6 @@ _QUALITY_RELATED_TOTALS_LOCAL_CACHE: dict[
     tuple[object, ...], tuple[float, dict[str, Any]]
 ] = {}
 _QUALITY_STATS_CACHE_LOCK = threading.Lock()
-_QUALITY_STATS_DIRTY_FLAG = "quality_stats_dirty"
-_QUALITY_STATS_DIRTY_MODELS = (
-    FirstArticleRecord,
-    ProductionScrapStatistics,
-    RepairOrder,
-    RepairDefectPhenomenon,
-)
-
-
-def _clear_quality_stats_local_cache() -> None:
-    with _QUALITY_STATS_CACHE_LOCK:
-        _QUALITY_ROWS_LOCAL_CACHE.clear()
-        _QUALITY_RELATED_TOTALS_LOCAL_CACHE.clear()
-
-
-@event.listens_for(Session, "before_flush")
-def _track_quality_stats_writes(
-    session: Session,
-    _flush_context,
-    _instances,
-) -> None:
-    if session.info.get(_QUALITY_STATS_DIRTY_FLAG):
-        return
-    for collection in (session.new, session.dirty, session.deleted):
-        if any(isinstance(obj, _QUALITY_STATS_DIRTY_MODELS) for obj in collection):
-            session.info[_QUALITY_STATS_DIRTY_FLAG] = True
-            return
-
-
-@event.listens_for(Session, "after_commit")
-def _invalidate_quality_stats_cache_after_commit(session: Session) -> None:
-    if not session.info.pop(_QUALITY_STATS_DIRTY_FLAG, False):
-        return
-    _clear_quality_stats_local_cache()
-
-
-@event.listens_for(Session, "after_rollback")
-def _clear_quality_stats_dirty_flag_after_rollback(session: Session) -> None:
-    session.info.pop(_QUALITY_STATS_DIRTY_FLAG, None)
 
 
 def _build_datetime_range_filters(
@@ -82,8 +43,8 @@ def _build_datetime_range_filters(
     *,
     start_date: date | None,
     end_date: date | None,
-) -> list[Any]:
-    filters: list[Any] = []
+) -> list[object]:
+    filters: list[object] = []
     if start_date is not None:
         filters.append(column >= datetime.combine(start_date, time.min))
     if end_date is not None:
@@ -97,7 +58,7 @@ def _build_created_at_filters(
     *,
     start_date: date | None,
     end_date: date | None,
-) -> list[Any]:
+) -> list[object]:
     return _build_datetime_range_filters(
         FirstArticleRecord.created_at,
         start_date=start_date,
@@ -539,7 +500,7 @@ def _aggregate_quality_related_totals(
 
 
 def _append_exact_or_like_filter(
-    filters: list[Any],
+    filters: list[object],
     column,
     value: str | None,
     *,
@@ -558,7 +519,7 @@ def _build_scrap_filters(
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
-) -> list[Any]:
+) -> list[object]:
     filters = _build_datetime_range_filters(
         ProductionScrapStatistics.last_scrap_time,
         start_date=start_date,
@@ -590,7 +551,7 @@ def _build_repair_filters(
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
-) -> list[Any]:
+) -> list[object]:
     filters = _build_datetime_range_filters(
         RepairOrder.repair_time,
         start_date=start_date,
@@ -618,7 +579,7 @@ def _build_defect_filters(
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
-) -> list[Any]:
+) -> list[object]:
     filters = _build_datetime_range_filters(
         RepairDefectPhenomenon.production_time,
         start_date=start_date,
@@ -643,23 +604,6 @@ def _build_defect_filters(
     return filters
 
 
-def _init_quality_grouped_item(
-    *, id_value: int, name_value: str, id_key: str = "product_id", name_key: str = "product_name"
-) -> dict[str, Any]:
-    """初始化质量统计项"""
-    return {
-        id_key: id_value,
-        name_key: name_value,
-        "first_article_total": 0,
-        "passed_total": 0,
-        "failed_total": 0,
-        "pass_rate_percent": 0.0,
-        "defect_total": 0,
-        "scrap_total": 0,
-        "repair_total": 0,
-    }
-
-
 def list_first_articles(
     db: Session,
     *,
@@ -671,30 +615,30 @@ def list_first_articles(
     operator_username: str | None = None,
     page: int,
     page_size: int,
-) -> dict[str, Any]:
-    filters: list[Any] = [FirstArticleRecord.verification_date == query_date]
+) -> dict[str, object]:
+    filters: list[object] = [FirstArticleRecord.verification_date == query_date]
     normalized_keyword = (keyword or "").strip()
     if normalized_keyword:
         like_pattern = f"%{normalized_keyword}%"
         filters.append(
             or_(
-                cast(Any, ProductionOrder.order_code).ilike(like_pattern),
-                cast(Any, Product.name).ilike(like_pattern),
-                cast(Any, ProductionOrderProcess.process_name).ilike(like_pattern),
-                cast(Any, User.username).ilike(like_pattern),
+                ProductionOrder.order_code.ilike(like_pattern),
+                Product.name.ilike(like_pattern),
+                ProductionOrderProcess.process_name.ilike(like_pattern),
+                User.username.ilike(like_pattern),
             )
         )
     normalized_result = (result_filter or "").strip().lower()
     if normalized_result in ("passed", "failed"):
         filters.append(FirstArticleRecord.result == normalized_result)
     if product_name and product_name.strip():
-        filters.append(cast(Any, Product.name).ilike(f"%{product_name.strip()}%"))
+        filters.append(Product.name.ilike(f"%{product_name.strip()}%"))
     if process_code and process_code.strip():
         filters.append(
-            cast(Any, ProductionOrderProcess.process_code).ilike(f"%{process_code.strip()}%")
+            ProductionOrderProcess.process_code.ilike(f"%{process_code.strip()}%")
         )
     if operator_username and operator_username.strip():
-        filters.append(cast(Any, User.username).ilike(f"%{operator_username.strip()}%"))
+        filters.append(User.username.ilike(f"%{operator_username.strip()}%"))
 
     count_stmt = (
         select(func.count())
@@ -796,7 +740,7 @@ def _load_first_article_rows(
     process_code: str | None = None,
     operator_username: str | None = None,
     result_filter: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     cache_key = _quality_stats_cache_key(
         start_date=start_date,
         end_date=end_date,
@@ -837,17 +781,17 @@ def _load_first_article_rows(
         .where(*filters)
     )
     if product_name and product_name.strip():
-        stmt = stmt.where(cast(Any, Product.name).ilike(f"%{product_name.strip()}%"))
+        stmt = stmt.where(Product.name.ilike(f"%{product_name.strip()}%"))
     if process_code and process_code.strip():
         stmt = stmt.where(
-            cast(Any, ProductionOrderProcess.process_code).ilike(f"%{process_code.strip()}%")
+            ProductionOrderProcess.process_code.ilike(f"%{process_code.strip()}%")
         )
     if operator_username and operator_username.strip():
-        stmt = stmt.where(cast(Any, User.username).ilike(f"%{operator_username.strip()}%"))
+        stmt = stmt.where(User.username.ilike(f"%{operator_username.strip()}%"))
     normalized_result = (result_filter or "").strip().lower()
     if normalized_result in ("passed", "failed"):
         stmt = stmt.where(FirstArticleRecord.result == normalized_result)
-    rows = cast(list[dict[str, Any]], [dict(row._mapping) for row in db.execute(stmt).all()])
+    rows = [dict(row._mapping) for row in db.execute(stmt).all()]
     if ttl_seconds > 0:
         with _QUALITY_STATS_CACHE_LOCK:
             _QUALITY_ROWS_LOCAL_CACHE[cache_key] = (
@@ -866,7 +810,7 @@ def get_quality_overview(
     process_code: str | None = None,
     operator_username: str | None = None,
     result_filter: str | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     rows = _load_first_article_rows(
         db,
         start_date=start_date,
@@ -946,7 +890,7 @@ def get_quality_process_stats(
     process_code: str | None = None,
     operator_username: str | None = None,
     result_filter: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     rows = _load_first_article_rows(
         db,
         start_date=start_date,
@@ -964,7 +908,7 @@ def get_quality_process_stats(
         process_code=process_code,
         operator_username=operator_username,
     )
-    grouped: dict[str, dict[str, Any]] = {}
+    grouped: dict[str, dict[str, object]] = {}
     for row in rows:
         process_key = _normalize_process_key(_row_process_code(row))
         process_name = _row_process_name(row)
@@ -1046,7 +990,7 @@ def get_quality_operator_stats(
     process_code: str | None = None,
     operator_username: str | None = None,
     result_filter: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     rows = _load_first_article_rows(
         db,
         start_date=start_date,
@@ -1064,7 +1008,7 @@ def get_quality_operator_stats(
         process_code=process_code,
         operator_username=operator_username,
     )
-    grouped: dict[str, dict[str, Any]] = {}
+    grouped: dict[str, dict[str, object]] = {}
     for row in rows:
         operator_name = _row_operator_username(row)
         operator_key = _normalize_operator_key(
@@ -1371,9 +1315,17 @@ def get_quality_product_stats(
         if not product_name_value:
             continue
         if product_id not in grouped:
-            grouped[product_id] = _init_quality_grouped_item(
-                id_value=product_id, name_value=product_name_value
-            )
+            grouped[product_id] = {
+                "product_id": product_id,
+                "product_name": product_name_value,
+                "first_article_total": 0,
+                "passed_total": 0,
+                "failed_total": 0,
+                "pass_rate_percent": 0.0,
+                "defect_total": 0,
+                "scrap_total": 0,
+                "repair_total": 0,
+            }
         item = grouped[product_id]
         item["first_article_total"] = int(item["first_article_total"]) + 1
         if _row_result(row) == "passed":
@@ -1406,7 +1358,17 @@ def get_quality_product_stats(
         product_id = int(sr.product_id)
         item = grouped.setdefault(
             product_id,
-            _init_quality_grouped_item(id_value=product_id, name_value=sr.product_name or ""),
+            {
+                "product_id": product_id,
+                "product_name": sr.product_name or "",
+                "first_article_total": 0,
+                "passed_total": 0,
+                "failed_total": 0,
+                "pass_rate_percent": 0.0,
+                "defect_total": 0,
+                "scrap_total": 0,
+                "repair_total": 0,
+            },
         )
         item["scrap_total"] = int(sr.total or 0)
 
@@ -1480,19 +1442,19 @@ def get_quality_trend(
     resolved_start = start_date or (date.today() - timedelta(days=29))
     resolved_end = end_date or date.today()
 
-    base_filters: list[Any] = []
-    joined_filters: list[Any] = []
+    base_filters: list[object] = []
+    joined_filters: list[object] = []
     need_joins = False
     if product_name and product_name.strip():
-        joined_filters.append(cast(Any, Product.name).ilike(f"%{product_name.strip()}%"))
+        joined_filters.append(Product.name.ilike(f"%{product_name.strip()}%"))
         need_joins = True
     if process_code and process_code.strip():
         joined_filters.append(
-            cast(Any, ProductionOrderProcess.process_code).ilike(f"%{process_code.strip()}%")
+            ProductionOrderProcess.process_code.ilike(f"%{process_code.strip()}%")
         )
         need_joins = True
     if operator_username and operator_username.strip():
-        joined_filters.append(cast(Any, User.username).ilike(f"%{operator_username.strip()}%"))
+        joined_filters.append(User.username.ilike(f"%{operator_username.strip()}%"))
         need_joins = True
     if result_filter and result_filter.strip():
         base_filters.append(FirstArticleRecord.result == result_filter.strip())
@@ -1516,21 +1478,23 @@ def get_quality_trend(
     grouped: dict[date, dict[str, Any]] = {}
     current = resolved_start
     while current <= resolved_end:
-        stat_date = _normalize_stat_date(current)
-        if stat_date:
-            grouped[stat_date] = _init_quality_grouped_item(
-                id_value=0, name_value="", id_key="stat_date", name_key="_unused"
-            )
-            # 移除未使用的占位键
-            grouped[stat_date].pop("_unused", None)
-            grouped[stat_date]["stat_date"] = stat_date
+        grouped[current] = {
+            "stat_date": current,
+            "first_article_total": 0,
+            "passed_total": 0,
+            "failed_total": 0,
+            "pass_rate_percent": 0.0,
+            "defect_total": 0,
+            "scrap_total": 0,
+            "repair_total": 0,
+        }
         current += timedelta(days=1)
 
     for row in rows:
-        d = cast(Any, row.created_at).date() if row.created_at else None
+        d = row.created_at.date() if row.created_at else None
         if d is None or d not in grouped:
             continue
-        item = grouped[cast(date, d)]
+        item = grouped[d]
         item["first_article_total"] = int(item["first_article_total"]) + 1
         if row.result == "passed":
             item["passed_total"] = int(item["passed_total"]) + 1
@@ -1844,25 +1808,24 @@ def submit_first_article_disposition(
 
     now = datetime.now(UTC)
 
-    record = cast(
-        FirstArticleRecord | None,
+    record = (
         db.execute(select(FirstArticleRecord).where(FirstArticleRecord.id == record_id))
         .scalars()
-        .first(),
+        .first()
     )
     if record is None:
         raise ValueError("首件记录不存在")
     if record.result != "failed":
         raise ValueError("仅不通过首件记录允许执行处置")
-    existing = cast(
-        FirstArticleDisposition | None,
+
+    existing = (
         db.execute(
             select(FirstArticleDisposition).where(
                 FirstArticleDisposition.first_article_record_id == record_id
             )
         )
         .scalars()
-        .first(),
+        .first()
     )
 
     # 计算新版本号
@@ -1876,7 +1839,9 @@ def submit_first_article_disposition(
                     )
                 ).scalar()
             )
-            or getattr(existing, "version", 1)
+            or existing.version
+            if hasattr(existing, "version")
+            else 1
         )
         new_version = int(prev_version or 1) + 1
     else:
@@ -1931,7 +1896,7 @@ def get_defect_analysis(
     operator_username: str | None = None,
     phenomenon: str | None = None,
     top_n: int = 10,
-) -> Any:
+) -> dict:
     from app.schemas.quality import (
         DefectAnalysisResult,
         DefectByDateItem,
@@ -1957,19 +1922,19 @@ def get_defect_analysis(
         stmt = stmt.where(RepairDefectPhenomenon.product_id == product_id)
     if product_name and product_name.strip():
         stmt = stmt.where(
-            cast(Any, RepairDefectPhenomenon.product_name).ilike(f"%{product_name.strip()}%")
+            RepairDefectPhenomenon.product_name.ilike(f"%{product_name.strip()}%")
         )
     if process_code:
         stmt = stmt.where(RepairDefectPhenomenon.process_code == process_code)
     if operator_username and operator_username.strip():
         stmt = stmt.where(
-            cast(Any, RepairDefectPhenomenon.operator_username).ilike(
+            RepairDefectPhenomenon.operator_username.ilike(
                 f"%{operator_username.strip()}%"
             )
         )
     if phenomenon and phenomenon.strip():
         stmt = stmt.where(
-            cast(Any, RepairDefectPhenomenon.phenomenon).ilike(f"%{phenomenon.strip()}%")
+            RepairDefectPhenomenon.phenomenon.ilike(f"%{phenomenon.strip()}%")
         )
 
     rows = db.execute(stmt).scalars().all()
@@ -1998,11 +1963,11 @@ def get_defect_analysis(
     reason_counts: dict[str, int] = defaultdict(int)
     if repair_order_ids:
         cause_stmt = select(RepairCause).where(
-            cast(Any, RepairCause.repair_order_id).in_(repair_order_ids)
+            RepairCause.repair_order_id.in_(repair_order_ids)
         )
         if phenomenon and phenomenon.strip():
             cause_stmt = cause_stmt.where(
-                cast(Any, RepairCause.phenomenon).ilike(f"%{phenomenon.strip()}%")
+                RepairCause.phenomenon.ilike(f"%{phenomenon.strip()}%")
             )
         cause_rows = db.execute(cause_stmt).scalars().all()
         for row in cause_rows:
@@ -2090,7 +2055,7 @@ def get_defect_analysis(
         total_defect_quantity=total,
         top_defects=top_defects,
         top_reasons=top_reasons,
-        product_quality_comparison=product_quality_comparison,  # type: ignore
+        product_quality_comparison=product_quality_comparison,
         by_process=by_process,
         by_product=by_product,
         by_operator=by_operator,
@@ -2108,7 +2073,7 @@ def export_defect_analysis_csv(
     process_code: str | None = None,
     operator_username: str | None = None,
     phenomenon: str | None = None,
-) -> Any:
+) -> dict:
     from app.schemas.quality import DefectAnalysisExportResult
 
     stmt = select(RepairDefectPhenomenon)
@@ -2126,19 +2091,19 @@ def export_defect_analysis_csv(
         stmt = stmt.where(RepairDefectPhenomenon.product_id == product_id)
     if product_name and product_name.strip():
         stmt = stmt.where(
-            cast(Any, RepairDefectPhenomenon.product_name).ilike(f"%{product_name.strip()}%")
+            RepairDefectPhenomenon.product_name.ilike(f"%{product_name.strip()}%")
         )
     if process_code:
         stmt = stmt.where(RepairDefectPhenomenon.process_code == process_code)
     if operator_username and operator_username.strip():
         stmt = stmt.where(
-            cast(Any, RepairDefectPhenomenon.operator_username).ilike(
+            RepairDefectPhenomenon.operator_username.ilike(
                 f"%{operator_username.strip()}%"
             )
         )
     if phenomenon and phenomenon.strip():
         stmt = stmt.where(
-            cast(Any, RepairDefectPhenomenon.phenomenon).ilike(f"%{phenomenon.strip()}%")
+            RepairDefectPhenomenon.phenomenon.ilike(f"%{phenomenon.strip()}%")
         )
 
     rows = db.execute(stmt).scalars().all()

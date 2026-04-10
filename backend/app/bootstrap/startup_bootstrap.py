@@ -6,10 +6,8 @@ from pathlib import Path
 import psycopg2
 from alembic import command
 from alembic.config import Config
-from alembic.util.exc import CommandError
 from psycopg2 import sql
 from psycopg2.errors import DuplicateDatabase
-from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.db.session import SessionLocal
@@ -35,28 +33,18 @@ def ensure_database_exists() -> None:
     connection.autocommit = True
     try:
         with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT 1 FROM pg_roles WHERE rolname = %s", (settings.db_user,)
-            )
+            cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (settings.db_user,))
             if cursor.fetchone() is None:
-                raise RuntimeError(
-                    f"[BOOTSTRAP] Database role '{settings.db_user}' does not exist."
-                )
+                raise RuntimeError(f"[BOOTSTRAP] Database role '{settings.db_user}' does not exist.")
 
-            cursor.execute(
-                "SELECT 1 FROM pg_database WHERE datname = %s", (settings.db_name,)
-            )
+            cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (settings.db_name,))
             if cursor.fetchone() is not None:
-                logger.info(
-                    "[BOOTSTRAP] Database '%s' already exists.", settings.db_name
-                )
+                logger.info("[BOOTSTRAP] Database '%s' already exists.", settings.db_name)
                 return
 
             try:
                 cursor.execute(
-                    sql.SQL(
-                        "CREATE DATABASE {} OWNER {} ENCODING 'UTF8' TEMPLATE template0"
-                    ).format(
+                    sql.SQL("CREATE DATABASE {} OWNER {} ENCODING 'UTF8' TEMPLATE template0").format(
                         sql.Identifier(settings.db_name),
                         sql.Identifier(settings.db_user),
                     )
@@ -64,10 +52,7 @@ def ensure_database_exists() -> None:
                 logger.info("[BOOTSTRAP] Database '%s' created.", settings.db_name)
             except DuplicateDatabase:
                 # Concurrent startup may create the database first.
-                logger.info(
-                    "[BOOTSTRAP] Database '%s' was created by another process.",
-                    settings.db_name,
-                )
+                logger.info("[BOOTSTRAP] Database '%s' was created by another process.", settings.db_name)
     finally:
         connection.close()
 
@@ -109,9 +94,7 @@ def seed_startup_data() -> None:
 
 def run_startup_bootstrap() -> None:
     if not settings.bootstrap_on_startup:
-        logger.info(
-            "[BOOTSTRAP] Startup bootstrap disabled by BOOTSTRAP_ON_STARTUP=false."
-        )
+        logger.info("[BOOTSTRAP] Startup bootstrap disabled by BOOTSTRAP_ON_STARTUP=false.")
         return
 
     logger.info("[BOOTSTRAP] Startup bootstrap begin.")
@@ -119,7 +102,7 @@ def run_startup_bootstrap() -> None:
         ensure_database_exists()
         run_alembic_upgrade()
         seed_startup_data()
-    except (psycopg2.Error, RuntimeError, CommandError, SQLAlchemyError):
+    except Exception:
         logger.exception("[BOOTSTRAP] Startup bootstrap failed.")
         raise
     logger.info("[BOOTSTRAP] Startup bootstrap done.")

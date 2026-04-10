@@ -14,8 +14,7 @@ from app import worker_main
 
 
 class AppStartupWorkerSplitUnitTest(unittest.TestCase):
-    @staticmethod
-    def test_web_lifespan_skips_bootstrap_and_background_loops_when_disabled() -> None:
+    def test_web_lifespan_skips_bootstrap_and_background_loops_when_disabled(self) -> None:
         async def run_case() -> None:
             maintenance_mock = AsyncMock()
             message_mock = AsyncMock()
@@ -42,8 +41,7 @@ class AppStartupWorkerSplitUnitTest(unittest.TestCase):
 
         asyncio.run(run_case())
 
-    @staticmethod
-    def test_worker_runs_bootstrap_and_background_loops_when_enabled() -> None:
+    def test_worker_runs_bootstrap_and_background_loops_when_enabled(self) -> None:
         async def run_case() -> None:
             maintenance_started = asyncio.Event()
             message_started = asyncio.Event()

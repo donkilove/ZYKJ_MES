@@ -161,8 +161,7 @@ class ProductModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()["data"]
 
-    @staticmethod
-    def _find_parameter_value(payload: dict, parameter_name: str) -> str:
+    def _find_parameter_value(self, payload: dict, parameter_name: str) -> str:
         return next(
             item["value"] for item in payload["items"] if item["name"] == parameter_name
         )

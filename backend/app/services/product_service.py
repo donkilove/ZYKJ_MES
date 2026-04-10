@@ -24,6 +24,7 @@ from app.core.product_lifecycle import (
 )
 from app.core.product_parameter_template import (
     ALLOWED_PARAMETER_TYPES,
+    PARAMETER_TYPE_TEXT,
     PRODUCT_NAME_PARAMETER_CATEGORY,
     PRODUCT_NAME_PARAMETER_KEY,
     PRODUCT_NAME_PARAMETER_TYPE,
@@ -216,7 +217,7 @@ def _snapshot_signature(payload: dict[str, object]) -> str:
 def _build_snapshot_payload(
     *,
     product_name: str,
-    parameters: Sequence[ProductParameter | ProductRevisionParameter],
+    parameters: list[ProductParameter | ProductRevisionParameter],
 ) -> dict[str, object]:
     return {
         "name": product_name,
@@ -300,9 +301,7 @@ def _classify_parameter_change_types(
             continue
         if current_row is None or next_item is None:
             continue
-        if _item_signature_from_row(current_row) != _item_signature_from_item(
-            next_item
-        ):
+        if _item_signature_from_row(current_row) != _item_signature_from_item(next_item):
             change_map["edit"].append(name)
 
     return change_map
@@ -447,7 +446,7 @@ def list_products(
         stmt = stmt.where(Product.category == category)
     if lifecycle_status is not None and lifecycle_status != "":
         stmt = stmt.where(Product.lifecycle_status == lifecycle_status)
-    if has_effective_version:
+    if has_effective_version is True:
         stmt = stmt.where(Product.effective_version > 0)
     elif has_effective_version is False:
         stmt = stmt.where(Product.effective_version == 0)
@@ -500,7 +499,7 @@ def list_products(
 
     offset = (page - 1) * page_size
     paged_stmt = stmt.offset(offset).limit(page_size)
-    products = list(db.execute(paged_stmt).scalars().all())
+    products = db.execute(paged_stmt).scalars().all()
 
     history_map = get_latest_history_map_by_product_ids(
         db, [product.id for product in products]
@@ -1032,7 +1031,7 @@ def list_product_parameters(db: Session, product_id: int) -> list[ProductParamet
         .where(ProductParameter.product_id == product_id)
         .order_by(ProductParameter.sort_order.asc(), ProductParameter.id.asc())
     )
-    return list(db.execute(stmt).scalars().all())
+    return db.execute(stmt).scalars().all()
 
 
 def list_revision_parameters(
@@ -1045,7 +1044,7 @@ def list_revision_parameters(
             ProductRevisionParameter.sort_order.asc(), ProductRevisionParameter.id.asc()
         )
     )
-    return list(db.execute(stmt).scalars().all())
+    return db.execute(stmt).scalars().all()
 
 
 def _replace_revision_parameters(
@@ -1071,7 +1070,7 @@ def _replace_revision_parameters(
                 param_type=str(item["type"]),
                 param_value=str(item["value"]),
                 param_description=str(item.get("description") or ""),
-                sort_order=int(item["sort_order"]),  # type: ignore[reportArgumentType]
+                sort_order=int(item["sort_order"]),
                 is_preset=bool(item["is_preset"]),
             )
         )
@@ -1095,7 +1094,7 @@ def _sync_current_parameter_rows(
                 param_type=str(item["type"]),
                 param_value=str(item["value"]),
                 param_description=str(item.get("description") or ""),
-                sort_order=int(item["sort_order"]),  # type: ignore[reportArgumentType]
+                sort_order=int(item["sort_order"]),
                 is_preset=bool(item["is_preset"]),
             )
         )
@@ -1267,10 +1266,7 @@ def _list_product_reference_blockers(db: Session, *, product_id: int) -> list[st
     production_records = db.execute(
         select(func.count())
         .select_from(ProductionRecord)
-        .join(
-            ProductionOrderProcess,
-            ProductionOrderProcess.id == ProductionRecord.order_process_id,
-        )
+        .join(ProductionOrderProcess, ProductionOrderProcess.id == ProductionRecord.order_process_id)
         .join(ProductionOrder, ProductionOrder.id == ProductionOrderProcess.order_id)
         .where(ProductionOrder.product_id == product_id)
     ).scalar_one()
@@ -1352,7 +1348,7 @@ def _get_product_version_delete_blocker(
 def _list_open_orders_for_product(
     db: Session, *, product_id: int
 ) -> list[ProductionOrder]:
-    return list(
+    return (
         db.execute(
             select(ProductionOrder)
             .where(
@@ -1605,8 +1601,10 @@ def change_product_lifecycle(
     inactive_reason: str | None,
     operator: User,
 ) -> Product:
-    _ = note  # reserved for future audit expansion.
-    _ = operator  # lifecycle transition currently does not create a separate revision row.
+    del note  # reserved for future audit expansion.
+    del (
+        operator
+    )  # lifecycle transition currently does not create a separate revision row.
 
     normalized_target_status = _normalize_product_lifecycle_status(target_status)
     current_status = _normalize_product_lifecycle_status(product.lifecycle_status)
@@ -1652,7 +1650,7 @@ def change_product_lifecycle(
 
 
 def list_product_versions(db: Session, *, product_id: int) -> list[ProductRevision]:
-    return list(
+    return (
         db.execute(
             select(ProductRevision)
             .where(ProductRevision.product_id == product_id)
@@ -2091,10 +2089,10 @@ def compare_product_versions(
         "产品名称": str(to_snapshot["name"]),
     }
 
-    for item in from_snapshot["parameters"]:  # type: ignore[reportGeneralTypeIssues]
+    for item in from_snapshot["parameters"]:
         item_dict = dict(item)
         from_map[f"参数:{item_dict['name']}"] = _parameter_compare_value(item_dict)
-    for item in to_snapshot["parameters"]:  # type: ignore[reportGeneralTypeIssues]
+    for item in to_snapshot["parameters"]:
         item_dict = dict(item)
         to_map[f"参数:{item_dict['name']}"] = _parameter_compare_value(item_dict)
 
@@ -2195,7 +2193,7 @@ def rollback_product_to_version(
     if existing_product and existing_product.id != product.id:
         raise ValueError("Product name already exists")
 
-    next_items = [dict(item) for item in target_snapshot["parameters"]]  # type: ignore[reportGeneralTypeIssues]
+    next_items = [dict(item) for item in target_snapshot["parameters"]]
     changed_keys = _calculate_changed_keys(
         current_parameters=current_parameters,
         next_items=next_items,
@@ -2274,7 +2272,7 @@ def list_parameter_history(
     total_stmt = select(func.count()).select_from(stmt.subquery())
     total = db.execute(total_stmt).scalar_one()
     offset = (page - 1) * page_size
-    rows = list(db.execute(stmt.offset(offset).limit(page_size)).scalars().all())
+    rows = db.execute(stmt.offset(offset).limit(page_size)).scalars().all()
     return total, rows
 
 

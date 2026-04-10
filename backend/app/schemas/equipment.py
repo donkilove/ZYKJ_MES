@@ -172,8 +172,6 @@ class MaintenanceRecordItem(BaseModel):
     updated_at: datetime
 
 
-
-
 class MaintenanceRecordListResult(BaseModel):
     total: int
     items: list[MaintenanceRecordItem]
@@ -198,12 +196,14 @@ class EquipmentDetailResult(BaseModel):
     active_plans: list[MaintenancePlanItem]
     pending_work_orders: list[MaintenanceWorkOrderItem]
     recent_records: list[MaintenanceRecordItem]
+
+
 class MaintenanceWorkOrderDetail(MaintenanceWorkOrderItem):
     source_plan_id: int | None
     source_plan_cycle_days: int | None
     source_plan_start_date: date | None = None
     source_plan_summary: str | None = None
-    source_execution_process_code: str | None = None
+    source_execution_process_code: str | None
     source_equipment_name: str | None = None
     source_item_id: int | None = None
     source_item_name: str | None = None

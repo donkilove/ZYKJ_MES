@@ -248,8 +248,7 @@ class MessageServiceUnitTest(unittest.TestCase):
         self.assertEqual(compensated_ids, [8])
         push_once.assert_awaited_once_with(31, 12)
 
-    @staticmethod
-    def test_push_message_created_async_runs_sync_compensation_without_event_loop():
+    def test_push_message_created_async_runs_sync_compensation_without_event_loop(self):
         db = MagicMock()
         db.execute.return_value = _FakeScalarResult(all_rows=[3, 7])
         msg = SimpleNamespace(id=15)
@@ -319,6 +318,7 @@ class MessageServiceUnitTest(unittest.TestCase):
         maintenance.assert_not_called()
 
     def test_get_message_jump_target_returns_disabled_reason_for_inactive_message(self):
+        now = datetime.now(UTC)
         msg = SimpleNamespace(
             id=16,
             status="archived",

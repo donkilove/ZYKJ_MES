@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date
-from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -33,7 +32,7 @@ def get_overview_stats(
     if start_date is not None:
         filters.append(ProductionOrder.created_at >= start_date)
     if end_date is not None:
-        filters.append(ProductionOrder.created_at < end_date)
+        filters.append(ProductionOrder.created_at < (end_date))
 
     total_orders = db.execute(
         select(func.count()).select_from(ProductionOrder).where(*filters)
@@ -70,10 +69,7 @@ def get_overview_stats(
         .join(
             last_process_subquery,
             (ProductionOrderProcess.order_id == last_process_subquery.c.order_id)
-            & (
-                ProductionOrderProcess.process_order
-                == last_process_subquery.c.max_process_order
-            ),
+            & (ProductionOrderProcess.process_order == last_process_subquery.c.max_process_order),
         )
         .join(ProductionOrder, ProductionOrder.id == ProductionOrderProcess.order_id)
         .where(*filters)
@@ -89,7 +85,7 @@ def get_overview_stats(
     }
 
 
-def get_process_stats(db: Session) -> list[dict[str, Any]]:
+def get_process_stats(db: Session) -> list[dict[str, int | str]]:
     rows = (
         db.execute(
             select(ProductionOrderProcess).order_by(
@@ -101,7 +97,7 @@ def get_process_stats(db: Session) -> list[dict[str, Any]]:
         .all()
     )
 
-    grouped: dict[str, dict[str, Any]] = {}
+    grouped: dict[str, dict[str, int | str]] = {}
     for row in rows:
         key = row.process_code
         if key not in grouped:
@@ -118,12 +114,8 @@ def get_process_stats(db: Session) -> list[dict[str, Any]]:
             }
         item = grouped[key]
         item["total_orders"] = int(item["total_orders"]) + 1
-        item["total_visible_quantity"] = (
-            int(item["total_visible_quantity"]) + row.visible_quantity
-        )
-        item["total_completed_quantity"] = (
-            int(item["total_completed_quantity"]) + row.completed_quantity
-        )
+        item["total_visible_quantity"] = int(item["total_visible_quantity"]) + row.visible_quantity
+        item["total_completed_quantity"] = int(item["total_completed_quantity"]) + row.completed_quantity
         if row.status == PROCESS_STATUS_PENDING:
             item["pending_orders"] = int(item["pending_orders"]) + 1
         elif row.status == PROCESS_STATUS_IN_PROGRESS:
@@ -136,7 +128,7 @@ def get_process_stats(db: Session) -> list[dict[str, Any]]:
     return list(grouped.values())
 
 
-def get_operator_stats(db: Session) -> list[dict[str, Any]]:
+def get_operator_stats(db: Session) -> list[dict[str, int | str]]:
     rows = (
         db.execute(
             select(ProductionRecord)
@@ -149,32 +141,23 @@ def get_operator_stats(db: Session) -> list[dict[str, Any]]:
     user_rows = db.execute(select(User)).scalars().all()
     username_by_id = {row.id: row.username for row in user_rows}
 
-    grouped: dict[tuple[int, str], dict[str, Any]] = defaultdict(dict)
+    grouped: dict[tuple[int, str], dict[str, int | str]] = defaultdict(dict)
     for row in rows:
-        key = (
-            row.operator_user_id,
-            row.order_process.process_code if row.order_process else "",
-        )
+        key = (row.operator_user_id, row.order_process.process_code if row.order_process else "")
         item = grouped.get(key)
         if not item:
             item = {
                 "operator_user_id": row.operator_user_id,
                 "operator_username": username_by_id.get(row.operator_user_id, ""),
-                "process_code": row.order_process.process_code
-                if row.order_process
-                else "",
-                "process_name": row.order_process.process_name
-                if row.order_process
-                else "",
+                "process_code": row.order_process.process_code if row.order_process else "",
+                "process_name": row.order_process.process_name if row.order_process else "",
                 "production_records": 0,
                 "production_quantity": 0,
                 "last_production_at": None,
             }
             grouped[key] = item
         item["production_records"] = int(item["production_records"]) + 1
-        item["production_quantity"] = (
-            int(item["production_quantity"]) + row.production_quantity
-        )
+        item["production_quantity"] = int(item["production_quantity"]) + row.production_quantity
         if item["last_production_at"] is None:
             item["last_production_at"] = row.created_at
 

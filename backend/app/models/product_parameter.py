@@ -1,12 +1,4 @@
-from sqlalchemy import (
-    Boolean,
-    CheckConstraint,
-    ForeignKey,
-    Integer,
-    String,
-    UniqueConstraint,
-    text,
-)
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -15,15 +7,8 @@ from app.models.base import Base, TimestampMixin
 class ProductParameter(Base, TimestampMixin):
     __tablename__ = "mes_product_parameter"
     __table_args__ = (
-        UniqueConstraint(
-            "product_id",
-            "param_key",
-            name="uq_mes_product_parameter_product_id_param_key",
-        ),
-        CheckConstraint(
-            "param_type IN ('Text', 'Link')",
-            name="ck_mes_product_parameter_param_type_allowed",
-        ),
+        UniqueConstraint("product_id", "param_key", name="uq_mes_product_parameter_product_id_param_key"),
+        CheckConstraint("param_type IN ('Text', 'Link')", name="ck_mes_product_parameter_param_type_allowed"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -42,9 +27,7 @@ class ProductParameter(Base, TimestampMixin):
         default="",
         server_default=text("''"),
     )
-    sort_order: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, index=True
-    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
     is_preset: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     product = relationship("Product", back_populates="parameters")

@@ -14,11 +14,7 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from app.api.deps import (
-    require_permission,
-    require_permission_fast_user,
-    require_permission_fast_user_id,
-)
+from app.api.deps import get_current_active_user, require_permission
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
@@ -58,22 +54,18 @@ router = APIRouter()
 @router.get("/unread-count", response_model=ApiResponse[UnreadCountResult])
 def api_unread_count(
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(
-        require_permission_fast_user_id("message.messages.unread_count")
-    ),
+    current_user: User = Depends(require_permission("message.messages.unread_count")),
 ) -> ApiResponse[UnreadCountResult]:
-    count = get_unread_count(db, user_id=current_user_id)
+    count = get_unread_count(db, user_id=current_user.id)
     return success_response(UnreadCountResult(unread_count=count))
 
 
 @router.get("/summary", response_model=ApiResponse[MessageSummaryResult])
 def api_message_summary(
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(
-        require_permission_fast_user_id("message.messages.unread_count")
-    ),
+    current_user: User = Depends(require_permission("message.messages.unread_count")),
 ) -> ApiResponse[MessageSummaryResult]:
-    payload = get_message_summary(db, user_id=current_user_id)
+    payload = get_message_summary(db, user_id=current_user.id)
     return success_response(MessageSummaryResult(**payload))
 
 
@@ -91,12 +83,11 @@ def api_list_messages(
     todo_only: bool = Query(False),
     active_only: bool = Query(True),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission_fast_user("message.messages.list")),
+    current_user: User = Depends(require_permission("message.messages.list")),
 ) -> ApiResponse[MessageListResult]:
-    current_user_id = int(current_user.id)
     items, total = list_messages(
         db,
-        user_id=current_user_id,
+        user_id=current_user.id,
         current_user=current_user,
         page=page,
         page_size=page_size,
@@ -288,7 +279,7 @@ async def api_run_message_maintenance(
         target_id=str(current_user.id),
         target_name=current_user.username,
         operator=current_user,
-        after_data=dict(result),  # type: ignore[reportArgumentType]
+        after_data=result,
     )
     db.commit()
     return success_response(MessageMaintenanceResult(**result))
@@ -344,7 +335,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
         sub = str(payload.get("sub", "")).strip()
         if sub:
             user_id = int(sub)
-    except ValueError:
+    except Exception:
         await websocket.close(code=4001)
         return
 
@@ -381,7 +372,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         pass
-    except RuntimeError:
+    except Exception:
         logger.exception("[MSG_WS] 用户 %s WebSocket 异常", user_id)
     finally:
         await message_connection_manager.disconnect(websocket, user_id)

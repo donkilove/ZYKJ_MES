@@ -15,5 +15,5 @@ def get_page_catalog(
     current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[PageCatalogResult]:
     _ = current_user
-    items = [PageCatalogItem(**item) for item in list_page_catalog_items()]  # type: ignore[reportArgumentType]
+    items = [PageCatalogItem(**item) for item in list_page_catalog_items()]
     return success_response(PageCatalogResult(items=items))

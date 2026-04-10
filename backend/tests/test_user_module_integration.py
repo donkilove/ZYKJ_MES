@@ -35,6 +35,7 @@ from app.services.bootstrap_seed_service import seed_initial_data  # noqa: E402
 from app.services.audit_service import write_audit_log  # noqa: E402
 from app.services.authz_service import ensure_role_permission_defaults  # noqa: E402
 from app.services.user_service import approve_registration_request, update_user  # noqa: E402
+from app.services.user_export_task_service import ensure_user_export_runtime_dir  # noqa: E402
 
 
 class UserModuleIntegrationTest(unittest.TestCase):
@@ -132,7 +133,9 @@ class UserModuleIntegrationTest(unittest.TestCase):
                     )
                 )
             export_task_ids = {
-                task_id for task_id in self.extra_export_task_ids if task_id is not None
+                task_id
+                for task_id in self.extra_export_task_ids
+                if task_id is not None
             }
             for task_id in export_task_ids:
                 task = (
@@ -738,17 +741,13 @@ class UserModuleIntegrationTest(unittest.TestCase):
             headers=self._headers(),
             params={"deleted_scope": "active", "keyword": self.username},
         )
-        self.assertEqual(
-            active_list_response.status_code, 200, active_list_response.text
-        )
+        self.assertEqual(active_list_response.status_code, 200, active_list_response.text)
         restored_items = active_list_response.json()["data"]["items"]
         self.assertTrue(any(int(item["id"]) == self.user_id for item in restored_items))
 
         restored_db = SessionLocal()
         try:
-            restored_user = (
-                restored_db.query(User).filter(User.id == self.user_id).one()
-            )
+            restored_user = restored_db.query(User).filter(User.id == self.user_id).one()
             self.assertFalse(restored_user.is_deleted)
             self.assertFalse(restored_user.is_active)
             self.assertIsNone(restored_user.deleted_at)
@@ -790,16 +789,16 @@ class UserModuleIntegrationTest(unittest.TestCase):
                 f"/api/v1/users/export-tasks/{task_id}",
                 headers=self._headers(),
             )
-            self.assertEqual(detail_response.status_code, 200, detail_response.text)
+            self.assertEqual(
+                detail_response.status_code, 200, detail_response.text
+            )
             if detail_response.json()["data"]["status"] == "succeeded":
                 break
             time.sleep(0.2)
         assert detail_response is not None
         self.assertEqual(detail_response.json()["data"]["status"], "succeeded")
         self.assertGreaterEqual(detail_response.json()["data"]["record_count"], 1)
-        self.assertTrue(
-            detail_response.json()["data"]["file_name"].startswith("users_active_")
-        )
+        self.assertTrue(detail_response.json()["data"]["file_name"].startswith("users_active_"))
 
         list_response = self.client.get(
             "/api/v1/users/export-tasks",

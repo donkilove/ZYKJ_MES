@@ -3,8 +3,6 @@ import json
 from threading import RLock
 import time
 
-from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -65,6 +63,7 @@ from app.services.authz_service import (
     get_user_permission_codes,
     list_permission_catalog_rows,
     preview_permission_hierarchy,
+    replace_role_permissions_for_module,
     update_capability_pack_role_config,
     update_permission_hierarchy_role_config,
     update_role_permission_matrix,
@@ -98,9 +97,7 @@ def _get_authz_endpoint_response_bytes(cache_key: str) -> bytes | None:
         return payload_bytes
 
 
-def _set_authz_endpoint_response_bytes(
-    cache_key: str, payload: dict[str, object]
-) -> bytes:
+def _set_authz_endpoint_response_bytes(cache_key: str, payload: dict[str, object]) -> bytes:
     payload_bytes = json.dumps(
         payload,
         ensure_ascii=False,
@@ -122,10 +119,7 @@ def _authz_revision_token(
     revision_by_module = get_authz_module_revision_map(db)
     if module_code is None:
         return json.dumps(
-            sorted(
-                (str(code), int(revision))
-                for code, revision in revision_by_module.items()
-            ),
+            sorted((str(code), int(revision)) for code, revision in revision_by_module.items()),
             ensure_ascii=True,
             separators=(",", ":"),
         )
@@ -180,9 +174,7 @@ def get_my_permissions_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[MyPermissionsResult]:
-    permission_codes = sorted(
-        get_user_permission_codes(db, user=current_user, module_code=module)
-    )
+    permission_codes = sorted(get_user_permission_codes(db, user=current_user, module_code=module))
     return success_response(MyPermissionsResult(permission_codes=permission_codes))
 
 
@@ -194,9 +186,7 @@ def get_authz_snapshot_api(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[AuthzSnapshotResult]:
-    return success_response(
-        AuthzSnapshotResult(**get_authz_snapshot(db, user=current_user))  # type: ignore[reportArgumentType]
-    )
+    return success_response(AuthzSnapshotResult(**get_authz_snapshot(db, user=current_user)))
 
 
 @router.get(
@@ -219,7 +209,7 @@ def get_role_permissions_api(
             role_code=role_code,
             role_name=role_name,
             module_code=module,
-            items=[RolePermissionItem(**item) for item in items],  # type: ignore[reportArgumentType]
+            items=[RolePermissionItem(**item) for item in items],
         )
     )
 
@@ -239,22 +229,20 @@ def get_role_permissions_matrix_api(
             module_code=module,
         )
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
     return success_response(
         RolePermissionMatrixResult(
             module_code=str(payload.get("module_code", "")),
-            module_codes=[str(code) for code in payload.get("module_codes", [])],  # type: ignore[reportGeneralTypeIssues]
+            module_codes=[str(code) for code in payload.get("module_codes", [])],
             permissions=[
-                PermissionCatalogItem(**item)  # type: ignore[reportArgumentType]
-                for item in (payload.get("permissions") or [])  # type: ignore[reportGeneralTypeIssues]
+                PermissionCatalogItem(**item)
+                for item in payload.get("permissions", [])
                 if isinstance(item, dict)
             ],
             role_items=[
-                RolePermissionMatrixItem(**item)  # type: ignore[reportArgumentType]
-                for item in (payload.get("role_items") or [])  # type: ignore[reportGeneralTypeIssues]
+                RolePermissionMatrixItem(**item)
+                for item in payload.get("role_items", [])
                 if isinstance(item, dict)
             ],
         )
@@ -268,9 +256,7 @@ def get_role_permissions_matrix_api(
 def put_role_permissions_matrix_api(
     payload: RolePermissionMatrixUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)
-    ),
+    current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[RolePermissionMatrixUpdateResult]:
     if not payload.dry_run:
         raise HTTPException(
@@ -287,17 +273,15 @@ def put_role_permissions_matrix_api(
             remark=payload.remark,
         )
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
     return success_response(
         RolePermissionMatrixUpdateResult(
             module_code=str(result.get("module_code", "")),
             dry_run=bool(result.get("dry_run", False)),
             role_results=[
-                RolePermissionMatrixRoleResult(**item)  # type: ignore[reportArgumentType]
-                for item in (result.get("role_results") or [])  # type: ignore[reportGeneralTypeIssues]
+                RolePermissionMatrixRoleResult(**item)
+                for item in result.get("role_results", [])
                 if isinstance(item, dict)
             ],
         ),
@@ -327,11 +311,9 @@ def get_permission_hierarchy_catalog_api(
     try:
         payload = get_permission_hierarchy_catalog(db, module_code=module)
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     response_payload = success_response(
-        PermissionHierarchyCatalogResult(**payload)  # type: ignore[reportArgumentType]
+        PermissionHierarchyCatalogResult(**payload)
     ).model_dump(mode="json")
     payload_bytes = _set_authz_endpoint_response_bytes(cache_key, response_payload)
     return Response(content=payload_bytes, media_type="application/json")
@@ -354,10 +336,8 @@ def get_permission_hierarchy_role_config_api(
             module_code=module,
         )
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
-    return success_response(PermissionHierarchyRoleConfigResult(**payload))  # type: ignore[reportArgumentType]
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(PermissionHierarchyRoleConfigResult(**payload))
 
 
 @router.put(
@@ -368,9 +348,7 @@ def put_permission_hierarchy_role_config_api(
     role_code: str,
     payload: PermissionHierarchyRoleConfigUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)
-    ),
+    current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[PermissionHierarchyRoleConfigUpdateResult]:
     if not payload.dry_run:
         raise HTTPException(
@@ -389,13 +367,10 @@ def put_permission_hierarchy_role_config_api(
             operator=current_user,
         )
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
-    result_any: Any = result
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     return success_response(
-        PermissionHierarchyRoleConfigUpdateResult(  # type: ignore[reportArgumentType]
-            **result_any,
+        PermissionHierarchyRoleConfigUpdateResult(
+            **result,
             dry_run=payload.dry_run,
         ),
         message="updated" if not payload.dry_run else "previewed",
@@ -418,13 +393,9 @@ def preview_permission_hierarchy_api(
             role_items=[item.model_dump() for item in payload.role_items],
         )
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
-    return success_response(
-        PermissionHierarchyPreviewResult(**result), message="previewed"  # type: ignore[reportArgumentType]
-    )
+    return success_response(PermissionHierarchyPreviewResult(**result), message="previewed")
 
 
 @router.get(
@@ -439,10 +410,8 @@ def get_capability_pack_catalog_api(
     try:
         payload = get_capability_pack_catalog(db, module_code=module)
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
-    return success_response(CapabilityPackCatalogResult(**payload))  # type: ignore[reportArgumentType]
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(CapabilityPackCatalogResult(**payload))
 
 
 @router.get(
@@ -462,10 +431,8 @@ def get_capability_pack_role_config_api(
             module_code=module,
         )
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
-    return success_response(CapabilityPackRoleConfigResult(**payload))  # type: ignore[reportArgumentType]
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(CapabilityPackRoleConfigResult(**payload))
 
 
 @router.put(
@@ -476,9 +443,7 @@ def put_capability_pack_role_config_api(
     role_code: str,
     payload: CapabilityPackRoleConfigUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)
-    ),
+    current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[CapabilityPackRoleConfigUpdateResult]:
     try:
         result = update_capability_pack_role_config(
@@ -492,13 +457,10 @@ def put_capability_pack_role_config_api(
             remark=payload.remark,
         )
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
-    result_any: Any = result
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     return success_response(
-        CapabilityPackRoleConfigUpdateResult(  # type: ignore[reportArgumentType]
-            **result_any,
+        CapabilityPackRoleConfigUpdateResult(
+            **result,
             dry_run=payload.dry_run,
         ),
         message="updated" if not payload.dry_run else "previewed",
@@ -512,9 +474,7 @@ def put_capability_pack_role_config_api(
 def apply_capability_packs_batch_api(
     payload: CapabilityPackBatchApplyRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)
-    ),
+    current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[CapabilityPackPreviewResult]:
     try:
         result = apply_capability_pack_role_configs(
@@ -526,13 +486,9 @@ def apply_capability_packs_batch_api(
             remark=payload.remark,
         )
     except AuthzRevisionConflictError as error:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=str(error)
-        ) from error
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     write_audit_log(
         db,
         action_code="authz.capability_pack.batch_apply",
@@ -540,13 +496,10 @@ def apply_capability_packs_batch_api(
         target_type="authz_module",
         target_id=payload.module_code,
         operator=current_user,
-        after_data={
-            "module_code": payload.module_code,
-            "role_count": len(payload.role_items),
-        },
+        after_data={"module_code": payload.module_code, "role_count": len(payload.role_items)},
     )
     db.commit()
-    return success_response(CapabilityPackPreviewResult(**result), message="updated")  # type: ignore[reportArgumentType]
+    return success_response(CapabilityPackPreviewResult(**result), message="updated")
 
 
 @router.get(
@@ -566,10 +519,8 @@ def get_capability_pack_effective_api(
             module_code=module,
         )
     except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
-    return success_response(PermissionExplainResult(**payload))  # type: ignore[reportArgumentType]
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return success_response(PermissionExplainResult(**payload))
 
 
 @router.put(
@@ -580,9 +531,7 @@ def put_role_permissions_api(
     role_code: str,
     payload: RolePermissionUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)
-    ),
+    current_user: User = Depends(require_permission(PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE)),
 ) -> ApiResponse[RolePermissionUpdateResult]:
     _ = role_code
     _ = payload

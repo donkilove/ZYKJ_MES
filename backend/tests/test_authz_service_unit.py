@@ -49,9 +49,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
         authz_snapshot_service._AUTHZ_SNAPSHOT_LOCAL_CACHE.clear()
         authz_snapshot_service._AUTHZ_SNAPSHOT_INFLIGHT.clear()
 
-    def test_get_permission_codes_for_role_codes_hits_cache_on_second_call(
-        self,
-    ) -> None:
+    def test_get_permission_codes_for_role_codes_hits_cache_on_second_call(self) -> None:
         db = MagicMock()
         with (
             patch.object(
@@ -80,9 +78,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
         ensure_defaults.assert_called_once()
         query_codes.assert_called_once()
 
-    def test_get_permission_codes_for_role_codes_recomputes_after_ttl_expired(
-        self,
-    ) -> None:
+    def test_get_permission_codes_for_role_codes_recomputes_after_ttl_expired(self) -> None:
         db = MagicMock()
         with (
             patch.object(
@@ -90,9 +86,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
                 "authz_permission_cache_redis_enabled",
                 False,
             ),
-            patch.object(
-                authz_service.settings, "authz_permission_cache_ttl_seconds", 1
-            ),
+            patch.object(authz_service.settings, "authz_permission_cache_ttl_seconds", 1),
             patch.object(authz_service, "ensure_authz_defaults"),
             patch.object(
                 authz_service,
@@ -116,16 +110,14 @@ class AuthzServiceUnitTest(unittest.TestCase):
 
         self.assertEqual(query_codes.call_count, 2)
 
-    def test_get_permission_codes_for_role_codes_coalesces_concurrent_miss(
-        self,
-    ) -> None:
+    def test_get_permission_codes_for_role_codes_coalesces_concurrent_miss(self) -> None:
         db = MagicMock()
         started = threading.Event()
         release = threading.Event()
         results: list[set[str]] = []
         errors: list[Exception] = []
 
-        def fake_query(**_kwargs):
+        def fake_query(**kwargs):
             started.set()
             release.wait(timeout=1)
             return {"page.user"}
@@ -167,9 +159,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
         self.assertEqual(results, [{"page.user"}, {"page.user"}])
         self.assertEqual(query_codes.call_count, 1)
 
-    def test_cache_invalidation_does_not_repeat_authz_default_initialization(
-        self,
-    ) -> None:
+    def test_cache_invalidation_does_not_repeat_authz_default_initialization(self) -> None:
         db = MagicMock()
 
         with (
@@ -200,13 +190,9 @@ class AuthzServiceUnitTest(unittest.TestCase):
         ensure_defaults.assert_called_once_with(db)
         self.assertEqual(query_codes.call_count, 2)
 
-    def test_get_user_permission_codes_skips_default_initialization_on_read_path(
-        self,
-    ) -> None:
+    def test_get_user_permission_codes_skips_default_initialization_on_read_path(self) -> None:
         db = MagicMock()
-        user = SimpleNamespace(
-            roles=[SimpleNamespace(code="operator", is_enabled=True)]
-        )
+        user = SimpleNamespace(roles=[SimpleNamespace(code="operator", is_enabled=True)])
 
         with (
             patch.object(
@@ -227,8 +213,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
         ensure_defaults.assert_not_called()
         query_codes.assert_called_once()
 
-    @staticmethod
-    def test_update_role_permission_matrix_invalidates_cache_after_commit() -> None:
+    def test_update_role_permission_matrix_invalidates_cache_after_commit(self) -> None:
         db = MagicMock()
         role_row = SimpleNamespace(code="operator", name="操作员")
         catalog_row = SimpleNamespace(
@@ -268,9 +253,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
                 ],
             ),
             patch.object(authz_service, "_bump_authz_module_revision"),
-            patch.object(
-                authz_service, "invalidate_permission_cache"
-            ) as invalidate_cache,
+            patch.object(authz_service, "invalidate_permission_cache") as invalidate_cache,
         ):
             authz_service.update_role_permission_matrix(
                 db,
@@ -291,9 +274,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
     def test_get_role_permission_matrix_uses_local_read_cache(self) -> None:
         db = MagicMock()
         role_row = SimpleNamespace(code="operator", name="操作员")
-        grant_row = SimpleNamespace(
-            role_code="operator", permission_code="user.profile.view"
-        )
+        grant_row = SimpleNamespace(role_code="operator", permission_code="user.profile.view")
         catalog_row = SimpleNamespace(
             permission_code="user.profile.view",
             permission_name="查看个人资料",
@@ -310,14 +291,8 @@ class AuthzServiceUnitTest(unittest.TestCase):
         with (
             patch.object(authz_service, "_ensure_authz_defaults_once"),
             patch.object(authz_service, "get_authz_module_revision", return_value=3),
-            patch.object(
-                authz_service, "list_permission_modules", return_value=["user"]
-            ),
-            patch.object(
-                authz_service,
-                "_list_catalog_rows_by_module",
-                return_value=[catalog_row],
-            ) as list_catalog,
+            patch.object(authz_service, "list_permission_modules", return_value=["user"]),
+            patch.object(authz_service, "_list_catalog_rows_by_module", return_value=[catalog_row]) as list_catalog,
             patch.object(authz_service, "_role_sort_key", return_value=0),
             patch.object(
                 authz_service,
@@ -336,9 +311,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
     def test_get_role_permission_matrix_coalesces_concurrent_miss(self) -> None:
         db = MagicMock()
         role_row = SimpleNamespace(code="operator", name="操作员")
-        grant_row = SimpleNamespace(
-            role_code="operator", permission_code="user.profile.view"
-        )
+        grant_row = SimpleNamespace(role_code="operator", permission_code="user.profile.view")
         catalog_row = SimpleNamespace(
             permission_code="user.profile.view",
             permission_name="查看个人资料",
@@ -356,7 +329,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
             _FakeScalarResult([grant_row]),
         ]
 
-        def blocked_catalog(*_args, **_kwargs):
+        def blocked_catalog(*args, **kwargs):
             started.set()
             release.wait(timeout=1)
             return [catalog_row]
@@ -372,9 +345,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
         with (
             patch.object(authz_service, "_ensure_authz_defaults_once"),
             patch.object(authz_service, "get_authz_module_revision", return_value=3),
-            patch.object(
-                authz_service, "list_permission_modules", return_value=["user"]
-            ),
+            patch.object(authz_service, "list_permission_modules", return_value=["user"]),
             patch.object(
                 authz_service,
                 "_list_catalog_rows_by_module",
@@ -484,12 +455,8 @@ class AuthzServiceUnitTest(unittest.TestCase):
                 return_value=[{"feature_code": "profile"}],
             ) as feature_items,
         ):
-            first = authz_service.get_permission_hierarchy_catalog(
-                db, module_code="user"
-            )
-            second = authz_service.get_permission_hierarchy_catalog(
-                db, module_code="user"
-            )
+            first = authz_service.get_permission_hierarchy_catalog(db, module_code="user")
+            second = authz_service.get_permission_hierarchy_catalog(db, module_code="user")
 
         self.assertEqual(first["module_code"], "user")
         self.assertEqual(second["module_code"], "user")
@@ -840,7 +807,7 @@ class AuthzServiceUnitTest(unittest.TestCase):
         results: list[dict[str, object]] = []
         errors: list[Exception] = []
 
-        def blocked_catalog(*_args, **_kwargs):
+        def blocked_catalog(*args, **kwargs):
             started.set()
             release.wait(timeout=1)
             return [catalog_row]

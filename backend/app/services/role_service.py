@@ -1,5 +1,3 @@
-from typing import Any
-
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -59,14 +57,14 @@ def get_roles_by_codes(db: Session, codes: list[str]) -> tuple[list[Role], list[
         return [], []
 
     stmt = select(Role).where(Role.code.in_(unique_codes), Role.is_deleted.is_(False))
-    roles = list(db.execute(stmt).scalars().all())
+    roles = db.execute(stmt).scalars().all()
     existing_codes = {role.code for role in roles}
     missing_codes = [code for code in unique_codes if code not in existing_codes]
     return roles, missing_codes
 
 
 def list_roles(db: Session, page: int, page_size: int, keyword: str | None) -> tuple[int, list[Role]]:
-    filters: list[Any] = [Role.is_deleted.is_(False)]
+    filters = [Role.is_deleted.is_(False)]
     if keyword:
         like_pattern = f"%{keyword}%"
         filters.append(Role.code.ilike(like_pattern) | Role.name.ilike(like_pattern))
@@ -81,7 +79,7 @@ def list_roles(db: Session, page: int, page_size: int, keyword: str | None) -> t
         .offset(offset)
         .limit(page_size)
     )
-    roles = list(db.execute(stmt).scalars().all())
+    roles = db.execute(stmt).scalars().all()
     return total, roles
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -172,9 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     findings = scan_paths(paths)
 
     if args.fix and findings:
-        files_to_repair = sorted(
-            {item.path for item in findings if item.kind == "gbk_utf8_mojibake"}
-        )
+        files_to_repair = sorted({item.path for item in findings if item.kind == "gbk_utf8_mojibake"})
         fixed_count = 0
         for file_path in files_to_repair:
             if repair_file(file_path):

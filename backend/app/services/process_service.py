@@ -22,7 +22,7 @@ def list_processes(db: Session, page: int, page_size: int, keyword: str | None) 
 
     offset = (page - 1) * page_size
     paged_stmt = stmt.offset(offset).limit(page_size)
-    processes = list(db.execute(paged_stmt).scalars().all())
+    processes = db.execute(paged_stmt).scalars().all()
     return total, processes
 
 
@@ -42,7 +42,7 @@ def get_processes_by_codes(db: Session, codes: list[str]) -> tuple[list[Process]
         return [], []
 
     stmt = select(Process).where(Process.code.in_(unique_codes)).options(selectinload(Process.stage))
-    processes = list(db.execute(stmt).scalars().all())
+    processes = db.execute(stmt).scalars().all()
     existing_codes = {process.code for process in processes}
     missing_codes = [code for code in unique_codes if code not in existing_codes]
     return processes, missing_codes

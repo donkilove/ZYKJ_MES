@@ -4,27 +4,23 @@ import copy
 from collections import defaultdict
 from dataclasses import dataclass
 import hashlib
-import importlib
 import json
 import logging
 from threading import Event, RLock
 import time
-from typing import Any, cast, Callable, Protocol, TypedDict, TypeVar, cast
 
-from sqlalchemy import select, true
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 try:
-    import redis  # type: ignore
-    from redis.exceptions import ConnectionError, RedisError  # type: ignore
-    _RedisFactory = redis.Redis  # type: ignore
-except ImportError:  # pragma: no cover - 依赖缺失时仅启用本地缓存回退
-    _RedisFactory = None
+    from redis import Redis
+    from redis.exceptions import RedisError
+except Exception:  # pragma: no cover - 依赖缺失时仅启用本地缓存回退
+    Redis = None  # type: ignore[assignment]
 
     class RedisError(Exception):
         pass
-
 
 from app.core.authz_catalog import (
     AUTHZ_RESOURCE_ACTION,
@@ -33,6 +29,7 @@ from app.core.authz_catalog import (
     AUTHZ_RESOURCE_PAGE,
     MODULE_PERMISSION_BY_MODULE_CODE,
     PERM_AUTHZ_ROLE_PERMISSIONS_UPDATE,
+    PERM_AUTHZ_ROLE_PERMISSIONS_VIEW,
     PERM_PAGE_FUNCTION_PERMISSION_CONFIG_VIEW,
     PAGE_DEFINITIONS,
     PAGE_PERMISSION_BY_PAGE_CODE,
@@ -96,99 +93,19 @@ _CAPABILITY_PACK_VISIBLE_MODULE_CODES = (
 )
 
 logger = logging.getLogger(__name__)
-T = TypeVar("T")
-
-
-class _AuthzRedisClient(Protocol):
-    def ping(self) -> Any: ...
-
-    def get(self, key: str) -> str | bytes | None: ...
-
-    def setex(self, key: str, ttl_seconds: int, value: str) -> Any: ...
-
-    def scan_iter(self, *, match: str, count: int) -> Any: ...
-
-    def delete(self, *keys: str) -> Any: ...
-
-
-class HierarchyPermissionCodes(TypedDict):
-    module_permission_code: str
-    page_permission_codes: set[str]
-    feature_permission_codes: set[str]
-
-
-class RoleHierarchyUpdateResult(TypedDict):
-    role_code: str
-    module_code: str
-    module_permission_code: str
-    before_granted_codes: set[str]
-    after_granted_codes: set[str]
-    before_selected_codes: list[str]
-    after_selected_codes: list[str]
-    added_permission_codes: list[str]
-    removed_permission_codes: list[str]
-    auto_linked_dependencies: list[str]
-    effective_page_permission_codes: list[str]
-    effective_feature_permission_codes: list[str]
-    before_effective_page_permission_codes: list[str]
-    before_effective_feature_permission_codes: list[str]
-
-
-class PermissionHierarchyRoleConfigPayload(TypedDict):
-    role_code: str
-    role_name: str
-    readonly: bool
-    module_code: str
-    module_enabled: bool
-    granted_page_permission_codes: list[str]
-    granted_feature_permission_codes: list[str]
-    effective_page_permission_codes: list[str]
-    effective_feature_permission_codes: list[str]
-
-
-class CapabilityPackRoleConfigPayload(TypedDict):
-    role_code: str
-    role_name: str
-    readonly: bool
-    module_code: str
-    module_enabled: bool
-    granted_capability_codes: list[str]
-    effective_capability_codes: list[str]
-    effective_page_permission_codes: list[str]
-    auto_linked_dependencies: list[str]
-
-
-class CapabilityPackRoleResultPayload(TypedDict):
-    role_code: str
-    role_name: str
-    readonly: bool
-    ignored_input: bool
-    module_code: str
-    before_capability_codes: list[str]
-    after_capability_codes: list[str]
-    added_capability_codes: list[str]
-    removed_capability_codes: list[str]
-    auto_linked_dependencies: list[str]
-    effective_capability_codes: list[str]
-    effective_page_permission_codes: list[str]
-    updated_count: int
-    before_granted_codes: set[str]
-    after_granted_codes: set[str]
-    changed_codes: list[str]
-
 
 _AUTHZ_PERMISSION_CACHE_ALL_MODULES = "__all__"
 _AUTHZ_PERMISSION_LOCAL_CACHE: dict[str, tuple[float, set[str]]] = {}
 _AUTHZ_PERMISSION_LOCAL_CACHE_LOCK = RLock()
 _AUTHZ_PERMISSION_INFLIGHT: dict[str, Event] = {}
 _AUTHZ_PERMISSION_INFLIGHT_LOCK = RLock()
-_AUTHZ_READ_LOCAL_CACHE: dict[str, tuple[float, Any]] = {}
+_AUTHZ_READ_LOCAL_CACHE: dict[str, tuple[float, object]] = {}
 _AUTHZ_READ_LOCAL_CACHE_LOCK = RLock()
 _AUTHZ_READ_INFLIGHT: dict[str, Event] = {}
 _AUTHZ_READ_INFLIGHT_LOCK = RLock()
 _AUTHZ_DEFAULTS_READY = False
 _AUTHZ_DEFAULTS_READY_LOCK = RLock()
-_AUTHZ_PERMISSION_REDIS_CLIENT: _AuthzRedisClient | None = None
+_AUTHZ_PERMISSION_REDIS_CLIENT = None
 _AUTHZ_PERMISSION_REDIS_INIT = False
 
 
@@ -210,27 +127,13 @@ def _authz_read_cache_ttl_seconds() -> int:
     return max(5, min(60, settings.authz_permission_cache_ttl_seconds))
 
 
-def _create_authz_permission_redis_client() -> _AuthzRedisClient:
-    redis_client_cls = getattr(importlib.import_module("redis"), "Redis")
-    return redis_client_cls(
-        host=settings.redis_host,
-        port=settings.redis_port,
-        db=settings.redis_db,
-        password=settings.redis_password or None,
-        ssl=settings.redis_ssl,
-        decode_responses=True,
-        socket_timeout=max(0.05, settings.redis_socket_timeout_seconds),
-        socket_connect_timeout=max(0.05, settings.redis_connect_timeout_seconds),
-    )
-
-
 def _authz_read_cache_key(*, cache_type: str, values: list[str]) -> str:
     joined = "|".join(values)
     digest = hashlib.sha1(f"{cache_type}|{joined}".encode("utf-8")).hexdigest()
     return f"{settings.authz_permission_cache_prefix}:read:{cache_type}:{digest}"
 
 
-def _get_authz_read_cache(cache_key: str, *, copy_payload: bool = False) -> Any | None:
+def _get_authz_read_cache(cache_key: str, *, copy_payload: bool = False):
     with _AUTHZ_READ_LOCAL_CACHE_LOCK:
         cached = _AUTHZ_READ_LOCAL_CACHE.get(cache_key)
         if cached is None:
@@ -245,7 +148,7 @@ def _get_authz_read_cache(cache_key: str, *, copy_payload: bool = False) -> Any 
 
 
 def _set_authz_read_cache(
-    cache_key: str, payload: Any, *, copy_payload: bool = False
+    cache_key: str, payload: object, *, copy_payload: bool = False
 ) -> None:
     expire_at = time.monotonic() + _authz_read_cache_ttl_seconds()
     with _AUTHZ_READ_LOCAL_CACHE_LOCK:
@@ -257,26 +160,25 @@ def _set_authz_read_cache(
 
 def _get_or_build_authz_read_cache(
     cache_key: str,
-    builder: Callable[[], T],
+    builder,
     *,
     copy_payload: bool = False,
-) -> T:
+):
     cached = _get_authz_read_cache(cache_key, copy_payload=copy_payload)
     if cached is not None:
         return cached
 
-    event: Event
+    event: Event | None = None
     while True:
         with _AUTHZ_READ_INFLIGHT_LOCK:
             cached = _get_authz_read_cache(cache_key, copy_payload=copy_payload)
             if cached is not None:
                 return cached
-            current_event = _AUTHZ_READ_INFLIGHT.get(cache_key)
-            if current_event is None:
+            event = _AUTHZ_READ_INFLIGHT.get(cache_key)
+            if event is None:
                 event = Event()
                 _AUTHZ_READ_INFLIGHT[cache_key] = event
                 break
-            event = current_event
         event.wait(timeout=max(0.05, float(_authz_read_cache_ttl_seconds())))
         cached = _get_authz_read_cache(cache_key, copy_payload=copy_payload)
         if cached is not None:
@@ -303,7 +205,7 @@ def _authz_permission_cache_key(
     return f"{settings.authz_permission_cache_prefix}:{digest}"
 
 
-def _get_authz_permission_cache_redis_client() -> _AuthzRedisClient | None:
+def _get_authz_permission_cache_redis_client():
     global _AUTHZ_PERMISSION_REDIS_INIT
     global _AUTHZ_PERMISSION_REDIS_CLIENT
     if _AUTHZ_PERMISSION_REDIS_INIT:
@@ -311,17 +213,23 @@ def _get_authz_permission_cache_redis_client() -> _AuthzRedisClient | None:
     _AUTHZ_PERMISSION_REDIS_INIT = True
     if not settings.authz_permission_cache_redis_enabled:
         return None
-    if _RedisFactory is None:
+    if Redis is None:
         logger.warning("[AUTHZ_CACHE] redis 依赖不可用，使用进程内缓存回退。")
         return None
     try:
-        redis_client = _create_authz_permission_redis_client()
-        redis_client.ping()
-        _AUTHZ_PERMISSION_REDIS_CLIENT = redis_client
-    except (RedisError, OSError):
-        logger.warning(
-            "[AUTHZ_CACHE] Redis 连接失败，使用进程内缓存回退。", exc_info=True
+        _AUTHZ_PERMISSION_REDIS_CLIENT = Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            password=settings.redis_password or None,
+            ssl=settings.redis_ssl,
+            decode_responses=True,
+            socket_timeout=max(0.05, settings.redis_socket_timeout_seconds),
+            socket_connect_timeout=max(0.05, settings.redis_connect_timeout_seconds),
         )
+        _AUTHZ_PERMISSION_REDIS_CLIENT.ping()
+    except Exception:
+        logger.warning("[AUTHZ_CACHE] Redis 连接失败，使用进程内缓存回退。", exc_info=True)
         _AUTHZ_PERMISSION_REDIS_CLIENT = None
     return _AUTHZ_PERMISSION_REDIS_CLIENT
 
@@ -360,7 +268,7 @@ def _get_or_build_permission_codes_cache(
         _set_permission_codes_to_local_cache(cache_key, redis_cached, ttl_seconds)
         return redis_cached
 
-    event: Event
+    event: Event | None = None
     while True:
         with _AUTHZ_PERMISSION_INFLIGHT_LOCK:
             local_cached = _get_permission_codes_from_local_cache(cache_key)
@@ -368,16 +276,13 @@ def _get_or_build_permission_codes_cache(
                 return local_cached
             redis_cached = _get_permission_codes_from_redis_cache(cache_key)
             if redis_cached is not None:
-                _set_permission_codes_to_local_cache(
-                    cache_key, redis_cached, ttl_seconds
-                )
+                _set_permission_codes_to_local_cache(cache_key, redis_cached, ttl_seconds)
                 return redis_cached
-            current_event = _AUTHZ_PERMISSION_INFLIGHT.get(cache_key)
-            if current_event is None:
+            event = _AUTHZ_PERMISSION_INFLIGHT.get(cache_key)
+            if event is None:
                 event = Event()
                 _AUTHZ_PERMISSION_INFLIGHT[cache_key] = event
                 break
-            event = current_event
         event.wait(timeout=max(0.05, float(ttl_seconds)))
         local_cached = _get_permission_codes_from_local_cache(cache_key)
         if local_cached is not None:
@@ -407,9 +312,7 @@ def _get_permission_codes_from_redis_cache(cache_key: str) -> set[str] | None:
     try:
         payload = redis_client.get(cache_key)
     except RedisError:
-        logger.warning(
-            "[AUTHZ_CACHE] Redis 读取失败，使用进程内缓存回退。", exc_info=True
-        )
+        logger.warning("[AUTHZ_CACHE] Redis 读取失败，使用进程内缓存回退。", exc_info=True)
         return None
     if not payload:
         return None
@@ -435,9 +338,7 @@ def _set_permission_codes_to_redis_cache(
             json.dumps(sorted(permission_codes), ensure_ascii=False),
         )
     except RedisError:
-        logger.warning(
-            "[AUTHZ_CACHE] Redis 写入失败，使用进程内缓存回退。", exc_info=True
-        )
+        logger.warning("[AUTHZ_CACHE] Redis 写入失败，使用进程内缓存回退。", exc_info=True)
 
 
 def invalidate_permission_cache() -> None:
@@ -474,11 +375,7 @@ def _ensure_authz_defaults_once(db: Session) -> None:
 
 
 def _codes(*values: str | None) -> set[str]:
-    result: set[str] = set()
-    for value in values:
-        if isinstance(value, str) and value.strip():
-            result.add(value)
-    return result
+    return {value for value in values if isinstance(value, str) and value.strip()}
 
 
 def _baseline_permission_codes_for_role(role_code: str) -> set[str]:
@@ -547,7 +444,6 @@ def _guard_role_permission_codes(
     allowed_codes: set[str] | None = None,
     hierarchy_only: bool = False,
 ) -> set[str]:
-    _ = hierarchy_only
     effective_codes = set(permission_codes)
     effective_codes.update(_baseline_permission_codes_for_role(role_code))
     if allowed_codes is not None:
@@ -587,8 +483,8 @@ def _count_active_system_admin_users(db: Session) -> int:
         select(User.id)
         .join(User.roles)
         .where(
-            cast(Any, User.is_deleted).is_(False),
-            cast(Any, User.is_active).is_(True),
+            User.is_deleted.is_(False),
+            User.is_active.is_(True),
             Role.code == ROLE_SYSTEM_ADMIN,
         )
     )
@@ -1044,16 +940,12 @@ def _ensure_role_rows(db: Session) -> None:
 
 
 def ensure_permission_catalog_defaults(db: Session) -> bool:
-    existing_rows: list[PermissionCatalog] = list(
-        db.execute(select(PermissionCatalog)).scalars().all()
-    )
-    row_by_code: dict[str, PermissionCatalog] = {
-        row.permission_code: row for row in existing_rows
-    }
+    existing_rows = db.execute(select(PermissionCatalog)).scalars().all()
+    row_by_code = {row.permission_code: row for row in existing_rows}
     changed = False
 
     for item in PERMISSION_CATALOG:
-        row: PermissionCatalog | None = row_by_code.get(item.permission_code)
+        row = row_by_code.get(item.permission_code)
         if row is None:
             db.add(
                 PermissionCatalog(
@@ -1166,7 +1058,7 @@ def ensure_authz_defaults(db: Session) -> None:
 def get_authz_module_revision(db: Session, *, module_code: str) -> int:
     _ensure_authz_defaults_once(db)
     normalized_module = _normalize_module_code(module_code)
-    row: AuthzModuleRevision | None = (
+    row = (
         db.execute(
             select(AuthzModuleRevision).where(
                 AuthzModuleRevision.module_code == normalized_module
@@ -1188,7 +1080,7 @@ def get_authz_module_revision_map(db: Session) -> dict[str, int]:
         cache_type="authz_module_revision_map",
         values=["all"],
     )
-    cached_payload: dict[str, int] | None = _get_authz_read_cache(cache_key)
+    cached_payload = _get_authz_read_cache(cache_key)
     if cached_payload is not None:
         return dict(cached_payload)
     rows = db.execute(select(AuthzModuleRevision)).scalars().all()
@@ -1202,10 +1094,7 @@ def get_authz_module_revision_map(db: Session) -> dict[str, int]:
 def _authz_read_revision_state(db: Session) -> tuple[dict[str, int], str]:
     revision_by_module = get_authz_module_revision_map(db)
     revision_token = json.dumps(
-        sorted(
-            (str(module_code), int(revision))
-            for module_code, revision in revision_by_module.items()
-        ),
+        sorted((str(module_code), int(revision)) for module_code, revision in revision_by_module.items()),
         ensure_ascii=True,
         separators=(",", ":"),
     )
@@ -1219,7 +1108,7 @@ def _bump_authz_module_revision(
     operator: User | None,
 ) -> int:
     normalized_module = _normalize_module_code(module_code)
-    row: AuthzModuleRevision | None = (
+    row = (
         db.execute(
             select(AuthzModuleRevision).where(
                 AuthzModuleRevision.module_code == normalized_module
@@ -1239,9 +1128,9 @@ def _bump_authz_module_revision(
 
 
 def _serialize_capability_pack_role_result(
-    item: CapabilityPackRoleResultPayload,
-) -> CapabilityPackRoleResultPayload:
-    return {  # type: ignore
+    item: dict[str, object],
+) -> dict[str, object]:
+    return {
         "role_code": str(item["role_code"]),
         "role_name": str(item["role_name"]),
         "readonly": bool(item["readonly"]),
@@ -1278,7 +1167,7 @@ def _snapshot_capability_pack_module_state(
     module_code: str,
 ) -> list[dict[str, object]]:
     role_rows = (
-        db.execute(select(Role).where(cast(Any, Role.is_deleted).is_(False))).scalars().all()
+        db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
     )
     ordered_roles = sorted(role_rows, key=_role_sort_key)
     snapshot: list[dict[str, object]] = []
@@ -1309,7 +1198,7 @@ def _record_capability_pack_change_log(
     remark: str | None,
     change_type: str,
     rollback_of_change_log_id: int | None,
-    role_results: list[CapabilityPackRoleResultPayload],
+    role_results: list[dict[str, object]],
 ) -> AuthzChangeLog:
     snapshot = _snapshot_capability_pack_module_state(db, module_code=module_code)
     log_row = AuthzChangeLog(
@@ -1365,7 +1254,7 @@ def list_permission_catalog_rows(
     )
     rows = _get_or_build_authz_read_cache(
         cache_key,
-        lambda: [
+        lambda: tuple(
             PermissionCatalogRow(
                 permission_code=str(permission_code),
                 permission_name=str(permission_name or ""),
@@ -1393,11 +1282,11 @@ def list_permission_catalog_rows(
                         PermissionCatalog.parent_permission_code,
                         PermissionCatalog.is_enabled,
                     )
-                    .where(cast(Any, PermissionCatalog.is_enabled).is_(True))
+                    .where(PermissionCatalog.is_enabled.is_(True))
                     .where(
                         PermissionCatalog.module_code == normalized_module
                         if normalized_module
-                        else true()
+                        else True
                     )
                     .order_by(
                         PermissionCatalog.module_code.asc(),
@@ -1406,7 +1295,7 @@ def list_permission_catalog_rows(
                     )
                 )
             ).all()
-        ],
+        ),
     )
     return rows
 
@@ -1420,11 +1309,7 @@ def list_permission_modules(db: Session) -> list[str]:
         cache_key,
         lambda: tuple(
             sorted(
-                {
-                    row.module_code
-                    for row in list_permission_catalog_rows(db)
-                    if row.module_code
-                }
+                {row.module_code for row in list_permission_catalog_rows(db) if row.module_code}
             )
         ),
     )
@@ -1538,9 +1423,9 @@ def _load_granted_permission_codes_for_roles(
             PermissionCatalog.permission_code == RolePermissionGrant.permission_code,
         )
         .where(
-            cast(Any, RolePermissionGrant.role_code).in_(normalized_roles),
-            cast(Any, RolePermissionGrant.granted).is_(True),
-            cast(Any, PermissionCatalog.is_enabled).is_(True),
+            RolePermissionGrant.role_code.in_(normalized_roles),
+            RolePermissionGrant.granted.is_(True),
+            PermissionCatalog.is_enabled.is_(True),
         )
     )
     if module_code and module_code.strip():
@@ -1566,7 +1451,7 @@ def _load_granted_permission_codes_for_roles(
 def _effective_permission_codes_from_granted(
     *,
     granted_codes: set[str],
-    row_by_code: dict[str, PermissionCatalogRow],
+    row_by_code: dict[str, PermissionCatalog],
 ) -> set[str]:
     if not granted_codes:
         return set()
@@ -1704,9 +1589,7 @@ def _effective_permission_codes_for_role_codes(
     normalized_roles = sorted({code for code in role_codes if code})
     if not normalized_roles:
         return set()
-    normalized_module = (
-        module_code.strip() if module_code and module_code.strip() else None
-    )
+    normalized_module = module_code.strip() if module_code and module_code.strip() else None
     if not use_cache:
         if ensure_defaults:
             _ensure_authz_defaults_once(db)
@@ -1813,22 +1696,14 @@ def get_role_permission_items(
     )
     cache_key = _authz_read_cache_key(
         cache_type="role_permission_items",
-        values=[
-            role_code.strip(),
-            normalized_module or _AUTHZ_PERMISSION_CACHE_ALL_MODULES,
-            revision_token,
-        ],
+        values=[role_code.strip(), normalized_module or _AUTHZ_PERMISSION_CACHE_ALL_MODULES, revision_token],
     )
-    cached_payload: tuple[str, list[dict[str, object]]] | None = _get_authz_read_cache(
-        cache_key
-    )
+    cached_payload = _get_authz_read_cache(cache_key)
     if cached_payload is not None:
         role_name, items = cached_payload
         return str(role_name), list(items)
 
-    role_row: Role | None = (
-        db.execute(select(Role).where(Role.code == role_code)).scalars().first()
-    )
+    role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
     if role_row is None:
         raise ValueError(f"Role not found: {role_code}")
 
@@ -1854,7 +1729,7 @@ def get_role_permission_items(
         db.execute(
             select(RolePermissionGrant).where(
                 RolePermissionGrant.role_code == role_code,
-                cast(Any, RolePermissionGrant.permission_code).in_(catalog_codes),
+                RolePermissionGrant.permission_code.in_(catalog_codes),
             )
         )
         .scalars()
@@ -1911,20 +1786,20 @@ def get_role_permission_matrix(
         module_codes = list_permission_modules(db)
         valid_codes = [row.permission_code for row in catalog_rows]
 
-        role_rows: list[Role] = list(
-            db.execute(select(Role).where(cast(Any, Role.is_deleted).is_(False))).scalars().all()
+        role_rows = (
+            db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
         )
         role_rows.sort(key=_role_sort_key)
-        role_codes = [str(row.code) for row in role_rows]
+        role_codes = [row.code for row in role_rows]
 
         grants_by_role: dict[str, set[str]] = defaultdict(set)
         if role_codes and valid_codes:
             grant_rows = (
                 db.execute(
                     select(RolePermissionGrant).where(
-                        cast(Any, RolePermissionGrant.role_code).in_(role_codes),
-                        cast(Any, RolePermissionGrant.permission_code).in_(valid_codes),
-                        cast(Any, RolePermissionGrant.granted).is_(True),
+                        RolePermissionGrant.role_code.in_(role_codes),
+                        RolePermissionGrant.permission_code.in_(valid_codes),
+                        RolePermissionGrant.granted.is_(True),
                     )
                 )
                 .scalars()
@@ -1993,25 +1868,6 @@ def get_role_permission_matrix(
     return _get_or_build_authz_read_cache(cache_key, builder=_build_payload)
 
 
-def _validate_role_items(
-    *, role_items: list[dict[str, Any]], role_map: dict[str, Any]
-) -> list[str]:
-    """校验角色项并返回有序的角色编码列表"""
-    visited_role_codes: set[str] = set()
-    role_codes: list[str] = []
-    for item in role_items:
-        role_code = str(item.get("role_code", "")).strip()
-        if not role_code:
-            raise ValueError("role_code is required")
-        if role_code in visited_role_codes:
-            raise ValueError(f"duplicate role_code: {role_code}")
-        if role_code not in role_map:
-            raise ValueError(f"Role not found: {role_code}")
-        visited_role_codes.add(role_code)
-        role_codes.append(role_code)
-    return role_codes
-
-
 def update_role_permission_matrix(
     db: Session,
     *,
@@ -2044,15 +1900,19 @@ def update_role_permission_matrix(
         for row in catalog_rows
     }
 
-    role_rows = list(
-        db.execute(select(Role).where(cast(Any, Role.is_deleted).is_(False))).scalars().all()
+    role_rows = (
+        db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
     )
     role_map = {row.code: row for row in role_rows}
-    selected_role_codes = _validate_role_items(role_items=role_items, role_map=role_map)
-
     role_input_map: dict[str, set[str]] = {}
     for item in role_items:
         role_code = str(item.get("role_code", "")).strip()
+        if not role_code:
+            raise ValueError("role_code is required")
+        if role_code in role_input_map:
+            raise ValueError(f"duplicate role_code: {role_code}")
+        if role_code not in role_map:
+            raise ValueError(f"Role not found: {role_code}")
         raw_codes = item.get("granted_permission_codes")
         if raw_codes is None:
             requested_codes: list[str] = []
@@ -2077,13 +1937,11 @@ def update_role_permission_matrix(
         }
 
     selected_role_codes = sorted(role_input_map.keys())
-    grant_role_code_column = RolePermissionGrant.__table__.c.role_code
-    grant_permission_code_column = RolePermissionGrant.__table__.c.permission_code
     grant_rows = (
         db.execute(
             select(RolePermissionGrant).where(
-                grant_role_code_column.in_(selected_role_codes),
-                grant_permission_code_column.in_(valid_codes),
+                RolePermissionGrant.role_code.in_(selected_role_codes),
+                RolePermissionGrant.permission_code.in_(valid_codes),
             )
         )
         .scalars()
@@ -2117,16 +1975,16 @@ def update_role_permission_matrix(
             module_permission_by_code=module_permission_by_code,
         )
 
-        parsed_requested_codes = set(role_input_map[role_code])
+        requested_codes = role_input_map[role_code]
         guarded_requested_codes = _guard_role_permission_codes(
             role_code=role_code,
-            permission_codes=parsed_requested_codes,
+            permission_codes=requested_codes,
             allowed_codes=valid_codes,
             hierarchy_only=False,
         )
-        guard_added_codes = sorted(guarded_requested_codes.difference(parsed_requested_codes))
+        guard_added_codes = sorted(guarded_requested_codes.difference(requested_codes))
         guard_removed_codes = sorted(
-            parsed_requested_codes.difference(guarded_requested_codes)
+            requested_codes.difference(guarded_requested_codes)
         )
 
         after_codes, auto_granted, auto_revoked = (
@@ -2225,7 +2083,7 @@ def replace_role_permissions_for_module(
         operator=operator,
         remark=remark,
     )
-    role_results: list[Any] = result.get("role_results", [])  # type: ignore
+    role_results = result.get("role_results", [])
     if not role_results:
         return 0, [], []
     role_result = role_results[0]
@@ -2282,7 +2140,7 @@ def _capability_group_meta(
     if explicit is not None:
         return explicit
     page_name = _page_name_by_code().get(page_code, page_code)
-    return f"{module_code}.{page_code}", page_name, f"{page_name}相关能力"
+    return (f"{module_code}.{page_code}", page_name, f"{page_name}相关能力")
 
 
 def _capability_items_for_module(module_code: str) -> list[dict[str, object]]:
@@ -2488,7 +2346,7 @@ def _feature_items_for_module(module_code: str) -> list[dict[str, object]]:
 
 def _hierarchy_permission_codes_for_module(
     module_code: str,
-) -> HierarchyPermissionCodes:
+) -> dict[str, set[str] | str]:
     module_permission = MODULE_PERMISSION_BY_MODULE_CODE.get(
         module_code,
         module_permission_code(module_code),
@@ -2566,8 +2424,8 @@ def _role_granted_codes_for_hierarchy(
         db.execute(
             select(RolePermissionGrant.permission_code).where(
                 RolePermissionGrant.role_code == role_code,
-                cast(Any, RolePermissionGrant.permission_code).in_(sorted(valid_codes)),
-                cast(Any, RolePermissionGrant.granted).is_(True),
+                RolePermissionGrant.permission_code.in_(sorted(valid_codes)),
+                RolePermissionGrant.granted.is_(True),
             )
         )
         .scalars()
@@ -2589,7 +2447,7 @@ def _calculate_role_hierarchy_update(
     module_enabled: bool,
     page_permission_codes: list[str],
     feature_permission_codes: list[str],
-) -> RoleHierarchyUpdateResult:
+) -> dict[str, object]:
     normalized_module = _normalize_module_code(module_code)
     hierarchy_codes = _hierarchy_permission_codes_for_module(normalized_module)
     module_permission = str(hierarchy_codes["module_permission_code"])
@@ -2714,7 +2572,7 @@ def _apply_role_permission_changes(
         db.execute(
             select(RolePermissionGrant).where(
                 RolePermissionGrant.role_code == role_code,
-                cast(Any, RolePermissionGrant.permission_code).in_(changed_codes),
+                RolePermissionGrant.permission_code.in_(changed_codes),
             )
         )
         .scalars()
@@ -2753,9 +2611,7 @@ def get_permission_hierarchy_catalog(
         cache_type="permission_hierarchy_catalog",
         values=[normalized_module, revision_token],
     )
-    cached_payload: CapabilityPackRoleConfigPayload | None = _get_authz_read_cache(
-        cache_key
-    )
+    cached_payload = _get_authz_read_cache(cache_key)
     if cached_payload is not None:
         return dict(cached_payload)
     available_module_codes = sorted(
@@ -2788,7 +2644,7 @@ def get_permission_hierarchy_role_config(
     *,
     role_code: str,
     module_code: str,
-) -> PermissionHierarchyRoleConfigPayload:
+) -> dict[str, object]:
     normalized_module = _normalize_module_code(module_code)
     _ensure_authz_defaults_once(db)
     _revision_by_module, revision_token = _authz_read_revision_state(db)
@@ -2796,11 +2652,9 @@ def get_permission_hierarchy_role_config(
         cache_type="permission_hierarchy_role_config",
         values=[normalized_module, role_code, revision_token],
     )
-    cached_payload: PermissionHierarchyRoleConfigPayload | None = _get_authz_read_cache(
-        cache_key
-    )
+    cached_payload = _get_authz_read_cache(cache_key)
     if cached_payload is not None:
-        return cached_payload
+        return dict(cached_payload)
     role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
     if role_row is None:
         raise ValueError(f"Role not found: {role_code}")
@@ -2819,7 +2673,7 @@ def get_permission_hierarchy_role_config(
         granted_codes=granted_codes,
         row_by_code=row_by_code,
     )
-    result: PermissionHierarchyRoleConfigPayload = {
+    result = {
         "role_code": role_row.code,
         "role_name": role_row.name,
         "readonly": False,
@@ -2872,6 +2726,8 @@ def update_permission_hierarchy_role_config(
     changed_codes = sorted(
         before_granted_codes.symmetric_difference(after_granted_codes)
     )
+    updated_count = 0
+
     if not dry_run and changed_codes:
         updated_count = _apply_role_permission_changes(
             db,
@@ -2927,14 +2783,20 @@ def preview_permission_hierarchy(
         }
 
     role_rows = (
-        db.execute(select(Role).where(cast(Any, Role.is_deleted).is_(False))).scalars().all()
+        db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
     )
-    role_map = {row.code: row for row in role_rows}
-    _validate_role_items(role_items=role_items, role_map=role_map)
-
+    role_name_by_code = {row.code: row.name for row in role_rows}
     role_results: list[dict[str, object]] = []
+    visited_role_codes: set[str] = set()
     for item in role_items:
         role_code = str(item.get("role_code", "")).strip()
+        if not role_code:
+            raise ValueError("role_code is required")
+        if role_code in visited_role_codes:
+            raise ValueError(f"duplicate role_code: {role_code}")
+        visited_role_codes.add(role_code)
+        if role_code not in role_name_by_code:
+            raise ValueError(f"Role not found: {role_code}")
         module_enabled = bool(item.get("module_enabled", False))
         raw_pages = item.get("page_permission_codes")
         raw_features = item.get("feature_permission_codes")
@@ -2982,7 +2844,7 @@ def get_capability_pack_catalog(
         cache_type="capability_pack_catalog",
         values=[normalized_module, revision_token],
     )
-    cached_payload: dict[str, object] | None = _get_authz_read_cache(cache_key)
+    cached_payload = _get_authz_read_cache(cache_key)
     if cached_payload is not None:
         return dict(cached_payload)
     normalized_module, available_module_codes = _normalize_capability_pack_module_code(
@@ -3011,7 +2873,7 @@ def get_capability_pack_role_config(
     *,
     role_code: str,
     module_code: str,
-) -> CapabilityPackRoleConfigPayload:
+) -> dict[str, object]:
     normalized_module = _normalize_module_code(module_code)
     _ensure_authz_defaults_once(db)
     _revision_by_module, revision_token = _authz_read_revision_state(db)
@@ -3019,11 +2881,9 @@ def get_capability_pack_role_config(
         cache_type="capability_pack_role_config",
         values=[normalized_module, role_code, revision_token],
     )
-    cached_payload: CapabilityPackRoleConfigPayload | None = _get_authz_read_cache(
-        cache_key
-    )
+    cached_payload = _get_authz_read_cache(cache_key)
     if cached_payload is not None:
-        return cached_payload
+        return dict(cached_payload)
     normalized_module, _ = _normalize_capability_pack_module_code(
         db,
         module_code=normalized_module,
@@ -3046,7 +2906,7 @@ def get_capability_pack_role_config(
             module_capability_codes
         )
     )
-    result: CapabilityPackRoleConfigPayload = {
+    result = {
         "role_code": config["role_code"],
         "role_name": config["role_name"],
         "readonly": config["readonly"]
@@ -3120,7 +2980,7 @@ def _calculate_capability_pack_role_update(
     module_code: str,
     module_enabled: bool,
     capability_codes: list[str],
-) -> CapabilityPackRoleResultPayload:
+) -> dict[str, object]:
     role_row = db.execute(select(Role).where(Role.code == role_code)).scalars().first()
     if role_row is None:
         raise ValueError(f"Role not found: {role_code}")
@@ -3230,6 +3090,10 @@ def _calculate_capability_pack_role_update(
     )
 
     row_by_code = _catalog_rows_by_code(db)
+    before_effective_codes = _effective_permission_codes_from_granted(
+        granted_codes=before_granted_codes,
+        row_by_code=row_by_code,
+    )
     after_effective_codes = _effective_permission_codes_from_granted(
         granted_codes=after_granted_codes,
         row_by_code=row_by_code,
@@ -3285,7 +3149,7 @@ def update_capability_pack_role_config(
     change_type: str = "apply",
     rollback_of_change_log_id: int | None = None,
     remark: str | None = None,
-) -> CapabilityPackRoleResultPayload:
+) -> dict[str, object]:
     ensure_authz_defaults(db)
     normalized_module, _ = _normalize_capability_pack_module_code(
         db,
@@ -3299,6 +3163,7 @@ def update_capability_pack_role_config(
         capability_codes=capability_codes,
     )
     changed_codes = list(result["changed_codes"])
+    updated_count = 0
     if not dry_run and changed_codes:
         updated_count = _apply_role_permission_changes(
             db,
@@ -3337,7 +3202,7 @@ def update_capability_pack_role_config(
         updated_count = len(changed_codes)
         db.rollback()
 
-    return {  # type: ignore
+    return {
         "role_code": str(result["role_code"]),
         "role_name": str(result["role_name"]),
         "readonly": bool(result["readonly"]),
@@ -3397,19 +3262,25 @@ def apply_capability_pack_role_configs(
         }
 
     for item in role_items:
-        _ = str(item.get("role_code", "")).strip()
+        role_code = str(item.get("role_code", "")).strip()
 
     role_rows = (
-        db.execute(select(Role).where(cast(Any, Role.is_deleted).is_(False))).scalars().all()
+        db.execute(select(Role).where(Role.is_deleted.is_(False))).scalars().all()
     )
-    role_map = {row.code: row for row in role_rows}
-    _validate_role_items(role_items=role_items, role_map=role_map)
-
-    results: list[CapabilityPackRoleResultPayload] = []
+    role_name_by_code = {row.code: row.name for row in role_rows}
+    visited_role_codes: set[str] = set()
+    results: list[dict[str, object]] = []
     total_updated_count = 0
 
     for item in role_items:
         role_code = str(item.get("role_code", "")).strip()
+        if not role_code:
+            raise ValueError("role_code is required")
+        if role_code in visited_role_codes:
+            raise ValueError(f"duplicate role_code: {role_code}")
+        if role_code not in role_name_by_code:
+            raise ValueError(f"Role not found: {role_code}")
+        visited_role_codes.add(role_code)
 
         raw_capabilities = item.get("capability_codes")
         capability_codes = (
@@ -3491,9 +3362,9 @@ def get_capability_pack_effective_explain(
         cache_type="capability_pack_effective_explain",
         values=[normalized_module, role_code, revision_token],
     )
-    cached_payload: dict[str, object] | None = _get_authz_read_cache(cache_key)
+    cached_payload = _get_authz_read_cache(cache_key)
     if cached_payload is not None:
-        return cached_payload
+        return dict(cached_payload)
     normalized_module, _ = _normalize_capability_pack_module_code(
         db,
         module_code=normalized_module,
