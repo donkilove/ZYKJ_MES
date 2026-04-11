@@ -1,0 +1,772 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "scenarios": [
+    "auth-me",
+    "auth-accounts",
+    "auth-register-requests",
+    "authz-permission-catalog",
+    "authz-snapshot",
+    "authz-role-permissions",
+    "authz-role-permissions-matrix",
+    "me-profile",
+    "me-session",
+    "users-online-status",
+    "users-export-tasks",
+    "users-detail-1",
+    "sessions-login-logs",
+    "sessions-online",
+    "audits-list",
+    "roles-list",
+    "roles-detail-1",
+    "messages-unread-count",
+    "messages-summary",
+    "messages-list",
+    "products-list",
+    "products-parameter-query",
+    "products-parameter-versions",
+    "products-detail-1",
+    "products-detail-bundle-1",
+    "products-versions-1",
+    "products-parameters-1",
+    "products-effective-parameters-1",
+    "products-impact-analysis-1",
+    "products-parameter-history-1",
+    "craft-stages",
+    "craft-stages-light",
+    "craft-stage-detail-1",
+    "craft-processes",
+    "craft-processes-light-1",
+    "craft-process-detail-1",
+    "craft-system-master-template",
+    "craft-system-master-template-versions",
+    "craft-kanban-process-metrics-1",
+    "craft-templates",
+    "equipment-admin-owners",
+    "equipment-owners",
+    "equipment-ledger",
+    "equipment-items",
+    "equipment-plans",
+    "equipment-executions",
+    "equipment-records",
+    "equipment-rules",
+    "equipment-runtime-parameters",
+    "quality-stats-overview",
+    "quality-stats-processes",
+    "quality-stats-operators",
+    "quality-stats-products",
+    "quality-trend",
+    "quality-defect-analysis",
+    "quality-scrap-statistics",
+    "quality-repair-orders",
+    "quality-suppliers",
+    "quality-supplier-detail-1",
+    "ui-page-catalog",
+    "processes-list"
+  ],
+  "duration_seconds": 20,
+  "warmup_seconds": 5,
+  "concurrency": 40,
+  "spawn_rate": 10.0,
+  "token_count": 40,
+  "session_pool_size": 20,
+  "threshold": {
+    "p95_ms": 500.0,
+    "error_rate_threshold": 0.05
+  },
+  "overall": {
+    "total_requests": 3971,
+    "successful_requests": 3971,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 254.24,
+    "p99_ms": 327.87,
+    "status_counts": {
+      "200": 3971
+    }
+  },
+  "overall_with_warmup": {
+    "total_requests": 5106,
+    "successful_requests": 5106,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 249.6,
+    "p99_ms": 312.67,
+    "status_counts": {
+      "200": 5106
+    }
+  },
+  "scenarios_metrics": {
+    "auth-me": {
+      "total_requests": 59,
+      "successful_requests": 59,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 234.55,
+      "p99_ms": 240.93,
+      "status_counts": {
+        "200": 59
+      }
+    },
+    "auth-accounts": {
+      "total_requests": 59,
+      "successful_requests": 59,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 229.38,
+      "p99_ms": 249.57,
+      "status_counts": {
+        "200": 59
+      }
+    },
+    "auth-register-requests": {
+      "total_requests": 59,
+      "successful_requests": 59,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 251.99,
+      "p99_ms": 273.81,
+      "status_counts": {
+        "200": 59
+      }
+    },
+    "authz-permission-catalog": {
+      "total_requests": 60,
+      "successful_requests": 60,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 224.59,
+      "p99_ms": 225.46,
+      "status_counts": {
+        "200": 60
+      }
+    },
+    "authz-snapshot": {
+      "total_requests": 62,
+      "successful_requests": 62,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 226.96,
+      "p99_ms": 234.54,
+      "status_counts": {
+        "200": 62
+      }
+    },
+    "authz-role-permissions": {
+      "total_requests": 61,
+      "successful_requests": 61,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 236.89,
+      "p99_ms": 246.89,
+      "status_counts": {
+        "200": 61
+      }
+    },
+    "authz-role-permissions-matrix": {
+      "total_requests": 63,
+      "successful_requests": 63,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 223.01,
+      "p99_ms": 243.84,
+      "status_counts": {
+        "200": 63
+      }
+    },
+    "me-profile": {
+      "total_requests": 64,
+      "successful_requests": 64,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 233.04,
+      "p99_ms": 253.09,
+      "status_counts": {
+        "200": 64
+      }
+    },
+    "me-session": {
+      "total_requests": 65,
+      "successful_requests": 65,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 225.36,
+      "p99_ms": 243.42,
+      "status_counts": {
+        "200": 65
+      }
+    },
+    "users-online-status": {
+      "total_requests": 65,
+      "successful_requests": 65,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 240.78,
+      "p99_ms": 274.4,
+      "status_counts": {
+        "200": 65
+      }
+    },
+    "users-export-tasks": {
+      "total_requests": 66,
+      "successful_requests": 66,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 214.21,
+      "p99_ms": 218.84,
+      "status_counts": {
+        "200": 66
+      }
+    },
+    "users-detail-1": {
+      "total_requests": 66,
+      "successful_requests": 66,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 249.95,
+      "p99_ms": 254.64,
+      "status_counts": {
+        "200": 66
+      }
+    },
+    "sessions-login-logs": {
+      "total_requests": 66,
+      "successful_requests": 66,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 254.24,
+      "p99_ms": 279.8,
+      "status_counts": {
+        "200": 66
+      }
+    },
+    "sessions-online": {
+      "total_requests": 65,
+      "successful_requests": 65,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 243.95,
+      "p99_ms": 258.5,
+      "status_counts": {
+        "200": 65
+      }
+    },
+    "audits-list": {
+      "total_requests": 65,
+      "successful_requests": 65,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 279.22,
+      "p99_ms": 341.76,
+      "status_counts": {
+        "200": 65
+      }
+    },
+    "roles-list": {
+      "total_requests": 64,
+      "successful_requests": 64,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 260.49,
+      "p99_ms": 271.82,
+      "status_counts": {
+        "200": 64
+      }
+    },
+    "roles-detail-1": {
+      "total_requests": 65,
+      "successful_requests": 65,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 248.08,
+      "p99_ms": 257.83,
+      "status_counts": {
+        "200": 65
+      }
+    },
+    "messages-unread-count": {
+      "total_requests": 65,
+      "successful_requests": 65,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 237.27,
+      "p99_ms": 330.83,
+      "status_counts": {
+        "200": 65
+      }
+    },
+    "messages-summary": {
+      "total_requests": 64,
+      "successful_requests": 64,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 243.13,
+      "p99_ms": 254.3,
+      "status_counts": {
+        "200": 64
+      }
+    },
+    "messages-list": {
+      "total_requests": 66,
+      "successful_requests": 66,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 248.94,
+      "p99_ms": 275.5,
+      "status_counts": {
+        "200": 66
+      }
+    },
+    "products-list": {
+      "total_requests": 65,
+      "successful_requests": 65,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 267.2,
+      "p99_ms": 286.41,
+      "status_counts": {
+        "200": 65
+      }
+    },
+    "products-parameter-query": {
+      "total_requests": 66,
+      "successful_requests": 66,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 261.68,
+      "p99_ms": 282.61,
+      "status_counts": {
+        "200": 66
+      }
+    },
+    "products-parameter-versions": {
+      "total_requests": 69,
+      "successful_requests": 69,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 295.91,
+      "p99_ms": 323.66,
+      "status_counts": {
+        "200": 69
+      }
+    },
+    "products-detail-1": {
+      "total_requests": 69,
+      "successful_requests": 69,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 260.05,
+      "p99_ms": 305.64,
+      "status_counts": {
+        "200": 69
+      }
+    },
+    "products-detail-bundle-1": {
+      "total_requests": 68,
+      "successful_requests": 68,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 245.46,
+      "p99_ms": 341.52,
+      "status_counts": {
+        "200": 68
+      }
+    },
+    "products-versions-1": {
+      "total_requests": 68,
+      "successful_requests": 68,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 263.0,
+      "p99_ms": 280.67,
+      "status_counts": {
+        "200": 68
+      }
+    },
+    "products-parameters-1": {
+      "total_requests": 69,
+      "successful_requests": 69,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 241.16,
+      "p99_ms": 384.01,
+      "status_counts": {
+        "200": 69
+      }
+    },
+    "products-effective-parameters-1": {
+      "total_requests": 68,
+      "successful_requests": 68,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 234.18,
+      "p99_ms": 318.7,
+      "status_counts": {
+        "200": 68
+      }
+    },
+    "products-impact-analysis-1": {
+      "total_requests": 69,
+      "successful_requests": 69,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 262.29,
+      "p99_ms": 292.38,
+      "status_counts": {
+        "200": 69
+      }
+    },
+    "products-parameter-history-1": {
+      "total_requests": 69,
+      "successful_requests": 69,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 233.95,
+      "p99_ms": 241.54,
+      "status_counts": {
+        "200": 69
+      }
+    },
+    "craft-stages": {
+      "total_requests": 69,
+      "successful_requests": 69,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 250.42,
+      "p99_ms": 351.7,
+      "status_counts": {
+        "200": 69
+      }
+    },
+    "craft-stages-light": {
+      "total_requests": 68,
+      "successful_requests": 68,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 256.84,
+      "p99_ms": 450.8,
+      "status_counts": {
+        "200": 68
+      }
+    },
+    "craft-stage-detail-1": {
+      "total_requests": 67,
+      "successful_requests": 67,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 287.86,
+      "p99_ms": 357.46,
+      "status_counts": {
+        "200": 67
+      }
+    },
+    "craft-processes": {
+      "total_requests": 68,
+      "successful_requests": 68,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 232.77,
+      "p99_ms": 302.93,
+      "status_counts": {
+        "200": 68
+      }
+    },
+    "craft-processes-light-1": {
+      "total_requests": 69,
+      "successful_requests": 69,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 234.83,
+      "p99_ms": 256.08,
+      "status_counts": {
+        "200": 69
+      }
+    },
+    "craft-process-detail-1": {
+      "total_requests": 69,
+      "successful_requests": 69,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 235.59,
+      "p99_ms": 264.92,
+      "status_counts": {
+        "200": 69
+      }
+    },
+    "craft-system-master-template": {
+      "total_requests": 70,
+      "successful_requests": 70,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 224.12,
+      "p99_ms": 280.22,
+      "status_counts": {
+        "200": 70
+      }
+    },
+    "craft-system-master-template-versions": {
+      "total_requests": 70,
+      "successful_requests": 70,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 244.03,
+      "p99_ms": 292.58,
+      "status_counts": {
+        "200": 70
+      }
+    },
+    "craft-kanban-process-metrics-1": {
+      "total_requests": 71,
+      "successful_requests": 71,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 254.21,
+      "p99_ms": 265.05,
+      "status_counts": {
+        "200": 71
+      }
+    },
+    "craft-templates": {
+      "total_requests": 72,
+      "successful_requests": 72,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 225.19,
+      "p99_ms": 349.47,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    "equipment-admin-owners": {
+      "total_requests": 72,
+      "successful_requests": 72,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 252.05,
+      "p99_ms": 286.86,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    "equipment-owners": {
+      "total_requests": 68,
+      "successful_requests": 68,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 238.11,
+      "p99_ms": 261.41,
+      "status_counts": {
+        "200": 68
+      }
+    },
+    "equipment-ledger": {
+      "total_requests": 69,
+      "successful_requests": 69,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 269.55,
+      "p99_ms": 411.8,
+      "status_counts": {
+        "200": 69
+      }
+    },
+    "equipment-items": {
+      "total_requests": 69,
+      "successful_requests": 69,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 228.96,
+      "p99_ms": 260.33,
+      "status_counts": {
+        "200": 69
+      }
+    },
+    "equipment-plans": {
+      "total_requests": 68,
+      "successful_requests": 68,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 240.27,
+      "p99_ms": 282.13,
+      "status_counts": {
+        "200": 68
+      }
+    },
+    "equipment-executions": {
+      "total_requests": 67,
+      "successful_requests": 67,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 242.19,
+      "p99_ms": 257.45,
+      "status_counts": {
+        "200": 67
+      }
+    },
+    "equipment-records": {
+      "total_requests": 63,
+      "successful_requests": 63,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 240.5,
+      "p99_ms": 260.82,
+      "status_counts": {
+        "200": 63
+      }
+    },
+    "equipment-rules": {
+      "total_requests": 63,
+      "successful_requests": 63,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 225.42,
+      "p99_ms": 261.25,
+      "status_counts": {
+        "200": 63
+      }
+    },
+    "equipment-runtime-parameters": {
+      "total_requests": 63,
+      "successful_requests": 63,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 238.09,
+      "p99_ms": 304.51,
+      "status_counts": {
+        "200": 63
+      }
+    },
+    "quality-stats-overview": {
+      "total_requests": 64,
+      "successful_requests": 64,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 261.85,
+      "p99_ms": 281.87,
+      "status_counts": {
+        "200": 64
+      }
+    },
+    "quality-stats-processes": {
+      "total_requests": 62,
+      "successful_requests": 62,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 249.4,
+      "p99_ms": 374.8,
+      "status_counts": {
+        "200": 62
+      }
+    },
+    "quality-stats-operators": {
+      "total_requests": 62,
+      "successful_requests": 62,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 241.84,
+      "p99_ms": 270.34,
+      "status_counts": {
+        "200": 62
+      }
+    },
+    "quality-stats-products": {
+      "total_requests": 62,
+      "successful_requests": 62,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 241.86,
+      "p99_ms": 264.08,
+      "status_counts": {
+        "200": 62
+      }
+    },
+    "quality-trend": {
+      "total_requests": 61,
+      "successful_requests": 61,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 233.82,
+      "p99_ms": 255.24,
+      "status_counts": {
+        "200": 61
+      }
+    },
+    "quality-defect-analysis": {
+      "total_requests": 61,
+      "successful_requests": 61,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 266.75,
+      "p99_ms": 320.69,
+      "status_counts": {
+        "200": 61
+      }
+    },
+    "quality-scrap-statistics": {
+      "total_requests": 61,
+      "successful_requests": 61,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 244.45,
+      "p99_ms": 384.47,
+      "status_counts": {
+        "200": 61
+      }
+    },
+    "quality-repair-orders": {
+      "total_requests": 61,
+      "successful_requests": 61,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 241.03,
+      "p99_ms": 244.87,
+      "status_counts": {
+        "200": 61
+      }
+    },
+    "quality-suppliers": {
+      "total_requests": 59,
+      "successful_requests": 59,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 252.99,
+      "p99_ms": 262.57,
+      "status_counts": {
+        "200": 59
+      }
+    },
+    "quality-supplier-detail-1": {
+      "total_requests": 59,
+      "successful_requests": 59,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 233.99,
+      "p99_ms": 247.06,
+      "status_counts": {
+        "200": 59
+      }
+    },
+    "ui-page-catalog": {
+      "total_requests": 57,
+      "successful_requests": 57,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 227.27,
+      "p99_ms": 260.56,
+      "status_counts": {
+        "200": 57
+      }
+    },
+    "processes-list": {
+      "total_requests": 58,
+      "successful_requests": 58,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 251.01,
+      "p99_ms": 258.35,
+      "status_counts": {
+        "200": 58
+      }
+    }
+  },
+  "gate_passed": true
+}

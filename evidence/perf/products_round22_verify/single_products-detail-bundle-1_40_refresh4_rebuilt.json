@@ -1,0 +1,52 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "scenarios": [
+    "products-detail-bundle-1"
+  ],
+  "duration_seconds": 20,
+  "warmup_seconds": 5,
+  "concurrency": 40,
+  "spawn_rate": 10.0,
+  "token_count": 40,
+  "session_pool_size": 20,
+  "threshold": {
+    "p95_ms": 500.0,
+    "error_rate_threshold": 0.05
+  },
+  "overall": {
+    "total_requests": 7365,
+    "successful_requests": 7365,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 143.65,
+    "p99_ms": 162.45,
+    "status_counts": {
+      "200": 7365
+    }
+  },
+  "overall_with_warmup": {
+    "total_requests": 9177,
+    "successful_requests": 9177,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 139.97,
+    "p99_ms": 161.59,
+    "status_counts": {
+      "200": 9177
+    }
+  },
+  "scenarios_metrics": {
+    "products-detail-bundle-1": {
+      "total_requests": 7365,
+      "successful_requests": 7365,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 143.65,
+      "p99_ms": 162.45,
+      "status_counts": {
+        "200": 7365
+      }
+    }
+  },
+  "gate_passed": true
+}

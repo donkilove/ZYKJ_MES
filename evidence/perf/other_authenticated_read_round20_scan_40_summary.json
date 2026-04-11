@@ -1,0 +1,867 @@
+{
+  "generated_at": "2026-04-09T19:09:56",
+  "concurrency": 40,
+  "token_file": ".tmp_runtime/admin_token_pool_40_refresh2.txt",
+  "duration_seconds": 10,
+  "warmup_seconds": 3,
+  "scenario_count": 61,
+  "passed_count": 1,
+  "failed_count": 60,
+  "failed_scenarios": [
+    "auth-me",
+    "auth-register-requests",
+    "authz-permission-catalog",
+    "authz-snapshot",
+    "authz-role-permissions",
+    "authz-role-permissions-matrix",
+    "me-profile",
+    "me-session",
+    "users-online-status",
+    "users-export-tasks",
+    "users-detail-1",
+    "sessions-login-logs",
+    "sessions-online",
+    "audits-list",
+    "roles-list",
+    "roles-detail-1",
+    "messages-unread-count",
+    "messages-summary",
+    "messages-list",
+    "products-list",
+    "products-parameter-query",
+    "products-parameter-versions",
+    "products-detail-1",
+    "products-detail-bundle-1",
+    "products-versions-1",
+    "products-parameters-1",
+    "products-effective-parameters-1",
+    "products-impact-analysis-1",
+    "products-parameter-history-1",
+    "craft-stages",
+    "craft-stages-light",
+    "craft-stage-detail-1",
+    "craft-processes",
+    "craft-processes-light-1",
+    "craft-process-detail-1",
+    "craft-system-master-template",
+    "craft-system-master-template-versions",
+    "craft-kanban-process-metrics-1",
+    "craft-templates",
+    "equipment-admin-owners",
+    "equipment-owners",
+    "equipment-ledger",
+    "equipment-items",
+    "equipment-plans",
+    "equipment-executions",
+    "equipment-records",
+    "equipment-rules",
+    "equipment-runtime-parameters",
+    "quality-stats-overview",
+    "quality-stats-processes",
+    "quality-stats-operators",
+    "quality-stats-products",
+    "quality-trend",
+    "quality-defect-analysis",
+    "quality-scrap-statistics",
+    "quality-repair-orders",
+    "quality-suppliers",
+    "quality-supplier-detail-1",
+    "ui-page-catalog",
+    "processes-list"
+  ],
+  "results": [
+    {
+      "scenario": "auth-me",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 144.45,
+      "error_rate": 1.0,
+      "total_requests": 3510,
+      "status_counts": {
+        "401": 3510
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\auth-me.json",
+      "note": ""
+    },
+    {
+      "scenario": "auth-accounts",
+      "command_exit_code": 0,
+      "gate_passed": true,
+      "p95_ms": 147.61,
+      "error_rate": 0.0,
+      "total_requests": 3020,
+      "status_counts": {
+        "200": 3020
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\auth-accounts.json",
+      "note": ""
+    },
+    {
+      "scenario": "auth-register-requests",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 149.59,
+      "error_rate": 1.0,
+      "total_requests": 3072,
+      "status_counts": {
+        "401": 3072
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\auth-register-requests.json",
+      "note": ""
+    },
+    {
+      "scenario": "authz-permission-catalog",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 142.16,
+      "error_rate": 1.0,
+      "total_requests": 3117,
+      "status_counts": {
+        "401": 3117
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\authz-permission-catalog.json",
+      "note": ""
+    },
+    {
+      "scenario": "authz-snapshot",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 146.4,
+      "error_rate": 1.0,
+      "total_requests": 3081,
+      "status_counts": {
+        "401": 3081
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\authz-snapshot.json",
+      "note": ""
+    },
+    {
+      "scenario": "authz-role-permissions",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 150.41,
+      "error_rate": 1.0,
+      "total_requests": 3005,
+      "status_counts": {
+        "401": 3005
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\authz-role-permissions.json",
+      "note": ""
+    },
+    {
+      "scenario": "authz-role-permissions-matrix",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 159.3,
+      "error_rate": 1.0,
+      "total_requests": 2952,
+      "status_counts": {
+        "401": 2952
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\authz-role-permissions-matrix.json",
+      "note": ""
+    },
+    {
+      "scenario": "me-profile",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 145.74,
+      "error_rate": 1.0,
+      "total_requests": 3050,
+      "status_counts": {
+        "401": 3050
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\me-profile.json",
+      "note": ""
+    },
+    {
+      "scenario": "me-session",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 141.81,
+      "error_rate": 1.0,
+      "total_requests": 3114,
+      "status_counts": {
+        "404": 3114
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\me-session.json",
+      "note": ""
+    },
+    {
+      "scenario": "users-online-status",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 141.53,
+      "error_rate": 1.0,
+      "total_requests": 3121,
+      "status_counts": {
+        "401": 3121
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\users-online-status.json",
+      "note": ""
+    },
+    {
+      "scenario": "users-export-tasks",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 176.29,
+      "error_rate": 1.0,
+      "total_requests": 2848,
+      "status_counts": {
+        "401": 2848
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\users-export-tasks.json",
+      "note": ""
+    },
+    {
+      "scenario": "users-detail-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 139.71,
+      "error_rate": 1.0,
+      "total_requests": 3088,
+      "status_counts": {
+        "401": 3088
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\users-detail-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "sessions-login-logs",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 143.47,
+      "error_rate": 1.0,
+      "total_requests": 3016,
+      "status_counts": {
+        "401": 3016
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\sessions-login-logs.json",
+      "note": ""
+    },
+    {
+      "scenario": "sessions-online",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 149.88,
+      "error_rate": 1.0,
+      "total_requests": 2984,
+      "status_counts": {
+        "401": 2984
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\sessions-online.json",
+      "note": ""
+    },
+    {
+      "scenario": "audits-list",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 148.65,
+      "error_rate": 1.0,
+      "total_requests": 3018,
+      "status_counts": {
+        "401": 3018
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\audits-list.json",
+      "note": ""
+    },
+    {
+      "scenario": "roles-list",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 145.63,
+      "error_rate": 1.0,
+      "total_requests": 2998,
+      "status_counts": {
+        "401": 2998
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\roles-list.json",
+      "note": ""
+    },
+    {
+      "scenario": "roles-detail-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 180.12,
+      "error_rate": 1.0,
+      "total_requests": 2939,
+      "status_counts": {
+        "401": 2939
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\roles-detail-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "messages-unread-count",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 147.29,
+      "error_rate": 1.0,
+      "total_requests": 3071,
+      "status_counts": {
+        "401": 3071
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\messages-unread-count.json",
+      "note": ""
+    },
+    {
+      "scenario": "messages-summary",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 142.5,
+      "error_rate": 1.0,
+      "total_requests": 3050,
+      "status_counts": {
+        "401": 3050
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\messages-summary.json",
+      "note": ""
+    },
+    {
+      "scenario": "messages-list",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 152.09,
+      "error_rate": 1.0,
+      "total_requests": 2955,
+      "status_counts": {
+        "401": 2955
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\messages-list.json",
+      "note": ""
+    },
+    {
+      "scenario": "products-list",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 159.32,
+      "error_rate": 1.0,
+      "total_requests": 2924,
+      "status_counts": {
+        "401": 2924
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\products-list.json",
+      "note": ""
+    },
+    {
+      "scenario": "products-parameter-query",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 152.43,
+      "error_rate": 1.0,
+      "total_requests": 2925,
+      "status_counts": {
+        "401": 2925
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\products-parameter-query.json",
+      "note": ""
+    },
+    {
+      "scenario": "products-parameter-versions",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 163.78,
+      "error_rate": 1.0,
+      "total_requests": 2721,
+      "status_counts": {
+        "401": 2721
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\products-parameter-versions.json",
+      "note": ""
+    },
+    {
+      "scenario": "products-detail-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 190.69,
+      "error_rate": 1.0,
+      "total_requests": 2462,
+      "status_counts": {
+        "401": 2462
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\products-detail-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "products-detail-bundle-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 169.32,
+      "error_rate": 1.0,
+      "total_requests": 2557,
+      "status_counts": {
+        "401": 2557
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\products-detail-bundle-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "products-versions-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 178.63,
+      "error_rate": 1.0,
+      "total_requests": 2504,
+      "status_counts": {
+        "401": 2504
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\products-versions-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "products-parameters-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 185.22,
+      "error_rate": 1.0,
+      "total_requests": 2512,
+      "status_counts": {
+        "401": 2512
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\products-parameters-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "products-effective-parameters-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 327.68,
+      "error_rate": 1.0,
+      "total_requests": 2058,
+      "status_counts": {
+        "401": 2058
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\products-effective-parameters-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "products-impact-analysis-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 171.39,
+      "error_rate": 1.0,
+      "total_requests": 2585,
+      "status_counts": {
+        "401": 2585
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\products-impact-analysis-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "products-parameter-history-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 165.52,
+      "error_rate": 1.0,
+      "total_requests": 2587,
+      "status_counts": {
+        "401": 2587
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\products-parameter-history-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "craft-stages",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 234.37,
+      "error_rate": 1.0,
+      "total_requests": 2321,
+      "status_counts": {
+        "401": 2321
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\craft-stages.json",
+      "note": ""
+    },
+    {
+      "scenario": "craft-stages-light",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 173.68,
+      "error_rate": 1.0,
+      "total_requests": 2578,
+      "status_counts": {
+        "401": 2578
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\craft-stages-light.json",
+      "note": ""
+    },
+    {
+      "scenario": "craft-stage-detail-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 175.22,
+      "error_rate": 1.0,
+      "total_requests": 2517,
+      "status_counts": {
+        "401": 2517
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\craft-stage-detail-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "craft-processes",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 178.14,
+      "error_rate": 1.0,
+      "total_requests": 2459,
+      "status_counts": {
+        "401": 2459
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\craft-processes.json",
+      "note": ""
+    },
+    {
+      "scenario": "craft-processes-light-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 170.73,
+      "error_rate": 1.0,
+      "total_requests": 2532,
+      "status_counts": {
+        "401": 2532
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\craft-processes-light-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "craft-process-detail-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 178.12,
+      "error_rate": 1.0,
+      "total_requests": 2475,
+      "status_counts": {
+        "401": 2475
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\craft-process-detail-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "craft-system-master-template",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 318.56,
+      "error_rate": 1.0,
+      "total_requests": 2213,
+      "status_counts": {
+        "401": 2213
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\craft-system-master-template.json",
+      "note": ""
+    },
+    {
+      "scenario": "craft-system-master-template-versions",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 292.46,
+      "error_rate": 1.0,
+      "total_requests": 2017,
+      "status_counts": {
+        "401": 2017
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\craft-system-master-template-versions.json",
+      "note": ""
+    },
+    {
+      "scenario": "craft-kanban-process-metrics-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 229.99,
+      "error_rate": 1.0,
+      "total_requests": 2433,
+      "status_counts": {
+        "401": 2433
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\craft-kanban-process-metrics-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "craft-templates",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 185.15,
+      "error_rate": 1.0,
+      "total_requests": 2564,
+      "status_counts": {
+        "401": 2564
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\craft-templates.json",
+      "note": ""
+    },
+    {
+      "scenario": "equipment-admin-owners",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 473.65,
+      "error_rate": 1.0,
+      "total_requests": 1352,
+      "status_counts": {
+        "401": 1352
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\equipment-admin-owners.json",
+      "note": ""
+    },
+    {
+      "scenario": "equipment-owners",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 241.9,
+      "error_rate": 1.0,
+      "total_requests": 2178,
+      "status_counts": {
+        "401": 2178
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\equipment-owners.json",
+      "note": ""
+    },
+    {
+      "scenario": "equipment-ledger",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 272.29,
+      "error_rate": 1.0,
+      "total_requests": 1893,
+      "status_counts": {
+        "401": 1893
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\equipment-ledger.json",
+      "note": ""
+    },
+    {
+      "scenario": "equipment-items",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 232.31,
+      "error_rate": 1.0,
+      "total_requests": 2173,
+      "status_counts": {
+        "401": 2173
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\equipment-items.json",
+      "note": ""
+    },
+    {
+      "scenario": "equipment-plans",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 204.11,
+      "error_rate": 1.0,
+      "total_requests": 2292,
+      "status_counts": {
+        "401": 2292
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\equipment-plans.json",
+      "note": ""
+    },
+    {
+      "scenario": "equipment-executions",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 261.48,
+      "error_rate": 1.0,
+      "total_requests": 1916,
+      "status_counts": {
+        "401": 1916
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\equipment-executions.json",
+      "note": ""
+    },
+    {
+      "scenario": "equipment-records",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 233.29,
+      "error_rate": 1.0,
+      "total_requests": 2234,
+      "status_counts": {
+        "401": 2234
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\equipment-records.json",
+      "note": ""
+    },
+    {
+      "scenario": "equipment-rules",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 397.08,
+      "error_rate": 1.0,
+      "total_requests": 1729,
+      "status_counts": {
+        "401": 1729
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\equipment-rules.json",
+      "note": ""
+    },
+    {
+      "scenario": "equipment-runtime-parameters",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 258.64,
+      "error_rate": 1.0,
+      "total_requests": 1791,
+      "status_counts": {
+        "401": 1791
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\equipment-runtime-parameters.json",
+      "note": ""
+    },
+    {
+      "scenario": "quality-stats-overview",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 174.8,
+      "error_rate": 1.0,
+      "total_requests": 2720,
+      "status_counts": {
+        "401": 2720
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\quality-stats-overview.json",
+      "note": ""
+    },
+    {
+      "scenario": "quality-stats-processes",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 163.4,
+      "error_rate": 1.0,
+      "total_requests": 2874,
+      "status_counts": {
+        "401": 2874
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\quality-stats-processes.json",
+      "note": ""
+    },
+    {
+      "scenario": "quality-stats-operators",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 172.02,
+      "error_rate": 1.0,
+      "total_requests": 2630,
+      "status_counts": {
+        "401": 2630
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\quality-stats-operators.json",
+      "note": ""
+    },
+    {
+      "scenario": "quality-stats-products",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 546.63,
+      "error_rate": 1.0,
+      "total_requests": 1604,
+      "status_counts": {
+        "401": 1604
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\quality-stats-products.json",
+      "note": ""
+    },
+    {
+      "scenario": "quality-trend",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 193.84,
+      "error_rate": 1.0,
+      "total_requests": 2370,
+      "status_counts": {
+        "401": 2370
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\quality-trend.json",
+      "note": ""
+    },
+    {
+      "scenario": "quality-defect-analysis",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 417.87,
+      "error_rate": 1.0,
+      "total_requests": 1826,
+      "status_counts": {
+        "401": 1826
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\quality-defect-analysis.json",
+      "note": ""
+    },
+    {
+      "scenario": "quality-scrap-statistics",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 251.55,
+      "error_rate": 1.0,
+      "total_requests": 2165,
+      "status_counts": {
+        "401": 2165
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\quality-scrap-statistics.json",
+      "note": ""
+    },
+    {
+      "scenario": "quality-repair-orders",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 204.51,
+      "error_rate": 1.0,
+      "total_requests": 2253,
+      "status_counts": {
+        "401": 2253
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\quality-repair-orders.json",
+      "note": ""
+    },
+    {
+      "scenario": "quality-suppliers",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 376.23,
+      "error_rate": 1.0,
+      "total_requests": 2114,
+      "status_counts": {
+        "401": 2114
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\quality-suppliers.json",
+      "note": ""
+    },
+    {
+      "scenario": "quality-supplier-detail-1",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 453.65,
+      "error_rate": 1.0,
+      "total_requests": 1491,
+      "status_counts": {
+        "401": 1491
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\quality-supplier-detail-1.json",
+      "note": ""
+    },
+    {
+      "scenario": "ui-page-catalog",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 234.69,
+      "error_rate": 1.0,
+      "total_requests": 2103,
+      "status_counts": {
+        "401": 2103
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\ui-page-catalog.json",
+      "note": ""
+    },
+    {
+      "scenario": "processes-list",
+      "command_exit_code": 1,
+      "gate_passed": false,
+      "p95_ms": 214.68,
+      "error_rate": 1.0,
+      "total_requests": 2184,
+      "status_counts": {
+        "401": 2184
+      },
+      "output_file": ".tmp_runtime\\perf_round20_scan\\processes-list.json",
+      "note": ""
+    }
+  ]
+}

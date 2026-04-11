@@ -1,0 +1,7 @@
+{
+  "injected": true,
+  "url": "https://yb.saigou.work:2053/v1/responses",
+  "hasInput": true,
+  "model": "gpt-5.3-chat-latest",
+  "instructions": "你是 OpenCode 编码代理。\n当前上游接口要求 requests body 中的 instructions 为非空字符串。\n请遵循项目规则并继续处理用户请求。"
+}

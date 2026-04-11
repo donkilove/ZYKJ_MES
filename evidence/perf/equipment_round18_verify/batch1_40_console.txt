@@ -1,0 +1,88 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "scenarios": [
+    "equipment-admin-owners",
+    "equipment-owners",
+    "equipment-items",
+    "equipment-plans"
+  ],
+  "duration_seconds": 45,
+  "warmup_seconds": 10,
+  "concurrency": 40,
+  "spawn_rate": 10.0,
+  "token_count": 40,
+  "session_pool_size": 20,
+  "threshold": {
+    "p95_ms": 500.0,
+    "error_rate_threshold": 0.05
+  },
+  "overall": {
+    "total_requests": 4165,
+    "successful_requests": 4165,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 885.07,
+    "p99_ms": 1192.3,
+    "status_counts": {
+      "200": 4165
+    }
+  },
+  "overall_with_warmup": {
+    "total_requests": 5121,
+    "successful_requests": 5121,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 860.31,
+    "p99_ms": 1174.14,
+    "status_counts": {
+      "200": 5121
+    }
+  },
+  "scenarios_metrics": {
+    "equipment-admin-owners": {
+      "total_requests": 1041,
+      "successful_requests": 1041,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 980.77,
+      "p99_ms": 1412.15,
+      "status_counts": {
+        "200": 1041
+      }
+    },
+    "equipment-owners": {
+      "total_requests": 1042,
+      "successful_requests": 1042,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 966.21,
+      "p99_ms": 1262.02,
+      "status_counts": {
+        "200": 1042
+      }
+    },
+    "equipment-items": {
+      "total_requests": 1042,
+      "successful_requests": 1042,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 815.1,
+      "p99_ms": 1066.14,
+      "status_counts": {
+        "200": 1042
+      }
+    },
+    "equipment-plans": {
+      "total_requests": 1040,
+      "successful_requests": 1040,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 801.36,
+      "p99_ms": 1000.81,
+      "status_counts": {
+        "200": 1040
+      }
+    }
+  },
+  "gate_passed": false
+}

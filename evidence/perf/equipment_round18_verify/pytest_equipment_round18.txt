@@ -1,0 +1,10 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\Donki\UserData\Code\ZYKJ_MES
+plugins: anyio-4.12.1
+collected 14 items
+
+backend\tests\test_equipment_module_integration.py ............          [ 85%]
+backend\tests\test_maintenance_scheduler_service_unit.py ..              [100%]
+
+============================= 14 passed in 13.55s =============================

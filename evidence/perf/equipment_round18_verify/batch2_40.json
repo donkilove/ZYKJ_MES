@@ -1,0 +1,88 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "scenarios": [
+    "equipment-executions",
+    "equipment-records",
+    "equipment-rules",
+    "equipment-runtime-parameters"
+  ],
+  "duration_seconds": 45,
+  "warmup_seconds": 10,
+  "concurrency": 40,
+  "spawn_rate": 10.0,
+  "token_count": 40,
+  "session_pool_size": 20,
+  "threshold": {
+    "p95_ms": 500.0,
+    "error_rate_threshold": 0.05
+  },
+  "overall": {
+    "total_requests": 6160,
+    "successful_requests": 6160,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 433.01,
+    "p99_ms": 589.62,
+    "status_counts": {
+      "200": 6160
+    }
+  },
+  "overall_with_warmup": {
+    "total_requests": 7521,
+    "successful_requests": 7521,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 428.67,
+    "p99_ms": 597.55,
+    "status_counts": {
+      "200": 7521
+    }
+  },
+  "scenarios_metrics": {
+    "equipment-executions": {
+      "total_requests": 1540,
+      "successful_requests": 1540,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 456.57,
+      "p99_ms": 603.29,
+      "status_counts": {
+        "200": 1540
+      }
+    },
+    "equipment-records": {
+      "total_requests": 1542,
+      "successful_requests": 1542,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 435.96,
+      "p99_ms": 597.55,
+      "status_counts": {
+        "200": 1542
+      }
+    },
+    "equipment-rules": {
+      "total_requests": 1541,
+      "successful_requests": 1541,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 417.77,
+      "p99_ms": 558.01,
+      "status_counts": {
+        "200": 1541
+      }
+    },
+    "equipment-runtime-parameters": {
+      "total_requests": 1537,
+      "successful_requests": 1537,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 408.98,
+      "p99_ms": 533.07,
+      "status_counts": {
+        "200": 1537
+      }
+    }
+  },
+  "gate_passed": true
+}

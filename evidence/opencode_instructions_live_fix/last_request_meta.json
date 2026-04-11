@@ -1,0 +1,5 @@
+{
+  "method": "POST",
+  "path": "/v1/responses",
+  "content_type": "application/json"
+}

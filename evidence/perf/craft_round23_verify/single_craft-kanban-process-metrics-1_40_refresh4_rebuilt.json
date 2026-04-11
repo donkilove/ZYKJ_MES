@@ -1,0 +1,52 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "scenarios": [
+    "craft-kanban-process-metrics-1"
+  ],
+  "duration_seconds": 20,
+  "warmup_seconds": 5,
+  "concurrency": 40,
+  "spawn_rate": 10.0,
+  "token_count": 40,
+  "session_pool_size": 20,
+  "threshold": {
+    "p95_ms": 500.0,
+    "error_rate_threshold": 0.05
+  },
+  "overall": {
+    "total_requests": 6166,
+    "successful_requests": 6166,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 154.82,
+    "p99_ms": 174.97,
+    "status_counts": {
+      "200": 6166
+    }
+  },
+  "overall_with_warmup": {
+    "total_requests": 8037,
+    "successful_requests": 8037,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 152.6,
+    "p99_ms": 172.12,
+    "status_counts": {
+      "200": 8037
+    }
+  },
+  "scenarios_metrics": {
+    "craft-kanban-process-metrics-1": {
+      "total_requests": 6166,
+      "successful_requests": 6166,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 154.82,
+      "p99_ms": 174.97,
+      "status_counts": {
+        "200": 6166
+      }
+    }
+  },
+  "gate_passed": true
+}

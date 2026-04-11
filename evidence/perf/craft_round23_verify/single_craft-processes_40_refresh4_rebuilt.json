@@ -1,0 +1,52 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "scenarios": [
+    "craft-processes"
+  ],
+  "duration_seconds": 20,
+  "warmup_seconds": 5,
+  "concurrency": 40,
+  "spawn_rate": 10.0,
+  "token_count": 40,
+  "session_pool_size": 20,
+  "threshold": {
+    "p95_ms": 500.0,
+    "error_rate_threshold": 0.05
+  },
+  "overall": {
+    "total_requests": 7808,
+    "successful_requests": 7808,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 132.48,
+    "p99_ms": 157.95,
+    "status_counts": {
+      "200": 7808
+    }
+  },
+  "overall_with_warmup": {
+    "total_requests": 9548,
+    "successful_requests": 9548,
+    "success_rate": 1.0,
+    "error_rate": 0.0,
+    "p95_ms": 130.25,
+    "p99_ms": 156.62,
+    "status_counts": {
+      "200": 9548
+    }
+  },
+  "scenarios_metrics": {
+    "craft-processes": {
+      "total_requests": 7808,
+      "successful_requests": 7808,
+      "success_rate": 1.0,
+      "error_rate": 0.0,
+      "p95_ms": 132.48,
+      "p99_ms": 157.95,
+      "status_counts": {
+        "200": 7808
+      }
+    }
+  },
+  "gate_passed": true
+}

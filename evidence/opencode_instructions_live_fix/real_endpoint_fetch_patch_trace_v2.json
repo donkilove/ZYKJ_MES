@@ -1,0 +1,8 @@
+{
+  "url": "https://yb.saigou.work:2053/v1/responses",
+  "injectedAt": "2026-04-04T03:15:22.687Z",
+  "instructions": "You are OpenCode.\nThe upstream endpoint requires a non-empty instructions string.\nFollow the project rules and continue handling the request.",
+  "removedFields": [
+    "max_output_tokens"
+  ]
+}

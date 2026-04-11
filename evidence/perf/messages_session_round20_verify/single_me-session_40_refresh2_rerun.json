@@ -1,0 +1,55 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "scenarios": [
+    "me-session"
+  ],
+  "duration_seconds": 20,
+  "warmup_seconds": 5,
+  "concurrency": 40,
+  "spawn_rate": 10.0,
+  "token_count": 40,
+  "session_pool_size": 20,
+  "threshold": {
+    "p95_ms": 500.0,
+    "error_rate_threshold": 0.05
+  },
+  "overall": {
+    "total_requests": 806,
+    "successful_requests": 805,
+    "success_rate": 0.9987593052109182,
+    "error_rate": 0.001240694789081842,
+    "p95_ms": 1634.77,
+    "p99_ms": 2141.3,
+    "status_counts": {
+      "200": 805,
+      "EXC": 1
+    }
+  },
+  "overall_with_warmup": {
+    "total_requests": 968,
+    "successful_requests": 967,
+    "success_rate": 0.9989669421487604,
+    "error_rate": 0.0010330578512396382,
+    "p95_ms": 1608.23,
+    "p99_ms": 2201.55,
+    "status_counts": {
+      "200": 967,
+      "EXC": 1
+    }
+  },
+  "scenarios_metrics": {
+    "me-session": {
+      "total_requests": 806,
+      "successful_requests": 805,
+      "success_rate": 0.9987593052109182,
+      "error_rate": 0.001240694789081842,
+      "p95_ms": 1634.77,
+      "p99_ms": 2141.3,
+      "status_counts": {
+        "200": 805,
+        "EXC": 1
+      }
+    }
+  },
+  "gate_passed": false
+}

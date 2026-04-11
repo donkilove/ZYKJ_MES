@@ -1,0 +1,55 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "scenarios": [
+    "equipment-runtime-parameters"
+  ],
+  "duration_seconds": 20,
+  "warmup_seconds": 5,
+  "concurrency": 40,
+  "spawn_rate": 10.0,
+  "token_count": 40,
+  "session_pool_size": 20,
+  "threshold": {
+    "p95_ms": 500.0,
+    "error_rate_threshold": 0.05
+  },
+  "overall": {
+    "total_requests": 900,
+    "successful_requests": 893,
+    "success_rate": 0.9922222222222222,
+    "error_rate": 0.007777777777777772,
+    "p95_ms": 1756.61,
+    "p99_ms": 2101.67,
+    "status_counts": {
+      "200": 893,
+      "EXC": 7
+    }
+  },
+  "overall_with_warmup": {
+    "total_requests": 1045,
+    "successful_requests": 1038,
+    "success_rate": 0.9933014354066986,
+    "error_rate": 0.006698564593301426,
+    "p95_ms": 1732.27,
+    "p99_ms": 2047.84,
+    "status_counts": {
+      "200": 1038,
+      "EXC": 7
+    }
+  },
+  "scenarios_metrics": {
+    "equipment-runtime-parameters": {
+      "total_requests": 900,
+      "successful_requests": 893,
+      "success_rate": 0.9922222222222222,
+      "error_rate": 0.007777777777777772,
+      "p95_ms": 1756.61,
+      "p99_ms": 2101.67,
+      "status_counts": {
+        "200": 893,
+        "EXC": 7
+      }
+    }
+  },
+  "gate_passed": false
+}
