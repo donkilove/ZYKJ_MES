@@ -1,29 +1,98 @@
-# Python
+# ===============================
+# 系统与通用临时文件
+# ===============================
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.swp
+*.swo
+*.tmp
+*.temp
+*.bak
+*.orig
+*.log
+
+# ===============================
+# Python / 后端产物与本地环境
+# ===============================
 .venv/
+venv/
+env/
+ENV/
 __pycache__/
+**/__pycache__/
 *.py[cod]
-*.pyo
 *.pyd
+*.pyo
+*.so
+.python-version
+
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
 
-# Backend local config
-# backend/.env
+.coverage
+.coverage.*
+htmlcov/
+.benchmarks/
 
-# Flutter / Dart
-mes_client/.dart_tool/
-mes_client/.packages
-mes_client/.flutter-plugins
-mes_client/.flutter-plugins-dependencies
-mes_client/.metadata
-mes_client/build/
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/runtime_exports/
+backend/pyright_errors.txt
+backend/remaining_errors.txt
 
-# IDE
+# ===============================
+# Flutter / Dart 前端构建产物
+# ===============================
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.pub/
+frontend/.pub-cache/
+frontend/build/
+frontend/coverage/
+frontend/windows/flutter/ephemeral/
+
+# 本地导出与调试噪音
+frontend/query-export.csv
+frontend/version-export.csv
+frontend/*-export.csv
+frontend/export-*.csv
+
+# ===============================
+# desktop_tests 构建与测试产物
+# ===============================
+desktop_tests/**/bin/
+desktop_tests/**/obj/
+desktop_tests/**/TestResults/
+desktop_tests/**/*.trx
+
+# ===============================
+# IDE 与本地工具缓存
+# ===============================
 .idea/
 .vscode/
+.vs/
+.fleet/
+.history/
+
 .codex/
-.github/
-evidence/
-.tmp_t5/
 .serena/
 .tmp_runtime/
-desktop_tests/
+.tmp_t5/
+
+# ===============================
+# evidence 仅忽略依赖缓存，保留日志本体
+# ===============================
+evidence/**/node_modules/
+evidence/**/.pnpm-store/
+evidence/**/.yarn/
+evidence/**/.npm/
+evidence/**/.cache/
