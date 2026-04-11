@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/product_models.dart';
-import 'package:mes_client/pages/product_management_page.dart';
-import 'package:mes_client/pages/product_page.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/product_management_page.dart';
+import 'package:mes_client/features/product/presentation/product_page.dart';
 
 AppSession _session() {
   return AppSession(baseUrl: 'http://test', accessToken: 'token');

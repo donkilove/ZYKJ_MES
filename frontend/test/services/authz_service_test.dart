@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/authz_models.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/authz_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/auth/services/authz_service.dart';
 
 import '../support/http_test_server.dart';
 

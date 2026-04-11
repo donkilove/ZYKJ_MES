@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/authz_models.dart';
-import 'package:mes_client/models/user_models.dart';
-import 'package:mes_client/pages/audit_log_page.dart';
-import 'package:mes_client/pages/function_permission_config_page.dart';
-import 'package:mes_client/pages/login_session_page.dart';
-import 'package:mes_client/pages/role_management_page.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/authz_service.dart';
-import 'package:mes_client/services/user_service.dart';
-import 'package:mes_client/widgets/crud_page_header.dart';
-import 'package:mes_client/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/features/user/models/user_models.dart';
+import 'package:mes_client/features/user/presentation/audit_log_page.dart';
+import 'package:mes_client/features/user/presentation/function_permission_config_page.dart';
+import 'package:mes_client/features/user/presentation/login_session_page.dart';
+import 'package:mes_client/features/user/presentation/role_management_page.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/auth/services/authz_service.dart';
+import 'package:mes_client/features/user/services/user_service.dart';
+import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 
 Finder _findSemanticsLabel(String label) {
   return find.byWidgetPredicate(

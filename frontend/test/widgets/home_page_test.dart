@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/current_user.dart';
-import 'package:mes_client/pages/home_page.dart';
+import 'package:mes_client/core/models/current_user.dart';
+import 'package:mes_client/features/shell/presentation/home_page.dart';
 
 void main() {
   CurrentUser buildUser({String? roleName = '品质管理员'}) {

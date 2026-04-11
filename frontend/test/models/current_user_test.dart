@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/current_user.dart';
+import 'package:mes_client/core/models/current_user.dart';
 
 void main() {
   test('CurrentUser.fromJson parses all fields and prefers fullName', () {

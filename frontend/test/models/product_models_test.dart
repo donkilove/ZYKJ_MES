@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/product_models.dart';
+import 'package:mes_client/features/product/models/product_models.dart';
 
 void main() {
   test('ProductItem and ProductListResult parse correctly', () {

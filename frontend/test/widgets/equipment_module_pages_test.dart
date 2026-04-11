@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/craft_models.dart';
-import 'package:mes_client/models/equipment_models.dart';
-import 'package:mes_client/pages/equipment_ledger_page.dart';
-import 'package:mes_client/pages/maintenance_execution_page.dart';
-import 'package:mes_client/pages/maintenance_item_page.dart';
-import 'package:mes_client/pages/maintenance_plan_page.dart';
-import 'package:mes_client/pages/maintenance_record_page.dart';
-import 'package:mes_client/services/craft_service.dart';
-import 'package:mes_client/services/equipment_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/craft/models/craft_models.dart';
+import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/features/equipment/presentation/equipment_ledger_page.dart';
+import 'package:mes_client/features/equipment/presentation/maintenance_execution_page.dart';
+import 'package:mes_client/features/equipment/presentation/maintenance_item_page.dart';
+import 'package:mes_client/features/equipment/presentation/maintenance_plan_page.dart';
+import 'package:mes_client/features/equipment/presentation/maintenance_record_page.dart';
+import 'package:mes_client/features/craft/services/craft_service.dart';
+import 'package:mes_client/features/equipment/services/equipment_service.dart';
 
 class _FakeEquipmentService extends EquipmentService {
   _FakeEquipmentService({

@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/authz_models.dart';
-import 'package:mes_client/models/current_user.dart';
-import 'package:mes_client/models/message_models.dart';
-import 'package:mes_client/models/page_catalog_models.dart';
-import 'package:mes_client/pages/main_shell_page.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/auth_service.dart';
-import 'package:mes_client/services/authz_service.dart';
-import 'package:mes_client/services/message_service.dart';
-import 'package:mes_client/services/message_ws_service.dart';
-import 'package:mes_client/services/page_catalog_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/core/models/current_user.dart';
+import 'package:mes_client/features/message/models/message_models.dart';
+import 'package:mes_client/core/models/page_catalog_models.dart';
+import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/auth/services/auth_service.dart';
+import 'package:mes_client/features/auth/services/authz_service.dart';
+import 'package:mes_client/features/message/services/message_service.dart';
+import 'package:mes_client/features/message/services/message_ws_service.dart';
+import 'package:mes_client/core/services/page_catalog_service.dart';
 
 final AppSession _session = AppSession(
   baseUrl: 'http://example.test/api/v1',

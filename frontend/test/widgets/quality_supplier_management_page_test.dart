@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/quality_models.dart';
-import 'package:mes_client/pages/quality_page.dart';
-import 'package:mes_client/pages/quality_supplier_management_page.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/quality_supplier_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/quality/models/quality_models.dart';
+import 'package:mes_client/features/quality/presentation/quality_page.dart';
+import 'package:mes_client/features/quality/presentation/quality_supplier_management_page.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
 
 void main() {
   final session = AppSession(baseUrl: 'http://localhost', accessToken: 'token');

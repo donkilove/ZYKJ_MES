@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/widgets/locked_form_dialog.dart';
 
 void main() {
   testWidgets(

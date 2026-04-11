@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/pages/account_settings_page.dart';
-import 'package:mes_client/pages/audit_log_page.dart';
-import 'package:mes_client/pages/function_permission_config_page.dart';
-import 'package:mes_client/pages/login_session_page.dart';
-import 'package:mes_client/pages/registration_approval_page.dart';
-import 'package:mes_client/pages/role_management_page.dart';
-import 'package:mes_client/pages/user_management_page.dart';
-import 'package:mes_client/pages/user_page.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/user/presentation/account_settings_page.dart';
+import 'package:mes_client/features/user/presentation/audit_log_page.dart';
+import 'package:mes_client/features/user/presentation/function_permission_config_page.dart';
+import 'package:mes_client/features/user/presentation/login_session_page.dart';
+import 'package:mes_client/features/user/presentation/registration_approval_page.dart';
+import 'package:mes_client/features/user/presentation/role_management_page.dart';
+import 'package:mes_client/features/user/presentation/user_management_page.dart';
+import 'package:mes_client/features/user/presentation/user_page.dart';
 
 Finder _findSemanticsLabel(String label) {
   return find.byWidgetPredicate(
@@ -90,7 +90,7 @@ void main() {
       '功能权限配置',
     ]);
     expect(capturedChildren, {
-      'user_management': UserManagementPage,
+      'user_management': LegacyLegacyUserManagementPage,
       'registration_approval': RegistrationApprovalPage,
       'role_management': RoleManagementPage,
       'audit_log': AuditLogPage,
@@ -257,7 +257,7 @@ void main() {
   });
 
   testWidgets('用户管理页存在时会透传跳转到角色管理回调', (tester) async {
-    UserManagementPage? userManagementPage;
+    LegacyLegacyUserManagementPage? userManagementPage;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -269,7 +269,7 @@ void main() {
             capabilityCodes: const <String>{},
             preferredTabCode: 'user_management',
             tabPageBuilder: (tabCode, child) {
-              if (child is UserManagementPage) {
+              if (child is LegacyLegacyUserManagementPage) {
                 userManagementPage = child;
               }
               return Center(child: Text('tab:$tabCode'));
@@ -290,7 +290,7 @@ void main() {
   });
 
   testWidgets('角色管理页签不可见时不提供用户管理跳转回调', (tester) async {
-    UserManagementPage? userManagementPage;
+    LegacyLegacyUserManagementPage? userManagementPage;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -302,7 +302,7 @@ void main() {
             capabilityCodes: const <String>{},
             preferredTabCode: 'user_management',
             tabPageBuilder: (tabCode, child) {
-              if (child is UserManagementPage) {
+              if (child is LegacyLegacyUserManagementPage) {
                 userManagementPage = child;
               }
               return Center(child: Text('tab:$tabCode'));

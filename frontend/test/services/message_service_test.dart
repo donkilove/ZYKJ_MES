@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/message_models.dart';
-import 'package:mes_client/services/message_service.dart';
-import 'package:mes_client/services/message_ws_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/message/models/message_models.dart';
+import 'package:mes_client/features/message/services/message_service.dart';
+import 'package:mes_client/features/message/services/message_ws_service.dart';
 
 import '../support/http_test_server.dart';
 

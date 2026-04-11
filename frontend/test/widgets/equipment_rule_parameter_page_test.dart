@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/equipment_models.dart';
-import 'package:mes_client/pages/equipment_rule_parameter_page.dart';
-import 'package:mes_client/services/equipment_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/features/equipment/presentation/equipment_rule_parameter_page.dart';
+import 'package:mes_client/features/equipment/services/equipment_service.dart';
 
 class _RuntimeParameterRequest {
   const _RuntimeParameterRequest({

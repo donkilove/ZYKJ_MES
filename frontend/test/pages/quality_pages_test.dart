@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/production_models.dart';
-import 'package:mes_client/models/quality_models.dart';
-import 'package:mes_client/pages/daily_first_article_page.dart';
-import 'package:mes_client/pages/production_repair_order_detail_page.dart';
-import 'package:mes_client/pages/production_scrap_statistics_detail_page.dart';
-import 'package:mes_client/pages/quality_page.dart';
-import 'package:mes_client/pages/quality_data_page.dart';
-import 'package:mes_client/pages/quality_defect_analysis_page.dart';
-import 'package:mes_client/services/production_service.dart';
-import 'package:mes_client/services/quality_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
+import 'package:mes_client/features/quality/models/quality_models.dart';
+import 'package:mes_client/features/misc/presentation/daily_first_article_page.dart';
+import 'package:mes_client/features/production/presentation/production_repair_order_detail_page.dart';
+import 'package:mes_client/features/production/presentation/production_scrap_statistics_detail_page.dart';
+import 'package:mes_client/features/quality/presentation/quality_page.dart';
+import 'package:mes_client/features/quality/presentation/quality_data_page.dart';
+import 'package:mes_client/features/quality/presentation/quality_defect_analysis_page.dart';
+import 'package:mes_client/features/production/services/production_service.dart';
+import 'package:mes_client/features/quality/services/quality_service.dart';
 
 void main() {
   final session = AppSession(baseUrl: 'http://localhost', accessToken: 'token');

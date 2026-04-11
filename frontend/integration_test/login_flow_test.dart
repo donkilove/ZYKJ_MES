@@ -1,49 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/authz_models.dart';
-import 'package:mes_client/models/craft_models.dart';
-import 'package:mes_client/models/equipment_models.dart';
-import 'package:mes_client/models/message_models.dart';
-import 'package:mes_client/models/product_models.dart';
-import 'package:mes_client/models/production_models.dart';
-import 'package:mes_client/models/quality_models.dart';
-import 'package:mes_client/models/user_models.dart';
-import 'package:mes_client/pages/account_settings_page.dart';
-import 'package:mes_client/pages/audit_log_page.dart';
-import 'package:mes_client/pages/craft_kanban_page.dart';
-import 'package:mes_client/pages/craft_page.dart';
-import 'package:mes_client/pages/craft_reference_analysis_page.dart';
-import 'package:mes_client/pages/equipment_page.dart';
-import 'package:mes_client/pages/equipment_rule_parameter_page.dart';
-import 'package:mes_client/pages/force_change_password_page.dart';
-import 'package:mes_client/pages/function_permission_config_page.dart';
-import 'package:mes_client/pages/login_page.dart';
-import 'package:mes_client/pages/login_session_page.dart';
-import 'package:mes_client/pages/message_center_page.dart';
-import 'package:mes_client/pages/maintenance_execution_page.dart';
-import 'package:mes_client/pages/process_configuration_page.dart';
-import 'package:mes_client/pages/process_management_page.dart';
-import 'package:mes_client/pages/production_order_query_page.dart';
-import 'package:mes_client/pages/production_page.dart';
-import 'package:mes_client/pages/quality_page.dart';
-import 'package:mes_client/pages/product_parameter_query_page.dart';
-import 'package:mes_client/pages/product_page.dart';
-import 'package:mes_client/pages/role_management_page.dart';
-import 'package:mes_client/pages/user_management_page.dart';
-import 'package:mes_client/pages/user_page.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/auth_service.dart';
-import 'package:mes_client/services/authz_service.dart';
-import 'package:mes_client/services/craft_service.dart';
-import 'package:mes_client/services/equipment_service.dart';
-import 'package:mes_client/services/message_service.dart';
-import 'package:mes_client/services/product_service.dart';
-import 'package:mes_client/services/production_service.dart';
-import 'package:mes_client/services/quality_service.dart';
-import 'package:mes_client/services/quality_supplier_service.dart';
-import 'package:mes_client/services/user_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/features/craft/models/craft_models.dart';
+import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/features/message/models/message_models.dart';
+import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
+import 'package:mes_client/features/quality/models/quality_models.dart';
+import 'package:mes_client/features/user/models/user_models.dart';
+import 'package:mes_client/features/user/presentation/account_settings_page.dart';
+import 'package:mes_client/features/user/presentation/audit_log_page.dart';
+import 'package:mes_client/features/craft/presentation/craft_kanban_page.dart';
+import 'package:mes_client/features/craft/presentation/craft_page.dart';
+import 'package:mes_client/features/craft/presentation/craft_reference_analysis_page.dart';
+import 'package:mes_client/features/equipment/presentation/equipment_page.dart';
+import 'package:mes_client/features/equipment/presentation/equipment_rule_parameter_page.dart';
+import 'package:mes_client/features/misc/presentation/force_change_password_page.dart';
+import 'package:mes_client/features/user/presentation/function_permission_config_page.dart';
+import 'package:mes_client/features/misc/presentation/login_page.dart';
+import 'package:mes_client/features/user/presentation/login_session_page.dart';
+import 'package:mes_client/features/message/presentation/message_center_page.dart';
+import 'package:mes_client/features/equipment/presentation/maintenance_execution_page.dart';
+import 'package:mes_client/features/craft/presentation/process_configuration_page.dart';
+import 'package:mes_client/features/craft/presentation/process_management_page.dart';
+import 'package:mes_client/features/production/presentation/production_order_query_page.dart';
+import 'package:mes_client/features/production/presentation/production_page.dart';
+import 'package:mes_client/features/quality/presentation/quality_page.dart';
+import 'package:mes_client/features/product/presentation/product_parameter_query_page.dart';
+import 'package:mes_client/features/product/presentation/product_page.dart';
+import 'package:mes_client/features/user/presentation/role_management_page.dart';
+import 'package:mes_client/features/user/presentation/user_management_page.dart';
+import 'package:mes_client/features/user/presentation/user_page.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/auth/services/auth_service.dart';
+import 'package:mes_client/features/auth/services/authz_service.dart';
+import 'package:mes_client/features/craft/services/craft_service.dart';
+import 'package:mes_client/features/equipment/services/equipment_service.dart';
+import 'package:mes_client/features/message/services/message_service.dart';
+import 'package:mes_client/features/product/services/product_service.dart';
+import 'package:mes_client/features/production/services/production_service.dart';
+import 'package:mes_client/features/quality/services/quality_service.dart';
+import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
+import 'package:mes_client/features/user/services/user_service.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -106,7 +106,7 @@ void main() {
       userService: userService,
       homeBuilder: (session) {
         return Scaffold(
-          body: UserManagementPage(
+          body: LegacyLegacyUserManagementPage(
             session: session,
             onLogout: () {},
             canCreateUser: true,
@@ -194,7 +194,7 @@ void main() {
               return const Scaffold(body: Center(child: Text('已退出登录态')));
             }
             return Scaffold(
-              body: UserManagementPage(
+              body: LegacyLegacyUserManagementPage(
                 session: session,
                 onLogout: () {
                   setState(() {
@@ -909,7 +909,7 @@ void main() {
       userService: userService,
       homeBuilder: (session) {
         return Scaffold(
-          body: UserManagementPage(
+          body: LegacyLegacyUserManagementPage(
             session: session,
             onLogout: () {},
             canCreateUser: true,

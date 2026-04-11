@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 
 Future<void> _pumpPaginationBar(
   WidgetTester tester, {

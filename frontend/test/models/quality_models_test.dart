@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/quality_models.dart';
+import 'package:mes_client/features/quality/models/quality_models.dart';
 
 void main() {
   test('quality label helpers map known codes and preserve unknown codes', () {

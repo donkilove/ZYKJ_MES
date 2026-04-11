@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/craft_models.dart';
-import 'package:mes_client/models/user_models.dart';
-import 'package:mes_client/pages/registration_approval_page.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/craft_service.dart';
-import 'package:mes_client/services/user_service.dart';
-import 'package:mes_client/widgets/crud_page_header.dart';
-import 'package:mes_client/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/craft/models/craft_models.dart';
+import 'package:mes_client/features/user/models/user_models.dart';
+import 'package:mes_client/features/user/presentation/registration_approval_page.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/craft/services/craft_service.dart';
+import 'package:mes_client/features/user/services/user_service.dart';
+import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 
 class _FakeApprovalUserService extends UserService {
   _FakeApprovalUserService()

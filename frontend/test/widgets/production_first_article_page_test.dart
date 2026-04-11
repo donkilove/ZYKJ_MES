@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/production_models.dart';
-import 'package:mes_client/pages/production_first_article_page.dart';
-import 'package:mes_client/services/production_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
+import 'package:mes_client/features/production/presentation/production_first_article_page.dart';
+import 'package:mes_client/features/production/services/production_service.dart';
 
 class _FakeProductionFirstArticleService extends ProductionService {
   _FakeProductionFirstArticleService()

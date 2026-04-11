@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/craft_models.dart';
+import 'package:mes_client/features/craft/models/craft_models.dart';
 
 void main() {
   test('craft stage/process models parse list wrappers', () {

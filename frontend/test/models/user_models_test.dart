@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/user_models.dart';
+import 'package:mes_client/features/user/models/user_models.dart';
 
 void main() {
   group('UserItem', () {

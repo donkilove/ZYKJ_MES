@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/widgets/adaptive_table_container.dart';
+import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 
 void main() {
   testWidgets('AdaptiveTableContainer renders child with dual scroll areas', (

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/craft_models.dart';
-import 'package:mes_client/models/production_models.dart';
-import 'package:mes_client/pages/process_configuration_page.dart';
-import 'package:mes_client/services/craft_service.dart';
-import 'package:mes_client/services/production_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/craft/models/craft_models.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
+import 'package:mes_client/features/craft/presentation/process_configuration_page.dart';
+import 'package:mes_client/features/craft/services/craft_service.dart';
+import 'package:mes_client/features/production/services/production_service.dart';
 
 class _FakeCraftService extends CraftService {
   _FakeCraftService({

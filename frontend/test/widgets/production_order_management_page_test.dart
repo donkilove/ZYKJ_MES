@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/craft_models.dart';
-import 'package:mes_client/models/production_models.dart';
-import 'package:mes_client/models/quality_models.dart';
-import 'package:mes_client/pages/production_order_management_page.dart';
-import 'package:mes_client/services/craft_service.dart';
-import 'package:mes_client/services/production_service.dart';
-import 'package:mes_client/services/quality_supplier_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/craft/models/craft_models.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
+import 'package:mes_client/features/quality/models/quality_models.dart';
+import 'package:mes_client/features/production/presentation/production_order_management_page.dart';
+import 'package:mes_client/features/craft/services/craft_service.dart';
+import 'package:mes_client/features/production/services/production_service.dart';
+import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
 
 class _FakeProductionOrderManagementService extends ProductionService {
   _FakeProductionOrderManagementService()

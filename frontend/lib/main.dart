@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'models/app_session.dart';
-import 'pages/force_change_password_page.dart';
-import 'pages/login_page.dart';
-import 'pages/main_shell_page.dart';
-import 'services/auth_service.dart';
-import 'services/session_store.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/misc/presentation/force_change_password_page.dart';
+import 'package:mes_client/features/misc/presentation/login_page.dart';
+import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
+import 'package:mes_client/features/auth/services/auth_service.dart';
+import 'package:mes_client/core/services/session_store.dart';
 
 void main() {
   runApp(const MesClientApp());

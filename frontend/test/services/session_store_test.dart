@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/services/session_store.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/services/session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

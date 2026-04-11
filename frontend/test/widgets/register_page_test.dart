@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/pages/register_page.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/auth_service.dart';
+import 'package:mes_client/features/misc/presentation/register_page.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/auth/services/auth_service.dart';
 
 class _FakeRegisterAuthService extends AuthService {
   int registerCalls = 0;

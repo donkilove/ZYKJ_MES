@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/pages/force_change_password_page.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/user_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/misc/presentation/force_change_password_page.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/user/services/user_service.dart';
 
 class _FakeForceChangePasswordUserService extends UserService {
   _FakeForceChangePasswordUserService()

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/quality_models.dart';
-import 'package:mes_client/pages/daily_first_article_page.dart';
-import 'package:mes_client/pages/quality_page.dart';
-import 'package:mes_client/services/quality_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/quality/models/quality_models.dart';
+import 'package:mes_client/features/misc/presentation/daily_first_article_page.dart';
+import 'package:mes_client/features/quality/presentation/quality_page.dart';
+import 'package:mes_client/features/quality/services/quality_service.dart';
 
 class _FakeQualityService extends QualityService {
   _FakeQualityService() : super(AppSession(baseUrl: '', accessToken: ''));

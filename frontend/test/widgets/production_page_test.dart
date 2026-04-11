@@ -4,11 +4,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/authz_models.dart';
-import 'package:mes_client/pages/production_assist_records_page.dart';
-import 'package:mes_client/pages/production_page.dart';
-import 'package:mes_client/pages/production_repair_orders_page.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/features/production/presentation/production_assist_records_page.dart';
+import 'package:mes_client/features/production/presentation/production_page.dart';
+import 'package:mes_client/features/production/presentation/production_repair_orders_page.dart';
 
 class _PayloadProbe extends StatelessWidget {
   const _PayloadProbe(this.label, {required this.payload});

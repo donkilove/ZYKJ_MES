@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/message_models.dart';
-import 'package:mes_client/pages/craft_page.dart';
-import 'package:mes_client/models/user_models.dart';
-import 'package:mes_client/pages/message_center_page.dart';
-import 'package:mes_client/pages/product_page.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/message_service.dart';
-import 'package:mes_client/services/user_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/message/models/message_models.dart';
+import 'package:mes_client/features/craft/presentation/craft_page.dart';
+import 'package:mes_client/features/user/models/user_models.dart';
+import 'package:mes_client/features/message/presentation/message_center_page.dart';
+import 'package:mes_client/features/product/presentation/product_page.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/message/services/message_service.dart';
+import 'package:mes_client/features/user/services/user_service.dart';
 
 class _FakeMessageService extends MessageService {
   _FakeMessageService() : super(AppSession(baseUrl: '', accessToken: ''));

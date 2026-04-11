@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/quality_models.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/quality_supplier_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/quality/models/quality_models.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
 
 import '../support/http_test_server.dart';
 

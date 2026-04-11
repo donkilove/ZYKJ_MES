@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/production_models.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
 
 void main() {
   test('production status helpers map known statuses and keep unknown', () {

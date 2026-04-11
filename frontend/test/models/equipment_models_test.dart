@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/equipment_models.dart';
+import 'package:mes_client/features/equipment/models/equipment_models.dart';
 
 void main() {
   test('maintenance cycle constants keep expected values', () {

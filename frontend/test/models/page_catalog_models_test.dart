@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/page_catalog_models.dart';
+import 'package:mes_client/core/models/page_catalog_models.dart';
 
 void main() {
   test('PageCatalogItem parses fields', () {

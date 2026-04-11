@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/production_models.dart';
-import 'package:mes_client/pages/production_data_page.dart';
-import 'package:mes_client/services/production_service.dart';
-import 'package:mes_client/widgets/crud_list_table_section.dart';
-import 'package:mes_client/widgets/crud_page_header.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
+import 'package:mes_client/features/production/presentation/production_data_page.dart';
+import 'package:mes_client/features/production/services/production_service.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/widgets/crud_page_header.dart';
 
 class _FakeProductionService extends ProductionService {
   _FakeProductionService() : super(AppSession(baseUrl: '', accessToken: ''));

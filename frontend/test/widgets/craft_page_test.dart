@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/pages/craft_kanban_page.dart';
-import 'package:mes_client/pages/craft_page.dart';
-import 'package:mes_client/pages/craft_reference_analysis_page.dart';
-import 'package:mes_client/pages/process_configuration_page.dart';
-import 'package:mes_client/pages/process_management_page.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/craft/presentation/craft_kanban_page.dart';
+import 'package:mes_client/features/craft/presentation/craft_page.dart';
+import 'package:mes_client/features/craft/presentation/craft_reference_analysis_page.dart';
+import 'package:mes_client/features/craft/presentation/process_configuration_page.dart';
+import 'package:mes_client/features/craft/presentation/process_management_page.dart';
 
 void main() {
   final session = AppSession(baseUrl: '', accessToken: '');

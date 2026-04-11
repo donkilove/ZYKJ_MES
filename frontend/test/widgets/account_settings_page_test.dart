@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/user_models.dart';
-import 'package:mes_client/pages/account_settings_page.dart';
-import 'package:mes_client/services/api_exception.dart';
-import 'package:mes_client/services/auth_service.dart';
-import 'package:mes_client/services/user_service.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/user/models/user_models.dart';
+import 'package:mes_client/features/user/presentation/account_settings_page.dart';
+import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/auth/services/auth_service.dart';
+import 'package:mes_client/features/user/services/user_service.dart';
 
 Finder _findSemanticsLabel(String label) {
   return find.byWidgetPredicate(

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/models/app_session.dart';
-import 'package:mes_client/models/authz_models.dart';
-import 'package:mes_client/pages/equipment_page.dart';
-import 'package:mes_client/pages/maintenance_execution_page.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/features/equipment/presentation/equipment_page.dart';
+import 'package:mes_client/features/equipment/presentation/maintenance_execution_page.dart';
 
 class _PayloadProbe extends StatelessWidget {
   const _PayloadProbe({required this.code, this.payload});

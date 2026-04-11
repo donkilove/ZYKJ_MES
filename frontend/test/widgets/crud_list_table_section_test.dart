@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 
 Widget _buildSubject({
   required bool loading,
