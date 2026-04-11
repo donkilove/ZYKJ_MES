@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.core.production_constants import (
@@ -256,10 +256,12 @@ def list_assist_authorizations(
             )
         )
 
-    rows = db.execute(stmt).scalars().all()
-    total = len(rows)
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.execute(count_stmt).scalar() or 0
     offset = (page - 1) * page_size
-    return total, rows[offset : offset + page_size]
+    paged_stmt = stmt.offset(offset).limit(page_size)
+    paged_rows = db.execute(paged_stmt).scalars().all()
+    return total, paged_rows
 
 
 def get_usable_assist_authorization_for_operation(

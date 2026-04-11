@@ -237,6 +237,17 @@ def _load_tokens_from_file(token_file: str, token_count: int) -> list[str]:
     return tokens
 
 
+def _initial_worker_scenario_index(
+    *,
+    worker_id: int,
+    worker_count: int,
+    scenario_count: int,
+) -> int:
+    if worker_count <= 1 or scenario_count <= 1:
+        return 0
+    return int(worker_id * scenario_count / worker_count)
+
+
 def _extract_access_token(payload: Any) -> str | None:
     if isinstance(payload, dict):
         direct = payload.get("access_token")
@@ -422,7 +433,15 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
         scenario: MetricBucket() for scenario in scenarios
     }
     total_bucket = MetricBucket()
-    scenario_clock: dict[int, int] = {index: 0 for index in range(args.concurrency)}
+    # 将 worker 的起始索引按场景总数均匀打散，避免大场景集在固定时间窗内只覆盖前缀。
+    scenario_clock: dict[int, int] = {
+        index: _initial_worker_scenario_index(
+            worker_id=index,
+            worker_count=args.concurrency,
+            scenario_count=len(scenarios),
+        )
+        for index in range(args.concurrency)
+    }
 
     begin = time.monotonic()
     warmup_deadline = begin + max(0, args.warmup_seconds)

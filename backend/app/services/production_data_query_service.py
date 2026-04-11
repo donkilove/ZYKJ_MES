@@ -190,6 +190,7 @@ def _load_relevant_records(
             selectinload(ProductionRecord.operator),
         )
         .order_by(ProductionRecord.created_at.asc(), ProductionRecord.id.asc())
+        .limit(1000)
     )
     return db.execute(stmt).scalars().all()
 
@@ -349,6 +350,7 @@ def get_unfinished_progress_data(
             selectinload(ProductionOrder.production_records),
         )
         .order_by(ProductionOrder.updated_at.desc(), ProductionOrder.id.desc())
+        .limit(200)
     )
     if normalized_product_ids:
         stmt = stmt.where(ProductionOrder.product_id.in_(normalized_product_ids))

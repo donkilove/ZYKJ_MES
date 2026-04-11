@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permission
@@ -1625,10 +1625,11 @@ def get_assist_user_options_api(
             )
         )
 
-    rows = db.execute(stmt).scalars().unique().all()
-    total = len(rows)
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.execute(count_stmt).scalar() or 0
     offset = (page - 1) * page_size
-    paged_rows = rows[offset : offset + page_size]
+    paged_stmt = stmt.offset(offset).limit(page_size)
+    paged_rows = db.execute(paged_stmt).scalars().unique().all()
     return success_response(
         AssistUserOptionListResult(
             total=total,

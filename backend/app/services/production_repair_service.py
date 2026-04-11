@@ -764,19 +764,19 @@ def list_repair_orders(
                 RepairOrder.sender_username.ilike(like_value),
             )
         )
-    rows = (
-        db.execute(
-            stmt.order_by(
-                RepairOrder.repair_time.desc(),
-                RepairOrder.id.desc(),
-            )
-        )
-        .scalars()
-        .all()
-    )
-    total = len(rows)
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.execute(count_stmt).scalar() or 0
     offset = (page - 1) * page_size
-    return total, rows[offset : offset + page_size]
+    paged_stmt = (
+        stmt.order_by(
+            RepairOrder.repair_time.desc(),
+            RepairOrder.id.desc(),
+        )
+        .offset(offset)
+        .limit(page_size)
+    )
+    paged_rows = db.execute(paged_stmt).scalars().all()
+    return total, paged_rows
 
 
 def get_repair_order_by_id(db: Session, *, repair_order_id: int) -> RepairOrder | None:
@@ -881,19 +881,19 @@ def list_scrap_statistics(
         stmt = stmt.where(ProductionScrapStatistics.product_name == product_name)
     if process_code:
         stmt = stmt.where(ProductionScrapStatistics.process_code == process_code)
-    rows = (
-        db.execute(
-            stmt.order_by(
-                ProductionScrapStatistics.last_scrap_time.desc(),
-                ProductionScrapStatistics.id.desc(),
-            )
-        )
-        .scalars()
-        .all()
-    )
-    total = len(rows)
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.execute(count_stmt).scalar() or 0
     offset = (page - 1) * page_size
-    return total, rows[offset : offset + page_size]
+    paged_stmt = (
+        stmt.order_by(
+            ProductionScrapStatistics.last_scrap_time.desc(),
+            ProductionScrapStatistics.id.desc(),
+        )
+        .offset(offset)
+        .limit(page_size)
+    )
+    paged_rows = db.execute(paged_stmt).scalars().all()
+    return total, paged_rows
 
 
 def _build_csv_base64(headers: list[str], rows: list[list[Any]]) -> str:

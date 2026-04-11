@@ -59,7 +59,7 @@ services:
       APP_ENV: prod
       APP_HOST: 0.0.0.0
       APP_PORT: "8000"
-      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-8}
       UVICORN_RELOAD: "false"
       RELOAD: "false"
 
