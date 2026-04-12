@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permission
+from app.api.deps import require_permission, require_permission_fast
 from app.db.session import get_db
 from app.models.process import Process
 from app.models.user import User
@@ -40,7 +40,7 @@ def get_processes(
     page_size: int = Query(default=50, ge=1, le=200),
     keyword: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("user.processes.list")),
+    _: None = Depends(require_permission_fast("user.processes.list")),
 ) -> ApiResponse[ProcessListResult]:
     total, processes = list_processes(db, page, page_size, keyword)
     result = ProcessListResult(

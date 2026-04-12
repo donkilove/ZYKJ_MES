@@ -473,7 +473,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     capacity_parser.add_argument(
         "--scenario-config-file",
-        help="Optional JSON scenario config path. Supports scenario fields: name, method, path, requires_auth, headers, query, json_body, form_body, success_statuses.",
+        help="Optional JSON scenario config path. Supports top-level token_pools plus scenario fields: name, method, path, requires_auth, role_domain, token_pool, headers, query, json_body, form_body, success_statuses.",
     )
     capacity_parser.add_argument(
         "--duration-seconds",

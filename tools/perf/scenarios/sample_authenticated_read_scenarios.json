@@ -1,10 +1,44 @@
 {
+  "token_pools": [
+    {
+      "name": "pool-admin",
+      "login_user_prefix": "ltadm",
+      "token_count": 2
+    },
+    {
+      "name": "pool-user-admin",
+      "login_user_prefix": "ltusr",
+      "token_count": 2
+    },
+    {
+      "name": "pool-production",
+      "login_user_prefix": "ltprd",
+      "token_count": 4
+    },
+    {
+      "name": "pool-quality",
+      "login_user_prefix": "ltqua",
+      "token_count": 4
+    },
+    {
+      "name": "pool-equipment",
+      "login_user_prefix": "ltmnt",
+      "token_count": 4
+    },
+    {
+      "name": "pool-operator",
+      "login_user_prefix": "ltopr",
+      "token_count": 4
+    }
+  ],
   "scenarios": [
     {
       "name": "me-profile",
       "method": "GET",
       "path": "/api/v1/me/profile",
       "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "headers": {},
       "query": {},
       "json_body": null,
@@ -18,6 +52,8 @@
       "method": "GET",
       "path": "/api/v1/messages/summary",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "headers": {},
       "query": {},
       "json_body": null,

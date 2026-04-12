@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import require_permission
+from app.api.deps import require_permission, require_permission_fast
 from app.db.session import get_db
 from app.models.craft_system_master_template import CraftSystemMasterTemplate
 from app.models.process import Process
@@ -597,7 +597,7 @@ def get_stage_detail_api(
     stage_id: int | None = Query(default=None, ge=1),
     stage_code: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("craft.stages.list")),
+    _: None = Depends(require_permission_fast("craft.stages.list")),
 ) -> ApiResponse[ProcessStageItem]:
     if stage_id is None and not (stage_code or "").strip():
         raise HTTPException(
@@ -775,7 +775,7 @@ def get_process_detail_api(
     process_id: int | None = Query(default=None, ge=1),
     process_code: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("craft.processes.list")),
+    _: None = Depends(require_permission_fast("craft.processes.list")),
 ) -> ApiResponse[CraftProcessItem]:
     if process_id is None and not (process_code or "").strip():
         raise HTTPException(
@@ -863,7 +863,7 @@ def delete_process_api(
 )
 def get_system_master_template_api(
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("craft.system_master_template.view")),
+    _: None = Depends(require_permission_fast("craft.system_master_template.view")),
 ) -> ApiResponse[SystemMasterTemplateItem | None]:
     row = get_system_master_template(db)
     if row is None:
@@ -1879,7 +1879,7 @@ def unarchive_template_api(
 def get_stage_references_api(
     stage_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("craft.stages.list")),
+    _: None = Depends(require_permission_fast("craft.stages.list")),
 ) -> ApiResponse[StageReferenceResult]:
     row = get_stage_by_id(db, stage_id)
     if not row:
@@ -1897,7 +1897,7 @@ def get_stage_references_api(
 def get_process_references_api(
     process_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("craft.processes.list")),
+    _: None = Depends(require_permission_fast("craft.processes.list")),
 ) -> ApiResponse[ProcessReferenceResult]:
     row = db.execute(select(Process).where(Process.id == process_id)).scalars().first()
     if not row:
