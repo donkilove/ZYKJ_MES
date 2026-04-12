@@ -557,8 +557,14 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
             "quality.stats.processes",
             "quality.stats.operators",
             "quality.stats.products",
-            "quality.trend",
         ),
+    ),
+    FeatureDefinition(
+        permission_code="feature.quality.trend.view",
+        permission_name="查看质量趋势",
+        module_code="quality",
+        page_code="quality_trend",
+        action_permission_codes=("quality.trend",),
     ),
     FeatureDefinition(
         permission_code="feature.quality.scrap_statistics.view",
@@ -612,6 +618,28 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         page_code="quality_defect_analysis",
         action_permission_codes=("quality.defect_analysis.export",),
         dependency_permission_codes=("feature.quality.defect_analysis.view",),
+    ),
+    FeatureDefinition(
+        permission_code="feature.quality.suppliers.view",
+        permission_name="查看供应商",
+        module_code="quality",
+        page_code="quality_supplier_management",
+        action_permission_codes=(
+            "quality.suppliers.list",
+            "quality.suppliers.detail",
+        ),
+    ),
+    FeatureDefinition(
+        permission_code="feature.quality.suppliers.manage",
+        permission_name="管理供应商",
+        module_code="quality",
+        page_code="quality_supplier_management",
+        action_permission_codes=(
+            "quality.suppliers.create",
+            "quality.suppliers.update",
+            "quality.suppliers.delete",
+        ),
+        dependency_permission_codes=("feature.quality.suppliers.view",),
     ),
     FeatureDefinition(
         permission_code="feature.production.order_management.manage",

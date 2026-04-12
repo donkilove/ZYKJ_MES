@@ -1,10 +1,44 @@
 {
+  "token_pools": [
+    {
+      "name": "pool-admin",
+      "login_user_prefix": "ltadm",
+      "token_count": 2
+    },
+    {
+      "name": "pool-user-admin",
+      "login_user_prefix": "ltusr",
+      "token_count": 2
+    },
+    {
+      "name": "pool-production",
+      "login_user_prefix": "ltprd",
+      "token_count": 4
+    },
+    {
+      "name": "pool-quality",
+      "login_user_prefix": "ltqua",
+      "token_count": 4
+    },
+    {
+      "name": "pool-equipment",
+      "login_user_prefix": "ltmnt",
+      "token_count": 4
+    },
+    {
+      "name": "pool-operator",
+      "login_user_prefix": "ltopr",
+      "token_count": 4
+    }
+  ],
   "scenarios": [
     {
       "name": "users-detail-1",
       "method": "GET",
       "path": "/api/v1/users/1",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -14,6 +48,8 @@
       "method": "GET",
       "path": "/api/v1/users/2",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -23,6 +59,8 @@
       "method": "GET",
       "path": "/api/v1/roles/1",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -32,6 +70,8 @@
       "method": "GET",
       "path": "/api/v1/messages/1",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "success_statuses": [
         200
       ]
@@ -41,6 +81,8 @@
       "method": "GET",
       "path": "/api/v1/messages/1/jump-target",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "success_statuses": [
         200
       ]
@@ -53,6 +95,8 @@
         "process_id": "1"
       },
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -65,6 +109,8 @@
         "stage_id": "1"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -77,6 +123,8 @@
         "process_id": "1"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -86,6 +134,8 @@
       "method": "GET",
       "path": "/api/v1/craft/system-master-template",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -95,6 +145,8 @@
       "method": "GET",
       "path": "/api/v1/craft/stages/1/references",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -104,6 +156,8 @@
       "method": "GET",
       "path": "/api/v1/craft/processes/1/references",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -113,6 +167,8 @@
       "method": "GET",
       "path": "/api/v1/quality/suppliers/1",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "success_statuses": [
         200
       ]
@@ -122,6 +178,8 @@
       "method": "GET",
       "path": "/api/v1/production/orders/18",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -131,6 +189,8 @@
       "method": "GET",
       "path": "/api/v1/production/orders/18/pipeline-mode",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -143,6 +203,8 @@
         "order_process_id": "18"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -152,6 +214,8 @@
       "method": "GET",
       "path": "/api/v1/production/orders/18/first-article/participant-users",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -164,6 +228,8 @@
         "order_process_id": "18"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -173,6 +239,8 @@
       "method": "GET",
       "path": "/api/v1/production/my-orders/18/context",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -185,6 +253,8 @@
         "order_code": "PT1775663213490-18"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -194,6 +264,8 @@
       "method": "GET",
       "path": "/api/v1/products/1",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -203,6 +275,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/versions",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -212,6 +286,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/versions/1/parameters",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -221,6 +297,8 @@
       "method": "GET",
       "path": "/api/v1/craft/products/1/template-references",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -228,17 +306,23 @@
     {
       "name": "auth-me",
       "method": "GET",
-      "path": "/api/v1/auth/me"
+      "path": "/api/v1/auth/me",
+      "role_domain": "auth",
+      "token_pool": "pool-admin"
     },
     {
       "name": "auth-accounts",
       "method": "GET",
-      "path": "/api/v1/auth/accounts"
+      "path": "/api/v1/auth/accounts",
+      "role_domain": "auth",
+      "token_pool": "pool-admin"
     },
     {
       "name": "auth-register-requests",
       "method": "GET",
       "path": "/api/v1/auth/register-requests",
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -248,6 +332,8 @@
       "name": "authz-permissions-catalog-user",
       "method": "GET",
       "path": "/api/v1/authz/permissions/catalog",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "module": "user"
       }
@@ -255,12 +341,16 @@
     {
       "name": "authz-snapshot",
       "method": "GET",
-      "path": "/api/v1/authz/snapshot"
+      "path": "/api/v1/authz/snapshot",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin"
     },
     {
       "name": "authz-role-permissions-user",
       "method": "GET",
       "path": "/api/v1/authz/role-permissions",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "role_code": "system_admin",
         "module": "user"
@@ -270,6 +360,8 @@
       "name": "authz-role-permissions-matrix-user",
       "method": "GET",
       "path": "/api/v1/authz/role-permissions/matrix",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "module": "user"
       }
@@ -278,6 +370,8 @@
       "name": "authz-hierarchy-catalog-user",
       "method": "GET",
       "path": "/api/v1/authz/hierarchy/catalog",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "module": "user"
       }
@@ -286,6 +380,8 @@
       "name": "authz-hierarchy-role-config-user",
       "method": "GET",
       "path": "/api/v1/authz/hierarchy/role-config",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "role_code": "system_admin",
         "module": "user"
@@ -295,6 +391,8 @@
       "name": "authz-capability-packs-catalog-user",
       "method": "GET",
       "path": "/api/v1/authz/capability-packs/catalog",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "module": "user"
       }
@@ -303,6 +401,8 @@
       "name": "authz-capability-packs-role-config-user",
       "method": "GET",
       "path": "/api/v1/authz/capability-packs/role-config",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "role_code": "system_admin",
         "module": "user"
@@ -312,6 +412,8 @@
       "name": "authz-capability-packs-effective-user",
       "method": "GET",
       "path": "/api/v1/authz/capability-packs/effective",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "role_code": "system_admin",
         "module": "user"
@@ -320,27 +422,37 @@
     {
       "name": "me-profile",
       "method": "GET",
-      "path": "/api/v1/me/profile"
+      "path": "/api/v1/me/profile",
+      "role_domain": "auth",
+      "token_pool": "pool-admin"
     },
     {
       "name": "me-session",
       "method": "GET",
-      "path": "/api/v1/me/session"
+      "path": "/api/v1/me/session",
+      "role_domain": "auth",
+      "token_pool": "pool-admin"
     },
     {
       "name": "messages-unread-count",
       "method": "GET",
-      "path": "/api/v1/messages/unread-count"
+      "path": "/api/v1/messages/unread-count",
+      "role_domain": "readonly",
+      "token_pool": "default"
     },
     {
       "name": "messages-summary",
       "method": "GET",
-      "path": "/api/v1/messages/summary"
+      "path": "/api/v1/messages/summary",
+      "role_domain": "readonly",
+      "token_pool": "default"
     },
     {
       "name": "messages-list",
       "method": "GET",
       "path": "/api/v1/messages",
+      "role_domain": "readonly",
+      "token_pool": "default",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -350,6 +462,8 @@
       "name": "users-export-tasks",
       "method": "GET",
       "path": "/api/v1/users/export-tasks",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -359,6 +473,8 @@
       "name": "users-online-status",
       "method": "GET",
       "path": "/api/v1/users/online-status",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "user_id": "1"
       }
@@ -367,6 +483,8 @@
       "name": "equipment-ledger",
       "method": "GET",
       "path": "/api/v1/equipment/ledger",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -375,17 +493,23 @@
     {
       "name": "equipment-admin-owners",
       "method": "GET",
-      "path": "/api/v1/equipment/admin-owners"
+      "path": "/api/v1/equipment/admin-owners",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment"
     },
     {
       "name": "equipment-owners",
       "method": "GET",
-      "path": "/api/v1/equipment/owners"
+      "path": "/api/v1/equipment/owners",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment"
     },
     {
       "name": "equipment-items",
       "method": "GET",
       "path": "/api/v1/equipment/items",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -395,6 +519,8 @@
       "name": "equipment-plans",
       "method": "GET",
       "path": "/api/v1/equipment/plans",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -404,6 +530,8 @@
       "name": "equipment-executions",
       "method": "GET",
       "path": "/api/v1/equipment/executions",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -413,6 +541,8 @@
       "name": "equipment-records",
       "method": "GET",
       "path": "/api/v1/equipment/records",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -422,6 +552,8 @@
       "name": "equipment-rules",
       "method": "GET",
       "path": "/api/v1/equipment/rules",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -431,6 +563,8 @@
       "name": "equipment-runtime-parameters",
       "method": "GET",
       "path": "/api/v1/equipment/runtime-parameters",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -440,6 +574,8 @@
       "name": "products-list",
       "method": "GET",
       "path": "/api/v1/products",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -449,6 +585,8 @@
       "name": "products-parameter-query",
       "method": "GET",
       "path": "/api/v1/products/parameter-query",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -458,6 +596,8 @@
       "name": "products-parameter-versions",
       "method": "GET",
       "path": "/api/v1/products/parameter-versions",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -467,6 +607,8 @@
       "name": "roles-list",
       "method": "GET",
       "path": "/api/v1/roles",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -476,6 +618,8 @@
       "name": "audits-list",
       "method": "GET",
       "path": "/api/v1/audits",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -485,6 +629,8 @@
       "name": "sessions-login-logs",
       "method": "GET",
       "path": "/api/v1/sessions/login-logs",
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -494,6 +640,8 @@
       "name": "sessions-online",
       "method": "GET",
       "path": "/api/v1/sessions/online",
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -502,37 +650,51 @@
     {
       "name": "ui-page-catalog",
       "method": "GET",
-      "path": "/api/v1/ui/page-catalog"
+      "path": "/api/v1/ui/page-catalog",
+      "role_domain": "readonly",
+      "token_pool": "default"
     },
     {
       "name": "quality-stats-overview",
       "method": "GET",
-      "path": "/api/v1/quality/stats/overview"
+      "path": "/api/v1/quality/stats/overview",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "quality-stats-processes",
       "method": "GET",
-      "path": "/api/v1/quality/stats/processes"
+      "path": "/api/v1/quality/stats/processes",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "quality-stats-operators",
       "method": "GET",
-      "path": "/api/v1/quality/stats/operators"
+      "path": "/api/v1/quality/stats/operators",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "quality-stats-products",
       "method": "GET",
-      "path": "/api/v1/quality/stats/products"
+      "path": "/api/v1/quality/stats/products",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "quality-trend",
       "method": "GET",
-      "path": "/api/v1/quality/trend"
+      "path": "/api/v1/quality/trend",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "quality-first-articles",
       "method": "GET",
       "path": "/api/v1/quality/first-articles",
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -542,6 +704,8 @@
       "name": "quality-suppliers",
       "method": "GET",
       "path": "/api/v1/quality/suppliers",
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -551,6 +715,8 @@
       "name": "quality-scrap-statistics",
       "method": "GET",
       "path": "/api/v1/quality/scrap-statistics",
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -560,6 +726,8 @@
       "name": "quality-repair-orders",
       "method": "GET",
       "path": "/api/v1/quality/repair-orders",
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -568,12 +736,16 @@
     {
       "name": "quality-defect-analysis",
       "method": "GET",
-      "path": "/api/v1/quality/defect-analysis"
+      "path": "/api/v1/quality/defect-analysis",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "craft-stages",
       "method": "GET",
       "path": "/api/v1/craft/stages",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -583,6 +755,8 @@
       "name": "craft-processes",
       "method": "GET",
       "path": "/api/v1/craft/processes",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -591,17 +765,23 @@
     {
       "name": "craft-stages-light",
       "method": "GET",
-      "path": "/api/v1/craft/stages/light"
+      "path": "/api/v1/craft/stages/light",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "craft-processes-light",
       "method": "GET",
-      "path": "/api/v1/craft/processes/light"
+      "path": "/api/v1/craft/processes/light",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "craft-templates",
       "method": "GET",
       "path": "/api/v1/craft/templates",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -610,27 +790,37 @@
     {
       "name": "production-stats-processes",
       "method": "GET",
-      "path": "/api/v1/production/stats/processes"
+      "path": "/api/v1/production/stats/processes",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "production-stats-operators",
       "method": "GET",
-      "path": "/api/v1/production/stats/operators"
+      "path": "/api/v1/production/stats/operators",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "production-data-today-realtime",
       "method": "GET",
-      "path": "/api/v1/production/data/today-realtime"
+      "path": "/api/v1/production/data/today-realtime",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "production-data-unfinished-progress",
       "method": "GET",
-      "path": "/api/v1/production/data/unfinished-progress"
+      "path": "/api/v1/production/data/unfinished-progress",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "production-data-manual",
       "method": "GET",
       "path": "/api/v1/production/data/manual",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -640,6 +830,8 @@
       "name": "production-scrap-statistics",
       "method": "GET",
       "path": "/api/v1/production/scrap-statistics",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -649,6 +841,8 @@
       "name": "production-repair-orders",
       "method": "GET",
       "path": "/api/v1/production/repair-orders",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -658,6 +852,8 @@
       "name": "production-assist-authorizations",
       "method": "GET",
       "path": "/api/v1/production/assist-authorizations",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -666,12 +862,16 @@
     {
       "name": "production-assist-user-options",
       "method": "GET",
-      "path": "/api/v1/production/assist-user-options"
+      "path": "/api/v1/production/assist-user-options",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "production-pipeline-instances",
       "method": "GET",
       "path": "/api/v1/production/pipeline-instances",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -681,6 +881,8 @@
       "name": "production-my-orders",
       "method": "GET",
       "path": "/api/v1/production/my-orders",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -691,6 +893,8 @@
       "method": "POST",
       "path": "/api/v1/production/orders",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "order_code": "PT-TEST-{RANDOM_INT}",
         "product_id": 1,
@@ -714,6 +918,8 @@
       "method": "PUT",
       "path": "/api/v1/production/orders/18/pipeline-mode",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "enabled": true,
         "process_codes": [
@@ -730,6 +936,8 @@
       "method": "PUT",
       "path": "/api/v1/production/orders/18",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "product_id": 1,
         "supplier_id": 1,
@@ -751,6 +959,8 @@
       "method": "DELETE",
       "path": "/api/v1/production/orders/9999",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -760,6 +970,8 @@
       "method": "POST",
       "path": "/api/v1/production/orders/18/complete",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "password": "admin123"
       },
@@ -772,6 +984,8 @@
       "method": "POST",
       "path": "/api/v1/production/orders/18/first-article",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "order_process_id": 1,
         "pipeline_instance_id": null,
@@ -794,6 +1008,8 @@
       "method": "POST",
       "path": "/api/v1/production/orders/18/end-production",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "order_process_id": 1,
         "pipeline_instance_id": null,
@@ -812,6 +1028,8 @@
       "method": "POST",
       "path": "/api/v1/production/scrap-statistics/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "keyword": null,
         "progress": "all",
@@ -829,6 +1047,8 @@
       "method": "POST",
       "path": "/api/v1/production/orders/18/repair-orders",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "order_process_id": 1,
         "production_quantity": 10,
@@ -851,6 +1071,8 @@
       "method": "POST",
       "path": "/api/v1/production/repair-orders/1/complete",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "cause_items": [
           {
@@ -870,6 +1092,8 @@
       "method": "POST",
       "path": "/api/v1/production/repair-orders/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "keyword": null,
         "status": null,
@@ -885,6 +1109,8 @@
       "method": "POST",
       "path": "/api/v1/production/orders/18/assist-authorizations",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "order_process_id": 1,
         "target_operator_user_id": 2,
@@ -900,6 +1126,8 @@
       "method": "POST",
       "path": "/api/v1/production/orders/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "keyword": null,
         "status": null,
@@ -919,6 +1147,8 @@
       "method": "POST",
       "path": "/api/v1/production/data/manual/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "stat_mode": "main_order",
         "start_date": "2026-04-01",
@@ -938,6 +1168,8 @@
       "method": "POST",
       "path": "/api/v1/craft/stages",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "stage_code": "ST-{RANDOM_INT}",
         "stage_name": "测试工序段",
@@ -953,6 +1185,8 @@
       "method": "PUT",
       "path": "/api/v1/craft/stages/1",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "stage_code": "ST001",
         "stage_name": "更新后的工序段",
@@ -968,6 +1202,8 @@
       "method": "DELETE",
       "path": "/api/v1/craft/stages/9999",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -977,6 +1213,8 @@
       "method": "POST",
       "path": "/api/v1/craft/processes",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "process_code": "PC-{RANDOM_INT}",
         "process_name": "测试小工序",
@@ -993,6 +1231,8 @@
       "method": "PUT",
       "path": "/api/v1/craft/processes/1",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "process_code": "PC001",
         "process_name": "更新后的小工序",
@@ -1009,6 +1249,8 @@
       "method": "DELETE",
       "path": "/api/v1/craft/processes/9999",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -1018,6 +1260,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "template_name": "LoadTestTemplate-{RANDOM_INT}",
         "product_id": 1,
@@ -1035,6 +1279,8 @@
       "method": "PUT",
       "path": "/api/v1/craft/templates/1",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "template_name": "UpdatedTemplate",
         "is_default": false,
@@ -1049,6 +1295,8 @@
       "method": "DELETE",
       "path": "/api/v1/craft/templates/9999",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -1058,6 +1306,8 @@
       "method": "POST",
       "path": "/api/v1/quality/first-articles",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "order_id": 18,
         "order_process_id": 1,
@@ -1077,6 +1327,8 @@
       "method": "POST",
       "path": "/api/v1/quality/defect-analysis",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "product_id": 1,
         "stage_id": 1,
@@ -1094,6 +1346,8 @@
       "method": "POST",
       "path": "/api/v1/quality/suppliers",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "name": "测试供应商-{RANDOM_INT}",
         "remark": "Load test supplier",
@@ -1108,6 +1362,8 @@
       "method": "PUT",
       "path": "/api/v1/quality/suppliers/1",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "name": "更新后的供应商",
         "remark": "Updated",
@@ -1122,6 +1378,8 @@
       "method": "DELETE",
       "path": "/api/v1/quality/suppliers/9999",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "success_statuses": [
         200
       ]
@@ -1131,6 +1389,8 @@
       "method": "POST",
       "path": "/api/v1/quality/stats/export",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "stat_type": "overview",
         "start_date": "2026-04-01",
@@ -1145,6 +1405,8 @@
       "method": "POST",
       "path": "/api/v1/quality/trend/export",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "start_date": "2026-04-01",
         "end_date": "2026-04-11"
@@ -1158,6 +1420,8 @@
       "method": "POST",
       "path": "/api/v1/quality/repair-orders",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "order_id": 18,
         "order_process_id": 1,
@@ -1177,6 +1441,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/ledger",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "equipment_code": "EQ-{RANDOM_INT}",
         "equipment_name": "测试设备",
@@ -1193,6 +1459,8 @@
       "method": "PUT",
       "path": "/api/v1/equipment/ledger/1",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "equipment_name": "更新后的设备",
         "equipment_type": "加工中心",
@@ -1208,6 +1476,8 @@
       "method": "DELETE",
       "path": "/api/v1/equipment/ledger/9999",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -1217,6 +1487,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/items",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "equipment_id": 1,
         "item_type": "maintenance",
@@ -1233,6 +1505,8 @@
       "method": "PUT",
       "path": "/api/v1/equipment/items/1",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "content": "更新后的维护内容",
         "scheduled_date": "2026-04-20"
@@ -1246,6 +1520,8 @@
       "method": "DELETE",
       "path": "/api/v1/equipment/items/9999",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -1255,6 +1531,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/plans",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "plan_name": "LoadTestPlan-{RANDOM_INT}",
         "equipment_id": 1,
@@ -1271,6 +1549,8 @@
       "method": "PUT",
       "path": "/api/v1/equipment/plans/1",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "plan_name": "更新后的计划",
         "equipment_id": 1,
@@ -1286,6 +1566,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/plans/1/toggle",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -1295,6 +1577,8 @@
       "method": "DELETE",
       "path": "/api/v1/equipment/plans/9999",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -1304,6 +1588,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/rules",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "rule_name": "LoadTestRule-{RANDOM_INT}",
         "rule_type": "parameter_threshold",
@@ -1320,6 +1606,8 @@
       "method": "PUT",
       "path": "/api/v1/equipment/rules/1",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "rule_name": "更新后的规则",
         "rule_type": "parameter_threshold",
@@ -1336,6 +1624,8 @@
       "method": "PATCH",
       "path": "/api/v1/equipment/rules/1/toggle",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -1345,6 +1635,8 @@
       "method": "DELETE",
       "path": "/api/v1/equipment/rules/9999",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -1354,6 +1646,8 @@
       "method": "PUT",
       "path": "/api/v1/equipment/runtime-parameters/1",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "param_value": "100.5",
         "remark": "Updated"
@@ -1367,6 +1661,8 @@
       "method": "DELETE",
       "path": "/api/v1/equipment/runtime-parameters/9999",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -1376,6 +1672,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/runtime-parameters/batch",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "equipment_id": 1,
         "items": [
@@ -1398,6 +1696,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/executions",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "plan_id": 1,
         "equipment_id": 1,
@@ -1414,6 +1714,8 @@
       "method": "POST",
       "path": "/api/v1/products",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "product_code": "PRD-{RANDOM_INT}",
         "product_name": "测试产品",
@@ -1430,6 +1732,8 @@
       "method": "PUT",
       "path": "/api/v1/products/1",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "product_name": "更新后的产品",
         "category": "标准件",
@@ -1445,6 +1749,8 @@
       "method": "POST",
       "path": "/api/v1/products/1/delete",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -1454,6 +1760,8 @@
       "method": "POST",
       "path": "/api/v1/products/1/parameter-versions",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "version_name": "V2.0",
         "parameters": [
@@ -1474,6 +1782,8 @@
       "method": "PUT",
       "path": "/api/v1/products/1/parameters",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "version_id": 1,
         "parameters": [
@@ -1493,6 +1803,8 @@
       "method": "POST",
       "path": "/api/v1/products/1/lifecycle",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "action": "enable",
         "remark": "Load test lifecycle"
@@ -1506,6 +1818,8 @@
       "method": "POST",
       "path": "/api/v1/users",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "username": "testuser_{RANDOM_INT}",
         "full_name": "测试用户",
@@ -1524,6 +1838,8 @@
       "method": "PUT",
       "path": "/api/v1/users/1",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "full_name": "更新后的用户",
         "role_ids": [
@@ -1540,6 +1856,8 @@
       "method": "POST",
       "path": "/api/v1/users/1/enable",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -1549,6 +1867,8 @@
       "method": "POST",
       "path": "/api/v1/users/1/disable",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -1558,6 +1878,8 @@
       "method": "POST",
       "path": "/api/v1/users/1/reset-password",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "new_password": "NewTest123"
       },
@@ -1570,6 +1892,8 @@
       "method": "DELETE",
       "path": "/api/v1/users/9999",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -1579,6 +1903,8 @@
       "method": "POST",
       "path": "/api/v1/users/9999/restore",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -1588,6 +1914,8 @@
       "method": "POST",
       "path": "/api/v1/users/export-tasks",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "keyword": null,
         "role_ids": null,
@@ -1602,6 +1930,8 @@
       "method": "POST",
       "path": "/api/v1/roles",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "name": "测试角色_{RANDOM_INT}",
         "code": "TEST_ROLE_{RANDOM_INT}",
@@ -1617,6 +1947,8 @@
       "method": "PUT",
       "path": "/api/v1/roles/1",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "name": "更新后的角色",
         "code": "TEST_ROLE",
@@ -1632,6 +1964,8 @@
       "method": "POST",
       "path": "/api/v1/roles/1/enable",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -1641,6 +1975,8 @@
       "method": "POST",
       "path": "/api/v1/roles/1/disable",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -1650,6 +1986,8 @@
       "method": "DELETE",
       "path": "/api/v1/roles/9999",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -1659,6 +1997,8 @@
       "method": "POST",
       "path": "/api/v1/processes",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "process_code": "TEST-{RANDOM_INT}",
         "process_name": "测试工序",
@@ -1674,6 +2014,8 @@
       "method": "PUT",
       "path": "/api/v1/processes/1",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "process_code": "TEST001",
         "process_name": "更新后的工序",
@@ -1689,6 +2031,8 @@
       "method": "POST",
       "path": "/api/v1/messages/1/read",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "success_statuses": [
         200
       ]
@@ -1698,6 +2042,8 @@
       "method": "POST",
       "path": "/api/v1/messages/read-all",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "success_statuses": [
         200
       ]
@@ -1707,6 +2053,8 @@
       "method": "POST",
       "path": "/api/v1/messages/read-batch",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "json_body": {
         "message_ids": [
           1,
@@ -1723,6 +2071,8 @@
       "method": "POST",
       "path": "/api/v1/messages",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "json_body": {
         "title": "测试消息_{RANDOM_INT}",
         "content": "这是一条测试消息",
@@ -1740,6 +2090,8 @@
       "method": "PUT",
       "path": "/api/v1/authz/permissions/1",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "is_enabled": true,
         "remark": "Updated"
@@ -1753,6 +2105,8 @@
       "method": "PUT",
       "path": "/api/v1/authz/role-permissions",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "role_code": "system_admin",
         "module": "user",
@@ -1770,6 +2124,8 @@
       "method": "PUT",
       "path": "/api/v1/authz/role-permissions/matrix",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "role_codes": [
           "system_admin"
@@ -1786,6 +2142,8 @@
       "method": "PUT",
       "path": "/api/v1/authz/hierarchy/role-config",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "role_code": "system_admin",
         "module": "user",
@@ -1800,6 +2158,8 @@
       "method": "POST",
       "path": "/api/v1/authz/capability-packs",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "pack_name": "LoadTestPack_{RANDOM_INT}",
         "module": "user",
@@ -1816,6 +2176,8 @@
       "method": "PUT",
       "path": "/api/v1/authz/capability-packs/1",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "pack_name": "UpdatedPack",
         "module": "user",
@@ -1833,6 +2195,8 @@
       "method": "PUT",
       "path": "/api/v1/authz/capability-packs/role-config",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "role_code": "system_admin",
         "module": "user",
@@ -1849,6 +2213,8 @@
       "method": "POST",
       "path": "/api/v1/sessions/force-offline",
       "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "json_body": {
         "user_id": 2
       },
@@ -1861,6 +2227,8 @@
       "method": "POST",
       "path": "/api/v1/sessions/force-offline/batch",
       "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "json_body": {
         "user_ids": [
           2,
@@ -1876,6 +2244,8 @@
       "method": "POST",
       "path": "/api/v1/auth/login",
       "requires_auth": false,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "form_body": {
         "username": "admin1",
         "password": "admin123"
@@ -1889,6 +2259,8 @@
       "method": "POST",
       "path": "/api/v1/auth/logout",
       "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "success_statuses": [
         200
       ]
@@ -1898,6 +2270,8 @@
       "method": "POST",
       "path": "/api/v1/auth/register-requests",
       "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "json_body": {
         "username": "newuser_{RANDOM_INT}",
         "full_name": "新用户",
@@ -1912,6 +2286,8 @@
       "method": "POST",
       "path": "/api/v1/auth/refresh",
       "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "success_statuses": [
         200
       ]
@@ -1921,6 +2297,8 @@
       "method": "POST",
       "path": "/api/v1/me/password",
       "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "json_body": {
         "old_password": "admin123",
         "new_password": "NewTest123"
@@ -1934,6 +2312,8 @@
       "method": "POST",
       "path": "/api/v1/craft/system-master-template",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "steps": [
           {
@@ -1957,6 +2337,8 @@
       "method": "PUT",
       "path": "/api/v1/craft/system-master-template",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "steps": [
           {
@@ -1975,6 +2357,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates/1/publish",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "apply_order_sync": false,
         "confirmed": true,
@@ -1990,6 +2374,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates/1/rollback",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "target_version": 1,
         "apply_order_sync": false,
@@ -2005,6 +2391,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates/1/enable",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2014,6 +2402,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates/1/disable",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2023,6 +2413,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates/1/copy",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "new_name": "CopiedTemplate"
       },
@@ -2035,6 +2427,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates/1/copy-to-product",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "target_product_id": 2,
         "new_name": "CopiedTemplateForProduct"
@@ -2048,6 +2442,8 @@
       "method": "POST",
       "path": "/api/v1/craft/system-master-template/copy-to-product",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "target_product_id": 2,
         "template_name": "NewTemplateFromMaster"
@@ -2061,6 +2457,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates/1/draft",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2070,6 +2468,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/ledger/1/toggle",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "enabled": true
       },
@@ -2082,6 +2482,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/ledger/1/disable",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2091,6 +2493,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/items/1/toggle",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "enabled": true
       },
@@ -2103,6 +2507,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/executions/1/start",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2112,6 +2518,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/executions/1/complete",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "result_summary": "completed",
         "result_remark": "Load test completed"
@@ -2125,6 +2533,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/executions/1/cancel",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2134,6 +2544,8 @@
       "method": "GET",
       "path": "/api/v1/equipment/ledger/export",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2143,6 +2555,8 @@
       "method": "POST",
       "path": "/api/v1/quality/first-articles/1/disposition",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "disposition_opinion": "通过",
         "recheck_result": "合格",
@@ -2157,6 +2571,8 @@
       "method": "POST",
       "path": "/api/v1/production/my-orders/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "view_mode": "own",
         "order_status": null,
@@ -2171,6 +2587,8 @@
       "method": "POST",
       "path": "/api/v1/production/order-events/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "keyword": null,
         "start_date": null,
@@ -2185,6 +2603,8 @@
       "method": "POST",
       "path": "/api/v1/auth/bootstrap-admin",
       "requires_auth": false,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "json_body": {
         "username": "bootstrap_admin",
         "password": "Bootstrap123456",
@@ -2199,6 +2619,8 @@
       "method": "POST",
       "path": "/api/v1/auth/register",
       "requires_auth": false,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "json_body": {
         "username": "newuser_{RANDOM_INT}",
         "password": "Test123456",
@@ -2213,6 +2635,8 @@
       "method": "POST",
       "path": "/api/v1/auth/register-requests/1/approve",
       "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "success_statuses": [
         200
       ]
@@ -2222,6 +2646,8 @@
       "method": "POST",
       "path": "/api/v1/auth/register-requests/1/reject",
       "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "json_body": {
         "remark": "Rejected"
       },
@@ -2234,6 +2660,8 @@
       "method": "POST",
       "path": "/api/v1/authz/hierarchy/preview",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "module": "user",
         "role_code": "system_admin"
@@ -2247,6 +2675,8 @@
       "method": "PUT",
       "path": "/api/v1/authz/capability-packs/batch-apply",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "role_code": "system_admin",
         "module": "user",
@@ -2264,6 +2694,8 @@
       "method": "PUT",
       "path": "/api/v1/authz/role-permissions/{role_code}",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "module": "user",
         "permission_codes": [
@@ -2279,6 +2711,8 @@
       "method": "PUT",
       "path": "/api/v1/authz/hierarchy/role-config/{role_code}",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "module": "user",
         "config": {}
@@ -2292,6 +2726,8 @@
       "method": "PUT",
       "path": "/api/v1/authz/capability-packs/role-config/{role_code}",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "json_body": {
         "module": "user",
         "pack_ids": [
@@ -2311,6 +2747,8 @@
         "page_size": "20"
       },
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -2320,6 +2758,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates/import",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "items": [],
         "overwrite_existing": false
@@ -2333,6 +2773,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates/1/archive",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2342,6 +2784,8 @@
       "method": "POST",
       "path": "/api/v1/craft/templates/1/unarchive",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2351,6 +2795,8 @@
       "method": "PATCH",
       "path": "/api/v1/equipment/runtime-parameters/1/toggle",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "enabled": true
       },
@@ -2363,6 +2809,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/items/1/disable",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2372,6 +2820,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/plans/1/generate",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2381,6 +2831,8 @@
       "method": "POST",
       "path": "/api/v1/equipment/runtime-parameters",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "json_body": {
         "equipment_id": 1,
         "param_name": "温度",
@@ -2395,6 +2847,8 @@
       "method": "POST",
       "path": "/api/v1/messages/announcements",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "json_body": {
         "title": "公告标题",
         "content": "公告内容",
@@ -2409,6 +2863,8 @@
       "method": "POST",
       "path": "/api/v1/messages/maintenance/run",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "json_body": {
         "work_order_id": 1
       },
@@ -2421,6 +2877,8 @@
       "method": "POST",
       "path": "/api/v1/products/1/versions",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "version_name": "V3.0",
         "parameters": [
@@ -2441,6 +2899,8 @@
       "method": "POST",
       "path": "/api/v1/products/1/rollback",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "target_version": 1
       },
@@ -2453,6 +2913,8 @@
       "method": "POST",
       "path": "/api/v1/products/1/versions/2/activate",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2462,6 +2924,8 @@
       "method": "POST",
       "path": "/api/v1/products/1/versions/2/copy",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "new_version_name": "V2.1"
       },
@@ -2474,6 +2938,8 @@
       "method": "POST",
       "path": "/api/v1/products/1/versions/2/disable",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2483,6 +2949,8 @@
       "method": "PATCH",
       "path": "/api/v1/products/1/versions/2/note",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "note": "Updated note"
       },
@@ -2495,6 +2963,8 @@
       "method": "DELETE",
       "path": "/api/v1/products/1/versions/2",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2504,6 +2974,8 @@
       "method": "PUT",
       "path": "/api/v1/products/1/versions/2/parameters",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "json_body": {
         "parameters": [
           {
@@ -2522,6 +2994,8 @@
       "method": "POST",
       "path": "/api/v1/quality/defect-analysis/export",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "start_date": "2026-04-01",
         "end_date": "2026-04-11"
@@ -2535,6 +3009,8 @@
       "method": "POST",
       "path": "/api/v1/quality/first-articles/export",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "query_date": "2026-04-11"
       },
@@ -2547,6 +3023,8 @@
       "method": "POST",
       "path": "/api/v1/quality/repair-orders/export",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "start_date": "2026-04-01",
         "end_date": "2026-04-11"
@@ -2560,6 +3038,8 @@
       "method": "POST",
       "path": "/api/v1/quality/repair-orders/1/complete",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "disposition_opinion": "返工",
         "recheck_result": "合格",
@@ -2574,6 +3054,8 @@
       "method": "POST",
       "path": "/api/v1/quality/scrap-statistics/export",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "json_body": {
         "start_date": "2026-04-01",
         "end_date": "2026-04-11"
@@ -2587,6 +3069,8 @@
       "method": "GET",
       "path": "/api/v1/authz/permissions/me",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -2599,6 +3083,8 @@
         "product_id": "1"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2611,6 +3097,8 @@
         "product_id": "1"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2620,6 +3108,8 @@
       "method": "GET",
       "path": "/api/v1/craft/processes/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2629,6 +3119,8 @@
       "method": "GET",
       "path": "/api/v1/craft/stages/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2638,6 +3130,8 @@
       "method": "GET",
       "path": "/api/v1/craft/system-master-template/versions",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2647,6 +3141,8 @@
       "method": "GET",
       "path": "/api/v1/craft/templates/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2656,6 +3152,8 @@
       "method": "GET",
       "path": "/api/v1/craft/templates/1",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2665,6 +3163,8 @@
       "method": "GET",
       "path": "/api/v1/craft/templates/1/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2674,6 +3174,8 @@
       "method": "GET",
       "path": "/api/v1/craft/templates/1/impact-analysis",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2683,6 +3185,8 @@
       "method": "GET",
       "path": "/api/v1/craft/templates/1/references",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2692,6 +3196,8 @@
       "method": "GET",
       "path": "/api/v1/craft/templates/1/versions",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2705,6 +3211,8 @@
         "to_version": "2"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2714,6 +3222,8 @@
       "method": "GET",
       "path": "/api/v1/craft/templates/1/versions/1/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2723,6 +3233,8 @@
       "method": "GET",
       "path": "/api/v1/equipment/executions/export",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2732,6 +3244,8 @@
       "method": "GET",
       "path": "/api/v1/equipment/executions/1/detail",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2741,6 +3255,8 @@
       "method": "GET",
       "path": "/api/v1/equipment/items/export",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2750,6 +3266,8 @@
       "method": "GET",
       "path": "/api/v1/equipment/ledger/1/detail",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2759,6 +3277,8 @@
       "method": "GET",
       "path": "/api/v1/equipment/plans/export",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2768,6 +3288,8 @@
       "method": "GET",
       "path": "/api/v1/equipment/records/export",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2777,6 +3299,8 @@
       "method": "GET",
       "path": "/api/v1/equipment/records/1/detail",
       "requires_auth": true,
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "success_statuses": [
         200
       ]
@@ -2786,6 +3310,8 @@
       "method": "GET",
       "path": "/api/v1/auth/register-requests/1",
       "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "success_statuses": [
         200
       ]
@@ -2799,6 +3325,8 @@
         "page_size": "20"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2808,6 +3336,8 @@
       "method": "GET",
       "path": "/api/v1/production/repair-orders/1/detail",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2817,6 +3347,8 @@
       "method": "GET",
       "path": "/api/v1/production/repair-orders/1/phenomena-summary",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2826,6 +3358,8 @@
       "method": "GET",
       "path": "/api/v1/production/scrap-statistics/1",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2835,6 +3369,8 @@
       "method": "GET",
       "path": "/api/v1/production/stats/overview",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2844,6 +3380,8 @@
       "method": "GET",
       "path": "/api/v1/products/export/list",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2853,6 +3391,8 @@
       "method": "GET",
       "path": "/api/v1/products/parameters/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2862,6 +3402,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/detail",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2871,6 +3413,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/effective-parameters",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2880,6 +3424,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/impact-analysis",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2889,6 +3435,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/parameter-history",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2898,6 +3446,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/parameters",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2911,6 +3461,8 @@
         "to_version": "2"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2920,6 +3472,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/versions/1/export",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2929,6 +3483,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/versions/1/parameter-history",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -2938,6 +3494,8 @@
       "method": "GET",
       "path": "/api/v1/quality/first-articles/1",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "success_statuses": [
         200
       ]
@@ -2947,6 +3505,8 @@
       "method": "GET",
       "path": "/api/v1/quality/first-articles/1/disposition-detail",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "success_statuses": [
         200
       ]
@@ -2956,6 +3516,8 @@
       "method": "GET",
       "path": "/api/v1/quality/repair-orders/1/detail",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "success_statuses": [
         200
       ]
@@ -2965,6 +3527,8 @@
       "method": "GET",
       "path": "/api/v1/quality/repair-orders/1/phenomena-summary",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "success_statuses": [
         200
       ]
@@ -2974,6 +3538,8 @@
       "method": "GET",
       "path": "/api/v1/quality/scrap-statistics/1",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "success_statuses": [
         200
       ]
@@ -2983,6 +3549,8 @@
       "method": "GET",
       "path": "/api/v1/users/export",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -2992,6 +3560,8 @@
       "method": "GET",
       "path": "/api/v1/users/export-tasks/1",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -3001,6 +3571,8 @@
       "method": "GET",
       "path": "/api/v1/users/export-tasks/1/download",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]

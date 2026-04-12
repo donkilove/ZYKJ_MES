@@ -4,9 +4,9 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only, selectinload
 
-from app.api.deps import require_permission
+from app.api.deps import require_permission, require_permission_fast
 from app.core.authz_catalog import (
     PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE,
     PERM_PROD_ASSIST_AUTHORIZATIONS_LIST,
@@ -941,7 +941,7 @@ def list_first_article_templates_api(
     order_id: int,
     order_process_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
+    _: None = Depends(require_permission_fast(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
 ) -> ApiResponse[FirstArticleTemplateListResult]:
     order, process_row = _get_first_article_order_context(
         db,
@@ -951,6 +951,16 @@ def list_first_article_templates_api(
     rows = (
         db.execute(
             select(FirstArticleTemplate)
+            .options(
+                load_only(
+                    FirstArticleTemplate.id,
+                    FirstArticleTemplate.product_id,
+                    FirstArticleTemplate.process_code,
+                    FirstArticleTemplate.template_name,
+                    FirstArticleTemplate.check_content,
+                    FirstArticleTemplate.test_value,
+                )
+            )
             .where(
                 FirstArticleTemplate.product_id == order.product_id,
                 FirstArticleTemplate.process_code == process_row.process_code,
@@ -989,7 +999,7 @@ def list_first_article_templates_api(
 def list_first_article_participant_users_api(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
+    _: None = Depends(require_permission_fast(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
 ) -> ApiResponse[FirstArticleParticipantOptionListResult]:
     order = db.get(ProductionOrder, order_id)
     if order is None:
@@ -1000,6 +1010,7 @@ def list_first_article_participant_users_api(
     rows = (
         db.execute(
             select(User)
+            .options(load_only(User.id, User.username, User.full_name))
             .where(User.is_active.is_(True), User.is_deleted.is_(False))
             .order_by(User.username.asc(), User.id.asc())
         )
@@ -1589,7 +1600,7 @@ def get_assist_user_options_api(
     role_code: str | None = Query(default=None),
     stage_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_PROD_ASSIST_USER_OPTIONS_LIST)),
+    _: None = Depends(require_permission_fast(PERM_PROD_ASSIST_USER_OPTIONS_LIST)),
 ) -> ApiResponse[AssistUserOptionListResult]:
     allowed_role_codes = {
         ROLE_SYSTEM_ADMIN,
@@ -1602,33 +1613,45 @@ def get_assist_user_options_api(
             detail=f"Invalid role_code: {role_code}",
         )
 
-    stmt = (
-        select(User)
-        .join(User.roles)
-        .where(
-            User.is_active.is_(True),
-            Role.code.in_(allowed_role_codes),
-        )
-        .order_by(User.id.asc())
-        .distinct()
-    )
+    filters = [
+        User.is_active.is_(True),
+        User.is_deleted.is_(False),
+        Role.code.in_(allowed_role_codes),
+    ]
     if role_code:
-        stmt = stmt.where(Role.code == role_code)
+        filters.append(Role.code == role_code)
     if stage_id is not None:
-        stmt = stmt.where(User.stage_id == stage_id)
+        filters.append(User.stage_id == stage_id)
     if keyword and keyword.strip():
         like_pattern = f"%{keyword.strip()}%"
-        stmt = stmt.where(
+        filters.append(
             or_(
                 User.username.ilike(like_pattern),
                 User.full_name.ilike(like_pattern),
             )
         )
 
-    count_stmt = select(func.count()).select_from(stmt.subquery())
+    count_stmt = (
+        select(func.count(func.distinct(User.id)))
+        .select_from(User)
+        .join(User.roles)
+        .where(*filters)
+    )
     total = db.execute(count_stmt).scalar() or 0
     offset = (page - 1) * page_size
-    paged_stmt = stmt.offset(offset).limit(page_size)
+    paged_stmt = (
+        select(User)
+        .options(
+            load_only(User.id, User.username, User.full_name, User.stage_id),
+            selectinload(User.roles).load_only(Role.id, Role.code),
+        )
+        .join(User.roles)
+        .where(*filters)
+        .order_by(User.id.asc())
+        .distinct()
+        .offset(offset)
+        .limit(page_size)
+    )
     paged_rows = db.execute(paged_stmt).scalars().unique().all()
     return success_response(
         AssistUserOptionListResult(

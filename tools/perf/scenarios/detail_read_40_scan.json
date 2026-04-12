@@ -1,171 +1,307 @@
 {
+  "token_pools": [
+    {
+      "name": "pool-admin",
+      "login_user_prefix": "ltadm",
+      "token_count": 2
+    },
+    {
+      "name": "pool-user-admin",
+      "login_user_prefix": "ltusr",
+      "token_count": 2
+    },
+    {
+      "name": "pool-production",
+      "login_user_prefix": "ltprd",
+      "token_count": 4
+    },
+    {
+      "name": "pool-quality",
+      "login_user_prefix": "ltqua",
+      "token_count": 4
+    },
+    {
+      "name": "pool-equipment",
+      "login_user_prefix": "ltmnt",
+      "token_count": 4
+    },
+    {
+      "name": "pool-operator",
+      "login_user_prefix": "ltopr",
+      "token_count": 4
+    }
+  ],
   "scenarios": [
     {
       "name": "users-detail-1",
       "method": "GET",
       "path": "/api/v1/users/1",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "users-detail-2",
       "method": "GET",
       "path": "/api/v1/users/2",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "roles-detail-1",
       "method": "GET",
       "path": "/api/v1/roles/1",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "messages-detail-1",
       "method": "GET",
       "path": "/api/v1/messages/1",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "readonly",
+      "token_pool": "default",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "messages-jump-target-1",
       "method": "GET",
       "path": "/api/v1/messages/1/jump-target",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "readonly",
+      "token_pool": "default",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "processes-detail-query",
       "method": "GET",
       "path": "/api/v1/processes",
-      "query": { "process_id": "1" },
+      "query": {
+        "process_id": "1"
+      },
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "craft-stages-detail-query",
       "method": "GET",
       "path": "/api/v1/craft/stages/detail",
-      "query": { "stage_id": "1" },
+      "query": {
+        "stage_id": "1"
+      },
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "craft-processes-detail-query",
       "method": "GET",
       "path": "/api/v1/craft/processes/detail",
-      "query": { "process_id": "1" },
+      "query": {
+        "process_id": "1"
+      },
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "craft-system-master-template",
       "method": "GET",
       "path": "/api/v1/craft/system-master-template",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "craft-stage-references-1",
       "method": "GET",
       "path": "/api/v1/craft/stages/1/references",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "craft-process-references-1",
       "method": "GET",
       "path": "/api/v1/craft/processes/1/references",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "quality-supplier-detail-1",
       "method": "GET",
       "path": "/api/v1/quality/suppliers/1",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "production-order-detail-18",
       "method": "GET",
       "path": "/api/v1/production/orders/18",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "production-order-pipeline-mode-18",
       "method": "GET",
       "path": "/api/v1/production/orders/18/pipeline-mode",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "production-order-first-article-templates-18",
       "method": "GET",
       "path": "/api/v1/production/orders/18/first-article/templates",
-      "query": { "order_process_id": "18" },
+      "query": {
+        "order_process_id": "18"
+      },
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "production-order-first-article-participant-users-18",
       "method": "GET",
       "path": "/api/v1/production/orders/18/first-article/participant-users",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "production-order-first-article-parameters-18",
       "method": "GET",
       "path": "/api/v1/production/orders/18/first-article/parameters",
-      "query": { "order_process_id": "18" },
+      "query": {
+        "order_process_id": "18"
+      },
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "production-my-order-context-18",
       "method": "GET",
       "path": "/api/v1/production/my-orders/18/context",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "production-order-events-search",
       "method": "GET",
       "path": "/api/v1/production/order-events/search",
-      "query": { "order_code": "PT1775663213490-18" },
+      "query": {
+        "order_code": "PT1775663213490-18"
+      },
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "products-detail-1",
       "method": "GET",
       "path": "/api/v1/products/1",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "products-detail-1-includes-versions",
       "method": "GET",
       "path": "/api/v1/products/1/versions",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "products-detail-1-version-1-params",
       "method": "GET",
       "path": "/api/v1/products/1/versions/1/parameters",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     },
     {
       "name": "products-template-references-1",
       "method": "GET",
       "path": "/api/v1/craft/products/1/template-references",
       "requires_auth": true,
-      "success_statuses": [200]
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "success_statuses": [
+        200
+      ]
     }
   ]
 }

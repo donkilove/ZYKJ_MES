@@ -1,5 +1,5 @@
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
@@ -12,12 +12,33 @@ from app.services.process_code_rule import (
 
 
 def list_processes(db: Session, page: int, page_size: int, keyword: str | None) -> tuple[int, list[Process]]:
-    stmt = select(Process).options(selectinload(Process.stage)).order_by(Process.id.asc())
+    stmt = (
+        select(Process)
+        .options(
+            load_only(
+                Process.id,
+                Process.code,
+                Process.name,
+                Process.stage_id,
+                Process.is_enabled,
+                Process.created_at,
+                Process.updated_at,
+            ),
+            selectinload(Process.stage).load_only(
+                ProcessStage.id,
+                ProcessStage.code,
+                ProcessStage.name,
+            ),
+        )
+        .order_by(Process.id.asc())
+    )
+    total_stmt = select(func.count(Process.id))
     if keyword:
         like_pattern = f"%{keyword}%"
         stmt = stmt.where(Process.name.ilike(like_pattern))
+        total_stmt = total_stmt.where(Process.name.ilike(like_pattern))
 
-    total_stmt = select(func.count()).select_from(stmt.subquery())
+    total_stmt = total_stmt.select_from(Process)
     total = db.execute(total_stmt).scalar_one()
 
     offset = (page - 1) * page_size

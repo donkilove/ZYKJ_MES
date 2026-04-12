@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permission
+from app.api.deps import require_permission, require_permission_fast
 from app.core.authz_catalog import (
     PERM_QUALITY_REPAIR_ORDERS_COMPLETE,
     PERM_QUALITY_REPAIR_ORDERS_DETAIL,
@@ -713,7 +713,9 @@ def list_suppliers_api(
 def get_supplier_detail_api(
     supplier_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)),
+    _: None = Depends(
+        require_permission_fast(PERM_PAGE_QUALITY_SUPPLIER_MANAGEMENT_VIEW)
+    ),
 ) -> ApiResponse[SupplierItem]:
     row = get_supplier_by_id(db, supplier_id)
     if row is None:

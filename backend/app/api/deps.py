@@ -35,7 +35,13 @@ def _allow_auth_user_cache(request: Request, session_token_id: str | None) -> bo
     if request.method.upper() not in {"GET", "HEAD"}:
         return False
     path = request.url.path
-    return path.startswith("/api/v1/authz/") or path == "/api/v1/ui/page-catalog"
+    if not path.startswith("/api/v1/"):
+        return False
+    if path.startswith("/api/v1/equipment/"):
+        return False
+    if path.startswith("/api/v1/production/my-orders"):
+        return False
+    return True
 
 
 def _get_cached_auth_user(

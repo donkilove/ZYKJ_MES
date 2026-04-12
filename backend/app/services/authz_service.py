@@ -47,6 +47,7 @@ from app.core.authz_hierarchy_catalog import (
 )
 from app.core.config import settings
 from app.core.rbac import (
+    ROLE_MAINTENANCE_STAFF,
     ROLE_DEFINITIONS,
     ROLE_OPERATOR,
     ROLE_PRODUCTION_ADMIN,
@@ -2246,6 +2247,16 @@ def _role_template_capability_codes(
                 "feature.production.assist.records.view",
             }
             return sorted(capability_codes.intersection(preferred))
+        preferred = {
+            code
+            for code in capability_codes
+            if code.endswith(".view") or code.endswith(".read")
+        }
+        return sorted(preferred)
+
+    if role_code == ROLE_MAINTENANCE_STAFF:
+        if module_code == "equipment":
+            return sorted(capability_codes)
         preferred = {
             code
             for code in capability_codes

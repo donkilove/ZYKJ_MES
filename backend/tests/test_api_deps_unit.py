@@ -108,6 +108,32 @@ class ApiDepsUnitTest(unittest.TestCase):
         get_user_permission_codes.assert_called_once_with(db, user=user)
         self.assertEqual(touch_user.call_count, 2)
 
+    def test_allow_auth_user_cache_allows_generic_gets_but_excludes_equipment(self) -> None:
+        production_request = SimpleNamespace(
+            method="GET",
+            url=SimpleNamespace(path="/api/v1/production/orders/18"),
+        )
+        equipment_request = SimpleNamespace(
+            method="GET",
+            url=SimpleNamespace(path="/api/v1/equipment/ledger"),
+        )
+        production_my_orders_request = SimpleNamespace(
+            method="GET",
+            url=SimpleNamespace(path="/api/v1/production/my-orders"),
+        )
+        post_request = SimpleNamespace(
+            method="POST",
+            url=SimpleNamespace(path="/api/v1/production/orders"),
+        )
+
+        self.assertTrue(deps._allow_auth_user_cache(production_request, "sid-1"))
+        self.assertFalse(deps._allow_auth_user_cache(equipment_request, "sid-1"))
+        self.assertFalse(
+            deps._allow_auth_user_cache(production_my_orders_request, "sid-1")
+        )
+        self.assertFalse(deps._allow_auth_user_cache(post_request, "sid-1"))
+        self.assertFalse(deps._allow_auth_user_cache(production_request, None))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -27,11 +27,28 @@ class ScenarioSpec:
     method: str
     path: str
     requires_auth: bool = True
+    role_domain: str | None = None
+    token_pool: str | None = None
     headers: dict[str, str] = field(default_factory=dict)
     query: dict[str, str] = field(default_factory=dict)
     json_body: Any | None = None
     form_body: dict[str, str] | None = None
     success_statuses: set[int] | None = None
+
+
+@dataclass
+class TokenPoolSpec:
+    name: str
+    login_user_prefix: str | None = None
+    password: str | None = None
+    token_count: int | None = None
+    token_file: str | None = None
+
+
+@dataclass
+class ScenarioConfigBundle:
+    scenarios: dict[str, ScenarioSpec]
+    token_pools: dict[str, TokenPoolSpec]
 
 
 @dataclass
@@ -133,6 +150,44 @@ def _normalize_success_statuses(raw: Any) -> set[int] | None:
     return statuses
 
 
+def _normalize_token_pool(raw: Any) -> TokenPoolSpec:
+    if not isinstance(raw, dict):
+        raise ValueError("token pool item must be an object")
+    name = str(raw.get("name") or "").strip()
+    if not name:
+        raise ValueError("token_pool.name is required")
+
+    login_user_prefix_raw = raw.get("login_user_prefix")
+    login_user_prefix = (
+        str(login_user_prefix_raw).strip() if login_user_prefix_raw is not None else None
+    )
+    if login_user_prefix == "":
+        login_user_prefix = None
+
+    password_raw = raw.get("password")
+    password = str(password_raw) if password_raw is not None else None
+
+    token_count_raw = raw.get("token_count")
+    token_count: int | None = None
+    if token_count_raw is not None:
+        if not isinstance(token_count_raw, int) or token_count_raw < 1:
+            raise ValueError(f"token_pool[{name}].token_count must be an integer >= 1")
+        token_count = token_count_raw
+
+    token_file_raw = raw.get("token_file")
+    token_file = str(token_file_raw).strip() if token_file_raw is not None else None
+    if token_file == "":
+        token_file = None
+
+    return TokenPoolSpec(
+        name=name,
+        login_user_prefix=login_user_prefix,
+        password=password,
+        token_count=token_count,
+        token_file=token_file,
+    )
+
+
 def _normalize_scenario(raw: Any) -> ScenarioSpec:
     if not isinstance(raw, dict):
         raise ValueError("scenario item must be an object")
@@ -148,6 +203,16 @@ def _normalize_scenario(raw: Any) -> ScenarioSpec:
     if not method:
         raise ValueError(f"scenario[{name}].method is required")
     requires_auth = bool(raw.get("requires_auth", True))
+    role_domain_raw = raw.get("role_domain")
+    role_domain = str(role_domain_raw).strip() if role_domain_raw is not None else None
+    if role_domain == "":
+        role_domain = None
+    token_pool_raw = raw.get("token_pool")
+    token_pool = str(token_pool_raw).strip() if token_pool_raw is not None else None
+    if token_pool == "":
+        token_pool = None
+    if token_pool is None and role_domain:
+        token_pool = f"pool-{role_domain}"
     headers = _normalize_mapping(raw.get("headers"), field_name=f"scenario[{name}].headers")
     query = _normalize_mapping(raw.get("query"), field_name=f"scenario[{name}].query")
     json_body = raw.get("json_body")
@@ -165,6 +230,8 @@ def _normalize_scenario(raw: Any) -> ScenarioSpec:
         method=method,
         path=path,
         requires_auth=requires_auth,
+        role_domain=role_domain,
+        token_pool=token_pool,
         headers=headers,
         query=query,
         json_body=json_body,
@@ -173,17 +240,21 @@ def _normalize_scenario(raw: Any) -> ScenarioSpec:
     )
 
 
-def _load_scenarios_from_file(raw_path: str) -> dict[str, ScenarioSpec]:
+def _load_scenario_config_bundle(raw_path: str) -> ScenarioConfigBundle:
     path = Path(raw_path).resolve()
     if not path.exists():
         raise FileNotFoundError(f"scenario config file not found: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(payload, dict):
         raw_scenarios = payload.get("scenarios")
+        raw_token_pools = payload.get("token_pools", [])
     else:
         raw_scenarios = payload
+        raw_token_pools = []
     if not isinstance(raw_scenarios, list):
         raise ValueError("scenario config must contain a 'scenarios' array")
+    if not isinstance(raw_token_pools, list):
+        raise ValueError("scenario config 'token_pools' must be an array")
     loaded: dict[str, ScenarioSpec] = {}
     for item in raw_scenarios:
         scenario = _normalize_scenario(item)
@@ -192,15 +263,60 @@ def _load_scenarios_from_file(raw_path: str) -> dict[str, ScenarioSpec]:
         loaded[scenario.name] = scenario
     if not loaded:
         raise ValueError("scenario config has no scenario definitions")
-    return loaded
+    token_pools: dict[str, TokenPoolSpec] = {}
+    for item in raw_token_pools:
+        token_pool = _normalize_token_pool(item)
+        if token_pool.name in token_pools:
+            raise ValueError(f"duplicate token pool name in config: {token_pool.name}")
+        token_pools[token_pool.name] = token_pool
+    return ScenarioConfigBundle(scenarios=loaded, token_pools=token_pools)
 
 
-def _build_scenario_registry(args) -> dict[str, ScenarioSpec]:
+def _load_scenarios_from_file(raw_path: str) -> dict[str, ScenarioSpec]:
+    return _load_scenario_config_bundle(raw_path).scenarios
+
+
+def _build_token_pool_registry(
+    args,
+    bundle: ScenarioConfigBundle,
+) -> dict[str, TokenPoolSpec]:
+    registry = {
+        "default": TokenPoolSpec(
+            name="default",
+            login_user_prefix=args.login_user_prefix,
+            password=args.password,
+            token_count=args.token_count,
+            token_file=args.token_file,
+        )
+    }
+    for name, spec in bundle.token_pools.items():
+        if name in registry:
+            raise ValueError(f"token pool name conflicts with reserved pool: {name}")
+        login_user_prefix = spec.login_user_prefix
+        token_file = spec.token_file
+        if not login_user_prefix and not token_file:
+            raise ValueError(
+                f"token pool '{name}' must set token_file or login_user_prefix"
+            )
+        registry[name] = TokenPoolSpec(
+            name=name,
+            login_user_prefix=login_user_prefix,
+            password=spec.password or args.password,
+            token_count=spec.token_count or args.token_count,
+            token_file=token_file,
+        )
+    return registry
+
+
+def _build_scenario_runtime(
+    args,
+) -> tuple[dict[str, ScenarioSpec], dict[str, TokenPoolSpec]]:
     registry = _builtin_scenarios()
     scenario_config_file = getattr(args, "scenario_config_file", None)
-    if not scenario_config_file:
-        return registry
-    custom = _load_scenarios_from_file(scenario_config_file)
+    bundle = ScenarioConfigBundle(scenarios={}, token_pools={})
+    if scenario_config_file:
+        bundle = _load_scenario_config_bundle(scenario_config_file)
+    custom = bundle.scenarios
     overlap = sorted(name for name in custom if name in registry)
     if overlap:
         raise ValueError(
@@ -208,6 +324,24 @@ def _build_scenario_registry(args) -> dict[str, ScenarioSpec]:
             + ", ".join(overlap)
         )
     registry.update(custom)
+    token_pools = _build_token_pool_registry(args, bundle)
+    unknown_token_pools = sorted(
+        {
+            scenario.token_pool
+            for scenario in registry.values()
+            if scenario.token_pool and scenario.token_pool not in token_pools
+        }
+    )
+    if unknown_token_pools:
+        raise ValueError(
+            "scenarios reference unknown token pools: "
+            + ", ".join(unknown_token_pools)
+        )
+    return registry, token_pools
+
+
+def _build_scenario_registry(args) -> dict[str, ScenarioSpec]:
+    registry, _ = _build_scenario_runtime(args)
     return registry
 
 
@@ -311,6 +445,32 @@ async def _build_token_pool(
     return tokens
 
 
+async def _build_token_pools(
+    *,
+    clients: list[httpx.AsyncClient],
+    base_url: str,
+    token_pool_specs: dict[str, TokenPoolSpec],
+) -> dict[str, list[str]]:
+    token_pools: dict[str, list[str]] = {}
+    for name, spec in token_pool_specs.items():
+        if spec.token_file:
+            tokens = _load_tokens_from_file(spec.token_file, spec.token_count or 0)
+        else:
+            if not spec.login_user_prefix:
+                raise RuntimeError(
+                    f"token pool '{name}' has no login_user_prefix and cannot login"
+                )
+            tokens = await _build_token_pool(
+                clients=clients,
+                base_url=base_url,
+                token_count=spec.token_count or 1,
+                login_user_prefix=spec.login_user_prefix,
+                password=spec.password or "",
+            )
+        token_pools[name] = tokens
+    return token_pools
+
+
 async def _request_scenario(
     *,
     client: httpx.AsyncClient,
@@ -350,8 +510,8 @@ async def _execute_scenario(
     scenario_registry: dict[str, ScenarioSpec],
     client: httpx.AsyncClient,
     base_url: str,
-    token_pool: list[str],
-    login_usernames: list[str],
+    token_pools: dict[str, list[str]],
+    login_usernames_by_pool: dict[str, list[str]],
     password: str,
 ) -> tuple[bool, str, float]:
     scenario_spec = scenario_registry.get(scenario)
@@ -359,23 +519,29 @@ async def _execute_scenario(
         return False, "UNSUPPORTED_SCENARIO", 0.0
 
     if scenario == "login":
-        username = random.choice(login_usernames)
+        default_login_usernames = login_usernames_by_pool.get("default", [])
+        if not default_login_usernames:
+            return False, "NO_LOGIN_USERS", 0.0
+        username = random.choice(default_login_usernames)
         token, status, latency_ms = await _login_once(
             client=client,
             base_url=base_url,
             username=username,
             password=password,
         )
-        if token and token_pool:
-            token_pool[random.randrange(len(token_pool))] = token
+        default_pool = token_pools.setdefault("default", [])
+        if token and default_pool:
+            default_pool[random.randrange(len(default_pool))] = token
         elif token:
-            token_pool.append(token)
+            default_pool.append(token)
         return token is not None, status, latency_ms
 
-    if scenario_spec.requires_auth and not token_pool:
+    target_pool_name = scenario_spec.token_pool or "default"
+    target_pool = token_pools.get(target_pool_name, [])
+    if scenario_spec.requires_auth and not target_pool:
         return False, "NO_TOKEN", 0.0
 
-    token = random.choice(token_pool) if scenario_spec.requires_auth else None
+    token = random.choice(target_pool) if scenario_spec.requires_auth else None
     return await _request_scenario(
         client=client,
         base_url=base_url,
@@ -386,7 +552,7 @@ async def _execute_scenario(
 
 async def _run_capacity_gate(args) -> dict[str, Any]:
     base_url = _normalize_base_url(args.base_url)
-    scenario_registry = _build_scenario_registry(args)
+    scenario_registry, token_pool_specs = _build_scenario_runtime(args)
     scenarios = _parse_scenarios(args.scenarios, available=set(scenario_registry))
     if args.concurrency < 1:
         raise ValueError("concurrency must be >= 1")
@@ -413,20 +579,20 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
         for _ in range(session_pool_size)
     ]
 
-    token_pool: list[str]
-    if args.token_file:
-        token_pool = _load_tokens_from_file(args.token_file, args.token_count)
-    else:
-        token_pool = await _build_token_pool(
-            clients=clients,
-            base_url=base_url,
-            token_count=args.token_count,
-            login_user_prefix=args.login_user_prefix,
-            password=args.password,
-        )
+    token_pools = await _build_token_pools(
+        clients=clients,
+        base_url=base_url,
+        token_pool_specs=token_pool_specs,
+    )
 
-    login_pool_size = max(args.session_pool_size, args.token_count)
-    login_usernames = [f"{args.login_user_prefix}{index + 1}" for index in range(login_pool_size)]
+    login_usernames_by_pool: dict[str, list[str]] = {}
+    for name, spec in token_pool_specs.items():
+        if not spec.login_user_prefix:
+            continue
+        login_pool_size = max(args.session_pool_size, spec.token_count or 1)
+        login_usernames_by_pool[name] = [
+            f"{spec.login_user_prefix}{index + 1}" for index in range(login_pool_size)
+        ]
 
     measure_bucket = MetricBucket()
     scenario_bucket: dict[str, MetricBucket] = {
@@ -459,8 +625,8 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
                 scenario_registry=scenario_registry,
                 client=client,
                 base_url=base_url,
-                token_pool=token_pool,
-                login_usernames=login_usernames,
+                token_pools=token_pools,
+                login_usernames_by_pool=login_usernames_by_pool,
                 password=args.password,
             )
 
@@ -496,7 +662,15 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
         "warmup_seconds": args.warmup_seconds,
         "concurrency": args.concurrency,
         "spawn_rate": args.spawn_rate,
-        "token_count": len(token_pool),
+        "token_count": len(token_pools.get("default", [])),
+        "token_pools": {
+            name: {
+                "token_count": len(tokens),
+                "login_user_prefix": token_pool_specs[name].login_user_prefix,
+                "token_file": token_pool_specs[name].token_file,
+            }
+            for name, tokens in token_pools.items()
+        },
         "session_pool_size": session_pool_size,
         "threshold": {
             "p95_ms": args.p95_ms,

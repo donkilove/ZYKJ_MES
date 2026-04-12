@@ -1,19 +1,57 @@
 {
+  "token_pools": [
+    {
+      "name": "pool-admin",
+      "login_user_prefix": "ltadm",
+      "token_count": 2
+    },
+    {
+      "name": "pool-user-admin",
+      "login_user_prefix": "ltusr",
+      "token_count": 2
+    },
+    {
+      "name": "pool-production",
+      "login_user_prefix": "ltprd",
+      "token_count": 4
+    },
+    {
+      "name": "pool-quality",
+      "login_user_prefix": "ltqua",
+      "token_count": 4
+    },
+    {
+      "name": "pool-equipment",
+      "login_user_prefix": "ltmnt",
+      "token_count": 4
+    },
+    {
+      "name": "pool-operator",
+      "login_user_prefix": "ltopr",
+      "token_count": 4
+    }
+  ],
   "scenarios": [
     {
       "name": "auth-me",
       "method": "GET",
-      "path": "/api/v1/auth/me"
+      "path": "/api/v1/auth/me",
+      "role_domain": "auth",
+      "token_pool": "pool-admin"
     },
     {
       "name": "auth-accounts",
       "method": "GET",
-      "path": "/api/v1/auth/accounts"
+      "path": "/api/v1/auth/accounts",
+      "role_domain": "auth",
+      "token_pool": "pool-admin"
     },
     {
       "name": "auth-register-requests",
       "method": "GET",
       "path": "/api/v1/auth/register-requests",
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -23,6 +61,8 @@
       "name": "authz-permissions-catalog-user",
       "method": "GET",
       "path": "/api/v1/authz/permissions/catalog",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "module": "user"
       }
@@ -30,12 +70,16 @@
     {
       "name": "authz-snapshot",
       "method": "GET",
-      "path": "/api/v1/authz/snapshot"
+      "path": "/api/v1/authz/snapshot",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin"
     },
     {
       "name": "authz-role-permissions-user",
       "method": "GET",
       "path": "/api/v1/authz/role-permissions",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "role_code": "system_admin",
         "module": "user"
@@ -45,6 +89,8 @@
       "name": "authz-role-permissions-matrix-user",
       "method": "GET",
       "path": "/api/v1/authz/role-permissions/matrix",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "module": "user"
       }
@@ -53,6 +99,8 @@
       "name": "authz-hierarchy-catalog-user",
       "method": "GET",
       "path": "/api/v1/authz/hierarchy/catalog",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "module": "user"
       }
@@ -61,6 +109,8 @@
       "name": "authz-hierarchy-role-config-user",
       "method": "GET",
       "path": "/api/v1/authz/hierarchy/role-config",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "role_code": "system_admin",
         "module": "user"
@@ -70,6 +120,8 @@
       "name": "authz-capability-packs-catalog-user",
       "method": "GET",
       "path": "/api/v1/authz/capability-packs/catalog",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "module": "user"
       }
@@ -78,6 +130,8 @@
       "name": "authz-capability-packs-role-config-user",
       "method": "GET",
       "path": "/api/v1/authz/capability-packs/role-config",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "role_code": "system_admin",
         "module": "user"
@@ -87,6 +141,8 @@
       "name": "authz-capability-packs-effective-user",
       "method": "GET",
       "path": "/api/v1/authz/capability-packs/effective",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "role_code": "system_admin",
         "module": "user"
@@ -95,27 +151,37 @@
     {
       "name": "me-profile",
       "method": "GET",
-      "path": "/api/v1/me/profile"
+      "path": "/api/v1/me/profile",
+      "role_domain": "auth",
+      "token_pool": "pool-admin"
     },
     {
       "name": "me-session",
       "method": "GET",
-      "path": "/api/v1/me/session"
+      "path": "/api/v1/me/session",
+      "role_domain": "auth",
+      "token_pool": "pool-admin"
     },
     {
       "name": "messages-unread-count",
       "method": "GET",
-      "path": "/api/v1/messages/unread-count"
+      "path": "/api/v1/messages/unread-count",
+      "role_domain": "readonly",
+      "token_pool": "default"
     },
     {
       "name": "messages-summary",
       "method": "GET",
-      "path": "/api/v1/messages/summary"
+      "path": "/api/v1/messages/summary",
+      "role_domain": "readonly",
+      "token_pool": "default"
     },
     {
       "name": "messages-list",
       "method": "GET",
       "path": "/api/v1/messages",
+      "role_domain": "readonly",
+      "token_pool": "default",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -125,6 +191,8 @@
       "name": "users-export-tasks",
       "method": "GET",
       "path": "/api/v1/users/export-tasks",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -134,6 +202,8 @@
       "name": "users-online-status",
       "method": "GET",
       "path": "/api/v1/users/online-status",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "user_id": "1"
       }
@@ -142,6 +212,8 @@
       "name": "equipment-ledger",
       "method": "GET",
       "path": "/api/v1/equipment/ledger",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -150,17 +222,23 @@
     {
       "name": "equipment-admin-owners",
       "method": "GET",
-      "path": "/api/v1/equipment/admin-owners"
+      "path": "/api/v1/equipment/admin-owners",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment"
     },
     {
       "name": "equipment-owners",
       "method": "GET",
-      "path": "/api/v1/equipment/owners"
+      "path": "/api/v1/equipment/owners",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment"
     },
     {
       "name": "equipment-items",
       "method": "GET",
       "path": "/api/v1/equipment/items",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -170,6 +248,8 @@
       "name": "equipment-plans",
       "method": "GET",
       "path": "/api/v1/equipment/plans",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -179,6 +259,8 @@
       "name": "equipment-executions",
       "method": "GET",
       "path": "/api/v1/equipment/executions",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -188,6 +270,8 @@
       "name": "equipment-records",
       "method": "GET",
       "path": "/api/v1/equipment/records",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -197,6 +281,8 @@
       "name": "equipment-rules",
       "method": "GET",
       "path": "/api/v1/equipment/rules",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -206,6 +292,8 @@
       "name": "equipment-runtime-parameters",
       "method": "GET",
       "path": "/api/v1/equipment/runtime-parameters",
+      "role_domain": "equipment",
+      "token_pool": "pool-equipment",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -215,6 +303,8 @@
       "name": "processes-list",
       "method": "GET",
       "path": "/api/v1/processes",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -224,6 +314,8 @@
       "name": "products-list",
       "method": "GET",
       "path": "/api/v1/products",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -233,6 +325,8 @@
       "name": "products-parameter-query",
       "method": "GET",
       "path": "/api/v1/products/parameter-query",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -242,6 +336,8 @@
       "name": "products-parameter-versions",
       "method": "GET",
       "path": "/api/v1/products/parameter-versions",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -251,6 +347,8 @@
       "name": "roles-list",
       "method": "GET",
       "path": "/api/v1/roles",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -260,6 +358,8 @@
       "name": "audits-list",
       "method": "GET",
       "path": "/api/v1/audits",
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -269,6 +369,8 @@
       "name": "sessions-login-logs",
       "method": "GET",
       "path": "/api/v1/sessions/login-logs",
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -278,6 +380,8 @@
       "name": "sessions-online",
       "method": "GET",
       "path": "/api/v1/sessions/online",
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -286,37 +390,51 @@
     {
       "name": "ui-page-catalog",
       "method": "GET",
-      "path": "/api/v1/ui/page-catalog"
+      "path": "/api/v1/ui/page-catalog",
+      "role_domain": "readonly",
+      "token_pool": "default"
     },
     {
       "name": "quality-stats-overview",
       "method": "GET",
-      "path": "/api/v1/quality/stats/overview"
+      "path": "/api/v1/quality/stats/overview",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "quality-stats-processes",
       "method": "GET",
-      "path": "/api/v1/quality/stats/processes"
+      "path": "/api/v1/quality/stats/processes",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "quality-stats-operators",
       "method": "GET",
-      "path": "/api/v1/quality/stats/operators"
+      "path": "/api/v1/quality/stats/operators",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "quality-stats-products",
       "method": "GET",
-      "path": "/api/v1/quality/stats/products"
+      "path": "/api/v1/quality/stats/products",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "quality-trend",
       "method": "GET",
-      "path": "/api/v1/quality/trend"
+      "path": "/api/v1/quality/trend",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "quality-first-articles",
       "method": "GET",
       "path": "/api/v1/quality/first-articles",
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -326,6 +444,8 @@
       "name": "quality-suppliers",
       "method": "GET",
       "path": "/api/v1/quality/suppliers",
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -335,6 +455,8 @@
       "name": "quality-scrap-statistics",
       "method": "GET",
       "path": "/api/v1/quality/scrap-statistics",
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -344,6 +466,8 @@
       "name": "quality-repair-orders",
       "method": "GET",
       "path": "/api/v1/quality/repair-orders",
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -352,12 +476,16 @@
     {
       "name": "quality-defect-analysis",
       "method": "GET",
-      "path": "/api/v1/quality/defect-analysis"
+      "path": "/api/v1/quality/defect-analysis",
+      "role_domain": "quality",
+      "token_pool": "pool-quality"
     },
     {
       "name": "craft-stages",
       "method": "GET",
       "path": "/api/v1/craft/stages",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -367,6 +495,8 @@
       "name": "craft-processes",
       "method": "GET",
       "path": "/api/v1/craft/processes",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -375,17 +505,23 @@
     {
       "name": "craft-stages-light",
       "method": "GET",
-      "path": "/api/v1/craft/stages/light"
+      "path": "/api/v1/craft/stages/light",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "craft-processes-light",
       "method": "GET",
-      "path": "/api/v1/craft/processes/light"
+      "path": "/api/v1/craft/processes/light",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "craft-templates",
       "method": "GET",
       "path": "/api/v1/craft/templates",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -394,27 +530,37 @@
     {
       "name": "production-stats-processes",
       "method": "GET",
-      "path": "/api/v1/production/stats/processes"
+      "path": "/api/v1/production/stats/processes",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "production-stats-operators",
       "method": "GET",
-      "path": "/api/v1/production/stats/operators"
+      "path": "/api/v1/production/stats/operators",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "production-data-today-realtime",
       "method": "GET",
-      "path": "/api/v1/production/data/today-realtime"
+      "path": "/api/v1/production/data/today-realtime",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "production-data-unfinished-progress",
       "method": "GET",
-      "path": "/api/v1/production/data/unfinished-progress"
+      "path": "/api/v1/production/data/unfinished-progress",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "production-data-manual",
       "method": "GET",
       "path": "/api/v1/production/data/manual",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -424,6 +570,8 @@
       "name": "production-scrap-statistics",
       "method": "GET",
       "path": "/api/v1/production/scrap-statistics",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -433,6 +581,8 @@
       "name": "production-repair-orders",
       "method": "GET",
       "path": "/api/v1/production/repair-orders",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -442,6 +592,8 @@
       "name": "production-assist-authorizations",
       "method": "GET",
       "path": "/api/v1/production/assist-authorizations",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -450,12 +602,16 @@
     {
       "name": "production-assist-user-options",
       "method": "GET",
-      "path": "/api/v1/production/assist-user-options"
+      "path": "/api/v1/production/assist-user-options",
+      "role_domain": "production",
+      "token_pool": "pool-production"
     },
     {
       "name": "production-pipeline-instances",
       "method": "GET",
       "path": "/api/v1/production/pipeline-instances",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -465,6 +621,8 @@
       "name": "production-my-orders",
       "method": "GET",
       "path": "/api/v1/production/my-orders",
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "query": {
         "page": "1",
         "page_size": "20"
@@ -475,6 +633,8 @@
       "method": "GET",
       "path": "/api/v1/users/1",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -484,6 +644,8 @@
       "method": "GET",
       "path": "/api/v1/users/2",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -493,6 +655,8 @@
       "method": "GET",
       "path": "/api/v1/roles/1",
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -502,6 +666,8 @@
       "method": "GET",
       "path": "/api/v1/messages/1",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "success_statuses": [
         200
       ]
@@ -511,6 +677,8 @@
       "method": "GET",
       "path": "/api/v1/messages/1/jump-target",
       "requires_auth": true,
+      "role_domain": "readonly",
+      "token_pool": "default",
       "success_statuses": [
         200
       ]
@@ -523,6 +691,8 @@
         "process_id": "1"
       },
       "requires_auth": true,
+      "role_domain": "user-admin",
+      "token_pool": "pool-user-admin",
       "success_statuses": [
         200
       ]
@@ -535,6 +705,8 @@
         "stage_id": "1"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -547,6 +719,8 @@
         "process_id": "1"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -556,6 +730,8 @@
       "method": "GET",
       "path": "/api/v1/craft/system-master-template",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -565,6 +741,8 @@
       "method": "GET",
       "path": "/api/v1/craft/stages/1/references",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -574,6 +752,8 @@
       "method": "GET",
       "path": "/api/v1/craft/processes/1/references",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -583,6 +763,8 @@
       "method": "GET",
       "path": "/api/v1/quality/suppliers/1",
       "requires_auth": true,
+      "role_domain": "quality",
+      "token_pool": "pool-quality",
       "success_statuses": [
         200
       ]
@@ -592,6 +774,8 @@
       "method": "GET",
       "path": "/api/v1/production/orders/18",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -601,6 +785,8 @@
       "method": "GET",
       "path": "/api/v1/production/orders/18/pipeline-mode",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -613,6 +799,8 @@
         "order_process_id": "18"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -622,6 +810,8 @@
       "method": "GET",
       "path": "/api/v1/production/orders/18/first-article/participant-users",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -634,6 +824,8 @@
         "order_process_id": "18"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -643,6 +835,8 @@
       "method": "GET",
       "path": "/api/v1/production/my-orders/18/context",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -655,6 +849,8 @@
         "order_code": "PT1775663213490-18"
       },
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -664,6 +860,8 @@
       "method": "GET",
       "path": "/api/v1/products/1",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -673,6 +871,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/versions",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -682,6 +882,8 @@
       "method": "GET",
       "path": "/api/v1/products/1/versions/1/parameters",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]
@@ -691,6 +893,8 @@
       "method": "GET",
       "path": "/api/v1/craft/products/1/template-references",
       "requires_auth": true,
+      "role_domain": "production",
+      "token_pool": "pool-production",
       "success_statuses": [
         200
       ]

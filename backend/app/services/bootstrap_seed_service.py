@@ -43,6 +43,8 @@ def _ensure_roles(db: Session) -> dict[str, Role]:
             role.name = name
             role.role_type = "builtin"
             role.is_builtin = True
+            role.is_enabled = True
+            role.is_deleted = False
 
     return roles_by_code
 
