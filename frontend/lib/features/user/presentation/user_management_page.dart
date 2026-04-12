@@ -163,7 +163,7 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
   }
 
   @override
-  void didUpdateWidget(covariant LegacyUserManagementPage oldWidget) {
+  void didUpdateWidget(covariant LegacyLegacyUserManagementPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isCurrentTabVisible && !oldWidget.isCurrentTabVisible) {
       _currentOnlineRefreshDelay = _onlineRefreshInterval;
