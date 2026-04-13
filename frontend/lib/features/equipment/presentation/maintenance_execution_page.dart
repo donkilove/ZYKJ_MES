@@ -440,6 +440,17 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     }
     try {
       final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
+      final dashboardFilter =
+          (payload['dashboard_filter'] as String? ?? '').trim();
+      if (dashboardFilter == 'overdue') {
+        _lastHandledJumpPayloadJson = rawPayload;
+        setState(() {
+          _statusFilter = 'overdue';
+          _page = 1;
+        });
+        _loadItems(page: 1);
+        return;
+      }
       final action = (payload['action'] as String? ?? '').trim();
       final rawWorkOrderId = payload['work_order_id'];
       final workOrderId = rawWorkOrderId is int

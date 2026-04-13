@@ -857,6 +857,27 @@ void main() {
     expect(find.text('维修订单'), findsWidgets);
   });
 
+  testWidgets('质量数据页支持 route payload 进入预警过滤态', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _FakeQualityService();
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityDataPage(
+          session: session,
+          onLogout: () {},
+          service: service,
+          routePayloadJson: '{"dashboard_filter":"warning"}',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.lastQualityStatsQuery?.result, 'failed');
+  });
+
   testWidgets('质量数据页支持查询筛选分页与导出', (tester) async {
     _setDesktopViewport(tester);
     addTearDown(tester.view.resetPhysicalSize);

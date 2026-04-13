@@ -818,6 +818,17 @@
       ]
     },
     {
+      "name": "ui-home-dashboard",
+      "method": "GET",
+      "path": "/api/v1/ui/home-dashboard",
+      "requires_auth": true,
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
+      "success_statuses": [
+        200
+      ]
+    },
+    {
       "name": "processes-list",
       "method": "GET",
       "path": "/api/v1/processes",

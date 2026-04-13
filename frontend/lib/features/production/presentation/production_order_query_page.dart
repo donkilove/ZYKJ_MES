@@ -75,6 +75,7 @@ class ProductionOrderQueryPage extends StatefulWidget {
     this.craftService,
     this.saveExportFile,
     this.pollInterval = const Duration(seconds: 12),
+    this.routePayloadJson,
   });
 
   final AppSession session;
@@ -89,6 +90,7 @@ class ProductionOrderQueryPage extends StatefulWidget {
   final CraftService? craftService;
   final ProductionOrderQueryExportSaver? saveExportFile;
   final Duration pollInterval;
+  final String? routePayloadJson;
 
   @override
   State<ProductionOrderQueryPage> createState() =>
@@ -115,6 +117,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   List<AssistUserOptionItem> _proxyViewOperators = const [];
   List<AssistUserOptionItem> _assistUsers = const [];
   List<CraftStageLightItem> _proxyStages = const [];
+  String? _lastHandledRoutePayloadJson;
 
   static const int _pageSize = 200;
 
@@ -126,12 +129,21 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     super.initState();
     _service = widget.service ?? ProductionService(widget.session);
     _craftService = widget.craftService ?? CraftService(widget.session);
+    _consumeRoutePayload(widget.routePayloadJson, triggerLoad: false);
     if (widget.canProxyView) {
       _loadProxyOperators();
       _loadProxyStages();
     }
     _loadOrders();
     _startPolling();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductionOrderQueryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.routePayloadJson != oldWidget.routePayloadJson) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    }
   }
 
   @override
@@ -146,6 +158,33 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
 
   String _errorMessage(Object error) =>
       error is ApiException ? error.message : error.toString();
+
+  void _consumeRoutePayload(String? rawPayload, {bool triggerLoad = true}) {
+    if (rawPayload == null ||
+        rawPayload.trim().isEmpty ||
+        rawPayload == _lastHandledRoutePayloadJson) {
+      return;
+    }
+    try {
+      final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
+      final dashboardFilter =
+          (payload['dashboard_filter'] as String? ?? '').trim();
+      if (dashboardFilter != 'exception') {
+        return;
+      }
+      _lastHandledRoutePayloadJson = rawPayload;
+      if (triggerLoad) {
+        setState(() {
+          _orderStatusFilter = 'in_progress';
+          _page = 1;
+        });
+        _loadOrders(page: 1);
+      } else {
+        _orderStatusFilter = 'in_progress';
+        _page = 1;
+      }
+    } catch (_) {}
+  }
 
   String _formatDate(DateTime? value) {
     if (value == null) {
