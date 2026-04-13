@@ -11,6 +11,8 @@ import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/message/services/message_ws_service.dart';
+import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
+import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
 
 final AppSession _session = AppSession(
@@ -149,6 +151,24 @@ MessageItem _buildMessageItem() {
     deliveryAttemptCount: 1,
     lastPushAt: DateTime.parse('2026-04-01T08:00:00Z'),
     nextRetryAt: null,
+  );
+}
+
+HomeDashboardData _buildDashboardData() {
+  return const HomeDashboardData(
+    generatedAt: null,
+    noticeCount: 0,
+    todoSummary: HomeDashboardTodoSummary(
+      totalCount: 0,
+      pendingApprovalCount: 0,
+      highPriorityCount: 0,
+      exceptionCount: 0,
+      overdueCount: 0,
+    ),
+    todoItems: [],
+    riskItems: [],
+    kpiItems: [],
+    degradedBlocks: [],
   );
 }
 
@@ -322,6 +342,18 @@ class _FakeMessageWsService extends MessageWsService {
   void reconnect() {}
 }
 
+class _CountingHomeDashboardService extends HomeDashboardService {
+  _CountingHomeDashboardService() : super(_session);
+
+  int loadCount = 0;
+
+  @override
+  Future<HomeDashboardData> load() async {
+    loadCount += 1;
+    return _buildDashboardData();
+  }
+}
+
 Future<void> _pumpMainShellPage(
   WidgetTester tester, {
   AuthService? authService,
@@ -335,6 +367,7 @@ Future<void> _pumpMainShellPage(
     required void Function() onDisconnected,
   })?
   messageWsServiceFactory,
+  HomeDashboardService? homeDashboardService,
   Widget Function({
     required AppSession session,
     required VoidCallback onLogout,
@@ -364,6 +397,7 @@ Future<void> _pumpMainShellPage(
         pageCatalogService: pageCatalogService,
         messageService: messageService,
         messageWsServiceFactory: messageWsServiceFactory,
+        homeDashboardService: homeDashboardService,
         userPageBuilder: userPageBuilder,
       ),
     ),
@@ -515,18 +549,20 @@ void main() {
       onLogout: () {},
     );
 
+    final todoCard = find.ancestor(
+      of: find.text('我的待办队列'),
+      matching: find.byType(Card),
+    );
     expect(
-      find.descendant(of: find.byType(GridView), matching: find.text('用户')),
+      find.descendant(of: todoCard, matching: find.text('用户')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: find.byType(GridView), matching: find.text('产品')),
+      find.descendant(of: todoCard, matching: find.text('产品')),
       findsNothing,
     );
 
-    await tester.tap(
-      find.descendant(of: find.byType(GridView), matching: find.text('用户')),
-    );
+    await tester.tap(find.descendant(of: todoCard, matching: find.text('用户')));
     await tester.pumpAndSettle();
 
     expect(
@@ -575,6 +611,46 @@ void main() {
     expect(pageCatalogService.callCount, 1);
     expect(messageService.unreadCountCallCount, 1);
     expect(find.textContaining('上次刷新：'), findsOneWidget);
+  });
+
+  testWidgets('首页首次加载与消息事件后会刷新工作台数据', (tester) async {
+    _FakeMessageWsService? wsService;
+    final homeDashboardService = _CountingHomeDashboardService();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) {
+            wsService = _FakeMessageWsService(
+              baseUrl: baseUrl,
+              accessToken: accessToken,
+              onEvent: onEvent,
+              onDisconnected: onDisconnected,
+            );
+            return wsService!;
+          },
+      homeDashboardService: homeDashboardService,
+      onLogout: () {},
+    );
+
+    expect(homeDashboardService.loadCount, 1);
+
+    wsService!.emit(
+      const WsEvent(event: 'message_created', userId: 1, unreadCount: 3),
+    );
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(homeDashboardService.loadCount, 2);
   });
 
   testWidgets('成功加载但无任何可访问模块时显示空菜单提示', (tester) async {

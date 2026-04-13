@@ -28,7 +28,11 @@ import 'package:mes_client/features/craft/presentation/craft_page.dart';
 
 import 'package:mes_client/features/equipment/presentation/equipment_page.dart';
 
+import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
+
 import 'package:mes_client/features/shell/presentation/home_page.dart';
+
+import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
 
 import 'package:mes_client/features/message/presentation/message_center_page.dart';
 
@@ -60,6 +64,8 @@ const Duration _visibilityRefreshInterval = Duration(seconds: 15);
 
 const Duration _unreadPollInterval = Duration(seconds: 30);
 
+const Duration _homeDashboardRefreshDebounceDuration = Duration(seconds: 2);
+
 class _ShellMenuItem {
   const _ShellMenuItem({
     required this.code,
@@ -89,6 +95,7 @@ class MainShellPage extends StatefulWidget {
     this.authzService,
     this.pageCatalogService,
     this.messageService,
+    this.homeDashboardService,
     this.userPageBuilder,
     this.productPageBuilder,
     this.equipmentPageBuilder,
@@ -113,6 +120,7 @@ class MainShellPage extends StatefulWidget {
   final AuthzService? authzService;
   final PageCatalogService? pageCatalogService;
   final MessageService? messageService;
+  final HomeDashboardService? homeDashboardService;
   final Widget Function({
     required AppSession session,
     required VoidCallback onLogout,
@@ -181,12 +189,14 @@ class _MainShellPageState extends State<MainShellPage>
   late final PageCatalogService _pageCatalogService;
 
   late final MessageService _messageService;
+  late final HomeDashboardService _homeDashboardService;
 
   MessageWsService? _wsService;
 
   Timer? _visibilityTimer;
 
   Timer? _unreadPollTimer;
+  Timer? _homeDashboardRefreshDebounce;
 
   bool _refreshingVisibility = false;
 
@@ -215,8 +225,10 @@ class _MainShellPageState extends State<MainShellPage>
   String? _preferredRoutePayloadJson;
 
   bool _manualRefreshing = false;
+  bool _homeDashboardLoading = false;
 
   DateTime? _lastManualRefreshAt;
+  HomeDashboardData? _homeDashboardData;
 
   @override
   void initState() {
@@ -229,6 +241,8 @@ class _MainShellPageState extends State<MainShellPage>
     _pageCatalogService =
         widget.pageCatalogService ?? PageCatalogService(widget.session);
     _messageService = widget.messageService ?? MessageService(widget.session);
+    _homeDashboardService =
+        widget.homeDashboardService ?? HomeDashboardService(widget.session);
 
     _loadCurrentUserAndVisibility();
 
@@ -241,6 +255,7 @@ class _MainShellPageState extends State<MainShellPage>
   void dispose() {
     _visibilityTimer?.cancel();
     _unreadPollTimer?.cancel();
+    _homeDashboardRefreshDebounce?.cancel();
     _wsService?.disconnect();
 
     WidgetsBinding.instance.removeObserver(this);
@@ -286,6 +301,9 @@ class _MainShellPageState extends State<MainShellPage>
       if (count != null) {
         setState(() => _unreadCount = count);
       }
+      if (event.event == 'unread_count_changed') {
+        _scheduleHomeDashboardRefresh();
+      }
     } else if (event.event == 'message_read_state_changed') {
       final count = event.unreadCount;
       setState(() {
@@ -294,6 +312,7 @@ class _MainShellPageState extends State<MainShellPage>
         }
         _messageRefreshTick += 1;
       });
+      _scheduleHomeDashboardRefresh();
     } else if (event.event == 'message_created') {
       final count = event.unreadCount;
       if (count != null) {
@@ -305,6 +324,7 @@ class _MainShellPageState extends State<MainShellPage>
         setState(() => _messageRefreshTick += 1);
         _refreshUnreadCount();
       }
+      _scheduleHomeDashboardRefresh();
     }
   }
 
@@ -494,6 +514,7 @@ class _MainShellPageState extends State<MainShellPage>
       });
 
       await _refreshVisibility(loadCatalog: true);
+      await _refreshHomeDashboard(silent: true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -616,6 +637,50 @@ class _MainShellPageState extends State<MainShellPage>
 
   Future<void> _handleVisibilityConfigSaved() async {
     await _refreshVisibility(loadCatalog: false);
+  }
+
+  bool _isHomePageVisible() {
+    return _selectedPageCode == _homePageCode &&
+        _menus.any((item) => item.code == _homePageCode);
+  }
+
+  Future<void> _refreshHomeDashboard({bool silent = false}) async {
+    if (!_isHomePageVisible() || _homeDashboardLoading) {
+      return;
+    }
+
+    _homeDashboardLoading = true;
+    try {
+      final data = await _homeDashboardService.load();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _homeDashboardData = data;
+      });
+    } catch (error) {
+      if (!mounted || silent) {
+        return;
+      }
+      setState(() {
+        _message = '加载首页工作台失败：${_errorMessage(error)}';
+      });
+    } finally {
+      _homeDashboardLoading = false;
+    }
+  }
+
+  void _scheduleHomeDashboardRefresh() {
+    if (!_isHomePageVisible()) {
+      return;
+    }
+    _homeDashboardRefreshDebounce?.cancel();
+    _homeDashboardRefreshDebounce = Timer(
+      _homeDashboardRefreshDebounceDuration,
+      () {
+        _refreshHomeDashboard(silent: true);
+      },
+    );
   }
 
   List<String> _visibleUserTabCodes() {
@@ -781,6 +846,7 @@ class _MainShellPageState extends State<MainShellPage>
         loadCatalog: loadCatalog,
       );
       final refreshUnreadFuture = _refreshUnreadCount();
+      final refreshDashboardFuture = _refreshHomeDashboard(silent: true);
 
       final currentUser = await currentUserFuture;
 
@@ -792,7 +858,11 @@ class _MainShellPageState extends State<MainShellPage>
         _currentUser = currentUser;
       });
 
-      await Future.wait<void>([refreshVisibilityFuture, refreshUnreadFuture]);
+      await Future.wait<void>([
+        refreshVisibilityFuture,
+        refreshUnreadFuture,
+        refreshDashboardFuture,
+      ]);
 
       if (!mounted) {
         return;
@@ -834,6 +904,7 @@ class _MainShellPageState extends State<MainShellPage>
         return HomePage(
           currentUser: _currentUser!,
           shortcuts: _buildHomeQuickJumps(),
+          dashboardData: _homeDashboardData,
           onNavigateToPage:
               (pageCode, {String? tabCode, String? routePayloadJson}) {
                 _navigateToPageTarget(
