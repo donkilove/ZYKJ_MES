@@ -87,6 +87,7 @@ desktop_tests/**/*.trx
 .serena/
 .tmp_runtime/
 .tmp_t5/
+.worktrees/
 
 # ===============================
 # evidence 仅忽略依赖缓存，保留日志本体
