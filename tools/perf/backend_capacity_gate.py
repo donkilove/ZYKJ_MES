@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import random
@@ -11,6 +12,8 @@ from typing import Any
 
 import httpx
 
+from tools.perf.write_gate.sample_contract import SampleContract, normalize_sample_contract
+from tools.perf.write_gate.result_summary import ScenarioResult, build_write_gate_summary
 
 DEFAULT_SCENARIOS = (
     "login",
@@ -26,6 +29,8 @@ class ScenarioSpec:
     name: str
     method: str
     path: str
+    layer: str | None = None
+    sample_contract: SampleContract | None = None
     requires_auth: bool = True
     role_domain: str | None = None
     token_pool: str | None = None
@@ -91,6 +96,20 @@ def _normalize_base_url(raw_base_url: str) -> str:
     if not base_url.startswith(("http://", "https://")):
         raise ValueError("base_url must start with http:// or https://")
     return base_url
+
+
+def _replace_random_int(value: str) -> str:
+    return value.replace("{RANDOM_INT}", str(int(time.time() * 1000)))
+
+
+def _materialize_payload(raw: Any) -> Any:
+    if isinstance(raw, str):
+        return _replace_random_int(raw)
+    if isinstance(raw, list):
+        return [_materialize_payload(item) for item in raw]
+    if isinstance(raw, dict):
+        return {key: _materialize_payload(value) for key, value in raw.items()}
+    return raw
 
 
 def _builtin_scenarios() -> dict[str, ScenarioSpec]:
@@ -202,6 +221,11 @@ def _normalize_scenario(raw: Any) -> ScenarioSpec:
         raise ValueError(f"scenario[{name}].path must start with '/'")
     if not method:
         raise ValueError(f"scenario[{name}].method is required")
+    layer_raw = raw.get("layer")
+    layer = str(layer_raw).strip() if layer_raw is not None else None
+    if layer == "":
+        layer = None
+    sample_contract = normalize_sample_contract(raw.get("sample_contract"))
     requires_auth = bool(raw.get("requires_auth", True))
     role_domain_raw = raw.get("role_domain")
     role_domain = str(role_domain_raw).strip() if role_domain_raw is not None else None
@@ -229,6 +253,8 @@ def _normalize_scenario(raw: Any) -> ScenarioSpec:
         name=name,
         method=method,
         path=path,
+        layer=layer,
+        sample_contract=sample_contract,
         requires_auth=requires_auth,
         role_domain=role_domain,
         token_pool=token_pool,
@@ -343,6 +369,55 @@ def _build_scenario_runtime(
 def _build_scenario_registry(args) -> dict[str, ScenarioSpec]:
     registry, _ = _build_scenario_runtime(args)
     return registry
+
+
+def _build_write_gate_summary_payload(results: list[ScenarioResult]) -> dict[str, object]:
+    summary = build_write_gate_summary(results)
+    return summary.to_dict()
+
+
+def _scenario_status_code(metric_payload: dict[str, Any]) -> int:
+    status_counts = metric_payload.get("status_counts") or {}
+    if not status_counts:
+        return 0
+    error_rate = float(metric_payload.get("error_rate", 1.0))
+    if error_rate > 0.0:
+        for status_code, count in status_counts.items():
+            if (
+                count
+                and str(status_code).isdigit()
+                and not (200 <= int(status_code) < 300)
+            ):
+                return int(status_code)
+    for status_code, count in status_counts.items():
+        if count and str(status_code).isdigit():
+            return int(status_code)
+    return 0
+
+
+def _build_write_gate_summary_from_metrics(
+    *,
+    scenario_metrics: dict[str, dict[str, Any]],
+    scenario_registry: dict[str, ScenarioSpec],
+) -> dict[str, object]:
+    write_results: list[ScenarioResult] = []
+    for scenario_name, metric_payload in scenario_metrics.items():
+        spec = scenario_registry.get(scenario_name)
+        if spec is None or spec.layer is None:
+            continue
+        error_rate = float(metric_payload.get("error_rate", 1.0))
+        success_rate = float(metric_payload.get("success_rate", 0.0))
+        write_results.append(
+            ScenarioResult(
+                name=scenario_name,
+                layer=spec.layer,
+                success=error_rate == 0.0 and success_rate > 0.0,
+                status_code=_scenario_status_code(metric_payload),
+                p95_ms=float(metric_payload.get("p95_ms", 0.0)),
+                restore_ok=True,
+            )
+        )
+    return _build_write_gate_summary_payload(write_results)
 
 
 def _parse_scenarios(raw: str, *, available: set[str]) -> list[str]:
@@ -490,8 +565,8 @@ async def _request_scenario(
             f"{base_url}{scenario.path}",
             headers=headers,
             params=scenario.query or None,
-            json=scenario.json_body,
-            data=scenario.form_body,
+            json=_materialize_payload(scenario.json_body),
+            data=_materialize_payload(scenario.form_body),
         )
         latency_ms = (time.perf_counter() - started_at) * 1000.0
         if scenario.success_statuses is None:
@@ -655,7 +730,7 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
         and measured["error_rate"] <= args.error_rate_threshold
     )
 
-    return {
+    result = {
         "base_url": base_url,
         "scenarios": scenarios,
         "duration_seconds": args.duration_seconds,
@@ -683,6 +758,17 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
         },
         "gate_passed": threshold_pass,
     }
+    if getattr(args, "gate_mode", "read") == "write":
+        result["write_gate_summary"] = _build_write_gate_summary_from_metrics(
+            scenario_metrics=result["scenarios_metrics"],
+            scenario_registry=scenario_registry,
+        )
+        result["evidence_hints"] = {
+            "scene_snapshot": "evidence/task_log_20260413_write_gate_inline_execution.md",
+            "result_summary": "write_gate_summary",
+            "failure_breakdown": "scenarios_metrics",
+        }
+    return result
 
 
 def run_backend_capacity_gate(args) -> int:
@@ -702,3 +788,45 @@ def run_backend_capacity_gate(args) -> int:
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["gate_passed"] else 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run backend capacity gate.")
+    parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    parser.add_argument(
+        "--gate-mode",
+        choices=("read", "write"),
+        default="read",
+    )
+    parser.add_argument(
+        "--scenarios",
+        default="login,authz,users,production-orders,production-stats",
+    )
+    parser.add_argument("--scenario", action="append")
+    parser.add_argument("--scenario-config-file")
+    parser.add_argument("--duration-seconds", type=int, default=90)
+    parser.add_argument("--concurrency", type=int, default=40)
+    parser.add_argument("--spawn-rate", type=float, default=10.0)
+    parser.add_argument("--token-count", type=int, default=40)
+    parser.add_argument("--session-pool-size", type=int, default=20)
+    parser.add_argument("--login-user-prefix", default="loadtest_")
+    parser.add_argument("--password", default="Admin@123456")
+    parser.add_argument("--token-file")
+    parser.add_argument("--warmup-seconds", type=int, default=15)
+    parser.add_argument("--p95-ms", type=float, default=500.0)
+    parser.add_argument("--error-rate-threshold", type=float, default=0.05)
+    parser.add_argument("--output-json")
+    parser.add_argument("--request-timeout-seconds", type=float, default=10.0)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.scenario:
+        args.scenarios = ",".join(args.scenario)
+    return run_backend_capacity_gate(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

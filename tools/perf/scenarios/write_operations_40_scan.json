@@ -39,6 +39,13 @@
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
+      "layer": "L1",
+      "sample_contract": {
+        "baseline_refs": ["product:active-default", "supplier:default"],
+        "runtime_samples": ["order:create-ready", "order:line-items-ready"],
+        "restore_strategy": "rebuild",
+        "state_assertions": ["order.created"]
+      },
       "json_body": {
         "order_code": "PT-TEST-{RANDOM_INT}",
         "product_id": 1,
@@ -47,9 +54,12 @@
         "start_date": "2026-04-01",
         "due_date": "2026-04-30",
         "remark": "Load test order",
-        "process_codes": [
-          "PC001",
-          "PC002"
+        "process_steps": [
+          {
+            "step_order": 1,
+            "stage_id": 1,
+            "process_id": 1
+          }
         ],
         "save_as_template": false
       },
@@ -492,6 +502,13 @@
       "requires_auth": true,
       "role_domain": "quality",
       "token_pool": "pool-quality",
+      "layer": "L2",
+      "sample_contract": {
+        "baseline_refs": [],
+        "runtime_samples": ["supplier:create-ready"],
+        "restore_strategy": "rebuild",
+        "state_assertions": ["supplier.created"]
+      },
       "json_body": {
         "name": "测试供应商-{RANDOM_INT}",
         "remark": "Load test supplier",
