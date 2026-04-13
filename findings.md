@@ -78,6 +78,13 @@
    - `C:\Users\Donki\AppData\Local\Programs\CC Switch\cc-switch.exe`
 2. 桌面版可执行文件本身是 GUI，不直接输出 CLI 帮助。
 3. 已安装官方 `cc-switch-cli` 到：
+
+## 2026-04-13 前端缺口评估补充
+
+1. `frontend/lib/features/shell/presentation/home_page.dart` 当前仍只有欢迎卡、角色展示和快速跳转，未承载待办、异常、审批、未读消息聚合或 KPI 卡片。
+2. `evidence/task_log_20260412_home_dashboard_brainstorming.md` 与 `evidence/task_log_20260412_home_dashboard_plan.md` 表明：首页工作台的设计与实现计划都已完成，但截至 2026-04-13 仍未进入代码落地。
+3. `frontend/lib/features/misc/presentation/login_page.dart` 中“系统公告”“最后更新 2026-03-23 08:30”等信息仍是静态内容；`frontend/lib/main.dart` 启动时直接执行 `SessionStore.clear()`，说明动态公告与会话恢复仍未收口。
+4. 工程侧次一级风险仍在：`main_shell_page.dart` 存在多路 `Timer.periodic` 轮询与 `IndexedStack` 常驻，`simple_pagination_bar.dart` 只支持上一页/下一页，多个页面与 integration_test 文件体量仍然偏大。
    - `C:\Users\Donki\.local\bin\cc-switch.exe`
 4. 实测 `cc-switch.exe --help` 返回：
    - `mcp` 子命令可用

@@ -73,3 +73,15 @@
   - `planning-with-files`
   - `superpowers`
 - 当前 `CC SWITCH -> Codex` 仅保留上述 2 个 skill。
+
+### 会话 10
+- 已完成“前端当前最大缺口”快速评估。
+- 复核结果：截至 2026-04-13，前端最大缺口仍是“首页尚未从欢迎页升级为业务工作台”；昨日已完成设计与实现计划，但代码尚未落地。
+- 同时确认次一级工程风险仍存在：主壳多路轮询、`IndexedStack` 常驻、分页能力弱、重页面与超大 integration_test 脚本尚未拆分。
+- 本轮已新增 `evidence/task_log_20260413_frontend_biggest_gap_assessment.md` 留痕。
+
+### 会话 11
+- 用户已确认按 `superpowers` 工作流执行首页工作台计划，并选择 `Subagent-Driven` 方式。
+- 已读取 `subagent-driven-development`、`using-git-worktrees`、`test-driven-development` 技能说明。
+- 已确认当前仓库位于 `main`，且存在未提交改动；仓库内未发现 `.worktrees/` / `worktrees/` 目录，也无 `CLAUDE.md` 指定位置。
+- 已新增 `evidence/task_log_20260413_home_dashboard_subagent_execution.md`，当前阻塞点为 worktree 目录位置待用户确认。
