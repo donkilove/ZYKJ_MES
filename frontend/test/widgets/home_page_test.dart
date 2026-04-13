@@ -54,20 +54,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('首页工作台展示标题欢迎卡日期和角色', (tester) async {
-    final now = DateTime.now();
-    final dateText =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final weekday = [
-      '星期一',
-      '星期二',
-      '星期三',
-      '星期四',
-      '星期五',
-      '星期六',
-      '星期日',
-    ][now.weekday - 1];
-
+  testWidgets('桌面首页展示工作台核心卡片', (tester) async {
     await pumpHomePage(
       tester,
       currentUser: buildUser(),
@@ -93,14 +80,10 @@ void main() {
     );
 
     expect(find.text('工作台'), findsOneWidget);
-    expect(find.text('欢迎使用 ZYKJ MES 系统'), findsOneWidget);
-    expect(find.textContaining('测试用户'), findsOneWidget);
-    expect(find.text(dateText), findsOneWidget);
-    expect(find.text(weekday), findsOneWidget);
-    expect(find.text('角色身份'), findsOneWidget);
-    expect(find.text('品质管理员'), findsOneWidget);
-    expect(find.text('用户'), findsOneWidget);
-    expect(find.text('产品'), findsOneWidget);
+    expect(find.text('我的待办队列'), findsOneWidget);
+    expect(find.text('异常与风险'), findsOneWidget);
+    expect(find.text('次级业务指标'), findsOneWidget);
+    expect(find.text('查看全部待办'), findsOneWidget);
     expect(find.text('上次刷新：12:00:00'), findsOneWidget);
   });
 
@@ -129,9 +112,7 @@ void main() {
       onRefresh: () async {},
     );
 
-    await tester.tap(
-      find.descendant(of: find.byType(GridView), matching: find.text('产品')),
-    );
+    await tester.tap(find.text('产品'));
     await tester.pumpAndSettle();
 
     expect(navigatedPageCode, 'product');
@@ -163,8 +144,8 @@ void main() {
 
     expect(refreshCalled, isTrue);
     expect(find.text('工作台'), findsOneWidget);
-    expect(find.text('暂无角色'), findsOneWidget);
-    expect(find.text('快速跳转'), findsOneWidget);
+    expect(find.text('我的待办队列'), findsOneWidget);
+    expect(find.text('用户'), findsOneWidget);
   });
 
   testWidgets('首页刷新中状态会禁用刷新按钮', (tester) async {
@@ -187,6 +168,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(refreshCalled, isFalse);
-    expect(find.text('暂无可快捷跳转的模块'), findsOneWidget);
+    expect(find.text('当前没有待处理事项'), findsOneWidget);
   });
 }

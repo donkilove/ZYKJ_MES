@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/current_user.dart';
+import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
+import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_header.dart';
+import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_kpi_card.dart';
+import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_risk_card.dart';
+import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_todo_card.dart';
 
 class HomeQuickJumpEntry {
   const HomeQuickJumpEntry({
@@ -27,6 +32,7 @@ class HomePage extends StatefulWidget {
     required this.onRefresh,
     required this.refreshing,
     this.refreshStatusText,
+    this.dashboardData,
   });
 
   final CurrentUser currentUser;
@@ -40,358 +46,188 @@ class HomePage extends StatefulWidget {
   final Future<void> Function() onRefresh;
   final bool refreshing;
   final String? refreshStatusText;
+  final HomeDashboardData? dashboardData;
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  CurrentUser get currentUser => widget.currentUser;
-
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 6) {
-      return '凌晨好';
-    }
-    if (hour < 12) {
-      return '早上好';
-    }
-    if (hour < 18) {
-      return '下午好';
-    }
-    return '晚上好';
+  bool _isDesktopLayout(BoxConstraints constraints) {
+    return constraints.maxWidth >= 1200;
   }
 
-  Widget _buildWelcomeCard(BuildContext context) {
-    final theme = Theme.of(context);
-    final now = DateTime.now();
-    final dateStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final weekday = [
-      '星期一',
-      '星期二',
-      '星期三',
-      '星期四',
-      '星期五',
-      '星期六',
-      '星期日',
-    ][now.weekday - 1];
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            theme.colorScheme.primaryContainer,
-            theme.colorScheme.secondaryContainer,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.primary.withValues(alpha: 0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+  HomeDashboardData _buildFallbackData() {
+    final todoItems = widget.shortcuts
+        .take(4)
+        .map(
+          (entry) => HomeDashboardTodoItem(
+            id: entry.pageCode.hashCode,
+            title: entry.title,
+            categoryLabel: '快捷入口',
+            priorityLabel: '常规',
+            targetPageCode: entry.pageCode,
+            targetTabCode: entry.tabCode,
+            targetRoutePayloadJson: entry.routePayloadJson,
           ),
-        ],
+        )
+        .toList();
+    return HomeDashboardData(
+      generatedAt: null,
+      noticeCount: 0,
+      todoSummary: HomeDashboardTodoSummary(
+        totalCount: widget.shortcuts.length,
+        pendingApprovalCount: 0,
+        highPriorityCount: 0,
+        exceptionCount: 0,
+        overdueCount: 0,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      todoItems: todoItems,
+      riskItems: const [
+        HomeDashboardMetricItem(
+          code: 'production_exception',
+          label: '生产异常',
+          value: '--',
+        ),
+        HomeDashboardMetricItem(
+          code: 'quality_warning',
+          label: '质量预警',
+          value: '--',
+        ),
+        HomeDashboardMetricItem(
+          code: 'maintenance_overdue',
+          label: '设备逾期保养',
+          value: '--',
+        ),
+        HomeDashboardMetricItem(
+          code: 'high_priority_message',
+          label: '待确认高优消息',
+          value: '--',
+        ),
+      ],
+      kpiItems: const [
+        HomeDashboardMetricItem(code: 'wip_orders', label: '在制订单', value: '--'),
+        HomeDashboardMetricItem(
+          code: 'today_output',
+          label: '今日产量',
+          value: '--',
+        ),
+        HomeDashboardMetricItem(
+          code: 'first_pass_rate',
+          label: '首件通过率',
+          value: '--',
+        ),
+        HomeDashboardMetricItem(code: 'scrap_count', label: '报废数', value: '--'),
+      ],
+      degradedBlocks: const [],
+    );
+  }
+
+  Widget _buildDesktopLayout(HomeDashboardData data) {
+    return Column(
+      children: [
+        HomeDashboardHeader(
+          currentUser: widget.currentUser,
+          noticeCount: data.noticeCount,
+          refreshing: widget.refreshing,
+          onRefresh: widget.onRefresh,
+          refreshStatusText: widget.refreshStatusText,
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 17,
+                child: HomeDashboardTodoCard(
+                  todoSummary: data.todoSummary,
+                  todoItems: data.todoItems,
+                  onNavigateToPage: widget.onNavigateToPage,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 10,
+                child: Column(
                   children: [
-                    Text(
-                      '${_greeting()}，${currentUser.displayName}',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onPrimaryContainer,
+                    Expanded(
+                      child: HomeDashboardRiskCard(
+                        riskItems: data.riskItems,
+                        onNavigateToPage: widget.onNavigateToPage,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '欢迎使用 ZYKJ MES 系统',
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer.withValues(
-                          alpha: 0.8,
-                        ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: HomeDashboardKpiCard(
+                        kpiItems: data.kpiItems,
+                        onNavigateToPage: widget.onNavigateToPage,
                       ),
                     ),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onPrimaryContainer.withValues(
-                      alpha: 0.15,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        dateStr,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        weekday,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer
-                              .withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '角色身份',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer.withValues(
-                      alpha: 0.8,
-                    ),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (currentUser.roleName?.trim().isNotEmpty != true)
-                  Text(
-                    '暂无角色',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onPrimaryContainer.withValues(
-                        alpha: 0.7,
-                      ),
-                    ),
-                  )
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.onPrimaryContainer
-                              .withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          currentUser.roleName!,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickActionCard(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required Color color,
-    String? subtitle,
-    VoidCallback? onTap,
-  }) {
-    final theme = Theme.of(context);
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(
-          color: theme.colorScheme.outline.withValues(alpha: 0.1),
-        ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: color, size: 27),
               ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-              ],
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 
-  Color _quickActionColor(ThemeData theme, int index) {
-    switch (index % 3) {
-      case 0:
-        return theme.colorScheme.primary;
-      case 1:
-        return theme.colorScheme.secondary;
-      default:
-        return theme.colorScheme.tertiary;
-    }
+  Widget _buildMobileLayout(HomeDashboardData data) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          HomeDashboardHeader(
+            currentUser: widget.currentUser,
+            noticeCount: data.noticeCount,
+            refreshing: widget.refreshing,
+            onRefresh: widget.onRefresh,
+            refreshStatusText: widget.refreshStatusText,
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 420,
+            child: HomeDashboardTodoCard(
+              todoSummary: data.todoSummary,
+              todoItems: data.todoItems,
+              onNavigateToPage: widget.onNavigateToPage,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 260,
+            child: HomeDashboardRiskCard(
+              riskItems: data.riskItems,
+              onNavigateToPage: widget.onNavigateToPage,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 260,
+            child: HomeDashboardKpiCard(
+              kpiItems: data.kpiItems,
+              onNavigateToPage: widget.onNavigateToPage,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final shortcuts = widget.shortcuts;
-
+    final data = widget.dashboardData ?? _buildFallbackData();
     return Padding(
-      padding: const EdgeInsets.all(24),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '工作台',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (widget.refreshStatusText != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          widget.refreshStatusText!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                IconButton.filledTonal(
-                  icon: widget.refreshing
-                      ? const Icon(Icons.sync)
-                      : const Icon(Icons.refresh),
-                  onPressed: widget.refreshing
-                      ? null
-                      : () => widget.onRefresh(),
-                  tooltip: widget.refreshing ? '刷新中' : '刷新业务数据',
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildWelcomeCard(context),
-            const SizedBox(height: 24),
-            Text(
-              '快速跳转',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final crossAxisCount = constraints.maxWidth > 1200
-                    ? 7
-                    : constraints.maxWidth > 900
-                    ? 5
-                    : constraints.maxWidth > 600
-                    ? 4
-                    : 3;
-                return GridView.count(
-                  crossAxisCount: crossAxisCount,
-                  shrinkWrap: true,
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: shortcuts.isEmpty
-                      ? [
-                          _buildQuickActionCard(
-                            context,
-                            icon: Icons.info_outline_rounded,
-                            title: '暂无可快捷跳转的模块',
-                            color: theme.colorScheme.outline,
-                            subtitle: '请联系管理员分配页面可见权限',
-                          ),
-                        ]
-                      : [
-                          for (var index = 0; index < shortcuts.length; index++)
-                            _buildQuickActionCard(
-                              context,
-                              icon: shortcuts[index].icon,
-                              title: shortcuts[index].title,
-                              color: _quickActionColor(theme, index),
-                              subtitle: shortcuts[index].tabCode == null
-                                  ? null
-                                  : '默认页签：${shortcuts[index].tabCode}',
-                              onTap: () => widget.onNavigateToPage(
-                                shortcuts[index].pageCode,
-                                tabCode: shortcuts[index].tabCode,
-                                routePayloadJson:
-                                    shortcuts[index].routePayloadJson,
-                              ),
-                            ),
-                        ],
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
+      padding: const EdgeInsets.all(16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (_isDesktopLayout(constraints)) {
+            return _buildDesktopLayout(data);
+          }
+          return _buildMobileLayout(data);
+        },
       ),
     );
   }
