@@ -129,7 +129,7 @@ def build_home_dashboard(db: Session, *, current_user: User) -> HomeDashboardRes
             source_module=row.source_module,
             priority=row.priority,
             published_at=row.published_at,
-            overdue=row.priority == "urgent",
+            overdue=False,
             target_page_code=row.target_page_code,
             target_tab_code=row.target_tab_code,
             target_route_payload_json=row.target_route_payload_json,
@@ -158,7 +158,7 @@ def build_home_dashboard(db: Session, *, current_user: User) -> HomeDashboardRes
                 HomeDashboardMetricItem(
                     code="production_exception",
                     label="生产异常",
-                    value=str(summary_dict["todo_unread_count"]),
+                    value="0",
                     target_page_code="production",
                     target_tab_code="production_order_query",
                     target_route_payload_json='{"dashboard_filter":"exception"}',
