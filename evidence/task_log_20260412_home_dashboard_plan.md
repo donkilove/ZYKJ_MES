@@ -74,5 +74,25 @@
 - 是否满足任务目标：是
 - 主 agent 最终结论：计划可交付，待用户选择执行方式
 
+## 8.1 执行收口补记（2026-04-13）
+- 计划执行结果：已完成
+- 首页聚合接口验证：
+  - `$env:PYTHONPATH='backend'; python -m pytest backend/tests/test_home_dashboard_service_unit.py backend/tests/test_ui_home_dashboard_integration.py -q`
+  - 结果：`6 passed`
+- 首页 Flutter 验证：
+  - `flutter test test/services/home_dashboard_service_test.dart test/widgets/home_page_test.dart test/widgets/main_shell_page_test.dart test/widgets/message_center_page_test.dart test/widgets/production_order_query_page_test.dart test/widgets/quality_module_regression_test.dart test/widgets/equipment_module_pages_test.dart`
+  - 结果：通过
+- 首页集成测试：
+  - `flutter test -d windows integration_test/home_dashboard_flow_test.dart`
+  - 结果：通过
+- 首页 40 并发 P95：
+  - 初次失败根因：
+    1. 默认 token pool 用户名前缀与 perf 种子账号不一致
+    2. 默认连接池不足以支撑 40 并发
+  - 收口命令：
+    - `python backend/scripts/init_perf_capacity_users.py`
+    - `python -m tools.project_toolkit backend-capacity-gate --base-url http://127.0.0.1:8002 --login-user-prefix ltadm --password Admin@123456 --scenario-config-file tools/perf/scenarios/other_authenticated_read_scenarios.json --scenarios ui-home-dashboard --concurrency 40 --token-count 40 --session-pool-size 20 --warmup-seconds 15 --duration-seconds 90 --p95-ms 500 --error-rate-threshold 0.05 --output-json .tmp_runtime/ui_home_dashboard_40_pool40.json`
+  - 结果：`gate_passed=true`，`p95_ms=135.01`，`error_rate=0.0`
+
 ## 9. 迁移说明
 - 无迁移，直接替换。

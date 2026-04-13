@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from threading import Event, RLock
+import time
 
 from sqlalchemy.orm import Session
 
@@ -46,6 +48,12 @@ _CATEGORY_LABELS = {
     "craft": "工艺",
     "product": "产品",
 }
+
+_HOME_DASHBOARD_CACHE_TTL_SECONDS = 5
+_HOME_DASHBOARD_LOCAL_CACHE: dict[str, tuple[float, HomeDashboardResult]] = {}
+_HOME_DASHBOARD_LOCAL_CACHE_LOCK = RLock()
+_HOME_DASHBOARD_INFLIGHT: dict[str, Event] = {}
+_HOME_DASHBOARD_INFLIGHT_LOCK = RLock()
 
 
 def build_dashboard_todo_summary(
@@ -106,143 +114,219 @@ def _safe_int(value: str) -> int:
         return 0
 
 
+def _home_dashboard_cache_key(
+    *,
+    user_id: int,
+    visible_sidebar_codes: set[str],
+) -> str:
+    visible_codes = ",".join(sorted(visible_sidebar_codes))
+    return f"home_dashboard:{user_id}:{visible_codes}"
+
+
+def _get_cached_home_dashboard(cache_key: str) -> HomeDashboardResult | None:
+    with _HOME_DASHBOARD_LOCAL_CACHE_LOCK:
+        cached = _HOME_DASHBOARD_LOCAL_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        expire_at, payload = cached
+        if expire_at <= time.monotonic():
+            _HOME_DASHBOARD_LOCAL_CACHE.pop(cache_key, None)
+            return None
+        return payload
+
+
+def _set_cached_home_dashboard(
+    cache_key: str,
+    payload: HomeDashboardResult,
+) -> None:
+    with _HOME_DASHBOARD_LOCAL_CACHE_LOCK:
+        _HOME_DASHBOARD_LOCAL_CACHE[cache_key] = (
+            time.monotonic() + _HOME_DASHBOARD_CACHE_TTL_SECONDS,
+            payload,
+        )
+
+
+def _get_or_build_home_dashboard(
+    cache_key: str,
+    builder,
+) -> HomeDashboardResult:
+    cached = _get_cached_home_dashboard(cache_key)
+    if cached is not None:
+        return cached
+
+    event: Event | None = None
+    while True:
+        with _HOME_DASHBOARD_INFLIGHT_LOCK:
+            cached = _get_cached_home_dashboard(cache_key)
+            if cached is not None:
+                return cached
+            event = _HOME_DASHBOARD_INFLIGHT.get(cache_key)
+            if event is None:
+                event = Event()
+                _HOME_DASHBOARD_INFLIGHT[cache_key] = event
+                break
+        event.wait(timeout=max(0.05, float(_HOME_DASHBOARD_CACHE_TTL_SECONDS)))
+        cached = _get_cached_home_dashboard(cache_key)
+        if cached is not None:
+            return cached
+
+    try:
+        payload = builder()
+        _set_cached_home_dashboard(cache_key, payload)
+        return payload
+    finally:
+        with _HOME_DASHBOARD_INFLIGHT_LOCK:
+            current = _HOME_DASHBOARD_INFLIGHT.get(cache_key)
+            if current is event:
+                _HOME_DASHBOARD_INFLIGHT.pop(cache_key, None)
+                event.set()
+
+
 def build_home_dashboard(db: Session, *, current_user: User) -> HomeDashboardResult:
-    degraded_blocks: list[HomeDashboardDegradedBlock] = []
-    generated_at = datetime.now(UTC)
     snapshot = get_authz_snapshot(db, user=current_user)
     visible_sidebar_codes = set(snapshot.get("visible_sidebar_codes", []))
-
-    summary_dict = get_message_summary(db, user_id=current_user.id)
-    todo_rows, _ = list_messages(
-        db,
+    cache_key = _home_dashboard_cache_key(
         user_id=current_user.id,
-        current_user=current_user,
-        page=1,
-        page_size=20,
-        todo_only=True,
-        active_only=True,
+        visible_sidebar_codes=visible_sidebar_codes,
     )
-    todo_seeds = [
-        DashboardMessageSeed(
-            id=row.id,
-            title=row.title,
-            source_module=row.source_module,
-            priority=row.priority,
-            published_at=row.published_at,
-            overdue=False,
-            target_page_code=row.target_page_code,
-            target_tab_code=row.target_tab_code,
-            target_route_payload_json=row.target_route_payload_json,
+
+    def _build() -> HomeDashboardResult:
+        degraded_blocks: list[HomeDashboardDegradedBlock] = []
+        generated_at = datetime.now(UTC)
+
+        summary_dict = get_message_summary(db, user_id=current_user.id)
+        todo_rows, _ = list_messages(
+            db,
+            user_id=current_user.id,
+            current_user=current_user,
+            page=1,
+            page_size=20,
+            todo_only=True,
+            active_only=True,
         )
-        for row in todo_rows
-    ]
-
-    risk_items: list[HomeDashboardMetricItem] = []
-    kpi_items: list[HomeDashboardMetricItem] = []
-
-    try:
-        if "production" in visible_sidebar_codes:
-            production_overview = get_overview_stats(db)
-            production_today = get_today_realtime_data(
-                db,
-                filters=build_today_filters(
-                    stat_mode="main_order",
-                    product_ids=None,
-                    stage_ids=None,
-                    process_ids=None,
-                    operator_user_ids=None,
-                    order_status=None,
-                ),
+        todo_seeds = [
+            DashboardMessageSeed(
+                id=row.id,
+                title=row.title,
+                source_module=row.source_module,
+                priority=row.priority,
+                published_at=row.published_at,
+                overdue=False,
+                target_page_code=row.target_page_code,
+                target_tab_code=row.target_tab_code,
+                target_route_payload_json=row.target_route_payload_json,
             )
-            risk_items.append(
-                HomeDashboardMetricItem(
-                    code="production_exception",
-                    label="生产异常",
-                    value="0",
-                    target_page_code="production",
-                    target_tab_code="production_order_query",
-                    target_route_payload_json='{"dashboard_filter":"exception"}',
-                )
-            )
-            kpi_items.extend(
-                [
-                    HomeDashboardMetricItem(
-                        code="wip_orders",
-                        label="在制订单",
-                        value=str(production_overview["in_progress_orders"]),
-                        target_page_code="production",
-                        target_tab_code="production_data_query",
+            for row in todo_rows
+        ]
+
+        risk_items: list[HomeDashboardMetricItem] = []
+        kpi_items: list[HomeDashboardMetricItem] = []
+
+        try:
+            if "production" in visible_sidebar_codes:
+                production_overview = get_overview_stats(db)
+                production_today = get_today_realtime_data(
+                    db,
+                    filters=build_today_filters(
+                        stat_mode="main_order",
+                        product_ids=None,
+                        stage_ids=None,
+                        process_ids=None,
+                        operator_user_ids=None,
+                        order_status=None,
                     ),
-                    HomeDashboardMetricItem(
-                        code="today_quantity",
-                        label="今日产量",
-                        value=str(production_today["summary"]["total_quantity"]),
-                        target_page_code="production",
-                        target_tab_code="production_data_query",
-                    ),
-                ]
-            )
-    except Exception:
-        degraded_blocks.append(
-            HomeDashboardDegradedBlock(code="production", message="生产摘要加载失败")
-        )
-
-    try:
-        if "quality" in visible_sidebar_codes:
-            quality_overview = get_quality_overview(
-                db,
-                start_date=None,
-                end_date=None,
-                product_name=None,
-                process_code=None,
-                operator_username=None,
-                result_filter=None,
-            )
-            risk_items.append(
-                HomeDashboardMetricItem(
-                    code="quality_warning",
-                    label="质量预警",
-                    value=str(quality_overview["failed_total"]),
-                    target_page_code="quality",
-                    target_tab_code="quality_data_query",
-                    target_route_payload_json='{"dashboard_filter":"warning"}',
                 )
-            )
-            kpi_items.extend(
-                [
+                risk_items.append(
                     HomeDashboardMetricItem(
-                        code="first_article_pass_rate",
-                        label="首件通过率",
-                        value=f'{quality_overview["pass_rate_percent"]}%',
+                        code="production_exception",
+                        label="生产异常",
+                        value="0",
+                        target_page_code="production",
+                        target_tab_code="production_order_query",
+                        target_route_payload_json='{"dashboard_filter":"exception"}',
+                    )
+                )
+                kpi_items.extend(
+                    [
+                        HomeDashboardMetricItem(
+                            code="wip_orders",
+                            label="在制订单",
+                            value=str(production_overview["in_progress_orders"]),
+                            target_page_code="production",
+                            target_tab_code="production_data_query",
+                        ),
+                        HomeDashboardMetricItem(
+                            code="today_quantity",
+                            label="今日产量",
+                            value=str(production_today["summary"]["total_quantity"]),
+                            target_page_code="production",
+                            target_tab_code="production_data_query",
+                        ),
+                    ]
+                )
+        except Exception:
+            degraded_blocks.append(
+                HomeDashboardDegradedBlock(code="production", message="生产摘要加载失败")
+            )
+
+        try:
+            if "quality" in visible_sidebar_codes:
+                quality_overview = get_quality_overview(
+                    db,
+                    start_date=None,
+                    end_date=None,
+                    product_name=None,
+                    process_code=None,
+                    operator_username=None,
+                    result_filter=None,
+                )
+                risk_items.append(
+                    HomeDashboardMetricItem(
+                        code="quality_warning",
+                        label="质量预警",
+                        value=str(quality_overview["failed_total"]),
                         target_page_code="quality",
                         target_tab_code="quality_data_query",
-                    ),
-                    HomeDashboardMetricItem(
-                        code="scrap_total",
-                        label="报废数",
-                        value=str(quality_overview["scrap_total"]),
-                        target_page_code="quality",
-                        target_tab_code="quality_data_query",
-                    ),
-                ]
+                        target_route_payload_json='{"dashboard_filter":"warning"}',
+                    )
+                )
+                kpi_items.extend(
+                    [
+                        HomeDashboardMetricItem(
+                            code="first_article_pass_rate",
+                            label="首件通过率",
+                            value=f'{quality_overview["pass_rate_percent"]}%',
+                            target_page_code="quality",
+                            target_tab_code="quality_data_query",
+                        ),
+                        HomeDashboardMetricItem(
+                            code="scrap_total",
+                            label="报废数",
+                            value=str(quality_overview["scrap_total"]),
+                            target_page_code="quality",
+                            target_tab_code="quality_data_query",
+                        ),
+                    ]
+                )
+        except Exception:
+            degraded_blocks.append(
+                HomeDashboardDegradedBlock(code="quality", message="质量摘要加载失败")
             )
-    except Exception:
-        degraded_blocks.append(
-            HomeDashboardDegradedBlock(code="quality", message="质量摘要加载失败")
+
+        return HomeDashboardResult(
+            generated_at=generated_at,
+            notice_count=summary_dict["unread_count"],
+            todo_summary=build_dashboard_todo_summary(
+                total_count=summary_dict["total_count"],
+                pending_approval_count=summary_dict["todo_unread_count"],
+                high_priority_count=summary_dict["urgent_unread_count"],
+                exception_count=sum(_safe_int(item.value) for item in risk_items),
+                overdue_count=sum(1 for item in todo_seeds if item.overdue),
+            ),
+            todo_items=select_dashboard_todo_items(todo_seeds, limit=4),
+            risk_items=risk_items,
+            kpi_items=kpi_items,
+            degraded_blocks=degraded_blocks,
         )
 
-    return HomeDashboardResult(
-        generated_at=generated_at,
-        notice_count=summary_dict["unread_count"],
-        todo_summary=build_dashboard_todo_summary(
-            total_count=summary_dict["total_count"],
-            pending_approval_count=summary_dict["todo_unread_count"],
-            high_priority_count=summary_dict["urgent_unread_count"],
-            exception_count=sum(_safe_int(item.value) for item in risk_items),
-            overdue_count=sum(1 for item in todo_seeds if item.overdue),
-        ),
-        todo_items=select_dashboard_todo_items(todo_seeds, limit=4),
-        risk_items=risk_items,
-        kpi_items=kpi_items,
-        degraded_blocks=degraded_blocks,
-    )
+    return _get_or_build_home_dashboard(cache_key, _build)

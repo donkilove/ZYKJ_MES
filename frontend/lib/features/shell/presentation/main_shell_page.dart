@@ -1153,6 +1153,9 @@ class _MainShellPageState extends State<MainShellPage>
               routePayloadJson: routePayloadJson,
             );
           },
+          routePayloadJson: _selectedPageCode == _messagePageCode
+              ? _preferredRoutePayloadJson
+              : null,
         );
 
       default:

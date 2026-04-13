@@ -106,8 +106,8 @@ class HomeDashboardTodoCard extends StatelessWidget {
               child: TextButton(
                 onPressed: () => onNavigateToPage(
                   'message',
-                  tabCode: 'message_todo',
-                  routePayloadJson: '{"view_mode":"todo"}',
+                  tabCode: 'message_center',
+                  routePayloadJson: '{"preset":"todo_only"}',
                 ),
                 child: const Text('查看全部待办'),
               ),

@@ -655,6 +655,17 @@
       "token_pool": "default"
     },
     {
+      "name": "ui-home-dashboard",
+      "method": "GET",
+      "path": "/api/v1/ui/home-dashboard",
+      "role_domain": "auth",
+      "token_pool": "pool-admin",
+      "requires_auth": true,
+      "success_statuses": [
+        200
+      ]
+    },
+    {
       "name": "quality-stats-overview",
       "method": "GET",
       "path": "/api/v1/quality/stats/overview",
