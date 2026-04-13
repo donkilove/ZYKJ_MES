@@ -84,6 +84,27 @@ void main() {
         ),
       );
     });
+
+    test('load 在非 200 且响应体非 JSON 时仍抛 ApiException', () async {
+      final server = await TestHttpServer.start({
+        'GET /ui/home-dashboard': (_) =>
+            const TestResponse(statusCode: 500, body: 'server exploded'),
+      });
+      addTearDown(server.close);
+
+      final service = HomeDashboardService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-ui'),
+      );
+
+      await expectLater(
+        service.load,
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 500)
+              .having((e) => e.message, 'message', '加载首页工作台失败'),
+        ),
+      );
+    });
   });
 
   test('HomeDashboardData.fromJson 轻量解析断言', () {

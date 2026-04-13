@@ -21,13 +21,14 @@ class HomeDashboardService {
   Future<HomeDashboardData> load() async {
     final uri = Uri.parse('${session.baseUrl}/ui/home-dashboard');
     final response = await http.get(uri, headers: _authHeaders);
-    final body = _decodeBody(response);
     if (response.statusCode != 200) {
+      final body = _tryDecodeBody(response);
       throw ApiException(
         _extractErrorMessage(body),
         response.statusCode,
       );
     }
+    final body = _decodeBody(response);
 
     final data = body['data'];
     return HomeDashboardData.fromJson(
@@ -39,7 +40,24 @@ class HomeDashboardService {
     if (response.body.isEmpty) {
       return {};
     }
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+    if (decoded is Map) {
+      return decoded.cast<String, dynamic>();
+    }
+    throw const FormatException('响应体不是 JSON 对象');
+  }
+
+  Map<String, dynamic> _tryDecodeBody(http.Response response) {
+    try {
+      return _decodeBody(response);
+    } on FormatException {
+      return {};
+    } on TypeError {
+      return {};
+    }
   }
 
   String _extractErrorMessage(Map<String, dynamic> body) {
