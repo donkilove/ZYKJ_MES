@@ -87,6 +87,77 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
             "pool-quality",
         )
 
+    def test_load_scenario_config_bundle_supports_layer_and_sample_contract(self) -> None:
+        config = {
+            "scenarios": [
+                {
+                    "name": "write-contract",
+                    "method": "POST",
+                    "path": "/api/v1/production/orders",
+                    "layer": "L1",
+                    "sample_contract": {
+                        "baseline_refs": ["baseline-a", "baseline-b"],
+                        "runtime_samples": ["runtime-x", "runtime-y"],
+                        "state_assertions": ["assert-1", "assert-2"],
+                        "restore_strategy": "rebuild",
+                    },
+                }
+            ]
+        }
+
+        config_path = self._write_config(
+            "scenario_config_supports_layer_and_sample_contract.json",
+            config,
+        )
+        self.addCleanup(config_path.unlink, missing_ok=True)
+
+        bundle = backend_capacity_gate._load_scenario_config_bundle(str(config_path))
+
+        self.assertEqual(bundle.scenarios["write-contract"].layer, "L1")
+        self.assertEqual(
+            bundle.scenarios["write-contract"].sample_contract.baseline_refs,
+            ["baseline-a", "baseline-b"],
+        )
+        self.assertEqual(
+            bundle.scenarios["write-contract"].sample_contract.runtime_samples,
+            ["runtime-x", "runtime-y"],
+        )
+        self.assertEqual(
+            bundle.scenarios["write-contract"].sample_contract.state_assertions,
+            ["assert-1", "assert-2"],
+        )
+        self.assertEqual(
+            bundle.scenarios["write-contract"].sample_contract.restore_strategy,
+            "rebuild",
+        )
+
+    def test_load_scenario_config_bundle_rejects_invalid_restore_strategy(self) -> None:
+        config = {
+            "scenarios": [
+                {
+                    "name": "write-contract",
+                    "method": "POST",
+                    "path": "/api/v1/production/orders",
+                    "layer": "L1",
+                    "sample_contract": {
+                        "baseline_refs": ["baseline-a"],
+                        "runtime_samples": ["runtime-x"],
+                        "state_assertions": ["assert-1"],
+                        "restore_strategy": 123,
+                    },
+                }
+            ]
+        }
+
+        config_path = self._write_config(
+            "scenario_config_invalid_restore_strategy.json",
+            config,
+        )
+        self.addCleanup(config_path.unlink, missing_ok=True)
+
+        with self.assertRaisesRegex(ValueError, "restore_strategy must be a string"):
+            backend_capacity_gate._load_scenario_config_bundle(str(config_path))
+
     def test_build_scenario_runtime_rejects_unknown_token_pool_binding(self) -> None:
         config = {
             "scenarios": [
@@ -182,6 +253,46 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
             registry["processes-detail-query"].token_pool,
             "pool-user-admin",
         )
+
+    def test_write_gate_cli_output_contains_layer_summary_and_restore_rate(self) -> None:
+        scenario_registry = {
+            "production-order-create": backend_capacity_gate.ScenarioSpec(
+                name="production-order-create",
+                method="POST",
+                path="/api/v1/production/orders",
+                layer="L1",
+            ),
+            "quality-supplier-create": backend_capacity_gate.ScenarioSpec(
+                name="quality-supplier-create",
+                method="POST",
+                path="/api/v1/quality/suppliers",
+                layer="L2",
+            ),
+        }
+        payload = backend_capacity_gate._build_write_gate_summary_from_metrics(
+            scenario_metrics={
+                "production-order-create": {
+                    "success_rate": 1.0,
+                    "error_rate": 0.0,
+                    "p95_ms": 180,
+                    "status_counts": {"201": 1},
+                },
+                "quality-supplier-create": {
+                    "success_rate": 0.0,
+                    "error_rate": 1.0,
+                    "p95_ms": 90,
+                    "status_counts": {"422": 1},
+                },
+            },
+            scenario_registry=scenario_registry,
+        )
+
+        self.assertIn("by_layer", payload)
+        self.assertEqual(
+            payload["by_layer"]["L1"]["restore_success_rate"],
+            1.0,
+        )
+        self.assertEqual(payload["by_layer"]["L2"]["error_types"]["422"], 1)
 
 
 if __name__ == "__main__":

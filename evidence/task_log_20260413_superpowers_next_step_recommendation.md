@@ -38,6 +38,8 @@
   3. 继续优化少数读链路性能尾延迟。
 - 推荐优先级：1 > 2 > 3。
 - 正式 spec：`docs/superpowers/specs/2026-04-13-write-gate-design.md`
+- 正式 plan：`docs/superpowers/plans/2026-04-13-write-gate-implementation.md`
+- 当前执行模式：Inline Execution
 
 ## 5. 迁移说明
 - 无迁移，直接替换
