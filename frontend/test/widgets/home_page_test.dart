@@ -2,8 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/current_user.dart';
 import 'package:mes_client/features/shell/presentation/home_page.dart';
+import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_header.dart';
+import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_kpi_card.dart';
+import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_risk_card.dart';
+import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_todo_card.dart';
 
 void main() {
+  const desktopHeaderKey = Key('home_desktop_header');
+  const desktopMainRowKey = Key('home_desktop_main_row');
+  const desktopTodoPaneKey = Key('home_desktop_todo_pane');
+  const desktopRightPaneKey = Key('home_desktop_right_pane');
+  const desktopRiskPaneKey = Key('home_desktop_risk_pane');
+  const desktopKpiPaneKey = Key('home_desktop_kpi_pane');
+
   CurrentUser buildUser({String? roleName = '品质管理员'}) {
     return CurrentUser(
       id: 1,
@@ -79,10 +90,51 @@ void main() {
       refreshStatusText: '上次刷新：12:00:00',
     );
 
-    expect(find.text('工作台'), findsOneWidget);
-    expect(find.text('我的待办队列'), findsOneWidget);
-    expect(find.text('异常与风险'), findsOneWidget);
-    expect(find.text('次级业务指标'), findsOneWidget);
+    expect(find.byKey(desktopHeaderKey), findsOneWidget);
+    expect(find.byType(HomeDashboardHeader), findsOneWidget);
+
+    expect(find.byKey(desktopMainRowKey), findsOneWidget);
+    expect(find.byKey(desktopTodoPaneKey), findsOneWidget);
+    expect(find.byKey(desktopRightPaneKey), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(desktopMainRowKey),
+        matching: find.byKey(desktopTodoPaneKey),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(desktopMainRowKey),
+        matching: find.byKey(desktopRightPaneKey),
+      ),
+      findsOneWidget,
+    );
+
+    expect(
+      find.descendant(
+        of: find.byKey(desktopTodoPaneKey),
+        matching: find.byType(HomeDashboardTodoCard),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(desktopRiskPaneKey), findsOneWidget);
+    expect(find.byKey(desktopKpiPaneKey), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(desktopRiskPaneKey),
+        matching: find.byType(HomeDashboardRiskCard),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(desktopKpiPaneKey),
+        matching: find.byType(HomeDashboardKpiCard),
+      ),
+      findsOneWidget,
+    );
+
     expect(find.text('查看全部待办'), findsOneWidget);
     expect(find.text('上次刷新：12:00:00'), findsOneWidget);
   });

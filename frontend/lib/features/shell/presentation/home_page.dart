@@ -53,6 +53,13 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  static const _desktopHeaderKey = Key('home_desktop_header');
+  static const _desktopMainRowKey = Key('home_desktop_main_row');
+  static const _desktopTodoPaneKey = Key('home_desktop_todo_pane');
+  static const _desktopRightPaneKey = Key('home_desktop_right_pane');
+  static const _desktopRiskPaneKey = Key('home_desktop_risk_pane');
+  static const _desktopKpiPaneKey = Key('home_desktop_kpi_pane');
+
   bool _isDesktopLayout(BoxConstraints constraints) {
     return constraints.maxWidth >= 1200;
   }
@@ -127,6 +134,7 @@ class _HomePageState extends State<HomePage> {
     return Column(
       children: [
         HomeDashboardHeader(
+          key: _desktopHeaderKey,
           currentUser: widget.currentUser,
           noticeCount: data.noticeCount,
           refreshing: widget.refreshing,
@@ -136,9 +144,11 @@ class _HomePageState extends State<HomePage> {
         const SizedBox(height: 12),
         Expanded(
           child: Row(
+            key: _desktopMainRowKey,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
+                key: _desktopTodoPaneKey,
                 flex: 17,
                 child: HomeDashboardTodoCard(
                   todoSummary: data.todoSummary,
@@ -148,10 +158,12 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(width: 12),
               Expanded(
+                key: _desktopRightPaneKey,
                 flex: 10,
                 child: Column(
                   children: [
                     Expanded(
+                      key: _desktopRiskPaneKey,
                       child: HomeDashboardRiskCard(
                         riskItems: data.riskItems,
                         onNavigateToPage: widget.onNavigateToPage,
@@ -159,6 +171,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(height: 12),
                     Expanded(
+                      key: _desktopKpiPaneKey,
                       child: HomeDashboardKpiCard(
                         kpiItems: data.kpiItems,
                         onNavigateToPage: widget.onNavigateToPage,
