@@ -47,6 +47,10 @@ class HomeDashboardService {
     if (detail is String && detail.isNotEmpty) {
       return detail;
     }
+    final message = body['message'];
+    if (message is String && message.isNotEmpty) {
+      return message;
+    }
     return '加载首页工作台失败';
   }
 }
