@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -40,6 +41,7 @@ class MessageCenterPage extends StatefulWidget {
     this.userService,
     this.refreshTick = 0,
     this.onPickDateRange,
+    this.routePayloadJson,
   });
 
   final AppSession session;
@@ -59,6 +61,7 @@ class MessageCenterPage extends StatefulWidget {
   final int refreshTick;
   final Future<DateTimeRange?> Function(DateTimeRange? initialDateRange)?
   onPickDateRange;
+  final String? routePayloadJson;
 
   @override
   State<MessageCenterPage> createState() => _MessageCenterPageState();
@@ -95,12 +98,14 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   DateTimeRange? _dateRange;
   bool _todoOnly = false;
   bool _includeInactive = false;
+  String? _lastHandledRoutePayloadJson;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? MessageService(widget.session);
     _userService = widget.userService ?? UserService(widget.session);
+    _consumeRoutePayload(widget.routePayloadJson, triggerLoad: false);
     _load();
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _load(reset: false);
@@ -110,9 +115,40 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   @override
   void didUpdateWidget(covariant MessageCenterPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.routePayloadJson != oldWidget.routePayloadJson) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    }
     if (widget.refreshTick != oldWidget.refreshTick) {
       _load(reset: false);
     }
+  }
+
+  void _consumeRoutePayload(String? rawPayload, {bool triggerLoad = true}) {
+    if (rawPayload == null ||
+        rawPayload.trim().isEmpty ||
+        rawPayload == _lastHandledRoutePayloadJson) {
+      return;
+    }
+    try {
+      final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
+      final preset = (payload['preset'] as String? ?? '').trim();
+      if (preset != 'todo_only') {
+        return;
+      }
+      _lastHandledRoutePayloadJson = rawPayload;
+      if (triggerLoad) {
+        setState(() {
+          _todoOnly = true;
+          _page = 1;
+          _selectedIds.clear();
+        });
+        _load();
+      } else {
+        _todoOnly = true;
+        _page = 1;
+        _selectedIds.clear();
+      }
+    } catch (_) {}
   }
 
   @override

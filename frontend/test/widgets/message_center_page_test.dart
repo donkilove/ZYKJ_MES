@@ -548,6 +548,7 @@ Future<void> _pumpMessageCenterPage(
   bool canPublishAnnouncement = true,
   bool canViewDetail = true,
   bool canUseJump = true,
+  String? routePayloadJson,
   void Function(int count)? onUnreadCountChanged,
   VoidCallback? onLogout,
   void Function(String pageCode, {String? tabCode, String? routePayloadJson})?
@@ -572,6 +573,7 @@ Future<void> _pumpMessageCenterPage(
             canPublishAnnouncement: canPublishAnnouncement,
             canViewDetail: canViewDetail,
             canUseJump: canUseJump,
+            routePayloadJson: routePayloadJson,
             service: service,
             userService: userService ?? _FakeUserService(),
             onUnreadCountChanged: onUnreadCountChanged,
@@ -587,6 +589,17 @@ Future<void> _pumpMessageCenterPage(
 }
 
 void main() {
+  testWidgets('message center 支持 route payload 进入待办过滤态', (tester) async {
+    final service = _FakeMessageService();
+    await _pumpMessageCenterPage(
+      tester,
+      service: service,
+      routePayloadJson: '{"preset":"todo_only"}',
+    );
+
+    expect(service.lastTodoOnly, isTrue);
+  });
+
   testWidgets(
     'message center supports filters, preview, read actions and jumps',
     (tester) async {

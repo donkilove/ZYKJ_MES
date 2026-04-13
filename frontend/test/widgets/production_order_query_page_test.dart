@@ -455,6 +455,34 @@ Finder _findDropdownByLabel(String labelText) {
 }
 
 void main() {
+  testWidgets('生产订单查询页支持 route payload 进入异常过滤态', (tester) async {
+    final service = _FakeProductionOrderQueryPageService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: false,
+            canExportCsv: true,
+            routePayloadJson: '{"dashboard_filter":"exception"}',
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(service.lastOrderStatus, 'in_progress');
+  });
+
   testWidgets('订单查询页支持筛选并展示工单列表', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
 

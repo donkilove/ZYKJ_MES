@@ -85,6 +85,7 @@ class _FakeEquipmentService extends EquipmentService {
   int completeExecutionCalls = 0;
   int cancelExecutionCalls = 0;
   int getWorkOrderDetailCalls = 0;
+  String? lastExecutionStatusFilter;
   final List<EquipmentOwnerOption> _owners;
   final List<EquipmentLedgerItem> _equipmentItems;
   final List<MaintenanceItemEntry> _maintenanceItems;
@@ -171,6 +172,7 @@ class _FakeEquipmentService extends EquipmentService {
     DateTime? dueDateEnd,
     String? stageCode,
   }) async {
+    lastExecutionStatusFilter = status;
     return MaintenanceWorkOrderListResult(
       total: _workOrders.length,
       items: List<MaintenanceWorkOrderItem>.from(_workOrders),
@@ -860,6 +862,25 @@ void main() {
 
     expect(equipmentService.getWorkOrderDetailCalls, 1);
     expect(find.text('保养执行详情 #4'), findsOneWidget);
+  });
+
+  testWidgets('保养执行页面支持 jump payload 进入逾期过滤态', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+
+    await _pumpPage(
+      tester,
+      MaintenanceExecutionPage(
+        session: session,
+        onLogout: () {},
+        canExecute: true,
+        equipmentService: equipmentService,
+        craftService: craftService,
+        jumpPayloadJson: '{"dashboard_filter":"overdue"}',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(equipmentService.lastExecutionStatusFilter, 'overdue');
   });
 
   testWidgets('保养记录页面展示到期日期字段', (tester) async {

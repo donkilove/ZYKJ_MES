@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
@@ -19,6 +21,7 @@ class QualityDataPage extends StatefulWidget {
     this.service,
     this.initialStartDate,
     this.initialEndDate,
+    this.routePayloadJson,
   });
 
   final AppSession session;
@@ -27,6 +30,7 @@ class QualityDataPage extends StatefulWidget {
   final QualityService? service;
   final DateTime? initialStartDate;
   final DateTime? initialEndDate;
+  final String? routePayloadJson;
 
   @override
   State<QualityDataPage> createState() => _QualityDataPageState();
@@ -69,6 +73,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
   int _processPage = 1;
   int _operatorPage = 1;
   int _productPage = 1;
+  String? _lastHandledRoutePayloadJson;
 
   @override
   void initState() {
@@ -80,7 +85,16 @@ class _QualityDataPageState extends State<QualityDataPage> {
     if (widget.initialEndDate != null) {
       _endDate = widget.initialEndDate!;
     }
+    _consumeRoutePayload(widget.routePayloadJson, triggerLoad: false);
     _loadStats();
+  }
+
+  @override
+  void didUpdateWidget(covariant QualityDataPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.routePayloadJson != oldWidget.routePayloadJson) {
+      _consumeRoutePayload(widget.routePayloadJson);
+    }
   }
 
   @override
@@ -100,6 +114,33 @@ class _QualityDataPageState extends State<QualityDataPage> {
       return error.message;
     }
     return error.toString();
+  }
+
+  void _consumeRoutePayload(String? rawPayload, {bool triggerLoad = true}) {
+    if (rawPayload == null ||
+        rawPayload.trim().isEmpty ||
+        rawPayload == _lastHandledRoutePayloadJson) {
+      return;
+    }
+    try {
+      final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
+      final dashboardFilter =
+          (payload['dashboard_filter'] as String? ?? '').trim();
+      if (dashboardFilter != 'warning') {
+        return;
+      }
+      _lastHandledRoutePayloadJson = rawPayload;
+      if (triggerLoad) {
+        setState(() {
+          _resultFilter = 'failed';
+          _resetLocalPages();
+        });
+        _loadStats();
+      } else {
+        _resultFilter = 'failed';
+        _resetLocalPages();
+      }
+    } catch (_) {}
   }
 
   String _formatDate(DateTime value) {
