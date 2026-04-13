@@ -851,6 +851,56 @@ void main() {
     expect(homeDashboardService.loadCount, 3);
   });
 
+  testWidgets('pending 置位后页面销毁不应再触发补刷', (tester) async {
+    _FakeMessageWsService? wsService;
+    final homeDashboardService = _ControlledHomeDashboardService();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) {
+            wsService = _FakeMessageWsService(
+              baseUrl: baseUrl,
+              accessToken: accessToken,
+              onEvent: onEvent,
+              onDisconnected: onDisconnected,
+            );
+            return wsService!;
+          },
+      homeDashboardService: homeDashboardService,
+      onLogout: () {},
+    );
+
+    expect(homeDashboardService.loadCount, 1);
+
+    await tester.tap(find.byTooltip('刷新业务数据'));
+    await tester.pump();
+    expect(homeDashboardService.loadCount, 2);
+
+    wsService!.emit(
+      const WsEvent(event: 'message_created', userId: 1, unreadCount: 6),
+    );
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pumpAndSettle();
+
+    homeDashboardService.secondLoadCompleter!.complete(_buildDashboardData());
+    await tester.pumpAndSettle();
+
+    expect(homeDashboardService.loadCount, 2);
+  });
+
   testWidgets('成功加载但无任何可访问模块时显示空菜单提示', (tester) async {
     await _pumpMainShellPage(
       tester,

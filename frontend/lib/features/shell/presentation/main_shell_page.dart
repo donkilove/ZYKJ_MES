@@ -646,6 +646,9 @@ class _MainShellPageState extends State<MainShellPage>
   }
 
   Future<void> _refreshHomeDashboard({bool silent = false}) async {
+    if (!mounted) {
+      return;
+    }
     if (!_isHomePageVisible()) {
       return;
     }
@@ -674,7 +677,7 @@ class _MainShellPageState extends State<MainShellPage>
       _homeDashboardLoading = false;
       if (_homeDashboardRefreshPending) {
         _homeDashboardRefreshPending = false;
-        if (_isHomePageVisible()) {
+        if (mounted && _isHomePageVisible()) {
           unawaited(_refreshHomeDashboard(silent: true));
         }
       }
