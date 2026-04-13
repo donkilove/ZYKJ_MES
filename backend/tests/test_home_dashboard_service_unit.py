@@ -50,7 +50,77 @@ def test_select_dashboard_todo_items_orders_by_overdue_priority_and_publish_time
     assert [item.id for item in result] == [3, 2]
 
 
-def test_build_dashboard_todo_summary_counts_four_summary_numbers() -> None:
+def test_select_dashboard_todo_items_maps_category_priority_and_fallback() -> None:
+    now = datetime.now(UTC)
+    seeds = [
+        DashboardMessageSeed(
+            id=11,
+            title="工艺异常",
+            source_module="craft",
+            priority="important",
+            published_at=now - timedelta(minutes=15),
+            overdue=False,
+            target_page_code="craft",
+            target_tab_code="craft_kanban",
+            target_route_payload_json=None,
+        ),
+        DashboardMessageSeed(
+            id=12,
+            title="未知模块告警",
+            source_module="unknown_module",
+            priority="normal",
+            published_at=now - timedelta(minutes=14),
+            overdue=False,
+            target_page_code="unknown",
+            target_tab_code=None,
+            target_route_payload_json=None,
+        ),
+        DashboardMessageSeed(
+            id=13,
+            title="产品超时待办",
+            source_module="product",
+            priority="normal",
+            published_at=now - timedelta(minutes=13),
+            overdue=True,
+            target_page_code="product",
+            target_tab_code="product_parameter_query",
+            target_route_payload_json=None,
+        ),
+    ]
+
+    result = select_dashboard_todo_items(seeds, limit=3)
+    by_id = {item.id: item for item in result}
+
+    assert by_id[11].category_label == "工艺"
+    assert by_id[11].priority_label == "高优"
+    assert by_id[12].category_label == "待办"
+    assert by_id[12].priority_label == "普通"
+    assert by_id[13].category_label == "产品"
+    assert by_id[13].priority_label == "超时"
+
+
+def test_select_dashboard_todo_items_returns_empty_when_limit_is_negative() -> None:
+    now = datetime.now(UTC)
+    seeds = [
+        DashboardMessageSeed(
+            id=21,
+            title="负数上限测试",
+            source_module="quality",
+            priority="urgent",
+            published_at=now - timedelta(minutes=5),
+            overdue=False,
+            target_page_code="quality",
+            target_tab_code="quality_data_query",
+            target_route_payload_json=None,
+        ),
+    ]
+
+    result = select_dashboard_todo_items(seeds, limit=-1)
+
+    assert result == []
+
+
+def test_build_dashboard_todo_summary_counts_all_summary_numbers() -> None:
     summary = build_dashboard_todo_summary(
         total_count=12,
         pending_approval_count=2,

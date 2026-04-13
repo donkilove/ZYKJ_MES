@@ -26,6 +26,8 @@ _CATEGORY_LABELS = {
     "quality": "质量",
     "equipment": "设备",
     "message": "消息",
+    "craft": "工艺",
+    "product": "产品",
 }
 
 
@@ -51,6 +53,9 @@ def select_dashboard_todo_items(
     *,
     limit: int = 4,
 ) -> list[HomeDashboardTodoItem]:
+    if limit < 0:
+        return []
+
     ordered = sorted(
         seeds,
         key=lambda item: (
