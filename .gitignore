@@ -85,8 +85,10 @@ desktop_tests/**/*.trx
 
 .codex/
 .serena/
+.superpowers/
 .tmp_runtime/
 .tmp_t5/
+tmp/
 .worktrees/
 
 # ===============================
