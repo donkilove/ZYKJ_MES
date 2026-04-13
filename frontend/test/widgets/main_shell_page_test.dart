@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
@@ -354,6 +356,23 @@ class _CountingHomeDashboardService extends HomeDashboardService {
   }
 }
 
+class _ControlledHomeDashboardService extends HomeDashboardService {
+  _ControlledHomeDashboardService() : super(_session);
+
+  int loadCount = 0;
+  Completer<HomeDashboardData>? secondLoadCompleter;
+
+  @override
+  Future<HomeDashboardData> load() {
+    loadCount += 1;
+    if (loadCount == 2) {
+      secondLoadCompleter = Completer<HomeDashboardData>();
+      return secondLoadCompleter!.future;
+    }
+    return Future.value(_buildDashboardData());
+  }
+}
+
 Future<void> _pumpMainShellPage(
   WidgetTester tester, {
   AuthService? authService,
@@ -651,6 +670,185 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(homeDashboardService.loadCount, 2);
+  });
+
+  testWidgets('防抖窗口内多次消息事件会合并为一次工作台刷新', (tester) async {
+    _FakeMessageWsService? wsService;
+    final homeDashboardService = _CountingHomeDashboardService();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) {
+            wsService = _FakeMessageWsService(
+              baseUrl: baseUrl,
+              accessToken: accessToken,
+              onEvent: onEvent,
+              onDisconnected: onDisconnected,
+            );
+            return wsService!;
+          },
+      homeDashboardService: homeDashboardService,
+      onLogout: () {},
+    );
+
+    expect(homeDashboardService.loadCount, 1);
+
+    wsService!.emit(
+      const WsEvent(event: 'message_created', userId: 1, unreadCount: 3),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    wsService!.emit(
+      const WsEvent(
+        event: 'message_read_state_changed',
+        userId: 1,
+        unreadCount: 2,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    wsService!.emit(
+      const WsEvent(event: 'unread_count_changed', userId: 1, unreadCount: 4),
+    );
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(homeDashboardService.loadCount, 1);
+
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pumpAndSettle();
+    expect(homeDashboardService.loadCount, 2);
+  });
+
+  testWidgets('当前不在首页时消息事件不会触发工作台刷新', (tester) async {
+    _FakeMessageWsService? wsService;
+    final homeDashboardService = _CountingHomeDashboardService();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) {
+            wsService = _FakeMessageWsService(
+              baseUrl: baseUrl,
+              accessToken: accessToken,
+              onEvent: onEvent,
+              onDisconnected: onDisconnected,
+            );
+            return wsService!;
+          },
+      homeDashboardService: homeDashboardService,
+      onLogout: () {},
+    );
+
+    expect(homeDashboardService.loadCount, 1);
+
+    await tester.tap(find.byKey(const ValueKey('main-shell-menu-user')));
+    await tester.pumpAndSettle();
+
+    wsService!.emit(
+      const WsEvent(event: 'message_created', userId: 1, unreadCount: 3),
+    );
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(homeDashboardService.loadCount, 1);
+  });
+
+  testWidgets('首页手动刷新会触发一次工作台刷新', (tester) async {
+    final homeDashboardService = _CountingHomeDashboardService();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) => _FakeMessageWsService(
+            baseUrl: baseUrl,
+            accessToken: accessToken,
+            onEvent: onEvent,
+            onDisconnected: onDisconnected,
+          ),
+      homeDashboardService: homeDashboardService,
+      onLogout: () {},
+    );
+
+    expect(homeDashboardService.loadCount, 1);
+
+    await tester.tap(find.byTooltip('刷新业务数据'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(homeDashboardService.loadCount, 2);
+  });
+
+  testWidgets('加载中收到刷新请求会在完成后补一次工作台刷新', (tester) async {
+    _FakeMessageWsService? wsService;
+    final homeDashboardService = _ControlledHomeDashboardService();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) {
+            wsService = _FakeMessageWsService(
+              baseUrl: baseUrl,
+              accessToken: accessToken,
+              onEvent: onEvent,
+              onDisconnected: onDisconnected,
+            );
+            return wsService!;
+          },
+      homeDashboardService: homeDashboardService,
+      onLogout: () {},
+    );
+
+    expect(homeDashboardService.loadCount, 1);
+
+    await tester.tap(find.byTooltip('刷新业务数据'));
+    await tester.pump();
+    expect(homeDashboardService.loadCount, 2);
+
+    wsService!.emit(
+      const WsEvent(event: 'message_created', userId: 1, unreadCount: 5),
+    );
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    homeDashboardService.secondLoadCompleter!.complete(_buildDashboardData());
+    await tester.pumpAndSettle();
+
+    expect(homeDashboardService.loadCount, 3);
   });
 
   testWidgets('成功加载但无任何可访问模块时显示空菜单提示', (tester) async {

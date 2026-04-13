@@ -226,6 +226,7 @@ class _MainShellPageState extends State<MainShellPage>
 
   bool _manualRefreshing = false;
   bool _homeDashboardLoading = false;
+  bool _homeDashboardRefreshPending = false;
 
   DateTime? _lastManualRefreshAt;
   HomeDashboardData? _homeDashboardData;
@@ -645,7 +646,11 @@ class _MainShellPageState extends State<MainShellPage>
   }
 
   Future<void> _refreshHomeDashboard({bool silent = false}) async {
-    if (!_isHomePageVisible() || _homeDashboardLoading) {
+    if (!_isHomePageVisible()) {
+      return;
+    }
+    if (_homeDashboardLoading) {
+      _homeDashboardRefreshPending = true;
       return;
     }
 
@@ -667,6 +672,12 @@ class _MainShellPageState extends State<MainShellPage>
       });
     } finally {
       _homeDashboardLoading = false;
+      if (_homeDashboardRefreshPending) {
+        _homeDashboardRefreshPending = false;
+        if (_isHomePageVisible()) {
+          unawaited(_refreshHomeDashboard(silent: true));
+        }
+      }
     }
   }
 
