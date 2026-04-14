@@ -953,7 +953,6 @@ def create_product(
         operator=operator,
     )
 
-    db.commit()
     db.refresh(product)
     return product
 

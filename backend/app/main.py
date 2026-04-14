@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.api import api_router
 from app.bootstrap import run_startup_bootstrap
-from app.core.config import settings
+from app.core.config import ensure_runtime_settings_secure, settings
 from app.services.maintenance_scheduler_service import run_maintenance_auto_generate_loop
 from app.services.message_service import run_message_delivery_maintenance_loop
 
@@ -16,6 +16,7 @@ from app.services.message_service import run_message_delivery_maintenance_loop
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     scheduler_task: asyncio.Task[None] | None = None
     message_maintenance_task: asyncio.Task[None] | None = None
+    ensure_runtime_settings_secure()
     if settings.web_run_bootstrap:
         run_startup_bootstrap()
     if settings.web_run_background_loops and settings.maintenance_auto_generate_enabled:

@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -10,6 +10,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+from app.services import quality_service
 from app.services.quality_service import (
     export_quality_stats_csv,
     get_quality_operator_stats,
@@ -43,6 +44,22 @@ def _build_related_totals() -> dict:
 
 
 class QualityServiceStatsUnitTest(unittest.TestCase):
+    def test_resolve_query_verification_code_does_not_expose_insecure_default(self) -> None:
+        with patch.object(
+            quality_service.settings,
+            "production_default_verification_code",
+            "123456",
+        ):
+            verification_code, verification_code_source = (
+                quality_service._resolve_query_verification_code(
+                    code_row=None,
+                    query_date=date.today(),
+                )
+            )
+
+        self.assertIsNone(verification_code)
+        self.assertEqual(verification_code_source, "none")
+
     def test_overview_uses_related_quality_scope_without_first_article(self) -> None:
         with (
             patch("app.services.quality_service._load_first_article_rows", return_value=[]),

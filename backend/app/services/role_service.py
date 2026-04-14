@@ -105,7 +105,7 @@ def create_role(db: Session, payload: RoleCreate) -> tuple[Role | None, list[str
         is_enabled=payload.is_enabled,
     )
     db.add(role)
-    db.commit()
+    db.flush()
     db.refresh(role)
     return role, []
 

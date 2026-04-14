@@ -60,6 +60,8 @@ from app.models.authz_module_revision import AuthzModuleRevision
 from app.models.role import Role
 from app.models.role_permission_grant import RolePermissionGrant
 from app.models.user import User
+from app.services import authz_cache_service, authz_query_service
+from app.services import authz_read_service, authz_write_service
 
 
 ROLE_SORT_ORDER = {
@@ -121,42 +123,45 @@ class PermissionCatalogRow:
 
 
 def _authz_permission_cache_ttl_seconds() -> int:
-    return max(1, settings.authz_permission_cache_ttl_seconds)
+    return authz_cache_service._authz_permission_cache_ttl_seconds(
+        ttl_seconds=settings.authz_permission_cache_ttl_seconds
+    )
 
 
 def _authz_read_cache_ttl_seconds() -> int:
-    return max(5, min(60, settings.authz_permission_cache_ttl_seconds))
+    return authz_cache_service._authz_read_cache_ttl_seconds(
+        ttl_seconds=settings.authz_permission_cache_ttl_seconds
+    )
 
 
 def _authz_read_cache_key(*, cache_type: str, values: list[str]) -> str:
-    joined = "|".join(values)
-    digest = hashlib.sha1(f"{cache_type}|{joined}".encode("utf-8")).hexdigest()
-    return f"{settings.authz_permission_cache_prefix}:read:{cache_type}:{digest}"
+    return authz_cache_service._authz_read_cache_key(
+        cache_prefix=settings.authz_permission_cache_prefix,
+        cache_type=cache_type,
+        values=values,
+    )
 
 
 def _get_authz_read_cache(cache_key: str, *, copy_payload: bool = False):
-    with _AUTHZ_READ_LOCAL_CACHE_LOCK:
-        cached = _AUTHZ_READ_LOCAL_CACHE.get(cache_key)
-        if cached is None:
-            return None
-        expire_at, payload = cached
-        if expire_at <= time.monotonic():
-            _AUTHZ_READ_LOCAL_CACHE.pop(cache_key, None)
-            return None
-        if copy_payload:
-            return copy.deepcopy(payload)
-        return payload
+    return authz_read_service.get_authz_read_cache(
+        local_cache=_AUTHZ_READ_LOCAL_CACHE,
+        local_cache_lock=_AUTHZ_READ_LOCAL_CACHE_LOCK,
+        cache_key=cache_key,
+        copy_payload=copy_payload,
+    )
 
 
 def _set_authz_read_cache(
     cache_key: str, payload: object, *, copy_payload: bool = False
 ) -> None:
-    expire_at = time.monotonic() + _authz_read_cache_ttl_seconds()
-    with _AUTHZ_READ_LOCAL_CACHE_LOCK:
-        if copy_payload:
-            _AUTHZ_READ_LOCAL_CACHE[cache_key] = (expire_at, copy.deepcopy(payload))
-            return
-        _AUTHZ_READ_LOCAL_CACHE[cache_key] = (expire_at, payload)
+    authz_read_service.set_authz_read_cache(
+        local_cache=_AUTHZ_READ_LOCAL_CACHE,
+        local_cache_lock=_AUTHZ_READ_LOCAL_CACHE_LOCK,
+        cache_key=cache_key,
+        payload=payload,
+        ttl_seconds=_authz_read_cache_ttl_seconds(),
+        copy_payload=copy_payload,
+    )
 
 
 def _get_or_build_authz_read_cache(
@@ -165,45 +170,27 @@ def _get_or_build_authz_read_cache(
     *,
     copy_payload: bool = False,
 ):
-    cached = _get_authz_read_cache(cache_key, copy_payload=copy_payload)
-    if cached is not None:
-        return cached
-
-    event: Event | None = None
-    while True:
-        with _AUTHZ_READ_INFLIGHT_LOCK:
-            cached = _get_authz_read_cache(cache_key, copy_payload=copy_payload)
-            if cached is not None:
-                return cached
-            event = _AUTHZ_READ_INFLIGHT.get(cache_key)
-            if event is None:
-                event = Event()
-                _AUTHZ_READ_INFLIGHT[cache_key] = event
-                break
-        event.wait(timeout=max(0.05, float(_authz_read_cache_ttl_seconds())))
-        cached = _get_authz_read_cache(cache_key, copy_payload=copy_payload)
-        if cached is not None:
-            return cached
-
-    try:
-        payload = builder()
-        _set_authz_read_cache(cache_key, payload, copy_payload=copy_payload)
-        return payload
-    finally:
-        with _AUTHZ_READ_INFLIGHT_LOCK:
-            current = _AUTHZ_READ_INFLIGHT.get(cache_key)
-            if current is event:
-                _AUTHZ_READ_INFLIGHT.pop(cache_key, None)
-                event.set()
+    return authz_read_service.get_or_build_authz_read_cache(
+        local_cache=_AUTHZ_READ_LOCAL_CACHE,
+        local_cache_lock=_AUTHZ_READ_LOCAL_CACHE_LOCK,
+        inflight=_AUTHZ_READ_INFLIGHT,
+        inflight_lock=_AUTHZ_READ_INFLIGHT_LOCK,
+        cache_key=cache_key,
+        builder=builder,
+        ttl_seconds=_authz_read_cache_ttl_seconds(),
+        copy_payload=copy_payload,
+    )
 
 
 def _authz_permission_cache_key(
     *, normalized_roles: list[str], normalized_module_code: str | None
 ) -> str:
-    module_token = normalized_module_code or _AUTHZ_PERMISSION_CACHE_ALL_MODULES
-    joined_roles = ",".join(normalized_roles)
-    digest = hashlib.sha1(f"{joined_roles}|{module_token}".encode("utf-8")).hexdigest()
-    return f"{settings.authz_permission_cache_prefix}:{digest}"
+    return authz_cache_service._authz_permission_cache_key(
+        cache_prefix=settings.authz_permission_cache_prefix,
+        normalized_roles=normalized_roles,
+        normalized_module_code=normalized_module_code,
+        all_modules_token=_AUTHZ_PERMISSION_CACHE_ALL_MODULES,
+    )
 
 
 def _get_authz_permission_cache_redis_client():
@@ -1094,12 +1081,7 @@ def get_authz_module_revision_map(db: Session) -> dict[str, int]:
 
 def _authz_read_revision_state(db: Session) -> tuple[dict[str, int], str]:
     revision_by_module = get_authz_module_revision_map(db)
-    revision_token = json.dumps(
-        sorted((str(module_code), int(revision)) for module_code, revision in revision_by_module.items()),
-        ensure_ascii=True,
-        separators=(",", ":"),
-    )
-    return revision_by_module, revision_token
+    return authz_read_service.build_authz_read_revision_state(revision_by_module)
 
 
 def _bump_authz_module_revision(
@@ -1131,35 +1113,7 @@ def _bump_authz_module_revision(
 def _serialize_capability_pack_role_result(
     item: dict[str, object],
 ) -> dict[str, object]:
-    return {
-        "role_code": str(item["role_code"]),
-        "role_name": str(item["role_name"]),
-        "readonly": bool(item["readonly"]),
-        "ignored_input": bool(item["ignored_input"]),
-        "module_code": str(item["module_code"]),
-        "before_capability_codes": [
-            str(code) for code in item["before_capability_codes"]
-        ],
-        "after_capability_codes": [
-            str(code) for code in item["after_capability_codes"]
-        ],
-        "added_capability_codes": [
-            str(code) for code in item["added_capability_codes"]
-        ],
-        "removed_capability_codes": [
-            str(code) for code in item["removed_capability_codes"]
-        ],
-        "auto_linked_dependencies": [
-            str(code) for code in item["auto_linked_dependencies"]
-        ],
-        "effective_capability_codes": [
-            str(code) for code in item["effective_capability_codes"]
-        ],
-        "effective_page_permission_codes": [
-            str(code) for code in item["effective_page_permission_codes"]
-        ],
-        "updated_count": int(item["updated_count"]),
-    }
+    return authz_write_service._serialize_capability_pack_role_result(item)
 
 
 def _snapshot_capability_pack_module_state(
@@ -1202,42 +1156,17 @@ def _record_capability_pack_change_log(
     role_results: list[dict[str, object]],
 ) -> AuthzChangeLog:
     snapshot = _snapshot_capability_pack_module_state(db, module_code=module_code)
-    log_row = AuthzChangeLog(
+    return authz_write_service._record_capability_pack_change_log(
+        db,
         module_code=module_code,
         revision=revision,
-        change_type=change_type,
+        operator=operator,
         remark=remark,
-        operator_user_id=operator.id if operator is not None else None,
-        operator_username=operator.username if operator is not None else None,
+        change_type=change_type,
         rollback_of_change_log_id=rollback_of_change_log_id,
-        snapshot_json=snapshot,
+        role_results=role_results,
+        snapshot=snapshot,
     )
-    db.add(log_row)
-    db.flush()
-    for item in role_results:
-        serialized = _serialize_capability_pack_role_result(item)
-        db.add(
-            AuthzChangeLogItem(
-                change_log_id=log_row.id,
-                role_code=str(serialized["role_code"]),
-                role_name=str(serialized["role_name"]),
-                readonly=bool(serialized["readonly"]),
-                before_capability_codes=list(serialized["before_capability_codes"]),
-                after_capability_codes=list(serialized["after_capability_codes"]),
-                added_capability_codes=list(serialized["added_capability_codes"]),
-                removed_capability_codes=list(serialized["removed_capability_codes"]),
-                auto_linked_dependencies=list(serialized["auto_linked_dependencies"]),
-                effective_capability_codes=list(
-                    serialized["effective_capability_codes"]
-                ),
-                effective_page_permission_codes=list(
-                    serialized["effective_page_permission_codes"]
-                ),
-                updated_count=int(serialized["updated_count"]),
-            )
-        )
-    db.flush()
-    return log_row
 
 
 def list_permission_catalog_rows(
@@ -1454,104 +1383,10 @@ def _effective_permission_codes_from_granted(
     granted_codes: set[str],
     row_by_code: dict[str, PermissionCatalog],
 ) -> set[str]:
-    if not granted_codes:
-        return set()
-
-    effective: set[str] = set()
-    enabled_modules: set[str] = set()
-
-    for code in granted_codes:
-        row = row_by_code.get(code)
-        if row is None or row.resource_type != AUTHZ_RESOURCE_MODULE:
-            continue
-        enabled_modules.add(code)
-    effective.update(enabled_modules)
-
-    enabled_pages: set[str] = set()
-    for code in granted_codes:
-        row = row_by_code.get(code)
-        if row is None or row.resource_type != AUTHZ_RESOURCE_PAGE:
-            continue
-        module_code_value = str(row.module_code).strip()
-        module_permission = MODULE_PERMISSION_BY_MODULE_CODE.get(
-            module_code_value,
-            module_permission_code(module_code_value),
-        )
-        if module_permission in enabled_modules:
-            enabled_pages.add(code)
-    effective.update(enabled_pages)
-
-    enabled_features: set[str] = set()
-    remaining_feature_codes = {
-        code
-        for code in granted_codes
-        if (row := row_by_code.get(code)) is not None
-        and row.resource_type == AUTHZ_RESOURCE_FEATURE
-    }
-    changed = True
-    while changed:
-        changed = False
-        for code in list(remaining_feature_codes):
-            row = row_by_code.get(code)
-            if row is None:
-                remaining_feature_codes.discard(code)
-                continue
-            module_code_value = str(row.module_code).strip()
-            module_permission = MODULE_PERMISSION_BY_MODULE_CODE.get(
-                module_code_value,
-                module_permission_code(module_code_value),
-            )
-            if module_permission not in enabled_modules:
-                continue
-            feature_definition = FEATURE_BY_PERMISSION_CODE.get(code)
-            feature_page_code = (
-                PAGE_PERMISSION_BY_PAGE_CODE.get(feature_definition.page_code)
-                if feature_definition is not None
-                else row.parent_permission_code
-            )
-            if feature_page_code and feature_page_code not in enabled_pages:
-                continue
-            dependency_codes = (
-                set(feature_definition.dependency_permission_codes)
-                if feature_definition is not None
-                else set()
-            )
-            if dependency_codes and not dependency_codes.issubset(enabled_features):
-                continue
-            enabled_features.add(code)
-            remaining_feature_codes.discard(code)
-            changed = True
-    effective.update(enabled_features)
-
-    linked_action_codes: set[str] = set()
-    for code in enabled_features:
-        feature_definition = FEATURE_BY_PERMISSION_CODE.get(code)
-        if feature_definition is None:
-            continue
-        linked_action_codes.update(feature_definition.action_permission_codes)
-
-    enabled_actions: set[str] = set()
-    for code in granted_codes.union(linked_action_codes):
-        row = row_by_code.get(code)
-        if row is None or row.resource_type != AUTHZ_RESOURCE_ACTION:
-            continue
-        module_code_value = str(row.module_code).strip()
-        module_permission = MODULE_PERMISSION_BY_MODULE_CODE.get(
-            module_code_value,
-            module_permission_code(module_code_value),
-        )
-        if module_permission not in enabled_modules:
-            continue
-        parent_page_code = row.parent_permission_code
-        if (
-            parent_page_code
-            and parent_page_code.startswith("page.")
-            and parent_page_code not in enabled_pages
-        ):
-            continue
-        enabled_actions.add(code)
-    effective.update(enabled_actions)
-    return effective
+    return authz_query_service._effective_permission_codes_from_granted(
+        granted_codes=granted_codes,
+        row_by_code=row_by_code,
+    )
 
 
 def _query_effective_permission_codes_for_role_codes(
@@ -1569,14 +1404,11 @@ def _query_effective_permission_codes_for_role_codes(
         granted_codes=granted_codes,
         row_by_code=row_by_code,
     )
-    if normalized_module_code is None:
-        return effective_codes
-    return {
-        code
-        for code in effective_codes
-        if (row := row_by_code.get(code)) is not None
-        and str(row.module_code).strip() == normalized_module_code
-    }
+    return authz_query_service._filter_effective_permission_codes_by_module(
+        effective_codes=effective_codes,
+        row_by_code=row_by_code,
+        normalized_module_code=normalized_module_code,
+    )
 
 
 def _effective_permission_codes_for_role_codes(
@@ -2577,37 +2409,12 @@ def _apply_role_permission_changes(
     changed_codes: list[str],
     after_granted_codes: set[str],
 ) -> int:
-    if not changed_codes:
-        return 0
-    grant_rows = (
-        db.execute(
-            select(RolePermissionGrant).where(
-                RolePermissionGrant.role_code == role_code,
-                RolePermissionGrant.permission_code.in_(changed_codes),
-            )
-        )
-        .scalars()
-        .all()
+    return authz_write_service._apply_role_permission_changes(
+        db,
+        role_code=role_code,
+        changed_codes=changed_codes,
+        after_granted_codes=after_granted_codes,
     )
-    row_by_permission = {row.permission_code: row for row in grant_rows}
-    updated_count = 0
-    for permission_code in changed_codes:
-        should_grant = permission_code in after_granted_codes
-        row = row_by_permission.get(permission_code)
-        if row is None:
-            db.add(
-                RolePermissionGrant(
-                    role_code=role_code,
-                    permission_code=permission_code,
-                    granted=should_grant,
-                )
-            )
-            updated_count += 1
-            continue
-        if bool(row.granted) != should_grant:
-            row.granted = should_grant
-            updated_count += 1
-    return updated_count
 
 
 def get_permission_hierarchy_catalog(

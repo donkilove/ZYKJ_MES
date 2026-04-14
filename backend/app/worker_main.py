@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from app.bootstrap import run_startup_bootstrap
-from app.core.config import settings
+from app.core.config import ensure_runtime_settings_secure, settings
 from app.services.maintenance_scheduler_service import run_maintenance_auto_generate_loop
 from app.services.message_service import run_message_delivery_maintenance_loop
 
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 async def run_worker() -> None:
+    ensure_runtime_settings_secure()
     if settings.worker_run_bootstrap:
         run_startup_bootstrap()
 

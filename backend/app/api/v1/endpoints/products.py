@@ -585,24 +585,27 @@ def create_product_api(
             remark=payload.remark,
             operator=current_user,
         )
+        write_audit_log(
+            db,
+            action_code="product.create",
+            action_name="新建产品",
+            target_type="product",
+            target_id=str(product.id),
+            target_name=product.name,
+            operator=current_user,
+            after_data={
+                "name": product.name,
+                "category": product.category,
+                "remark": product.remark,
+            },
+        )
+        db.commit()
     except (ValueError, ValidationError) as error:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
-
-    write_audit_log(
-        db,
-        action_code="product.create",
-        action_name="新建产品",
-        target_type="product",
-        target_id=str(product.id),
-        target_name=product.name,
-        operator=current_user,
-        after_data={
-            "name": product.name,
-            "category": product.category,
-            "remark": product.remark,
-        },
-    )
-    db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return success_response(to_product_item(product, None), message="created")
 
 

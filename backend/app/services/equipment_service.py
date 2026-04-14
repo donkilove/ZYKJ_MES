@@ -343,7 +343,7 @@ def create_equipment(
         is_enabled=True,
     )
     db.add(row)
-    db.commit()
+    db.flush()
     db.refresh(row)
     return row
 

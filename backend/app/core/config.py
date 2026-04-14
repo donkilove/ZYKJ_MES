@@ -3,6 +3,11 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+INSECURE_JWT_SECRET_KEYS = frozenset({"", "replace_with_a_strong_secret"})
+INSECURE_BOOTSTRAP_ADMIN_PASSWORDS = frozenset({"", "Admin@123456"})
+INSECURE_PRODUCTION_DEFAULT_VERIFICATION_CODES = frozenset({"", "123456"})
+
+
 class Settings(BaseSettings):
     app_name: str = "ZYKJ MES API"
     app_env: str = "dev"
@@ -81,3 +86,43 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def _normalized_setting_value(value: str | None) -> str:
+    return (value or "").strip()
+
+
+def jwt_secret_is_secure() -> bool:
+    return _normalized_setting_value(settings.jwt_secret_key) not in INSECURE_JWT_SECRET_KEYS
+
+
+def bootstrap_admin_password_is_secure() -> bool:
+    return (
+        _normalized_setting_value(settings.bootstrap_admin_password)
+        not in INSECURE_BOOTSTRAP_ADMIN_PASSWORDS
+    )
+
+
+def production_default_verification_code_is_secure() -> bool:
+    return (
+        _normalized_setting_value(settings.production_default_verification_code)
+        not in INSECURE_PRODUCTION_DEFAULT_VERIFICATION_CODES
+    )
+
+
+def ensure_runtime_settings_secure(
+    *,
+    require_bootstrap_password: bool = False,
+    require_verification_code: bool = False,
+) -> None:
+    errors: list[str] = []
+    if not jwt_secret_is_secure():
+        errors.append("JWT 密钥配置不安全，请显式设置 jwt_secret_key。")
+    if require_bootstrap_password and not bootstrap_admin_password_is_secure():
+        errors.append("管理员初始化口令配置不安全，请显式设置 bootstrap_admin_password。")
+    if require_verification_code and not production_default_verification_code_is_secure():
+        errors.append(
+            "首件验证码默认值配置不安全，请显式设置 production_default_verification_code。"
+        )
+    if errors:
+        raise ValueError("；".join(errors))

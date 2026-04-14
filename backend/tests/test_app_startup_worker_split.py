@@ -14,11 +14,25 @@ from app import worker_main
 
 
 class AppStartupWorkerSplitUnitTest(unittest.TestCase):
+    def test_web_lifespan_rejects_insecure_runtime_settings(self) -> None:
+        async def run_case() -> None:
+            with (
+                patch.object(app_main.settings, "jwt_secret_key", "replace_with_a_strong_secret"),
+                patch.object(app_main.settings, "web_run_bootstrap", False),
+                patch.object(app_main.settings, "web_run_background_loops", False),
+            ):
+                with self.assertRaisesRegex(ValueError, "JWT"):
+                    async with app_main.lifespan(app_main.app):
+                        pass
+
+        asyncio.run(run_case())
+
     def test_web_lifespan_skips_bootstrap_and_background_loops_when_disabled(self) -> None:
         async def run_case() -> None:
             maintenance_mock = AsyncMock()
             message_mock = AsyncMock()
             with (
+                patch.object(app_main.settings, "jwt_secret_key", "unit-test-jwt-secret"),
                 patch.object(app_main.settings, "web_run_bootstrap", False),
                 patch.object(app_main.settings, "web_run_background_loops", False),
                 patch.object(app_main, "run_startup_bootstrap") as bootstrap_mock,
@@ -56,6 +70,11 @@ class AppStartupWorkerSplitUnitTest(unittest.TestCase):
                 await stop_event.wait()
 
             with (
+                patch.object(
+                    worker_main.settings,
+                    "jwt_secret_key",
+                    "unit-test-jwt-secret",
+                ),
                 patch.object(worker_main.settings, "worker_run_bootstrap", True),
                 patch.object(worker_main.settings, "worker_run_background_loops", True),
                 patch.object(

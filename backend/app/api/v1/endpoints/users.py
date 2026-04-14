@@ -393,24 +393,27 @@ def create_user_api(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
     if not user:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create user")
-
-    write_audit_log(
-        db,
-        action_code="user.create",
-        action_name="新建用户",
-        target_type="user",
-        target_id=str(user.id),
-        target_name=user.username,
-        operator=current_user,
-        after_data={
-            "username": user.username,
-            "role_code": user.roles[0].code if user.roles else None,
-            "stage_id": user.stage_id,
-        },
-        ip_address=request.client.host if request and request.client else None,
-        terminal_info=request.headers.get("user-agent") if request else None,
-    )
-    db.commit()
+    try:
+        write_audit_log(
+            db,
+            action_code="user.create",
+            action_name="新建用户",
+            target_type="user",
+            target_id=str(user.id),
+            target_name=user.username,
+            operator=current_user,
+            after_data={
+                "username": user.username,
+                "role_code": user.roles[0].code if user.roles else None,
+                "stage_id": user.stage_id,
+            },
+            ip_address=request.client.host if request and request.client else None,
+            terminal_info=request.headers.get("user-agent") if request else None,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return success_response(
         to_user_item(
             user,

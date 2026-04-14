@@ -168,7 +168,6 @@ def create_assist_authorization(
             "status": row.status,
         },
     )
-    db.commit()
     db.refresh(row)
     return row
 

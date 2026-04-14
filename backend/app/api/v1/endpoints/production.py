@@ -1581,7 +1581,9 @@ def create_assist_authorization_api(
             reason=payload.reason,
             requester=current_user,
         )
+        db.commit()
     except Exception as error:
+        db.rollback()
         _raise_service_error(error)
     return success_response(
         _to_assist_authorization_item(row),

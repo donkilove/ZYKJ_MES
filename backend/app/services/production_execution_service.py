@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.authz_catalog import PERM_PROD_MY_ORDERS_PROXY
-from app.core.config import settings
+from app.core.config import ensure_runtime_settings_secure, settings
 from app.core.production_constants import (
     ORDER_STATUS_COMPLETED,
     ORDER_STATUS_IN_PROGRESS,
@@ -66,6 +66,7 @@ def _get_today_verification_code(
     )
     if row:
         return row
+    ensure_runtime_settings_secure(require_verification_code=True)
     row = DailyVerificationCode(
         verify_date=today,
         code=settings.production_default_verification_code,

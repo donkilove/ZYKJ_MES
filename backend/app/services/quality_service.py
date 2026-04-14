@@ -14,7 +14,10 @@ from uuid import uuid4
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.config import settings
+from app.core.config import (
+    production_default_verification_code_is_secure,
+    settings,
+)
 from app.models.daily_verification_code import DailyVerificationCode
 from app.models.first_article_disposition import FirstArticleDisposition
 from app.models.first_article_disposition_history import FirstArticleDispositionHistory
@@ -686,15 +689,10 @@ def list_first_articles(
         .scalars()
         .first()
     )
-    if code_row:
-        verification_code = code_row.code
-        verification_code_source = "stored"
-    elif query_date == date.today():
-        verification_code = settings.production_default_verification_code
-        verification_code_source = "default"
-    else:
-        verification_code = None
-        verification_code_source = "none"
+    verification_code, verification_code_source = _resolve_query_verification_code(
+        code_row=code_row,
+        query_date=query_date,
+    )
 
     items: list[dict[str, object]] = []
     for row in rows:
@@ -729,6 +727,18 @@ def list_first_articles(
         "total": total,
         "items": items,
     }
+
+
+def _resolve_query_verification_code(
+    *,
+    code_row: DailyVerificationCode | None,
+    query_date: date,
+) -> tuple[str | None, str]:
+    if code_row:
+        return code_row.code, "stored"
+    if query_date == date.today() and production_default_verification_code_is_secure():
+        return settings.production_default_verification_code, "default"
+    return None, "none"
 
 
 def _load_first_article_rows(

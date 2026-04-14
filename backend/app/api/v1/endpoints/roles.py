@@ -108,24 +108,28 @@ def create_role_api(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="; ".join(errors))
     if not role:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create role")
-    write_audit_log(
-        db,
-        action_code="role.create",
-        action_name="新建角色",
-        target_type="role",
-        target_id=str(role.id),
-        target_name=role.name,
-        operator=current_user,
-        after_data={
-            "code": role.code,
-            "name": role.name,
-            "role_type": role.role_type,
-            "is_enabled": role.is_enabled,
-        },
-        ip_address=request.client.host if request.client else None,
-        terminal_info=request.headers.get("user-agent"),
-    )
-    db.commit()
+    try:
+        write_audit_log(
+            db,
+            action_code="role.create",
+            action_name="新建角色",
+            target_type="role",
+            target_id=str(role.id),
+            target_name=role.name,
+            operator=current_user,
+            after_data={
+                "code": role.code,
+                "name": role.name,
+                "role_type": role.role_type,
+                "is_enabled": role.is_enabled,
+            },
+            ip_address=request.client.host if request.client else None,
+            terminal_info=request.headers.get("user-agent"),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return success_response(to_role_item(db, role), message="created")
 
 

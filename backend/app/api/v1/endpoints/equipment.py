@@ -396,20 +396,23 @@ def create_equipment_ledger(
             owner_name=payload.owner_name,
             remark=payload.remark,
         )
+        write_audit_log(
+            db,
+            action_code="equipment.ledger.create",
+            action_name="新增设备台账",
+            target_type="equipment",
+            target_id=str(row.id),
+            target_name=row.name,
+            operator=current_user,
+            after_data={"code": row.code, "name": row.name, "model": row.model},
+        )
+        db.commit()
     except ValueError as error:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
-
-    write_audit_log(
-        db,
-        action_code="equipment.ledger.create",
-        action_name="新增设备台账",
-        target_type="equipment",
-        target_id=str(row.id),
-        target_name=row.name,
-        operator=current_user,
-        after_data={"code": row.code, "name": row.name, "model": row.model},
-    )
-    db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return success_response(to_equipment_item(row), message="created")
 
 

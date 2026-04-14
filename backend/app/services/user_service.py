@@ -682,7 +682,7 @@ def create_user(db: Session, payload: UserCreate) -> tuple[User | None, str | No
     user.roles = [role] if role else []
     user.processes = processes or []
     db.add(user)
-    db.commit()
+    db.flush()
     db.refresh(user)
     return user, None
 

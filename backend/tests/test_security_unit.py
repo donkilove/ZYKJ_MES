@@ -55,6 +55,15 @@ class SecurityUnitTest(unittest.TestCase):
         self.assertFalse(second)
         self.assertEqual(verify_password.call_count, 2)
 
+    def test_create_access_token_rejects_insecure_placeholder_secret(self) -> None:
+        with patch.object(
+            security.settings,
+            "jwt_secret_key",
+            "replace_with_a_strong_secret",
+        ):
+            with self.assertRaisesRegex(ValueError, "JWT"):
+                security.create_access_token("7")
+
 
 if __name__ == "__main__":
     unittest.main()

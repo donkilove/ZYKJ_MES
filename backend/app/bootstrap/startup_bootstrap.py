@@ -9,7 +9,7 @@ from alembic.config import Config
 from psycopg2 import sql
 from psycopg2.errors import DuplicateDatabase
 
-from app.core.config import settings
+from app.core.config import ensure_runtime_settings_secure, settings
 from app.db.session import SessionLocal
 from app.services.bootstrap_seed_service import seed_initial_data
 
@@ -99,6 +99,7 @@ def run_startup_bootstrap() -> None:
 
     logger.info("[BOOTSTRAP] Startup bootstrap begin.")
     try:
+        ensure_runtime_settings_secure(require_bootstrap_password=True)
         ensure_database_exists()
         run_alembic_upgrade()
         seed_startup_data()
