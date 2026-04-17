@@ -2,7 +2,7 @@
 
 - 执行日期：2026-04-17
 - 对应主日志：`evidence/task_log_20260417_backend_p95_40_production_craft_batch1.md`
-- 当前状态：任务 1、任务 2、任务 3、任务 4 已通过
+- 当前状态：任务 1、任务 2、任务 3、任务 4、任务 5 已完成
 
 ## 1. 任务分类
 
@@ -32,6 +32,7 @@
 | 7 | `pytest` | `backend/tests/test_production_craft_scenarios_unit.py` | 运行任务 3 的场景拆分与契约校准验证 | `4 passed` | 主日志 |
 | 8 | `pytest` | `backend/tests/test_backend_capacity_gate_unit.py`、`backend/tests/test_write_gate_sample_runtime_unit.py`、`backend/tests/test_write_gate_integration.py`、`backend/tests/test_perf_sample_seed_service_unit.py`、`backend/tests/test_perf_production_craft_samples_integration.py` | 运行任务 3 修改后的全量回归 | `13 passed` 与 `3 passed` | 主日志 |
 | 9 | Python CLI + `pytest` | `backend/tests/test_production_module_integration.py`、`backend/tests/test_craft_module_integration.py` | 运行任务 4 的模块级 `perf_seeded` 回归 | `2 passed` | 主日志 |
+| 10 | Python CLI | `backend-capacity-gate` read/detail/write/combined | 运行任务 5 的模块级结果与全链路回灌 | 生成 4 份结果 JSON | 主日志 |
 
 ## 4. 验证留痕
 
@@ -40,9 +41,9 @@
 | G1 | 通过 | E1 | 已归类为 CAT-01 |
 | G2 | 通过 | E1 | 已记录工具触发与原因 |
 | G3 | 通过 | E2 | 子代理通道不稳定已记录，并切回内联执行补偿 |
-| G4 | 通过 | E3-E6 | 已完成真实 pytest 与样本脚本执行 |
-| G5 | 通过 | E1-E6 | 已形成“触发 -> 实现 -> 重试 -> 验证 -> 收口”闭环 |
-| G7 | 通过 | E6 | 无迁移，直接替换 |
+| G4 | 通过 | E3-E9 | 已完成真实 pytest、样本脚本、压测命令与结果文件验证 |
+| G5 | 通过 | E1-E9 | 已形成“触发 -> 实现 -> 重试 -> 验证 -> 收口”闭环 |
+| G7 | 通过 | E9 | 无迁移，直接替换 |
 
 ## 4.1 证据编号表
 
@@ -54,6 +55,9 @@
 | E4 | 任务 2 的 pytest 输出 | 2026-04-17 14:50 | 样本上下文占位符与写门禁接线已通过真实测试 |
 | E5 | 任务 3 的 pytest 输出 | 2026-04-17 16:05 | 模块级场景文件、核心 combined 场景占位符和上下文字段已通过真实测试 |
 | E6 | 任务 4 的 pytest 输出 | 2026-04-17 16:20 | `production/craft` 模块已具备 `perf_seeded` 正式回归入口 |
+| E7 | `production_craft_read_40_20260417_171623.json` | 2026-04-17 17:16 | `read` 子套件达到 `success_rate=98.69%`、`p95_ms=476.09`，已过门禁 |
+| E8 | `production_craft_detail_40_20260417_171731.json`、`production_craft_write_40_20260417_171834.json` | 2026-04-17 17:18 | `detail` 已大幅进入成功路径，`write` 仍需重点治理 |
+| E9 | `combined_40_production_craft_roundtrip_20260417_172012.json` | 2026-04-17 17:20 | 全链路回灌已改善 `production/craft` 相关场景，但整体仍未过门禁 |
 
 ## 5. 失败重试
 
@@ -68,6 +72,9 @@
 | 7 | 任务 2 集成测试 | `test_write_gate_integration.py` 登录链路触发 `JWT 密钥配置不安全` | 该测试文件未同步设置安全 JWT 密钥 | 在 `setUp/tearDown` 中临时设置并恢复 JWT 密钥 | 通过 |
 | 8 | 任务 3 场景校准 | 场景单测要求样本上下文暴露 `stage_code/process_code/order_process_id` 等键 | 任务 1 初版上下文不足以支撑 detail/write 占位符 | 扩展 `perf_sample_seed_service` 的上下文字段集合 | 通过 |
 | 9 | 任务 4 模块回归 | 现有 `production/craft` 集成测试没有可直接消费样本上下文的入口 | 模块级回归仍依赖临时建样 helper，缺少正式执行口径 | 新增 `load_perf_sample_context()` 与 `perf_seeded` 用例，并统一设置测试内安全 JWT 密钥 | 通过 |
+| 10 | 任务 5 模块级 read 压测 | `backend-capacity-gate` 无条件构建未使用的默认 token 池，导致 token 获取失败 | 模块级套件只依赖 `pool-production`，默认池不应参与登录 | 增加“按场景过滤 token pool”逻辑并补单测 | 通过 |
+| 11 | 任务 5 CLI 执行 | `project_toolkit backend-capacity-gate` 未暴露 `--sample-context-file` 与 `--gate-mode` | CLI 壳层未跟上底层能力扩展 | 在 `tools/project_toolkit.py` 增补参数透传 | 通过 |
+| 12 | 任务 5 模块级 read 压测 | `ltprd1` 登录成功但 `production/craft` 权限快照为空，全套件 `403` | `production_admin` 当前权限模板与 endpoint 检查口径不一致 | 运行时直接给 `production_admin` 铺满 `production/craft` 模块权限后复跑 | 通过 |
 
 ## 6. 降级/阻塞/代记
 
@@ -76,16 +83,16 @@
   - 工作树未携带 `.venv`，改用主仓库共享虚拟环境
   - `Sequential Thinking` 独立入口不可用，使用 `update_plan` 作为等效拆解工具
 - 执行补偿：
-  - 子代理驱动通道不稳定，任务 1、任务 2、任务 3、任务 4 均切回内联执行
+  - 子代理驱动通道不稳定，任务 1、任务 2、任务 3、任务 4、任务 5 均切回内联执行
 - 阻塞记录：无
 - evidence 代记：无
 
 ## 7. 通过判定
 
-- 是否完成闭环：是（限任务 1、任务 2、任务 3、任务 4）
-- 是否满足门禁：是（限任务 1、任务 2、任务 3、任务 4）
-- 是否存在残余风险：有，后续任务仍需继续执行模块级 `40` 并发结果和 `270` 场景回灌
-- 最终判定：任务 1、任务 2、任务 3、任务 4 通过
+- 是否完成闭环：是（第一批任务 1-5 均已执行并留痕）
+- 是否满足门禁：部分满足
+- 是否存在残余风险：有，`detail` 和 `write` 套件仍未过门禁，全链路回灌仍未通过
+- 最终判定：第一批执行完成，可交付阶段性结果，但尚未达到最终全链路门禁通过
 
 ## 8. 迁移说明
 

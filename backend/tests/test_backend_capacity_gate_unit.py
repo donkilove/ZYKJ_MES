@@ -298,6 +298,39 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
         )
         self.assertEqual(payload["by_layer"]["L2"]["error_types"]["422"], 1)
 
+    def test_filter_token_pools_skips_unused_default_pool(self) -> None:
+        scenario_registry = {
+            "production-orders-read": backend_capacity_gate.ScenarioSpec(
+                name="production-orders-read",
+                method="GET",
+                path="/api/v1/production/orders",
+                requires_auth=True,
+                token_pool="pool-production",
+            )
+        }
+        token_pools = {
+            "default": backend_capacity_gate.TokenPoolSpec(
+                name="default",
+                login_user_prefix="loadtest_",
+                password="Admin@123456",
+                token_count=20,
+            ),
+            "pool-production": backend_capacity_gate.TokenPoolSpec(
+                name="pool-production",
+                login_user_prefix="ltprd",
+                password="Admin@123456",
+                token_count=4,
+            ),
+        }
+
+        filtered = backend_capacity_gate._filter_token_pool_specs_for_scenarios(
+            scenarios=["production-orders-read"],
+            scenario_registry=scenario_registry,
+            token_pool_specs=token_pools,
+        )
+
+        self.assertEqual(list(filtered.keys()), ["pool-production"])
+
     def test_materialize_request_supports_sample_placeholders(self) -> None:
         scenario = backend_capacity_gate.ScenarioSpec(
             name="production-order-detail",

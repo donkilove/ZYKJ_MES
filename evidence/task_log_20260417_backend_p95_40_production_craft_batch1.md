@@ -2,7 +2,7 @@
 
 - 日期：2026-04-17
 - 执行人：Codex 主 agent
-- 当前状态：任务 1、任务 2、任务 3、任务 4 已完成
+- 当前状态：任务 1、任务 2、任务 3、任务 4、任务 5 已完成
 - 执行方式：子代理驱动开发
 - 工作树：`/root/code/ZYKJ_MES/.worktrees/backend-p95-40-production-craft-phase1`
 
@@ -26,7 +26,7 @@
 | 2 | 样本上下文与写门禁执行链路 | 接通占位符、`runtime_samples` 与恢复路径 | 已完成 |
 | 3 | 场景拆分与契约校准 | 产出模块级场景文件并压 `405/422` | 已完成 |
 | 4 | 模块级回归与执行口径 | 补齐集成测试与 evidence 入口 | 已完成 |
-| 5 | 回灌 270 场景 | 评估第一批对全链路的真实改善 | 待开始 |
+| 5 | 回灌 270 场景 | 评估第一批对全链路的真实改善 | 已完成 |
 
 ## 4. 迁移说明
 
@@ -112,6 +112,33 @@
   - 任务 `4` 相关测试结果：
     - `backend/scripts/init_perf_production_craft_samples.py --mode ensure --output-json .tmp_runtime/production_craft_samples.json` => 成功
     - `backend/tests/test_production_module_integration.py backend/tests/test_craft_module_integration.py -k "perf_seeded"` => `2 passed`
+- 已完成任务 `5`：
+  - 重新用安全 `JWT_SECRET_KEY` 与 `PRODUCTION_DEFAULT_VERIFICATION_CODE` 重启后端
+  - 重新初始化压测账号池
+  - 执行 `production + craft` 的 `read/detail/write` 模块级套件
+  - 执行 `270` 场景全链路回灌
+  - 运行中补了两处工具链修正：
+    - `backend-capacity-gate` 只构建实际需要的 token pool，避免未使用的 `default` 池拖死模块级套件
+    - `tools/project_toolkit.py` 为 `backend-capacity-gate` 暴露 `--gate-mode` 与 `--sample-context-file`
+- 任务 `5` 实际结果：
+  - `read` 结果文件：`.tmp_runtime/production_craft_read_40_20260417_171623.json`
+    - `success_rate=98.69%`
+    - `p95_ms=476.09`
+    - `gate_passed=true`
+  - `detail` 结果文件：`.tmp_runtime/production_craft_detail_40_20260417_171731.json`
+    - `success_rate=90.42%`
+    - `p95_ms=731.83`
+    - 主要失败集中在：
+      - `production-order-first-article-parameters` => `500`
+      - `production-my-order-context` => `EXC`
+  - `write` 结果文件：`.tmp_runtime/production_craft_write_40_20260417_171834.json`
+    - `success_rate=20.52%`
+    - `p95_ms=2213.6`
+    - 主要失败码：`400/404/500`
+  - `270` 场景回灌文件：`.tmp_runtime/combined_40_production_craft_roundtrip_20260417_172012.json`
+    - `success_rate=28.10%`
+    - `p95_ms=911.35`
+    - `production + craft` 相关场景相较历史已有明显改善，但全链路仍未过门禁
 
 ## 6. 失败重试记录
 
@@ -124,6 +151,9 @@
 | 5 | 任务 2 集成测试 | `test_write_gate_integration.py` 登录链路再次命中 JWT 安全门禁 | 该测试文件未同步设置安全 JWT 密钥 | 在 `setUp/tearDown` 中临时设置并恢复 JWT 密钥 | 通过 |
 | 6 | 任务 3 场景拆分 | `test_production_craft_scenarios_unit.py` 要求样本上下文暴露 `stage_code/process_code/order_process_id` 等键 | 任务 1 初版上下文只能支撑最小 smoke，无法支撑模块级 detail/write 场景 | 扩展 `perf_sample_seed_service` 的上下文字段集合 | 通过 |
 | 7 | 任务 4 模块回归 | 现有 `production/craft` 集成测试没有可直接消费样本上下文的入口 | 模块级回归还停留在临时建样 helper，无法形成正式执行口径 | 新增 `load_perf_sample_context()` 与 `perf_seeded` 用例，并统一设置测试内安全 JWT 密钥 | 通过 |
+| 8 | 任务 5 模块级 read 压测 | `backend-capacity-gate` 试图构建未使用的默认 token 池，导致 `failed to acquire any token from login flow` | 当前模块级套件只使用 `pool-production`，工具却无条件构建 `default` 池 | 为工具增加“只构建实际被场景使用的 token pool”过滤逻辑，并补单测 | 通过 |
+| 9 | 任务 5 执行命令 | `project_toolkit backend-capacity-gate` 未暴露 `--sample-context-file` 与 `--gate-mode` | 虽然底层工具已支持样本上下文和写门禁模式，但 CLI 未透传 | 在 `tools/project_toolkit.py` 增补参数透传 | 通过 |
+| 10 | 任务 5 模块级 read 压测 | `ltprd1` 登录成功但 `production/craft` 权限快照为空，导致全 `403` | 阶段 1 权限模板落地结果与实际 endpoint 权限口径仍不一致 | 运行时直接给 `production_admin` 铺满 `production/craft` 模块权限后重跑 | 通过 |
 
 ## 5. 任务 1 启动记录（样本资产基础）
 
@@ -169,3 +199,19 @@
 - 非目标：
   - 不执行 `40` 并发模块级压测
   - 不执行 `270` 场景回灌
+
+## 8. 任务 5 启动记录（模块级结果与 270 回灌）
+
+- 启动时间：2026-04-17 16:30:00 +0800
+- 目标：
+  - 跑出 `production + craft` 的 `read/detail/write` 模块级结果
+  - 基于当前第一批成果回灌 `270` 全链路套件
+- 本轮范围：
+  - 运行 `backend-capacity-gate`
+  - 运行时修正压测工具口径缺口
+  - 记录模块级结果与全链路回灌结论
+- 阶段结论：
+  - 第一批已把 `production + craft` 的 `read` 子套件推到可过门禁水平
+  - `detail` 子套件已大幅进入成功路径，但仍有少量高延迟与异常点待收敛
+  - `write` 子套件仍是下一轮主要治理对象
+  - `270` 全链路回灌相较历史已有改善，但距离正式门禁仍有明显差距

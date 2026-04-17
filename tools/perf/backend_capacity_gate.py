@@ -348,6 +348,27 @@ def _build_token_pool_registry(
     return registry
 
 
+def _filter_token_pool_specs_for_scenarios(
+    *,
+    scenarios: list[str],
+    scenario_registry: dict[str, ScenarioSpec],
+    token_pool_specs: dict[str, TokenPoolSpec],
+) -> dict[str, TokenPoolSpec]:
+    required_pool_names: set[str] = set()
+    for scenario_name in scenarios:
+        scenario_spec = scenario_registry[scenario_name]
+        if scenario_name == "login":
+            required_pool_names.add("default")
+            continue
+        if scenario_spec.requires_auth:
+            required_pool_names.add(scenario_spec.token_pool or "default")
+    return {
+        name: spec
+        for name, spec in token_pool_specs.items()
+        if name in required_pool_names
+    }
+
+
 def _build_scenario_runtime(
     args,
 ) -> tuple[dict[str, ScenarioSpec], dict[str, TokenPoolSpec]]:
@@ -725,14 +746,20 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
         for _ in range(session_pool_size)
     ]
 
-    token_pools = await _build_token_pools(
-        clients=clients,
-        base_url=base_url,
+    required_token_pool_specs = _filter_token_pool_specs_for_scenarios(
+        scenarios=scenarios,
+        scenario_registry=scenario_registry,
         token_pool_specs=token_pool_specs,
     )
 
+    token_pools = await _build_token_pools(
+        clients=clients,
+        base_url=base_url,
+        token_pool_specs=required_token_pool_specs,
+    )
+
     login_usernames_by_pool: dict[str, list[str]] = {}
-    for name, spec in token_pool_specs.items():
+    for name, spec in required_token_pool_specs.items():
         if not spec.login_user_prefix:
             continue
         login_pool_size = max(args.session_pool_size, spec.token_count or 1)
@@ -813,8 +840,8 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
         "token_pools": {
             name: {
                 "token_count": len(tokens),
-                "login_user_prefix": token_pool_specs[name].login_user_prefix,
-                "token_file": token_pool_specs[name].token_file,
+                "login_user_prefix": required_token_pool_specs[name].login_user_prefix,
+                "token_file": required_token_pool_specs[name].token_file,
             }
             for name, tokens in token_pools.items()
         },
