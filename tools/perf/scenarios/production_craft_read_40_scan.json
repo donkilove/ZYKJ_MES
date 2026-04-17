@@ -1,0 +1,198 @@
+{
+  "token_pools": [
+    {
+      "name": "pool-production",
+      "login_user_prefix": "ltprd",
+      "token_count": 4
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "craft-stages",
+      "method": "GET",
+      "path": "/api/v1/craft/stages",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "query": {
+        "page": "1",
+        "page_size": "20"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-processes",
+      "method": "GET",
+      "path": "/api/v1/craft/processes",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "query": {
+        "page": "1",
+        "page_size": "20"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-stages-light",
+      "method": "GET",
+      "path": "/api/v1/craft/stages/light",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-processes-light",
+      "method": "GET",
+      "path": "/api/v1/craft/processes/light",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-templates",
+      "method": "GET",
+      "path": "/api/v1/craft/templates",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "query": {
+        "page": "1",
+        "page_size": "20"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-kanban-process-metrics",
+      "method": "GET",
+      "path": "/api/v1/craft/kanban/process-metrics",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "query": {
+        "product_id": "{sample:product_id}"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-kanban-process-metrics-export",
+      "method": "GET",
+      "path": "/api/v1/craft/kanban/process-metrics/export",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "query": {
+        "product_id": "{sample:product_id}"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-stats-processes",
+      "method": "GET",
+      "path": "/api/v1/production/stats/processes",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-stats-operators",
+      "method": "GET",
+      "path": "/api/v1/production/stats/operators",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-stats-overview",
+      "method": "GET",
+      "path": "/api/v1/production/stats/overview",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-data-today-realtime",
+      "method": "GET",
+      "path": "/api/v1/production/data/today-realtime",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-data-unfinished-progress",
+      "method": "GET",
+      "path": "/api/v1/production/data/unfinished-progress",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-data-manual",
+      "method": "GET",
+      "path": "/api/v1/production/data/manual",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "query": {
+        "page": "1",
+        "page_size": "20"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-assist-user-options",
+      "method": "GET",
+      "path": "/api/v1/production/assist-user-options",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-pipeline-instances",
+      "method": "GET",
+      "path": "/api/v1/production/pipeline-instances",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "query": {
+        "page": "1",
+        "page_size": "20"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-my-orders",
+      "method": "GET",
+      "path": "/api/v1/production/my-orders",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "query": {
+        "page": "1",
+        "page_size": "20"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-orders-list",
+      "method": "GET",
+      "path": "/api/v1/production/orders",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L1",
+      "query": {
+        "page": "1",
+        "page_size": "20"
+      },
+      "success_statuses": [200]
+    }
+  ]
+}

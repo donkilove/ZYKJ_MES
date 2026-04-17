@@ -5,12 +5,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.models.production_order import ProductionOrder
+from app.models.production_order_process import ProductionOrderProcess
 from app.models.product import Product
 from app.models.product_revision import ProductRevision
 from app.models.product_process_template import ProductProcessTemplate
@@ -433,14 +434,42 @@ def seed_production_craft_samples(
     created_count += int(created)
     updated_count += int(updated)
 
+    order_process_rows = (
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(ProductionOrderProcess.order_id == order.id)
+            .order_by(ProductionOrderProcess.process_order.asc(), ProductionOrderProcess.id.asc())
+            .options(
+                selectinload(ProductionOrderProcess.process),
+                selectinload(ProductionOrderProcess.stage),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(order_process_rows) < 2:
+        raise ValueError("稳定生产订单未生成至少两道工序，无法支撑 production/craft 场景")
+    primary_order_process, secondary_order_process = order_process_rows[:2]
+
     context: dict[str, int | str] = {
+        "admin_user_id": admin_user.id,
+        "admin_username": admin_user.username,
         "product_id": product.id,
+        "product_name": product.name,
         "stage_id": stage.id,
+        "stage_code": stage.code,
         "process_id": process_primary.id,
+        "process_code": process_primary.code,
         "secondary_process_id": process_secondary.id,
+        "secondary_process_code": process_secondary.code,
         "supplier_id": supplier.id,
+        "supplier_name": supplier.name,
         "craft_template_id": template.id,
+        "craft_template_name": template.template_name,
         "production_order_id": order.id,
+        "production_order_code": order.order_code,
+        "order_process_id": primary_order_process.id,
+        "secondary_order_process_id": secondary_order_process.id,
     }
     run_scoped_refs: list[str] = []
 

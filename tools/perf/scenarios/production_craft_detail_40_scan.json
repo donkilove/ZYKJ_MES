@@ -1,0 +1,161 @@
+{
+  "token_pools": [
+    {
+      "name": "pool-production",
+      "login_user_prefix": "ltprd",
+      "token_count": 4
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "craft-stages-detail-query",
+      "method": "GET",
+      "path": "/api/v1/craft/stages/detail",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "query": {
+        "stage_id": "{sample:stage_id}"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-processes-detail-query",
+      "method": "GET",
+      "path": "/api/v1/craft/processes/detail",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "query": {
+        "process_id": "{sample:process_id}"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-stage-references",
+      "method": "GET",
+      "path": "/api/v1/craft/stages/{sample:stage_id}/references",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-process-references",
+      "method": "GET",
+      "path": "/api/v1/craft/processes/{sample:process_id}/references",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "success_statuses": [200]
+    },
+    {
+      "name": "products-template-references",
+      "method": "GET",
+      "path": "/api/v1/craft/products/{sample:product_id}/template-references",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-template-detail",
+      "method": "GET",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-template-impact-analysis",
+      "method": "GET",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}/impact-analysis",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-template-references",
+      "method": "GET",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}/references",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-order-detail",
+      "method": "GET",
+      "path": "/api/v1/production/orders/{sample:production_order_id}",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-order-pipeline-mode",
+      "method": "GET",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/pipeline-mode",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-order-first-article-templates",
+      "method": "GET",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/first-article/templates",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "query": {
+        "order_process_id": "{sample:order_process_id}"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-order-first-article-participant-users",
+      "method": "GET",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/first-article/participant-users",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-order-first-article-parameters",
+      "method": "GET",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/first-article/parameters",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "query": {
+        "order_process_id": "{sample:order_process_id}"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-my-order-context",
+      "method": "GET",
+      "path": "/api/v1/production/my-orders/{sample:production_order_id}/context",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-order-events-search",
+      "method": "GET",
+      "path": "/api/v1/production/order-events/search",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L2",
+      "query": {
+        "order_code": "{sample:production_order_code}"
+      },
+      "success_statuses": [200]
+    }
+  ]
+}

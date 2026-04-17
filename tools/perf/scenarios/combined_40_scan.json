@@ -106,28 +106,30 @@
       "method": "GET",
       "path": "/api/v1/craft/stages/detail",
       "query": {
-        "stage_id": "1"
+        "stage_id": "{sample:stage_id}"
       },
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "craft-processes-detail-query",
       "method": "GET",
       "path": "/api/v1/craft/processes/detail",
       "query": {
-        "process_id": "1"
+        "process_id": "{sample:process_id}"
       },
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "craft-system-master-template",
@@ -143,24 +145,26 @@
     {
       "name": "craft-stage-references-1",
       "method": "GET",
-      "path": "/api/v1/craft/stages/1/references",
+      "path": "/api/v1/craft/stages/{sample:stage_id}/references",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "craft-process-references-1",
       "method": "GET",
-      "path": "/api/v1/craft/processes/1/references",
+      "path": "/api/v1/craft/processes/{sample:process_id}/references",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "quality-supplier-detail-1",
@@ -176,88 +180,95 @@
     {
       "name": "production-order-detail-18",
       "method": "GET",
-      "path": "/api/v1/production/orders/18",
+      "path": "/api/v1/production/orders/{sample:production_order_id}",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "production-order-pipeline-mode-18",
       "method": "GET",
-      "path": "/api/v1/production/orders/18/pipeline-mode",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/pipeline-mode",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "production-order-first-article-templates-18",
       "method": "GET",
-      "path": "/api/v1/production/orders/18/first-article/templates",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/first-article/templates",
       "query": {
-        "order_process_id": "18"
+        "order_process_id": "{sample:order_process_id}"
       },
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "production-order-first-article-participant-users-18",
       "method": "GET",
-      "path": "/api/v1/production/orders/18/first-article/participant-users",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/first-article/participant-users",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "production-order-first-article-parameters-18",
       "method": "GET",
-      "path": "/api/v1/production/orders/18/first-article/parameters",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/first-article/parameters",
       "query": {
-        "order_process_id": "18"
+        "order_process_id": "{sample:order_process_id}"
       },
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "production-my-order-context-18",
       "method": "GET",
-      "path": "/api/v1/production/my-orders/18/context",
+      "path": "/api/v1/production/my-orders/{sample:production_order_id}/context",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "production-order-events-search",
       "method": "GET",
       "path": "/api/v1/production/order-events/search",
       "query": {
-        "order_code": "PT1775663213490-18"
+        "order_code": "{sample:production_order_code}"
       },
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "products-detail-1",
@@ -295,13 +306,14 @@
     {
       "name": "products-template-references-1",
       "method": "GET",
-      "path": "/api/v1/craft/products/1/template-references",
+      "path": "/api/v1/craft/products/{sample:product_id}/template-references",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "auth-me",
@@ -907,63 +919,92 @@
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "order_code": "PT-TEST-{RANDOM_INT}",
-        "product_id": 1,
-        "supplier_id": 1,
+        "order_code": "PERF-ORDER-{RANDOM_INT}",
+        "product_id": "{sample:product_id}",
+        "supplier_id": "{sample:supplier_id}",
         "quantity": 100,
-        "start_date": "2026-04-01",
-        "due_date": "2026-04-30",
-        "remark": "Load test order",
-        "process_codes": [
-          "PC001",
-          "PC002"
-        ],
+        "remark": "production craft write suite",
+        "template_id": "{sample:craft_template_id}",
         "save_as_template": false
       },
       "success_statuses": [
         201
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "product:PERF-PRODUCT-STD-01",
+          "supplier:PERF-SUPPLIER-STD-01",
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [
+          "order:create-ready"
+        ],
+        "state_assertions": [
+          "production.order.create"
+        ],
+        "restore_strategy": "delete"
+      }
     },
     {
       "name": "production-order-update-pipeline-mode",
       "method": "PUT",
-      "path": "/api/v1/production/orders/18/pipeline-mode",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/pipeline-mode",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
         "enabled": true,
         "process_codes": [
-          "PC001",
-          "PC002"
+          "{sample:process_code}",
+          "{sample:secondary_process_code}"
         ]
       },
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "order:PERF-ORDER-OPEN-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "production.order.pipeline_mode"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "production-order-update",
       "method": "PUT",
-      "path": "/api/v1/production/orders/18",
+      "path": "/api/v1/production/orders/{sample:production_order_id}",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "product_id": 1,
-        "supplier_id": 1,
-        "quantity": 200,
-        "start_date": "2026-04-01",
-        "due_date": "2026-04-30",
-        "remark": "Updated order",
-        "process_codes": [
-          "PC001"
-        ],
+        "product_id": "{sample:product_id}",
+        "supplier_id": "{sample:supplier_id}",
+        "quantity": 120,
+        "remark": "updated by production craft suite",
+        "template_id": "{sample:craft_template_id}",
         "save_as_template": false
       },
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "order:PERF-ORDER-OPEN-01",
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "production.order.update"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "production-order-delete",
@@ -993,46 +1034,65 @@
     {
       "name": "production-order-first-article",
       "method": "POST",
-      "path": "/api/v1/production/orders/18/first-article",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/first-article",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "order_process_id": 1,
-        "pipeline_instance_id": null,
-        "template_id": null,
-        "check_content": "外观检查",
-        "test_value": "合格",
+        "order_process_id": "{sample:order_process_id}",
+        "template_id": "{sample:craft_template_id}",
+        "check_content": "首件检查",
+        "test_value": "通过",
         "result": "passed",
-        "participant_user_ids": [],
-        "verification_code": "V1234",
-        "remark": "首件检验通过",
-        "effective_operator_user_id": null,
-        "assist_authorization_id": null
+        "participant_user_ids": [
+          "{sample:admin_user_id}"
+        ],
+        "verification_code": "VC-001",
+        "remark": "performance suite first article"
       },
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "order:PERF-ORDER-OPEN-01",
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "production.first_article.submit"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "production-order-end-production",
       "method": "POST",
-      "path": "/api/v1/production/orders/18/end-production",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/end-production",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "order_process_id": 1,
-        "pipeline_instance_id": null,
-        "quantity": 50,
-        "remark": "生产结束",
-        "effective_operator_user_id": null,
-        "assist_authorization_id": null,
+        "order_process_id": "{sample:order_process_id}",
+        "quantity": 1,
+        "remark": "performance suite end production",
         "defect_items": []
       },
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "order:PERF-ORDER-OPEN-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "production.end_production.submit"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "production-scrap-statistics-export",
@@ -1118,19 +1178,30 @@
     {
       "name": "production-assist-authorization-create",
       "method": "POST",
-      "path": "/api/v1/production/orders/18/assist-authorizations",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/assist-authorizations",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "order_process_id": 1,
-        "target_operator_user_id": 2,
-        "helper_user_id": 3,
-        "reason": "协助生产"
+        "order_process_id": "{sample:order_process_id}",
+        "target_operator_user_id": "{sample:admin_user_id}",
+        "helper_user_id": "{sample:admin_user_id}",
+        "reason": "performance suite assist"
       },
       "success_statuses": [
         201
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "order:PERF-ORDER-OPEN-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "production.assist.create"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "production-orders-export",
@@ -1182,31 +1253,54 @@
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "stage_code": "ST-{RANDOM_INT}",
-        "stage_name": "测试工序段",
-        "remark": "Load test stage",
-        "is_enabled": true
+        "code": "PERF-STAGE-{RANDOM_INT}",
+        "name": "PERF-STAGE-{RANDOM_INT}",
+        "sort_order": 0,
+        "remark": "production craft write suite"
       },
       "success_statuses": [
         201
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "stage:PERF-STAGE-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "craft.stage.create"
+        ],
+        "restore_strategy": "delete"
+      }
     },
     {
       "name": "craft-stage-update",
       "method": "PUT",
-      "path": "/api/v1/craft/stages/1",
+      "path": "/api/v1/craft/stages/{sample:stage_id}",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "stage_code": "ST001",
-        "stage_name": "更新后的工序段",
-        "remark": "Updated",
-        "is_enabled": true
+        "code": "{sample:stage_code}",
+        "name": "{sample:stage_code}",
+        "sort_order": 0,
+        "is_enabled": true,
+        "remark": "updated by production craft suite"
       },
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "stage:PERF-STAGE-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "craft.stage.update"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "craft-stage-delete",
@@ -1227,33 +1321,54 @@
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "process_code": "PC-{RANDOM_INT}",
-        "process_name": "测试小工序",
-        "stage_id": 1,
-        "process_order": 1,
-        "is_enabled": true
+        "code": "PERF-PROC-{RANDOM_INT}",
+        "name": "PERF-PROC-{RANDOM_INT}",
+        "stage_id": "{sample:stage_id}",
+        "remark": "production craft write suite"
       },
       "success_statuses": [
         201
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "stage:PERF-STAGE-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "craft.process.create"
+        ],
+        "restore_strategy": "delete"
+      }
     },
     {
       "name": "craft-process-update",
       "method": "PUT",
-      "path": "/api/v1/craft/processes/1",
+      "path": "/api/v1/craft/processes/{sample:process_id}",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "process_code": "PC001",
-        "process_name": "更新后的小工序",
-        "stage_id": 1,
-        "process_order": 1,
-        "is_enabled": true
+        "code": "{sample:process_code}",
+        "name": "{sample:process_code}",
+        "stage_id": "{sample:stage_id}",
+        "is_enabled": true,
+        "remark": "updated by production craft suite"
       },
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "process:PERF-PROCESS-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "craft.process.update"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "craft-process-delete",
@@ -1274,32 +1389,79 @@
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "template_name": "LoadTestTemplate-{RANDOM_INT}",
-        "product_id": 1,
-        "process_code": "PC001",
-        "stage_id": 1,
+        "product_id": "{sample:product_id}",
+        "template_name": "PERF-TPL-{RANDOM_INT}",
         "is_default": false,
-        "is_enabled": true
+        "remark": "production craft write suite",
+        "steps": [
+          {
+            "step_order": 1,
+            "stage_id": "{sample:stage_id}",
+            "process_id": "{sample:process_id}"
+          },
+          {
+            "step_order": 2,
+            "stage_id": "{sample:stage_id}",
+            "process_id": "{sample:secondary_process_id}"
+          }
+        ]
       },
       "success_statuses": [
         201
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "product:PERF-PRODUCT-STD-01",
+          "stage:PERF-STAGE-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "craft.template.create"
+        ],
+        "restore_strategy": "delete"
+      }
     },
     {
       "name": "craft-template-update",
       "method": "PUT",
-      "path": "/api/v1/craft/templates/1",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "template_name": "UpdatedTemplate",
-        "is_default": false,
-        "is_enabled": true
+        "template_name": "PERF-TEMPLATE-STD-01",
+        "is_default": true,
+        "is_enabled": true,
+        "remark": "updated by production craft suite",
+        "steps": [
+          {
+            "step_order": 1,
+            "stage_id": "{sample:stage_id}",
+            "process_id": "{sample:process_id}"
+          },
+          {
+            "step_order": 2,
+            "stage_id": "{sample:stage_id}",
+            "process_id": "{sample:secondary_process_id}"
+          }
+        ],
+        "sync_orders": false
       },
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "craft.template.update"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "craft-template-delete",
@@ -2366,7 +2528,7 @@
     {
       "name": "craft-template-publish",
       "method": "POST",
-      "path": "/api/v1/craft/templates/1/publish",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}/publish",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
@@ -2378,12 +2540,25 @@
       },
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [
+          "craft:template-publish-ready"
+        ],
+        "state_assertions": [
+          "craft.template.publish"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "craft-template-rollback",
       "method": "POST",
-      "path": "/api/v1/craft/templates/1/rollback",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}/rollback",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
@@ -2395,7 +2570,20 @@
       },
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [
+          "craft:template-publish-ready"
+        ],
+        "state_assertions": [
+          "craft.template.rollback"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "craft-template-enable",
@@ -2466,13 +2654,24 @@
     {
       "name": "craft-template-draft",
       "method": "POST",
-      "path": "/api/v1/craft/templates/1/draft",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}/draft",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "craft.template.draft"
+        ],
+        "restore_strategy": "rebuild"
+      }
     },
     {
       "name": "equipment-ledger-toggle",
@@ -3091,28 +3290,30 @@
       "method": "GET",
       "path": "/api/v1/craft/kanban/process-metrics",
       "query": {
-        "product_id": "1"
+        "product_id": "{sample:product_id}"
       },
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L1"
     },
     {
       "name": "craft-kanban-process-metrics-export",
       "method": "GET",
       "path": "/api/v1/craft/kanban/process-metrics/export",
       "query": {
-        "product_id": "1"
+        "product_id": "{sample:product_id}"
       },
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L1"
     },
     {
       "name": "craft-processes-export",
@@ -3161,13 +3362,14 @@
     {
       "name": "craft-template-detail",
       "method": "GET",
-      "path": "/api/v1/craft/templates/1",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "craft-template-export",
@@ -3183,24 +3385,26 @@
     {
       "name": "craft-template-impact-analysis",
       "method": "GET",
-      "path": "/api/v1/craft/templates/1/impact-analysis",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}/impact-analysis",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "craft-template-references",
       "method": "GET",
-      "path": "/api/v1/craft/templates/1/references",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}/references",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "success_statuses": [
         200
-      ]
+      ],
+      "layer": "L2"
     },
     {
       "name": "craft-template-versions",
