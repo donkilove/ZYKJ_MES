@@ -2,7 +2,7 @@
 
 - 执行日期：2026-04-17
 - 对应主日志：`evidence/task_log_20260417_backend_p95_40_production_craft_batch1.md`
-- 当前状态：任务 1、任务 2、任务 3 已通过
+- 当前状态：任务 1、任务 2、任务 3、任务 4 已通过
 
 ## 1. 任务分类
 
@@ -31,6 +31,7 @@
 | 6 | `pytest` | `backend/tests/test_backend_capacity_gate_unit.py`、`backend/tests/test_write_gate_sample_runtime_unit.py`、`backend/tests/test_write_gate_integration.py` | 运行任务 2 的红灯/绿灯验证 | 最终 `13 passed` | 主日志 |
 | 7 | `pytest` | `backend/tests/test_production_craft_scenarios_unit.py` | 运行任务 3 的场景拆分与契约校准验证 | `4 passed` | 主日志 |
 | 8 | `pytest` | `backend/tests/test_backend_capacity_gate_unit.py`、`backend/tests/test_write_gate_sample_runtime_unit.py`、`backend/tests/test_write_gate_integration.py`、`backend/tests/test_perf_sample_seed_service_unit.py`、`backend/tests/test_perf_production_craft_samples_integration.py` | 运行任务 3 修改后的全量回归 | `13 passed` 与 `3 passed` | 主日志 |
+| 9 | Python CLI + `pytest` | `backend/tests/test_production_module_integration.py`、`backend/tests/test_craft_module_integration.py` | 运行任务 4 的模块级 `perf_seeded` 回归 | `2 passed` | 主日志 |
 
 ## 4. 验证留痕
 
@@ -39,9 +40,9 @@
 | G1 | 通过 | E1 | 已归类为 CAT-01 |
 | G2 | 通过 | E1 | 已记录工具触发与原因 |
 | G3 | 通过 | E2 | 子代理通道不稳定已记录，并切回内联执行补偿 |
-| G4 | 通过 | E3-E5 | 已完成真实 pytest 与样本脚本执行 |
-| G5 | 通过 | E1-E5 | 已形成“触发 -> 实现 -> 重试 -> 验证 -> 收口”闭环 |
-| G7 | 通过 | E5 | 无迁移，直接替换 |
+| G4 | 通过 | E3-E6 | 已完成真实 pytest 与样本脚本执行 |
+| G5 | 通过 | E1-E6 | 已形成“触发 -> 实现 -> 重试 -> 验证 -> 收口”闭环 |
+| G7 | 通过 | E6 | 无迁移，直接替换 |
 
 ## 4.1 证据编号表
 
@@ -52,6 +53,7 @@
 | E3 | 任务 1 的 pytest 与脚本输出 | 2026-04-17 14:35 | 样本种子服务、样本脚本与集成 smoke 已全部通过 |
 | E4 | 任务 2 的 pytest 输出 | 2026-04-17 14:50 | 样本上下文占位符与写门禁接线已通过真实测试 |
 | E5 | 任务 3 的 pytest 输出 | 2026-04-17 16:05 | 模块级场景文件、核心 combined 场景占位符和上下文字段已通过真实测试 |
+| E6 | 任务 4 的 pytest 输出 | 2026-04-17 16:20 | `production/craft` 模块已具备 `perf_seeded` 正式回归入口 |
 
 ## 5. 失败重试
 
@@ -65,6 +67,7 @@
 | 6 | 任务 2 单测 | 旧测试调用 `_execute_scenario()` 缺少 `sample_context` 参数 | 新增样本上下文后，旧测试签名未同步更新 | 更新 fake request 签名并传入空样本上下文 | 通过 |
 | 7 | 任务 2 集成测试 | `test_write_gate_integration.py` 登录链路触发 `JWT 密钥配置不安全` | 该测试文件未同步设置安全 JWT 密钥 | 在 `setUp/tearDown` 中临时设置并恢复 JWT 密钥 | 通过 |
 | 8 | 任务 3 场景校准 | 场景单测要求样本上下文暴露 `stage_code/process_code/order_process_id` 等键 | 任务 1 初版上下文不足以支撑 detail/write 占位符 | 扩展 `perf_sample_seed_service` 的上下文字段集合 | 通过 |
+| 9 | 任务 4 模块回归 | 现有 `production/craft` 集成测试没有可直接消费样本上下文的入口 | 模块级回归仍依赖临时建样 helper，缺少正式执行口径 | 新增 `load_perf_sample_context()` 与 `perf_seeded` 用例，并统一设置测试内安全 JWT 密钥 | 通过 |
 
 ## 6. 降级/阻塞/代记
 
@@ -73,16 +76,16 @@
   - 工作树未携带 `.venv`，改用主仓库共享虚拟环境
   - `Sequential Thinking` 独立入口不可用，使用 `update_plan` 作为等效拆解工具
 - 执行补偿：
-  - 子代理驱动通道不稳定，任务 1、任务 2、任务 3 均切回内联执行
+  - 子代理驱动通道不稳定，任务 1、任务 2、任务 3、任务 4 均切回内联执行
 - 阻塞记录：无
 - evidence 代记：无
 
 ## 7. 通过判定
 
-- 是否完成闭环：是（限任务 1、任务 2、任务 3）
-- 是否满足门禁：是（限任务 1、任务 2、任务 3）
-- 是否存在残余风险：有，后续任务仍需继续做模块级回归与 `270` 场景回灌
-- 最终判定：任务 1、任务 2、任务 3 通过
+- 是否完成闭环：是（限任务 1、任务 2、任务 3、任务 4）
+- 是否满足门禁：是（限任务 1、任务 2、任务 3、任务 4）
+- 是否存在残余风险：有，后续任务仍需继续执行模块级 `40` 并发结果和 `270` 场景回灌
+- 最终判定：任务 1、任务 2、任务 3、任务 4 通过
 
 ## 8. 迁移说明
 

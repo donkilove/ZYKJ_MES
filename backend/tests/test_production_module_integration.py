@@ -1,6 +1,7 @@
 import base64
 import csv
 import io
+import json
 import sys
 import time
 import unittest
@@ -16,6 +17,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db.session import SessionLocal  # noqa: E402
+from app.core.config import settings  # noqa: E402
 from app.main import app  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.models.daily_verification_code import DailyVerificationCode  # noqa: E402
@@ -44,6 +46,27 @@ from app.models.repair_order import RepairOrder  # noqa: E402
 from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.authz_service import replace_role_permissions_for_module  # noqa: E402
+from app.services.perf_sample_seed_service import seed_production_craft_samples  # noqa: E402
+
+
+PERF_CONTEXT_PATH = BACKEND_DIR.parent / ".tmp_runtime" / "production_craft_samples.json"
+
+
+def load_perf_sample_context() -> dict[str, int | str]:
+    if PERF_CONTEXT_PATH.exists():
+        return json.loads(PERF_CONTEXT_PATH.read_text(encoding="utf-8"))
+
+    db = SessionLocal()
+    try:
+        context = seed_production_craft_samples(db, run_id="baseline").context
+    finally:
+        db.close()
+    PERF_CONTEXT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PERF_CONTEXT_PATH.write_text(
+        json.dumps(context, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return context
 
 
 class ProductionModuleIntegrationTest(unittest.TestCase):
@@ -52,6 +75,8 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         cls.client = TestClient(app)
 
     def setUp(self) -> None:
+        self._previous_jwt_secret_key = settings.jwt_secret_key
+        settings.jwt_secret_key = "production-module-test-secret"
         self.token = self._login()
         self.stage_ids: list[int] = []
         self.process_ids: list[int] = []
@@ -64,6 +89,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.role_ids: list[int] = []
 
     def tearDown(self) -> None:
+        settings.jwt_secret_key = self._previous_jwt_secret_key
         db = SessionLocal()
         try:
             for scrap_id in reversed(self.scrap_statistics_ids):
@@ -234,6 +260,22 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         row = response.json()["data"]
         self.order_ids.append(int(row["id"]))
         return row
+
+    def test_perf_seeded_order_supports_detail_first_article_and_end_production(self) -> None:
+        context = load_perf_sample_context()
+
+        detail_response = self.client.get(
+            f"/api/v1/production/orders/{context['production_order_id']}",
+            headers=self._headers(),
+        )
+        templates_response = self.client.get(
+            f"/api/v1/production/orders/{context['production_order_id']}/first-article/templates",
+            params={"order_process_id": context["order_process_id"]},
+            headers=self._headers(),
+        )
+
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        self.assertEqual(templates_response.status_code, 200, templates_response.text)
 
     def _create_supplier(self, name: str, *, is_enabled: bool = True) -> dict:
         response = self.client.post(
