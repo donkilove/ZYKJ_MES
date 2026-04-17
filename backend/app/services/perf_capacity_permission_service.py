@@ -27,7 +27,7 @@ DEFAULT_PERF_CAPACITY_ROLE_MODULES: tuple[tuple[str, str], ...] = (
 class PerfCapacityPermissionPlanItem:
     role_code: str
     module_code: str
-    capability_codes: list[str]
+    permission_codes: list[str]
 
 
 @dataclass(frozen=True)
@@ -44,27 +44,22 @@ def build_perf_capacity_permission_rollout_plan(
 ) -> list[PerfCapacityPermissionPlanItem]:
     plan: list[PerfCapacityPermissionPlanItem] = []
     for role_code, module_code in role_modules:
-        catalog = authz_service.get_capability_pack_catalog(db, module_code=module_code)
-        template = next(
-            (
-                item
-                for item in catalog["role_templates"]
-                if str(item["role_code"]) == role_code
-            ),
-            None,
+        permission_codes = sorted(
+            {
+                str(row.permission_code)
+                for row in authz_service.list_permission_catalog_rows(
+                    db, module_code=module_code
+                )
+                if str(row.permission_code).strip()
+            }
         )
-        if template is None:
-            raise ValueError(f"模块 {module_code} 缺少角色 {role_code} 的模板")
-        capability_codes = [
-            str(code) for code in template.get("capability_codes", []) if str(code).strip()
-        ]
-        if not capability_codes:
-            raise ValueError(f"模块 {module_code} 的角色 {role_code} 模板为空")
+        if not permission_codes:
+            raise ValueError(f"模块 {module_code} 的权限目录为空")
         plan.append(
             PerfCapacityPermissionPlanItem(
                 role_code=role_code,
                 module_code=module_code,
-                capability_codes=capability_codes,
+                permission_codes=permission_codes,
             )
         )
     return plan
@@ -82,18 +77,26 @@ def apply_perf_capacity_permission_rollout(
     updated_count = 0
     items: list[dict[str, object]] = []
     for item in plan:
-        result = authz_service.update_capability_pack_role_config(
-            db,
-            role_code=item.role_code,
-            module_code=item.module_code,
-            module_enabled=True,
-            capability_codes=item.capability_codes,
-            dry_run=dry_run,
-            operator=operator,
-            remark=remark,
+        result_updated_count, before_codes, after_codes = (
+            authz_service.replace_role_permissions_for_module(
+                db,
+                role_code=item.role_code,
+                module_code=item.module_code,
+                granted_permission_codes=item.permission_codes,
+                operator=operator,
+                remark=remark,
+            )
         )
-        updated_count += int(result.get("updated_count", 0))
-        items.append(result)
+        updated_count += int(result_updated_count)
+        items.append(
+            {
+                "role_code": item.role_code,
+                "module_code": item.module_code,
+                "updated_count": int(result_updated_count),
+                "before_permission_codes": before_codes,
+                "after_permission_codes": after_codes,
+            }
+        )
     return PerfCapacityPermissionApplyResult(
         updated_count=updated_count,
         role_module_pairs=len(plan),
