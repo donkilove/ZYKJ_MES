@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.perf import backend_capacity_gate
+from tools.perf.write_gate.sample_runtime import SampleExecutionResult
 
 
 class BackendCapacityGateUnitTest(unittest.TestCase):
@@ -198,8 +199,9 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
         }
         captured: dict[str, str | None] = {}
 
-        async def fake_request_scenario(*, client, base_url, scenario, token):
+        async def fake_request_scenario(*, client, base_url, scenario, token, sample_context):
             captured["token"] = token
+            captured["sample_context"] = sample_context
             return True, "200", 1.23
 
         with (
@@ -226,6 +228,7 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
                     },
                     login_usernames_by_pool={"default": ["loadtest_1"]},
                     password="Admin@123456",
+                    sample_context={},
                 )
             )
 
@@ -233,6 +236,7 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
         self.assertEqual(status, "200")
         self.assertEqual(latency_ms, 1.23)
         self.assertEqual(captured["token"], "production-token")
+        self.assertEqual(captured["sample_context"], {})
 
     def test_full_89_read_process_scenarios_bind_user_admin_pool(self) -> None:
         args = SimpleNamespace(
@@ -293,6 +297,56 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
             1.0,
         )
         self.assertEqual(payload["by_layer"]["L2"]["error_types"]["422"], 1)
+
+    def test_materialize_request_supports_sample_placeholders(self) -> None:
+        scenario = backend_capacity_gate.ScenarioSpec(
+            name="production-order-detail",
+            method="GET",
+            path="/api/v1/production/orders/{sample:production_order_id}",
+            query={"template_id": "{sample:craft_template_id}"},
+            json_body={"stage_id": "{sample:stage_id}"},
+        )
+
+        prepared = backend_capacity_gate._materialize_scenario_request(
+            scenario,
+            {
+                "production_order_id": 18,
+                "craft_template_id": 21,
+                "stage_id": 7,
+            },
+        )
+
+        self.assertEqual(prepared.path, "/api/v1/production/orders/18")
+        self.assertEqual(prepared.query["template_id"], 21)
+        self.assertEqual(prepared.json_body["stage_id"], 7)
+
+    def test_execute_write_gate_contract_runs_prepare_and_restore_handlers(self) -> None:
+        with patch.object(
+            backend_capacity_gate,
+            "_build_write_sample_runtime",
+            return_value=SimpleNamespace(
+                execute_contract=lambda **kwargs: SampleExecutionResult(
+                    scenario_name=kwargs["scenario_name"],
+                    prepare_calls=["order:create-ready"],
+                    restore_calls=["order:create-ready"],
+                    failed=False,
+                )
+            ),
+        ):
+            result = backend_capacity_gate._execute_write_gate_contract(
+                scenario_name="production-order-create",
+                contract=backend_capacity_gate.SampleContract(
+                    baseline_refs=["product:PERF-PRODUCT-STD-01"],
+                    runtime_samples=["order:create-ready"],
+                    restore_strategy="rebuild",
+                ),
+                sample_context={"product_id": 1},
+                api_client=object(),
+            )
+
+        self.assertEqual(result.prepare_calls, ["order:create-ready"])
+        self.assertEqual(result.restore_calls, ["order:create-ready"])
+        self.assertFalse(result.failed)
 
 
 if __name__ == "__main__":

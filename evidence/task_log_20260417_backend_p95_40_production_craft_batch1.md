@@ -2,14 +2,14 @@
 
 - 日期：2026-04-17
 - 执行人：Codex 主 agent
-- 当前状态：任务 1 已完成
+- 当前状态：任务 1、任务 2 已完成
 - 执行方式：子代理驱动开发
 - 工作树：`/root/code/ZYKJ_MES/.worktrees/backend-p95-40-production-craft-phase1`
 
 ## 1. 输入来源
 
 - 计划文档：`docs/superpowers/plans/2026-04-17-backend-p95-40-production-craft-phase1.md`
-- 当前任务：任务 1「落地 production + craft 样本资产基础」
+- 当前任务：任务 2「接通样本上下文与写门禁执行链路」
 
 ## 2. 前置说明
 
@@ -22,8 +22,8 @@
 
 | 序号 | 任务 | 目标 | 当前状态 |
 | --- | --- | --- | --- |
-| 1 | 样本资产基础 | 落地稳定主样本、一次性写样本、初始化脚本与基础测试 | 进行中 |
-| 2 | 样本上下文与写门禁执行链路 | 接通占位符、`runtime_samples` 与恢复路径 | 待开始 |
+| 1 | 样本资产基础 | 落地稳定主样本、一次性写样本、初始化脚本与基础测试 | 已完成 |
+| 2 | 样本上下文与写门禁执行链路 | 接通占位符、`runtime_samples` 与恢复路径 | 已完成 |
 | 3 | 场景拆分与契约校准 | 产出模块级场景文件并压 `405/422` | 待开始 |
 | 4 | 模块级回归与执行口径 | 补齐集成测试与 evidence 入口 | 待开始 |
 | 5 | 回灌 270 场景 | 评估第一批对全链路的真实改善 | 待开始 |
@@ -61,6 +61,18 @@
     - `craft_template_id`
     - `production_order_id`
 - 当前 `.tmp_runtime/production_craft_samples.json` 已生成，内容可用于下一任务的样本占位符接线。
+- 已完成任务 `2`：
+  - 新增 `tools/perf/write_gate/sample_context.py`
+  - 新增 `tools/perf/write_gate/sample_registry.py`
+  - 修改 `tools/perf/backend_capacity_gate.py`
+  - 修改 `backend/tests/test_backend_capacity_gate_unit.py`
+  - 修改 `backend/tests/test_write_gate_integration.py`
+- 任务 `2` 实际落地结果：
+  - 新增 `--sample-context-file` 参数，可在压测执行时加载样本上下文 JSON
+  - 新增 `_materialize_scenario_request()`，支持 `{sample:key}` 占位符进入 `path/query/json/form`
+  - 新增 `_execute_write_gate_contract()` 与 `_build_write_sample_runtime()`，把 `sample_contract.runtime_samples` 接入执行链路
+  - 默认样本注册表当前先接入 `order:create-ready`、`order:line-items-ready`、`supplier:create-ready`、`craft:template-publish-ready`
+  - 任务 `2` 相关测试结果：`13 passed`
 
 ## 6. 失败重试记录
 
@@ -69,6 +81,8 @@
 | 1 | 红灯转绿灯 | `create_order()` 报 `Template is not published` | 样本模板仅创建为草稿，未满足生产订单创建前置条件 | 将稳定模板提升为 `published`，并同步 `published_version` | 通过 |
 | 2 | 集成测试 | 登录 `admin` 时抛 `JWT 密钥配置不安全` | 测试环境沿用默认 `jwt_secret_key`，命中运行时安全门禁 | 在集成测试中临时设置安全 JWT 密钥，并在 `tearDown` 恢复 | 通过 |
 | 3 | 测试清理 | 清理稳定样本时触发 `ForeignKeyViolation` | 测试把稳定主样本也一并删除，破坏了模板/订单/工序外键关系 | 改为只清理 `PERF-RUN-*` 运行时订单，稳定样本持续复用 | 通过 |
+| 4 | 任务 2 单测 | 旧测试调用 `_execute_scenario()` 缺少 `sample_context` 参数 | 新增样本上下文后，旧测试签名未同步更新 | 更新 fake request 签名并补入 `sample_context={}` | 通过 |
+| 5 | 任务 2 集成测试 | `test_write_gate_integration.py` 登录链路再次命中 JWT 安全门禁 | 该测试文件未同步设置安全 JWT 密钥 | 在 `setUp/tearDown` 中临时设置并恢复 JWT 密钥 | 通过 |
 
 ## 5. 任务 1 启动记录（样本资产基础）
 

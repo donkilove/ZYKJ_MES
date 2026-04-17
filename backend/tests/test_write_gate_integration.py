@@ -16,13 +16,18 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from app.db.session import SessionLocal
+from app.core.config import settings
 from app.main import app
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.models.production_order import ProductionOrder
 from app.models.product import Product
 from app.models.supplier import Supplier
-from tools.perf.backend_capacity_gate import _load_scenario_config_bundle
+from tools.perf.backend_capacity_gate import (
+    ScenarioSpec,
+    _load_scenario_config_bundle,
+    _materialize_scenario_request,
+)
 from tools.perf.write_gate.sample_runtime import WriteSampleRuntime
 
 
@@ -88,6 +93,8 @@ class WriteGateIntegrationTest(unittest.TestCase):
         self.product_ids: list[int] = []
         self.supplier_ids: list[int] = []
         self.order_ids: list[int] = []
+        self._previous_jwt_secret_key = settings.jwt_secret_key
+        settings.jwt_secret_key = "write-gate-test-secret"
         self.token = self._login()
         bundle = _load_scenario_config_bundle(
             "tools/perf/scenarios/write_operations_40_scan.json"
@@ -95,6 +102,7 @@ class WriteGateIntegrationTest(unittest.TestCase):
         self.scenarios = bundle.scenarios
 
     def tearDown(self) -> None:
+        settings.jwt_secret_key = self._previous_jwt_secret_key
         self._cleanup_created_records()
 
     def _cleanup_created_records(self) -> None:
@@ -312,6 +320,40 @@ class WriteGateIntegrationTest(unittest.TestCase):
         self.assertEqual(result.success_rate, 1.0)
         self.assertEqual(result.error_types, {})
         self.assertEqual(self.context["last_restore_success_rate"], 1.0)
+
+    def test_capacity_gate_can_resolve_production_craft_placeholders_from_sample_context(
+        self,
+    ) -> None:
+        scenario = ScenarioSpec(
+            name="production-order-create",
+            method="POST",
+            path="/api/v1/production/orders/{sample:production_order_id}",
+            json_body={
+                "product_id": "{sample:product_id}",
+                "supplier_id": "{sample:supplier_id}",
+                "process_steps": [
+                    {
+                        "stage_id": "{sample:stage_id}",
+                        "process_id": "{sample:process_id}",
+                    }
+                ],
+            },
+        )
+
+        prepared = _materialize_scenario_request(
+            scenario,
+            {
+                "production_order_id": 18,
+                "product_id": 11,
+                "supplier_id": 12,
+                "stage_id": 13,
+                "process_id": 14,
+            },
+        )
+
+        self.assertEqual(prepared.path, "/api/v1/production/orders/18")
+        self.assertEqual(prepared.json_body["product_id"], 11)
+        self.assertEqual(prepared.json_body["process_steps"][0]["process_id"], 14)
 
 
 if __name__ == "__main__":
