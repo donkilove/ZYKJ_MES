@@ -1,6 +1,8 @@
 services:
   postgres:
-    # 仅供容器内后端访问，不默认暴露宿主端口
+    # 仅供容器内后端访问，不默认暴露宿主端口。
+    # 如需宿主数据库管理软件临时接入，请执行：
+    # python start_backend.py --expose-db --db-port <port>
     image: postgres:16-alpine
     restart: unless-stopped
     command:

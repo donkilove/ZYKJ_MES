@@ -3,19 +3,40 @@
 ## Quick Start
 
 ```powershell
+python start_backend.py
+```
+
+启动前端（可选）：
+
+```powershell
+python start_frontend.py
+```
+
+`start_frontend.py` 默认以 Windows 桌面应用方式启动；如需切换设备，可额外传入 `--device <id>`。
+
+常用运维命令（仓库根目录）：
+
+```powershell
+python start_backend.py logs
+python start_backend.py ps
+python start_backend.py down
+```
+
+如需让宿主数据库管理软件临时接入 PostgreSQL（默认不暴露）：
+
+```powershell
+python start_backend.py --expose-db --db-port 5433
+```
+
+### 补充：本地 `.venv + uvicorn` 历史口径
+
+以下方式仅作为补充/历史说明，默认主线以 `python start_backend.py` 为准：
+
+```powershell
 cd backend
 ..\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
-
-在仓库根目录也可以直接执行：
-
-```powershell
-.\.venv\Scripts\python.exe .\start_backend.py
-.\.venv\Scripts\python.exe .\start_frontend.py
-```
-
-`start_frontend.py` 默认以 Windows 桌面应用方式启动；如需切换设备，可额外传入 `--device <id>`。
 
 ### 本地性能宿主模式
 
