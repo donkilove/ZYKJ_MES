@@ -27,9 +27,6 @@ DEFAULT_WAIT_TIMEOUT_SECONDS = 90.0
 INSECURE_JWT_SECRET_KEYS = frozenset({"", "replace_with_a_strong_secret"})
 INSECURE_BOOTSTRAP_ADMIN_PASSWORDS = frozenset({"", "Admin@123456"})
 INSECURE_PRODUCTION_DEFAULT_VERIFICATION_CODES = frozenset({"", "123456"})
-DOCKER_LOCAL_JWT_SECRET_KEY = "zykj-mes-docker-local-secret-20260419"
-DOCKER_LOCAL_BOOTSTRAP_ADMIN_PASSWORD = "Admin_Local_20260419!"
-DOCKER_LOCAL_PRODUCTION_DEFAULT_VERIFICATION_CODE = "FA20260419"
 
 
 def load_env_file(path: Path) -> dict[str, str]:
@@ -66,24 +63,28 @@ def build_compose_env(
         base_env=base_env,
         env_file_values=env_file_values,
         insecure_values=INSECURE_JWT_SECRET_KEYS,
-        docker_local_fallback=DOCKER_LOCAL_JWT_SECRET_KEY,
     )
     if jwt_secret_key:
         merged_env["JWT_SECRET_KEY"] = jwt_secret_key
-    merged_env["BOOTSTRAP_ADMIN_PASSWORD"] = resolve_sensitive_env_value(
+    bootstrap_admin_password = resolve_sensitive_env_value(
         key="BOOTSTRAP_ADMIN_PASSWORD",
         base_env=base_env,
         env_file_values=env_file_values,
         insecure_values=INSECURE_BOOTSTRAP_ADMIN_PASSWORDS,
-        docker_local_fallback=DOCKER_LOCAL_BOOTSTRAP_ADMIN_PASSWORD,
     )
-    merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"] = resolve_sensitive_env_value(
+    if bootstrap_admin_password:
+        merged_env["BOOTSTRAP_ADMIN_PASSWORD"] = bootstrap_admin_password
+
+    production_default_verification_code = resolve_sensitive_env_value(
         key="PRODUCTION_DEFAULT_VERIFICATION_CODE",
         base_env=base_env,
         env_file_values=env_file_values,
         insecure_values=INSECURE_PRODUCTION_DEFAULT_VERIFICATION_CODES,
-        docker_local_fallback=DOCKER_LOCAL_PRODUCTION_DEFAULT_VERIFICATION_CODE,
     )
+    if production_default_verification_code:
+        merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"] = production_default_verification_code
+
+    ensure_compose_sensitive_env_secure(merged_env)
     return merged_env
 
 
@@ -97,8 +98,7 @@ def resolve_sensitive_env_value(
     base_env: Mapping[str, str],
     env_file_values: Mapping[str, str],
     insecure_values: AbstractSet[str],
-    docker_local_fallback: str,
-) -> str:
+ ) -> str:
     shell_value = normalize_setting_value(base_env.get(key))
     if shell_value and shell_value not in insecure_values:
         return shell_value
@@ -107,7 +107,31 @@ def resolve_sensitive_env_value(
     if env_file_value and env_file_value not in insecure_values:
         return env_file_value
 
-    return docker_local_fallback
+    return ""
+
+
+def ensure_compose_sensitive_env_secure(env: Mapping[str, str]) -> None:
+    errors: list[str] = []
+    jwt_secret_key = normalize_setting_value(env.get("JWT_SECRET_KEY"))
+    if jwt_secret_key in INSECURE_JWT_SECRET_KEYS:
+        errors.append("JWT_SECRET_KEY 未设置或仍为不安全默认值。")
+
+    bootstrap_admin_password = normalize_setting_value(env.get("BOOTSTRAP_ADMIN_PASSWORD"))
+    if bootstrap_admin_password in INSECURE_BOOTSTRAP_ADMIN_PASSWORDS:
+        errors.append("BOOTSTRAP_ADMIN_PASSWORD 未设置或仍为不安全默认值。")
+
+    production_default_verification_code = normalize_setting_value(
+        env.get("PRODUCTION_DEFAULT_VERIFICATION_CODE")
+    )
+    if production_default_verification_code in INSECURE_PRODUCTION_DEFAULT_VERIFICATION_CODES:
+        errors.append("PRODUCTION_DEFAULT_VERIFICATION_CODE 未设置或仍为不安全默认值。")
+
+    if errors:
+        raise RuntimeError(
+            "Docker 启动缺少安全关键配置："
+            + "；".join(errors)
+            + " 请在 backend/.env 或当前 shell 环境中提供安全值。"
+        )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

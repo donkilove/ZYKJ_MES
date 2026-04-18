@@ -38,52 +38,18 @@ cd backend
 ..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 本地性能宿主模式
+### 容器内启动行为
 
-如需按当前压测口径启动后端，可在仓库根目录执行：
-
-```bash
-./.venv/bin/python start_backend.py --mode perf --no-reload
-```
-
-说明：
-
-- `--mode perf` 会切到 `gunicorn + uvicorn worker` 启动方式。
-- perf 模式默认关闭 bootstrap、后台循环和 reload，避免把启动/后台开销混入压测结果。
-- perf 模式默认采用当前安全连接池预算：
-  - `DB_POOL_SIZE=6`
-  - `DB_MAX_OVERFLOW=4`
-  - `DB_POOL_TIMEOUT_SECONDS=5`
-- 如需覆盖 worker 数，可额外传入 `--workers 4` 等参数。
-
-Backend startup now performs bootstrap automatically:
+通过 `python start_backend.py` 拉起后端时，脚本会自动：
 
 - ensure database exists (create if missing)
 - run `alembic upgrade head`
 - seed roles/processes/admin user
 
-## Local Proxy Note
-
-If your environment sets `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`, local
-requests to `127.0.0.1` may be forwarded to the proxy and fail with `502`.
-
-根目录启动入口 `start_backend.py`、`start_frontend.py` 会自动合并：
-
-`NO_PROXY` and `no_proxy` => `localhost,127.0.0.1,::1`
-
-for spawned subprocesses so localhost traffic bypasses the proxy. If you start
-services manually, set `NO_PROXY` yourself.
-
-Manual seed command remains available:
-
-```powershell
-..\.venv\Scripts\python.exe -m scripts.init_admin
-```
-
 ## Default Admin
 
 - username: `admin`
-- password: `Admin@123456`
+- password: `Admin_Local_20260419!`
 
 ## Docker 生产部署基线（单机 Compose）
 
