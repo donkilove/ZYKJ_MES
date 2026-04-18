@@ -1,13 +1,12 @@
 services:
   postgres:
+    # 仅供容器内后端访问，不默认暴露宿主端口
     image: postgres:16-alpine
     restart: unless-stopped
     command:
       - postgres
       - -c
       - max_connections=200
-    ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${DB_NAME:-mes_db}
       POSTGRES_USER: ${DB_USER:-mes_user}
@@ -24,6 +23,7 @@ services:
       start_period: 10s
 
   redis:
+    # 仅供容器内后端访问，不默认暴露宿主端口
     image: redis:7-alpine
     restart: unless-stopped
     command:
