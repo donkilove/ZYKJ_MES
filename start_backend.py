@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -92,7 +92,6 @@ def build_compose_command(
     follow: bool,
     compose_files: Sequence[str],
     detach: bool = False,
-    force_build: bool | None = None,
 ) -> list[str]:
     command = ["docker", "compose"]
     for compose_file in compose_files:
@@ -110,10 +109,6 @@ def build_compose_command(
         command.append("up")
         if detach:
             command.append("-d")
-        if force_build is True:
-            command.append("--build")
-        if force_build is False:
-            command.append("--no-build")
     elif action == "build":
         command.append("build")
     elif action == "ps":
@@ -149,12 +144,17 @@ def require_docker() -> None:
         raise RuntimeError(f"docker compose 不可用：{details}")
 
 
-def run_compose(command: Sequence[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def run_compose(
+    command: Sequence[str],
+    env: dict[str, str],
+    *,
+    capture_output: bool = True,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         list(command),
         cwd=ROOT_DIR,
         text=True,
-        capture_output=True,
+        capture_output=capture_output,
         check=False,
         env=env,
     )
@@ -177,10 +177,19 @@ def wait_for_port(host: str, port: int, timeout_seconds: float) -> bool:
     return can_connect(host, port)
 
 
-def print_start_summary(db_exposed: bool, db_port: int) -> None:
+def print_start_summary(
+    *,
+    services: Sequence[str],
+    db_exposed: bool,
+    db_port: int,
+    backend_http_port: int | None,
+) -> None:
     print("[INFO] 后端 Docker 服务已启动。")
-    print(f"[INFO] 服务集合：{', '.join(DEFAULT_UP_SERVICES)}")
-    print(f"[INFO] 后端 HTTP 地址：http://{DEFAULT_BACKEND_HTTP_HOST}:{DEFAULT_BACKEND_HTTP_PORT}")
+    print(f"[INFO] 服务集合：{', '.join(services)}")
+    if backend_http_port is not None:
+        print(f"[INFO] 后端 HTTP 地址：http://{DEFAULT_BACKEND_HTTP_HOST}:{backend_http_port}")
+    else:
+        print("[INFO] 后端 HTTP 地址：未启动 backend-web，未提供 HTTP 入口。")
     if db_exposed:
         print(f"[INFO] 数据库暴露：已开启（127.0.0.1:{db_port} -> 5432）")
     else:
@@ -189,6 +198,19 @@ def print_start_summary(db_exposed: bool, db_port: int) -> None:
     print("[INFO]   python start_backend.py logs")
     print("[INFO]   python start_backend.py ps")
     print("[INFO]   python start_backend.py down")
+
+
+def resolve_backend_http_port(env: Mapping[str, str]) -> int:
+    raw_port = (env.get("BACKEND_WEB_HOST_PORT") or "").strip()
+    if not raw_port:
+        return DEFAULT_BACKEND_HTTP_PORT
+    try:
+        return int(raw_port)
+    except ValueError:
+        print(
+            f"[WARN] BACKEND_WEB_HOST_PORT={raw_port!r} 不是合法端口，回退默认端口 {DEFAULT_BACKEND_HTTP_PORT}。"
+        )
+        return DEFAULT_BACKEND_HTTP_PORT
 
 
 def print_compose_result(result: subprocess.CompletedProcess[str]) -> None:
@@ -224,8 +246,15 @@ def run_simple_action(
         follow=args.follow,
         compose_files=compose_files,
     )
-    result = run_compose(command, env)
-    print_compose_result(result)
+    is_logs_action = action == "logs"
+    try:
+        result = run_compose(command, env, capture_output=not is_logs_action)
+    except KeyboardInterrupt:
+        print("[WARN] 已中断日志跟随。")
+        return 130
+
+    if not is_logs_action:
+        print_compose_result(result)
     return result.returncode
 
 
@@ -265,12 +294,40 @@ def run_up_action(
         print("[ERROR] Docker 服务启动失败，可执行 `python start_backend.py logs` 排查。")
         return up_result.returncode
 
-    if wait_for_port(DEFAULT_BACKEND_HTTP_HOST, DEFAULT_BACKEND_HTTP_PORT, DEFAULT_WAIT_TIMEOUT_SECONDS):
-        print_start_summary(args.expose_db, args.db_port)
+    if "backend-web" not in services:
+        print("[INFO] 未包含 backend-web，跳过 HTTP 健康等待。")
+        print_start_summary(
+            services=services,
+            db_exposed=args.expose_db,
+            db_port=args.db_port,
+            backend_http_port=None,
+        )
+        return 0
+
+    backend_http_port = resolve_backend_http_port(env)
+    try:
+        backend_ready = wait_for_port(
+            DEFAULT_BACKEND_HTTP_HOST,
+            backend_http_port,
+            DEFAULT_WAIT_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        print(f"[ERROR] backend-web 健康检查异常：{exc}")
+        print("[ERROR] 请执行 `python start_backend.py logs` 查看容器日志后重试。")
+        return 1
+
+    if backend_ready:
+        print_start_summary(
+            services=services,
+            db_exposed=args.expose_db,
+            db_port=args.db_port,
+            backend_http_port=backend_http_port,
+        )
         return 0
 
     print(
-        "[ERROR] backend-web 等待超时，请执行 `python start_backend.py logs` 查看容器日志后重试。"
+        f"[ERROR] backend-web 等待超时（{DEFAULT_BACKEND_HTTP_HOST}:{backend_http_port}），"
+        "请执行 `python start_backend.py logs` 查看容器日志后重试。"
     )
     return 1
 
