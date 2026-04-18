@@ -14,7 +14,8 @@ RUN python -m pip install --upgrade pip \
 COPY backend /app/backend
 COPY docker /app/docker
 
-RUN chmod +x /app/docker/*.sh
+RUN sed -i 's/\r$//' /app/docker/*.sh \
+    && chmod +x /app/docker/*.sh
 
 WORKDIR /app/backend
 
