@@ -477,25 +477,6 @@
       ]
     },
     {
-      "name": "quality-defect-analysis-create-surface",
-      "method": "POST",
-      "path": "/api/v1/quality/defect-analysis",
-      "requires_auth": true,
-      "role_domain": "quality",
-      "token_pool": "pool-quality",
-      "json_body": {
-        "product_id": 1,
-        "stage_id": 1,
-        "process_id": 1,
-        "defect_type": "表面缺陷",
-        "quantity": 5,
-        "remark": "Load test defect"
-      },
-      "success_statuses": [
-        201
-      ]
-    },
-    {
       "name": "quality-supplier-create",
       "method": "POST",
       "path": "/api/v1/quality/suppliers",
@@ -962,13 +943,21 @@
     {
       "name": "products-lifecycle",
       "method": "POST",
-      "path": "/api/v1/products/1/lifecycle",
+      "path": "/api/v1/products/{sample:product_id}/lifecycle",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "action": "enable",
-        "remark": "Load test lifecycle"
+        "target_status": "inactive",
+        "confirmed": true,
+        "note": "Load test lifecycle",
+        "inactive_reason": "perf lifecycle check"
+      },
+      "sample_contract": {
+        "runtime_samples": [
+          "product:runtime-effective-version-ready"
+        ],
+        "restore_strategy": "delete"
       },
       "success_statuses": [
         200
@@ -1112,7 +1101,7 @@
       "token_pool": "pool-user-admin",
       "json_body": {
         "name": "更新后的角色",
-        "code": "TEST_ROLE",
+        "code": "{sample:runtime_role_code}",
         "remark": "Updated",
         "is_active": true
       },
@@ -1161,10 +1150,16 @@
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "process_code": "TEST-{RANDOM_INT}",
-        "process_name": "测试工序",
-        "remark": "Load test process",
-        "is_active": true
+        "code": "{sample:runtime_process_code}",
+        "name": "测试工序",
+        "stage_id": "{sample:stage_id}"
+      },
+      "sample_contract": {
+        "runtime_samples": [
+          "order:create-ready",
+          "craft:process-create-ready"
+        ],
+        "restore_strategy": "delete"
       },
       "success_statuses": [
         201
@@ -1173,15 +1168,22 @@
     {
       "name": "processes-process-update",
       "method": "PUT",
-      "path": "/api/v1/processes/1",
+      "path": "/api/v1/processes/{sample:runtime_process_id}",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "process_code": "TEST001",
-        "process_name": "更新后的工序",
-        "remark": "Updated",
-        "is_active": true
+        "code": "{sample:runtime_process_code}",
+        "name": "更新后的工序",
+        "stage_id": "{sample:stage_id}",
+        "is_enabled": true
+      },
+      "sample_contract": {
+        "runtime_samples": [
+          "order:create-ready",
+          "craft:process-runtime-ready"
+        ],
+        "restore_strategy": "delete"
       },
       "success_statuses": [
         200
@@ -1377,7 +1379,13 @@
       "role_domain": "auth",
       "token_pool": "pool-admin",
       "json_body": {
-        "user_id": 2
+        "session_token_id": "{sample:runtime_session_token_id}"
+      },
+      "sample_contract": {
+        "runtime_samples": [
+          "user:runtime-session-user-ready"
+        ],
+        "restore_strategy": "delete"
       },
       "success_statuses": [
         200
@@ -1443,17 +1451,6 @@
       ]
     },
     {
-      "name": "auth-refresh-token",
-      "method": "POST",
-      "path": "/api/v1/auth/refresh",
-      "requires_auth": true,
-      "role_domain": "auth",
-      "token_pool": "pool-admin",
-      "success_statuses": [
-        200
-      ]
-    },
-    {
       "name": "me-password-update",
       "method": "POST",
       "path": "/api/v1/me/password",
@@ -1489,6 +1486,12 @@
           }
         ]
       },
+      "sample_contract": {
+        "runtime_samples": [
+          "order:create-ready"
+        ],
+        "restore_strategy": "rebuild"
+      },
       "success_statuses": [
         201
       ]
@@ -1508,6 +1511,13 @@
             "step_order": 1
           }
         ]
+      },
+      "sample_contract": {
+        "runtime_samples": [
+          "order:create-ready",
+          "craft:system-master-ready"
+        ],
+        "restore_strategy": "rebuild"
       },
       "success_statuses": [
         200
@@ -1728,25 +1738,6 @@
       ]
     },
     {
-      "name": "quality-defect-analysis-create-appearance",
-      "method": "POST",
-      "path": "/api/v1/quality/defect-analysis",
-      "requires_auth": true,
-      "role_domain": "quality",
-      "token_pool": "pool-quality",
-      "json_body": {
-        "product_id": 1,
-        "stage_id": 1,
-        "process_id": 1,
-        "defect_type": "外观缺陷",
-        "quantity": 3,
-        "remark": "Load test"
-      },
-      "success_statuses": [
-        201
-      ]
-    },
-    {
       "name": "production-my-orders-export",
       "method": "POST",
       "path": "/api/v1/production/my-orders/export",
@@ -1757,22 +1748,6 @@
         "view_mode": "own",
         "order_status": null,
         "keyword": null
-      },
-      "success_statuses": [
-        200
-      ]
-    },
-    {
-      "name": "production-order-events-export",
-      "method": "POST",
-      "path": "/api/v1/production/order-events/export",
-      "requires_auth": true,
-      "role_domain": "production",
-      "token_pool": "pool-production",
-      "json_body": {
-        "keyword": null,
-        "start_date": null,
-        "end_date": null
       },
       "success_statuses": [
         200
@@ -1978,7 +1953,7 @@
         "full_name": "Bootstrap Admin"
       },
       "success_statuses": [
-        201
+        200
       ]
     },
     {
@@ -2268,14 +2243,18 @@
       "path": "/api/v1/messages/announcements",
       "requires_auth": true,
       "role_domain": "readonly",
-      "token_pool": "default",
+      "token_pool": "pool-admin",
       "json_body": {
         "title": "公告标题",
         "content": "公告内容",
-        "receiver_ids": []
+        "range_type": "users",
+        "user_ids": [
+          1
+        ],
+        "role_codes": []
       },
       "success_statuses": [
-        201
+        200
       ]
     },
     {

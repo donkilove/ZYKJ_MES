@@ -366,6 +366,18 @@ def _can_assign_stage(role: Role | None) -> bool:
     return role.role_type == "custom" or not role.is_builtin
 
 
+def _should_preserve_stage_scope(role: Role | None) -> bool:
+    if role is None:
+        return False
+    if role.code in {
+        ROLE_OPERATOR,
+        ROLE_PRODUCTION_ADMIN,
+        ROLE_MAINTENANCE_STAFF,
+    }:
+        return True
+    return role.role_type == "custom" or not role.is_builtin
+
+
 def _resolve_stage(
     db: Session,
     *,
@@ -563,10 +575,10 @@ def normalize_users_to_single_role(db: Session) -> int:
                 user.roles = [primary_role]
                 user_changed = True
 
-        role_codes = [role.code for role in user.roles]
-        is_operator = ROLE_OPERATOR in role_codes
+        primary_role = user.roles[0] if user.roles else None
+        preserve_stage_scope = _should_preserve_stage_scope(primary_role)
 
-        if not is_operator:
+        if not preserve_stage_scope:
             if user.processes:
                 user.processes = []
                 user_changed = True

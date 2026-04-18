@@ -113,7 +113,10 @@ def _normalize_base_url(raw_base_url: str) -> str:
 
 
 def _replace_random_int(value: str) -> str:
-    return value.replace("{RANDOM_INT}", str(int(time.time() * 1000)))
+    return (
+        value.replace("{RANDOM_INT}", str(time.time_ns()))
+        .replace("{RANDOM_SHORT}", str(time.time_ns())[-6:])
+    )
 
 
 def _materialize_payload(raw: Any) -> Any:
@@ -452,6 +455,7 @@ def _execute_write_gate_contract(
     return runtime.execute_contract(
         scenario_name=scenario_name,
         contract=contract,
+        sample_context=sample_context,
     )
 
 
@@ -675,6 +679,8 @@ async def _execute_scenario(
     if scenario_spec is None:
         return False, "UNSUPPORTED_SCENARIO", 0.0
 
+    local_sample_context = dict(sample_context)
+
     if scenario == "login":
         default_login_usernames = login_usernames_by_pool.get("default", [])
         if not default_login_usernames:
@@ -698,22 +704,35 @@ async def _execute_scenario(
     if scenario_spec.requires_auth and not target_pool:
         return False, "NO_TOKEN", 0.0
 
-    if scenario_spec.sample_contract is not None:
-        _execute_write_gate_contract(
-            scenario_name=scenario_spec.name,
-            contract=scenario_spec.sample_contract,
-            sample_context=sample_context,
+    runtime = None
+    contract = scenario_spec.sample_contract
+    if contract is not None:
+        runtime = _build_write_sample_runtime(
+            sample_context=local_sample_context,
             api_client=client,
+        )
+        await asyncio.to_thread(
+            runtime.prepare_contract,
+            contract,
+            local_sample_context,
         )
 
     token = random.choice(target_pool) if scenario_spec.requires_auth else None
-    return await _request_scenario(
-        client=client,
-        base_url=base_url,
-        scenario=scenario_spec,
-        token=token,
-        sample_context=sample_context,
-    )
+    try:
+        return await _request_scenario(
+            client=client,
+            base_url=base_url,
+            scenario=scenario_spec,
+            token=token,
+            sample_context=local_sample_context,
+        )
+    finally:
+        if runtime is not None and contract is not None:
+            await asyncio.to_thread(
+                runtime.restore_contract,
+                contract,
+                local_sample_context,
+            )
 
 
 async def _run_capacity_gate(args) -> dict[str, Any]:

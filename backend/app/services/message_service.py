@@ -1257,9 +1257,7 @@ def _push_message_created_async(db: Session, msg: Message) -> None:
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        # 同步业务入口通常运行在无线程事件循环的上下文；此处在事务提交后直接补做首次投递，
-        # 若失败则仍走失败持久化与后续维护重试链路，不影响主业务提交结果。
-        asyncio.run(_push_message_created_for_recipients(msg.id, recipient_ids))
+        # 同步业务入口不阻塞主请求链路；首次投递留给后续维护链路补偿。
         return
 
     for uid in recipient_ids:

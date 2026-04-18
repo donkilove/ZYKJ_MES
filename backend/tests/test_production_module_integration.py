@@ -46,6 +46,7 @@ from app.models.repair_order import RepairOrder  # noqa: E402
 from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.authz_service import replace_role_permissions_for_module  # noqa: E402
+from app.services.bootstrap_seed_service import seed_initial_data  # noqa: E402
 from app.services.perf_sample_seed_service import seed_production_craft_samples  # noqa: E402
 
 
@@ -53,9 +54,6 @@ PERF_CONTEXT_PATH = BACKEND_DIR.parent / ".tmp_runtime" / "production_craft_samp
 
 
 def load_perf_sample_context() -> dict[str, int | str]:
-    if PERF_CONTEXT_PATH.exists():
-        return json.loads(PERF_CONTEXT_PATH.read_text(encoding="utf-8"))
-
     db = SessionLocal()
     try:
         context = seed_production_craft_samples(db, run_id="baseline").context
@@ -77,6 +75,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
     def setUp(self) -> None:
         self._previous_jwt_secret_key = settings.jwt_secret_key
         settings.jwt_secret_key = "production-module-test-secret"
+        self._ensure_admin()
         self.token = self._login()
         self.stage_ids: list[int] = []
         self.process_ids: list[int] = []
@@ -142,6 +141,17 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token}"}
+
+    def _ensure_admin(self) -> None:
+        db = SessionLocal()
+        try:
+            seed_initial_data(
+                db,
+                admin_username="admin",
+                admin_password="Admin@123456",
+            )
+        finally:
+            db.close()
 
     def _login(self) -> str:
         response = self.client.post(
@@ -273,9 +283,15 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             params={"order_process_id": context["order_process_id"]},
             headers=self._headers(),
         )
+        parameters_response = self.client.get(
+            f"/api/v1/production/orders/{context['production_order_id']}/first-article/parameters",
+            params={"order_process_id": context["order_process_id"]},
+            headers=self._headers(),
+        )
 
         self.assertEqual(detail_response.status_code, 200, detail_response.text)
         self.assertEqual(templates_response.status_code, 200, templates_response.text)
+        self.assertEqual(parameters_response.status_code, 200, parameters_response.text)
 
     def _create_supplier(self, name: str, *, is_enabled: bool = True) -> dict:
         response = self.client.post(

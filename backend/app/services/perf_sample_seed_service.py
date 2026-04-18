@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
+from app.models.daily_verification_code import DailyVerificationCode
+from app.models.first_article_template import FirstArticleTemplate
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.models.production_order import ProductionOrder
@@ -17,9 +19,18 @@ from app.models.product_revision import ProductRevision
 from app.models.product_process_template import ProductProcessTemplate
 from app.models.supplier import Supplier
 from app.models.user import User
+from app.core.product_parameter_template import (
+    PRODUCT_NAME_PARAMETER_CATEGORY,
+    PRODUCT_NAME_PARAMETER_KEY,
+    PRODUCT_NAME_PARAMETER_TYPE,
+)
 from app.services.bootstrap_seed_service import seed_initial_data
 from app.services.craft_service import create_template
-from app.services.production_order_service import create_order
+from app.services.production_order_service import (
+    _build_order_process_rows,
+    create_order,
+    ensure_sub_orders_visible_quantity,
+)
 
 
 STABLE_PRODUCT_NAME = "PERF-PRODUCT-STD-01"
@@ -28,7 +39,9 @@ STABLE_STAGE_CODE = "PERF-STAGE-STD-01"
 STABLE_PROCESS_CODES = ("PERF-PROCESS-STD-01", "PERF-PROCESS-STD-02")
 STABLE_SUPPLIER_NAME = "PERF-SUPPLIER-STD-01"
 STABLE_TEMPLATE_NAME = "PERF-TEMPLATE-STD-01"
+STABLE_FIRST_ARTICLE_TEMPLATE_NAME = "PERF-FA-TPL-STD-01"
 STABLE_ORDER_CODE = "PERF-ORDER-OPEN-01"
+STABLE_VERIFICATION_CODE = "VC-654321"
 RUNTIME_ORDER_PREFIX = "PERF-RUN-"
 
 
@@ -43,6 +56,26 @@ class ProductionCraftSampleSeedResult:
 
 def _now_utc() -> datetime:
     return datetime.now(UTC)
+
+
+def _baseline_revision_snapshot(product_name: str) -> str:
+    return json.dumps(
+        {
+            "name": product_name,
+            "parameters": [
+                {
+                    "name": PRODUCT_NAME_PARAMETER_KEY,
+                    "category": PRODUCT_NAME_PARAMETER_CATEGORY,
+                    "type": PRODUCT_NAME_PARAMETER_TYPE,
+                    "value": product_name,
+                    "description": "",
+                    "sort_order": 1,
+                    "is_preset": True,
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
 
 
 def _get_admin_user(db: Session) -> User:
@@ -194,11 +227,28 @@ def _ensure_active_product(db: Session, *, name: str) -> tuple[Product, bool, bo
                 lifecycle_status="active",
                 action="snapshot",
                 note="性能样本初始化",
-                snapshot_json=json.dumps({"name": row.name, "category": row.category}, ensure_ascii=False),
+                snapshot_json=_baseline_revision_snapshot(row.name),
             )
         )
         db.flush()
         created = created or False
+    else:
+        try:
+            payload = json.loads(revision.snapshot_json)
+        except (TypeError, ValueError):
+            payload = None
+        if (
+            not isinstance(payload, dict)
+            or payload.get("name") != row.name
+            or not isinstance(payload.get("parameters"), list)
+            or not any(
+                isinstance(item, dict)
+                and item.get("name") == PRODUCT_NAME_PARAMETER_KEY
+                for item in payload.get("parameters", [])
+            )
+        ):
+            revision.snapshot_json = _baseline_revision_snapshot(row.name)
+            updated = True
     return row, created, updated
 
 
@@ -287,12 +337,163 @@ def _ensure_template(
     return row, False, updated
 
 
+def _ensure_first_article_template(
+    db: Session,
+    *,
+    product: Product,
+    process: Process,
+) -> tuple[FirstArticleTemplate, bool, bool]:
+    row = (
+        db.execute(
+            select(FirstArticleTemplate).where(
+                FirstArticleTemplate.product_id == product.id,
+                FirstArticleTemplate.process_code == process.code,
+                FirstArticleTemplate.template_name
+                == STABLE_FIRST_ARTICLE_TEMPLATE_NAME,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    created = False
+    updated = False
+    if row is None:
+        row = FirstArticleTemplate(
+            product_id=product.id,
+            process_code=process.code,
+            template_name=STABLE_FIRST_ARTICLE_TEMPLATE_NAME,
+            check_content="性能首件检查",
+            test_value="通过",
+            is_enabled=True,
+        )
+        db.add(row)
+        db.flush()
+        created = True
+        return row, created, updated
+
+    if row.check_content != "性能首件检查":
+        row.check_content = "性能首件检查"
+        updated = True
+    if row.test_value != "通过":
+        row.test_value = "通过"
+        updated = True
+    if not row.is_enabled:
+        row.is_enabled = True
+        updated = True
+    return row, created, updated
+
+
+def _ensure_today_verification_code(
+    db: Session,
+    *,
+    operator: User,
+) -> tuple[DailyVerificationCode, bool, bool]:
+    today = date.today()
+    row = (
+        db.execute(
+            select(DailyVerificationCode).where(
+                DailyVerificationCode.verify_date == today
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if row is None:
+        row = DailyVerificationCode(
+            verify_date=today,
+            code=STABLE_VERIFICATION_CODE,
+            created_by_user_id=operator.id,
+        )
+        db.add(row)
+        db.flush()
+        return row, True, False
+    updated = False
+    if row.code != STABLE_VERIFICATION_CODE:
+        row.code = STABLE_VERIFICATION_CODE
+        updated = True
+    if row.created_by_user_id is None:
+        row.created_by_user_id = operator.id
+        updated = True
+    return row, False, updated
+
+
+def _cleanup_stale_perf_templates_and_orders(
+    db: Session,
+    *,
+    product: Product,
+) -> int:
+    removed = 0
+    stale_orders = (
+        db.execute(
+            select(ProductionOrder).where(
+                ProductionOrder.product_id == product.id,
+                ProductionOrder.order_code.like("PERF-ORDER-%"),
+                ProductionOrder.order_code != STABLE_ORDER_CODE,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in stale_orders:
+        db.delete(row)
+        removed += 1
+    db.flush()
+
+    stale_templates = (
+        db.execute(
+            select(ProductProcessTemplate).where(
+                ProductProcessTemplate.product_id == product.id,
+                ProductProcessTemplate.template_name.like("PERF-TPL-%"),
+                ProductProcessTemplate.template_name != STABLE_TEMPLATE_NAME,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in stale_templates:
+        db.delete(row)
+        removed += 1
+    db.flush()
+
+    stale_processes = (
+        db.execute(
+            select(Process).where(
+                Process.code.like(f"{STABLE_STAGE_CODE}-%"),
+                Process.code.not_in(STABLE_PROCESS_CODES),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in stale_processes:
+        db.delete(row)
+        removed += 1
+    db.flush()
+
+    stale_stages = (
+        db.execute(
+            select(ProcessStage).where(
+                ProcessStage.code.like("PERF-STAGE-%"),
+                ProcessStage.code != STABLE_STAGE_CODE,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in stale_stages:
+        db.delete(row)
+        removed += 1
+    db.flush()
+    return removed
+
+
 def _ensure_production_order(
     db: Session,
     *,
     product: Product,
     supplier: Supplier,
     template: ProductProcessTemplate,
+    stage: ProcessStage,
     processes: list[Process],
     operator: User,
     order_code: str,
@@ -353,6 +554,52 @@ def _ensure_production_order(
     if row.remark != "性能样本":
         row.remark = "性能样本"
         updated = True
+
+    existing_rows = (
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(ProductionOrderProcess.order_id == row.id)
+            .order_by(ProductionOrderProcess.process_order.asc(), ProductionOrderProcess.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    expected = [
+        (1, stage.id, processes[0].id, processes[0].code),
+        (2, stage.id, processes[1].id, processes[1].code),
+    ]
+    needs_rebuild = len(existing_rows) != 2
+    if not needs_rebuild:
+        for existing, (order_index, expected_stage_id, expected_process_id, expected_process_code) in zip(existing_rows, expected, strict=True):
+            if (
+                existing.process_order != order_index
+                or existing.stage_id != expected_stage_id
+                or existing.process_id != expected_process_id
+                or existing.process_code != expected_process_code
+            ):
+                needs_rebuild = True
+                break
+    if needs_rebuild:
+        for existing in existing_rows:
+            db.delete(existing)
+        db.flush()
+        route_steps = [
+            (stage, processes[0]),
+            (stage, processes[1]),
+        ]
+        rebuilt_rows = _build_order_process_rows(
+            db,
+            order=row,
+            route_steps=route_steps,
+        )
+        for rebuilt_row in rebuilt_rows:
+            ensure_sub_orders_visible_quantity(
+                db,
+                process_row=rebuilt_row,
+                target_visible_quantity=rebuilt_row.visible_quantity,
+            )
+        row.current_process_code = processes[0].code
+        updated = True
     return row, False, updated
 
 
@@ -376,6 +623,7 @@ def seed_production_craft_samples(
     *,
     run_id: str,
     mode: str = "baseline",
+    cleanup_stale_perf_artifacts: bool = True,
 ) -> ProductionCraftSampleSeedResult:
     admin_user = _get_admin_user(db)
     created_count = 0
@@ -408,6 +656,9 @@ def seed_production_craft_samples(
     created_count += int(created)
     updated_count += int(updated)
 
+    if cleanup_stale_perf_artifacts:
+        updated_count += _cleanup_stale_perf_templates_and_orders(db, product=product)
+
     supplier, created, updated = _ensure_supplier(db, name=STABLE_SUPPLIER_NAME)
     created_count += int(created)
     updated_count += int(updated)
@@ -421,12 +672,26 @@ def seed_production_craft_samples(
     )
     created_count += int(created)
     updated_count += int(updated)
+    first_article_template, created, updated = _ensure_first_article_template(
+        db,
+        product=product,
+        process=process_primary,
+    )
+    created_count += int(created)
+    updated_count += int(updated)
+    verification_code_row, created, updated = _ensure_today_verification_code(
+        db,
+        operator=admin_user,
+    )
+    created_count += int(created)
+    updated_count += int(updated)
 
     order, created, updated = _ensure_production_order(
         db,
         product=product,
         supplier=supplier,
         template=template,
+        stage=stage,
         processes=[process_primary, process_secondary],
         operator=admin_user,
         order_code=STABLE_ORDER_CODE,
@@ -456,6 +721,8 @@ def seed_production_craft_samples(
         "admin_username": admin_user.username,
         "product_id": product.id,
         "product_name": product.name,
+        "product_current_version": product.current_version,
+        "product_effective_version": product.effective_version,
         "stage_id": stage.id,
         "stage_code": stage.code,
         "process_id": process_primary.id,
@@ -466,6 +733,9 @@ def seed_production_craft_samples(
         "supplier_name": supplier.name,
         "craft_template_id": template.id,
         "craft_template_name": template.template_name,
+        "first_article_template_id": first_article_template.id,
+        "first_article_template_name": first_article_template.template_name,
+        "verification_code": verification_code_row.code,
         "production_order_id": order.id,
         "production_order_code": order.order_code,
         "order_process_id": primary_order_process.id,
@@ -480,6 +750,7 @@ def seed_production_craft_samples(
             product=product,
             supplier=supplier,
             template=template,
+            stage=stage,
             processes=[process_primary, process_secondary],
             operator=admin_user,
             order_code=runtime_order_code,

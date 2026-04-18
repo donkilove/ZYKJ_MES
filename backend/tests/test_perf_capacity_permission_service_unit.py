@@ -12,6 +12,7 @@ from app.core.rbac import (
     ROLE_MAINTENANCE_STAFF,
     ROLE_PRODUCTION_ADMIN,
     ROLE_QUALITY_ADMIN,
+    ROLE_SYSTEM_ADMIN,
 )
 from app.services import authz_service
 from app.services import perf_capacity_permission_service
@@ -42,6 +43,9 @@ class PerfCapacityPermissionServiceUnitTest(unittest.TestCase):
 
         def fake_permission_catalog(db, *, module_code: str):
             mapping = {
+                "user": ["user.users.list"],
+                "system": ["authz.role_permissions.view"],
+                "message": ["message.messages.list"],
                 "production": ["production.orders.detail"],
                 "craft": ["craft.templates.detail"],
                 "product": ["product.products.view"],
@@ -70,6 +74,9 @@ class PerfCapacityPermissionServiceUnitTest(unittest.TestCase):
         self.assertEqual(
             [(item.role_code, item.module_code) for item in plan],
             [
+                (ROLE_SYSTEM_ADMIN, "user"),
+                (ROLE_SYSTEM_ADMIN, "system"),
+                (ROLE_SYSTEM_ADMIN, "message"),
                 (ROLE_PRODUCTION_ADMIN, "production"),
                 (ROLE_PRODUCTION_ADMIN, "craft"),
                 (ROLE_PRODUCTION_ADMIN, "product"),
@@ -166,6 +173,145 @@ class PerfCapacityPermissionServiceUnitTest(unittest.TestCase):
         self.assertEqual(result.updated_count, 5)
         self.assertEqual(result.role_module_pairs, 2)
         self.assertEqual(replace_role_permissions.call_count, 2)
+
+    def test_apply_perf_capacity_permission_rollout_invalidates_cache_even_when_no_db_delta(
+        self,
+    ) -> None:
+        db = MagicMock()
+        plan = [
+            perf_capacity_permission_service.PerfCapacityPermissionPlanItem(
+                role_code=ROLE_SYSTEM_ADMIN,
+                module_code="system",
+                permission_codes=["authz.role_permissions.view"],
+            )
+        ]
+
+        with (
+            patch.object(
+                perf_capacity_permission_service,
+                "build_perf_capacity_permission_rollout_plan",
+                return_value=plan,
+            ),
+            patch.object(
+                perf_capacity_permission_service.authz_service,
+                "replace_role_permissions_for_module",
+                return_value=(0, ["authz.role_permissions.view"], ["authz.role_permissions.view"]),
+            ),
+            patch.object(
+                perf_capacity_permission_service.authz_service,
+                "invalidate_permission_cache",
+            ) as invalidate_cache,
+            patch.object(
+                perf_capacity_permission_service,
+                "_apply_hierarchy_rollout_if_supported",
+                return_value=0,
+            ),
+        ):
+            result = perf_capacity_permission_service.apply_perf_capacity_permission_rollout(db)
+
+        self.assertEqual(result.updated_count, 0)
+        invalidate_cache.assert_called_once()
+
+    def test_apply_perf_capacity_permission_rollout_applies_user_hierarchy_for_system_admin(
+        self,
+    ) -> None:
+        db = MagicMock()
+        plan = [
+            perf_capacity_permission_service.PerfCapacityPermissionPlanItem(
+                role_code=ROLE_SYSTEM_ADMIN,
+                module_code="user",
+                permission_codes=["user.users.list"],
+            )
+        ]
+
+        with (
+            patch.object(
+                perf_capacity_permission_service,
+                "build_perf_capacity_permission_rollout_plan",
+                return_value=plan,
+            ),
+            patch.object(
+                perf_capacity_permission_service.authz_service,
+                "replace_role_permissions_for_module",
+                return_value=(1, [], ["user.users.list"]),
+            ),
+            patch.object(
+                perf_capacity_permission_service.authz_service,
+                "get_permission_hierarchy_catalog",
+                return_value={
+                    "pages": [{"permission_code": "page.user.view"}],
+                    "features": [
+                        {"permission_code": "feature.user.user_management.view"}
+                    ],
+                },
+            ),
+            patch.object(
+                perf_capacity_permission_service.authz_service,
+                "update_permission_hierarchy_role_config",
+                return_value={"updated_count": 3},
+            ) as update_hierarchy,
+        ):
+            result = perf_capacity_permission_service.apply_perf_capacity_permission_rollout(db)
+
+        update_hierarchy.assert_called_once_with(
+            db,
+            role_code=ROLE_SYSTEM_ADMIN,
+            module_code="user",
+            module_enabled=True,
+            page_permission_codes=["page.user.view"],
+            feature_permission_codes=["feature.user.user_management.view"],
+            dry_run=False,
+            operator=None,
+        )
+        self.assertEqual(result.updated_count, 4)
+        self.assertEqual(result.items[0]["hierarchy_updated_count"], 3)
+
+    def test_apply_perf_capacity_permission_rollout_applies_hierarchy_for_system_module(
+        self,
+    ) -> None:
+        db = MagicMock()
+        plan = [
+            perf_capacity_permission_service.PerfCapacityPermissionPlanItem(
+                role_code=ROLE_SYSTEM_ADMIN,
+                module_code="system",
+                permission_codes=["authz.permissions.catalog.view"],
+            )
+        ]
+
+        with (
+            patch.object(
+                perf_capacity_permission_service,
+                "build_perf_capacity_permission_rollout_plan",
+                return_value=plan,
+            ),
+            patch.object(
+                perf_capacity_permission_service.authz_service,
+                "replace_role_permissions_for_module",
+                return_value=(1, [], ["authz.permissions.catalog.view"]),
+            ),
+            patch.object(
+                perf_capacity_permission_service.authz_service,
+                "get_permission_hierarchy_catalog",
+                return_value={
+                    "pages": [{"permission_code": "page.function_permission_config.view"}],
+                    "features": [
+                        {
+                            "permission_code": "feature.system.role_permissions.manage"
+                        }
+                    ],
+                },
+            ),
+            patch.object(
+                perf_capacity_permission_service.authz_service,
+                "update_permission_hierarchy_role_config",
+                return_value={"updated_count": 2},
+            ) as update_hierarchy,
+        ):
+            result = perf_capacity_permission_service.apply_perf_capacity_permission_rollout(db)
+
+        update_hierarchy.assert_called_once()
+        self.assertEqual(result.updated_count, 3)
+        self.assertEqual(result.items[0]["hierarchy_updated_count"], 2)
 
 
 if __name__ == "__main__":

@@ -50,7 +50,9 @@
         "baseline_refs": [
           "order:PERF-ORDER-OPEN-01"
         ],
-        "runtime_samples": [],
+        "runtime_samples": [
+          "production:runtime-order-pending-ready"
+        ],
         "state_assertions": [
           "production.order.pipeline_mode"
         ],
@@ -77,7 +79,9 @@
           "order:PERF-ORDER-OPEN-01",
           "template:PERF-TEMPLATE-STD-01"
         ],
-        "runtime_samples": [],
+        "runtime_samples": [
+          "production:runtime-order-pending-ready"
+        ],
         "state_assertions": [
           "production.order.update"
         ],
@@ -105,7 +109,9 @@
           "order:PERF-ORDER-OPEN-01",
           "template:PERF-TEMPLATE-STD-01"
         ],
-        "runtime_samples": [],
+        "runtime_samples": [
+          "production:runtime-order-pending-ready"
+        ],
         "state_assertions": [
           "production.first_article.submit"
         ],
@@ -113,14 +119,15 @@
       },
       "json_body": {
         "order_process_id": "{sample:order_process_id}",
-        "template_id": "{sample:craft_template_id}",
+        "template_id": "{sample:first_article_template_id}",
         "check_content": "首件检查",
         "test_value": "通过",
         "result": "passed",
         "participant_user_ids": [
           "{sample:admin_user_id}"
         ],
-        "verification_code": "VC-001",
+        "verification_code": "{sample:verification_code}",
+        "effective_operator_user_id": "{sample:runtime_operator_user_id}",
         "remark": "performance suite first article"
       },
       "success_statuses": [200]
@@ -136,7 +143,9 @@
         "baseline_refs": [
           "order:PERF-ORDER-OPEN-01"
         ],
-        "runtime_samples": [],
+        "runtime_samples": [
+          "production:runtime-order-in-progress-ready"
+        ],
         "state_assertions": [
           "production.end_production.submit"
         ],
@@ -144,6 +153,7 @@
       },
       "json_body": {
         "order_process_id": "{sample:order_process_id}",
+        "effective_operator_user_id": "{sample:runtime_operator_user_id}",
         "quantity": 1,
         "remark": "performance suite end production",
         "defect_items": []
@@ -161,7 +171,9 @@
         "baseline_refs": [
           "order:PERF-ORDER-OPEN-01"
         ],
-        "runtime_samples": [],
+        "runtime_samples": [
+          "production:runtime-order-pending-ready"
+        ],
         "state_assertions": [
           "production.assist.create"
         ],
@@ -169,7 +181,7 @@
       },
       "json_body": {
         "order_process_id": "{sample:order_process_id}",
-        "target_operator_user_id": "{sample:admin_user_id}",
+        "target_operator_user_id": "{sample:runtime_operator_user_id}",
         "helper_user_id": "{sample:admin_user_id}",
         "reason": "performance suite assist"
       },
@@ -211,15 +223,17 @@
         "baseline_refs": [
           "stage:PERF-STAGE-STD-01"
         ],
-        "runtime_samples": [],
+        "runtime_samples": [
+          "craft:process-create-ready"
+        ],
         "state_assertions": [
           "craft.process.create"
         ],
         "restore_strategy": "delete"
       },
       "json_body": {
-        "code": "PERF-PROC-{RANDOM_INT}",
-        "name": "PERF-PROC-{RANDOM_INT}",
+        "code": "{sample:runtime_process_code}",
+        "name": "{sample:runtime_process_name}",
         "stage_id": "{sample:stage_id}",
         "remark": "production craft write suite"
       },
@@ -274,14 +288,16 @@
         "baseline_refs": [
           "template:PERF-TEMPLATE-STD-01"
         ],
-        "runtime_samples": [],
+        "runtime_samples": [
+          "craft:template-draft-ready"
+        ],
         "state_assertions": [
           "craft.template.update"
         ],
         "restore_strategy": "rebuild"
       },
       "json_body": {
-        "template_name": "PERF-TEMPLATE-STD-01",
+        "template_name": "{sample:craft_template_name}",
         "is_default": true,
         "is_enabled": true,
         "remark": "updated by production craft suite",
@@ -313,7 +329,7 @@
           "template:PERF-TEMPLATE-STD-01"
         ],
         "runtime_samples": [
-          "craft:template-publish-ready"
+          "craft:template-draft-ready"
         ],
         "state_assertions": [
           "craft.template.publish"
@@ -340,7 +356,7 @@
           "template:PERF-TEMPLATE-STD-01"
         ],
         "runtime_samples": [
-          "craft:template-publish-ready"
+          "craft:template-published-ready"
         ],
         "state_assertions": [
           "craft.template.rollback"
@@ -366,7 +382,9 @@
         "baseline_refs": [
           "template:PERF-TEMPLATE-STD-01"
         ],
-        "runtime_samples": [],
+        "runtime_samples": [
+          "craft:template-published-ready"
+        ],
         "state_assertions": [
           "craft.template.draft"
         ],

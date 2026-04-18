@@ -12,12 +12,18 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parent
+SHARED_REPO_ROOT = ROOT_DIR.parent.parent if ROOT_DIR.parent.name == ".worktrees" else ROOT_DIR
 BACKEND_DIR = ROOT_DIR / "backend"
 DEFAULT_ENV_FILE = BACKEND_DIR / ".env"
 LOCAL_NO_PROXY_ENTRIES = ("localhost", "127.0.0.1", "::1")
 DEFAULT_POSTGRES_PORT = 5432
 DEFAULT_POSTGRES_START_TIMEOUT_SECONDS = 20.0
 DEFAULT_POSTGRES_LOG_FILE = Path.home() / ".local" / "state" / "postgresql" / "postgresql-start_backend.log"
+DEFAULT_PERF_DB_POOL_SIZE = "6"
+DEFAULT_PERF_DB_MAX_OVERFLOW = "4"
+DEFAULT_PERF_DB_POOL_TIMEOUT_SECONDS = "5"
+DEFAULT_PERF_DB_POOL_RECYCLE_SECONDS = "1800"
+DEFAULT_PERF_WORKERS = 4
 
 
 @dataclass(frozen=True)
@@ -31,6 +37,8 @@ def _preferred_python_candidates() -> list[Path]:
     return [
         ROOT_DIR / ".venv" / "Scripts" / "python.exe",
         ROOT_DIR / ".venv" / "bin" / "python",
+        SHARED_REPO_ROOT / ".venv" / "Scripts" / "python.exe",
+        SHARED_REPO_ROOT / ".venv" / "bin" / "python",
     ]
 
 
@@ -49,6 +57,8 @@ def find_executable(name: str) -> str | None:
     candidates = [
         ROOT_DIR / ".venv" / "Scripts" / f"{name}.exe",
         ROOT_DIR / ".venv" / "bin" / name,
+        SHARED_REPO_ROOT / ".venv" / "Scripts" / f"{name}.exe",
+        SHARED_REPO_ROOT / ".venv" / "bin" / name,
         Path.home() / ".local" / "share" / "micromamba" / "envs" / "zykj-postgres" / "bin" / name,
         Path.home() / ".local" / "share" / "micromamba" / "envs" / "zykj-dev" / "bin" / name,
     ]
@@ -265,15 +275,60 @@ def _merge_no_proxy(existing: str | None) -> str:
     return ",".join(merged)
 
 
-def build_subprocess_env() -> dict[str, str]:
-    env = os.environ.copy()
+def build_subprocess_env(
+    args: argparse.Namespace,
+    *,
+    base_env: dict[str, str] | None = None,
+) -> dict[str, str]:
+    env = dict(base_env) if base_env is not None else os.environ.copy()
     merged_no_proxy = _merge_no_proxy(env.get("NO_PROXY") or env.get("no_proxy"))
     env["NO_PROXY"] = merged_no_proxy
     env["no_proxy"] = merged_no_proxy
+    if getattr(args, "mode", "dev") == "perf":
+        env["BOOTSTRAP_ON_STARTUP"] = "false"
+        env["WEB_RUN_BOOTSTRAP"] = "false"
+        env["WEB_RUN_BACKGROUND_LOOPS"] = "false"
+        env["MAINTENANCE_AUTO_GENERATE_ENABLED"] = "false"
+        env["MESSAGE_DELIVERY_MAINTENANCE_ENABLED"] = "false"
+        env["UVICORN_RELOAD"] = "false"
+        env["RELOAD"] = "false"
+        env.setdefault("DB_POOL_SIZE", DEFAULT_PERF_DB_POOL_SIZE)
+        env.setdefault("DB_MAX_OVERFLOW", DEFAULT_PERF_DB_MAX_OVERFLOW)
+        env.setdefault(
+            "DB_POOL_TIMEOUT_SECONDS",
+            DEFAULT_PERF_DB_POOL_TIMEOUT_SECONDS,
+        )
+        env.setdefault(
+            "DB_POOL_RECYCLE_SECONDS",
+            DEFAULT_PERF_DB_POOL_RECYCLE_SECONDS,
+        )
     return env
 
 
 def build_command(args: argparse.Namespace) -> list[str]:
+    mode = getattr(args, "mode", "dev")
+    if mode == "perf":
+        gunicorn = find_executable("gunicorn")
+        if not gunicorn:
+            raise FileNotFoundError("未找到 gunicorn，无法启动 perf 模式后端。")
+        return [
+            gunicorn,
+            "app.main:app",
+            "--worker-class",
+            "uvicorn.workers.UvicornWorker",
+            "--workers",
+            str(max(1, getattr(args, "workers", DEFAULT_PERF_WORKERS))),
+            "--bind",
+            f"{args.host}:{args.port}",
+            "--timeout",
+            "60",
+            "--graceful-timeout",
+            "20",
+            "--access-logfile",
+            "-",
+            "--error-logfile",
+            "-",
+        ]
     command = [
         resolve_python(),
         "-m",
@@ -293,6 +348,18 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="启动 FastAPI 后端服务。")
     parser.add_argument("--host", default="0.0.0.0", help="监听地址，默认：0.0.0.0")
     parser.add_argument("--port", type=int, default=8000, help="监听端口，默认：8000")
+    parser.add_argument(
+        "--mode",
+        choices=("dev", "perf"),
+        default="dev",
+        help="启动模式：dev=uvicorn 本地开发；perf=gunicorn 压测宿主。",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=DEFAULT_PERF_WORKERS,
+        help=f"perf 模式 worker 数，默认：{DEFAULT_PERF_WORKERS}",
+    )
     reload_group = parser.add_mutually_exclusive_group()
     reload_group.add_argument("--reload", dest="reload", action="store_true", help="启用热重载。")
     reload_group.add_argument("--no-reload", dest="reload", action="store_false", help="禁用热重载。")
@@ -312,7 +379,7 @@ def main() -> int:
         print(f"[ERROR] 未找到后端目录：{BACKEND_DIR}")
         return 1
 
-    env = build_subprocess_env()
+    env = build_subprocess_env(args)
     env_file_values = load_env_file(DEFAULT_ENV_FILE)
 
     if not DEFAULT_ENV_FILE.exists():
@@ -325,6 +392,7 @@ def main() -> int:
 
     command = build_command(args)
     print(f"[INFO] 后端工作目录：{BACKEND_DIR}")
+    print(f"[INFO] 启动模式：{args.mode}")
     print(f"[INFO] 启动命令：{' '.join(command)}")
     print(f"[INFO] 本地地址已加入 NO_PROXY：{env['NO_PROXY']}")
 

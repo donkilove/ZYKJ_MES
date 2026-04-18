@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -6,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 INSECURE_JWT_SECRET_KEYS = frozenset({"", "replace_with_a_strong_secret"})
 INSECURE_BOOTSTRAP_ADMIN_PASSWORDS = frozenset({"", "Admin@123456"})
 INSECURE_PRODUCTION_DEFAULT_VERIFICATION_CODES = frozenset({"", "123456"})
+DEFAULT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
@@ -67,7 +69,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 120
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(DEFAULT_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
     )

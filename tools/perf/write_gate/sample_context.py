@@ -31,7 +31,8 @@ def materialize_sample_value(raw: Any, sample_values: dict[str, Any]) -> Any:
             return str(sample_values[key])
 
         replaced = SAMPLE_TOKEN_PATTERN.sub(_replace, raw)
-        replaced = replaced.replace("{RANDOM_INT}", str(int(time.time() * 1000)))
+        replaced = replaced.replace("{RANDOM_INT}", str(time.time_ns()))
+        replaced = replaced.replace("{RANDOM_SHORT}", str(time.time_ns())[-6:])
         if replaced.isdigit():
             return int(replaced)
         return replaced

@@ -1,4 +1,5 @@
 import importlib
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -63,6 +64,24 @@ class DbSessionConfigUnitTest(unittest.TestCase):
         self.assertNotIn("pool_recycle", kwargs)
         self.assertTrue(kwargs["pool_pre_ping"])
         self.assertTrue(kwargs["future"])
+
+    def test_settings_default_pool_budget_matches_safe_local_budget(self) -> None:
+        settings = config_module.Settings()
+
+        self.assertEqual(settings.db_pool_size, 6)
+        self.assertEqual(settings.db_max_overflow, 4)
+        self.assertEqual(settings.db_pool_timeout_seconds, 5)
+        self.assertEqual(settings.db_pool_recycle_seconds, 1800)
+
+    def test_settings_reads_backend_env_file_independent_of_current_workdir(self) -> None:
+        original_cwd = Path.cwd()
+        try:
+            os.chdir("/")
+            settings = config_module.Settings()
+        finally:
+            os.chdir(original_cwd)
+
+        self.assertFalse(settings.authz_permission_cache_redis_enabled)
 
 
 if __name__ == "__main__":

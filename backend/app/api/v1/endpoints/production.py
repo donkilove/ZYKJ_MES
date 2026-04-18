@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, load_only, selectinload
 
-from app.api.deps import require_permission, require_permission_fast
+from app.api.deps import get_current_user, require_permission, require_permission_fast
 from app.core.authz_catalog import (
     PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE,
     PERM_PROD_ASSIST_AUTHORIZATIONS_LIST,
@@ -507,7 +507,8 @@ def create_order_api(
 def get_order_detail_api(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_PROD_ORDERS_DETAIL)),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission_fast(PERM_PROD_ORDERS_DETAIL)),
 ) -> ApiResponse[OrderDetail]:
     row = get_order_by_id(db, order_id, with_relations=True)
     if not row:
@@ -562,9 +563,8 @@ def get_order_detail_api(
 def get_order_pipeline_mode_api(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_permission(PERM_PROD_ORDERS_PIPELINE_MODE_VIEW)
-    ),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission_fast(PERM_PROD_ORDERS_PIPELINE_MODE_VIEW)),
 ) -> ApiResponse[OrderPipelineModeItem]:
     try:
         if not can_user_access_order_pipeline_mode(
@@ -836,7 +836,8 @@ def get_my_order_context_api(
     order_process_id: int | None = None,
     proxy_operator_user_id: int | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_PROD_MY_ORDERS_CONTEXT)),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_permission_fast(PERM_PROD_MY_ORDERS_CONTEXT)),
 ) -> ApiResponse[MyOrderContextResult]:
     if proxy_operator_user_id is not None and proxy_operator_user_id <= 0:
         raise HTTPException(
@@ -1040,7 +1041,7 @@ def get_first_article_parameters_api(
     order_id: int,
     order_process_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
+    _: None = Depends(require_permission_fast(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
 ) -> ApiResponse[FirstArticleParameterListResult]:
     order, _ = _get_first_article_order_context(
         db,

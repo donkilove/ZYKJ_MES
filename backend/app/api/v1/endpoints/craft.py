@@ -1200,7 +1200,7 @@ def import_templates_api(
 def get_template_detail_api(
     template_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("craft.templates.detail")),
+    _: None = Depends(require_permission_fast("craft.templates.detail")),
 ) -> ApiResponse[ProductProcessTemplateDetail]:
     row = get_template_by_id(db, template_id)
     if not row:
@@ -1218,7 +1218,7 @@ def get_template_impact_analysis_api(
     template_id: int,
     target_version: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("craft.templates.impact.analysis")),
+    _: None = Depends(require_permission_fast("craft.templates.impact.analysis")),
 ) -> ApiResponse[TemplateImpactAnalysisResult]:
     row = get_template_by_id(db, template_id)
     if not row:
@@ -1915,7 +1915,7 @@ def get_process_references_api(
 def get_template_references_api(
     template_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("craft.templates.list")),
+    _: None = Depends(require_permission_fast("craft.templates.list")),
 ) -> ApiResponse[TemplateReferenceResult]:
     row = get_template_by_id(db, template_id)
     if not row:
@@ -1962,7 +1962,7 @@ def get_template_references_api(
 def get_product_template_references_api(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("craft.templates.list")),
+    _: None = Depends(require_permission_fast("craft.templates.list")),
 ) -> ApiResponse[ProductTemplateReferenceResult]:
     product_row = (
         db.execute(select(Product).where(Product.id == product_id)).scalars().first()

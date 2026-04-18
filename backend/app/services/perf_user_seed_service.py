@@ -55,10 +55,28 @@ DEFAULT_PERF_USER_POOL_SPECS: tuple[PerfUserPoolSpec, ...] = (
         count=2,
     ),
     PerfUserPoolSpec(
+        pool_name="pool-readonly",
+        role_code=ROLE_SYSTEM_ADMIN,
+        username_prefix="ltrdo",
+        count=2,
+    ),
+    PerfUserPoolSpec(
         pool_name="pool-user-admin",
         role_code=ROLE_SYSTEM_ADMIN,
         username_prefix="ltusr",
         count=2,
+    ),
+    PerfUserPoolSpec(
+        pool_name="pool-auth-logout",
+        role_code=ROLE_SYSTEM_ADMIN,
+        username_prefix="ltlgo",
+        count=8,
+    ),
+    PerfUserPoolSpec(
+        pool_name="pool-auth-password",
+        role_code=ROLE_SYSTEM_ADMIN,
+        username_prefix="ltpwd",
+        count=8,
     ),
     PerfUserPoolSpec(
         pool_name="pool-production",
@@ -77,6 +95,7 @@ DEFAULT_PERF_USER_POOL_SPECS: tuple[PerfUserPoolSpec, ...] = (
         role_code=ROLE_MAINTENANCE_STAFF,
         username_prefix="ltmnt",
         count=4,
+        requires_stage=True,
     ),
     PerfUserPoolSpec(
         pool_name="pool-operator",
@@ -144,6 +163,69 @@ def _load_roles_by_code(
     return {role.code: role for role in roles}
 
 
+def _ensure_perf_stage_processes(
+    db: Session,
+) -> tuple[ProcessStage, list[Process]]:
+    stage = (
+        db.execute(
+            select(ProcessStage).where(ProcessStage.code == "product_testing")
+        )
+        .scalars()
+        .first()
+    )
+    if stage is None:
+        stage = ProcessStage(
+            code="product_testing",
+            name="成品测试",
+            sort_order=0,
+            is_enabled=True,
+            remark="perf:stage-binding",
+        )
+        db.add(stage)
+        db.flush()
+    elif not stage.is_enabled:
+        stage.is_enabled = True
+        db.flush()
+
+    processes = (
+        db.execute(
+            select(Process)
+            .where(
+                Process.stage_id == stage.id,
+                Process.is_enabled.is_(True),
+            )
+            .order_by(Process.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if processes:
+        return stage, list(processes)
+
+    process = (
+        db.execute(
+            select(Process).where(Process.code == "perf_product_testing_default")
+        )
+        .scalars()
+        .first()
+    )
+    if process is None:
+        process = Process(
+            code="perf_product_testing_default",
+            name="成品测试默认流程",
+            stage_id=stage.id,
+            is_enabled=True,
+            remark="perf:stage-binding",
+        )
+        db.add(process)
+        db.flush()
+    else:
+        process.stage_id = stage.id
+        process.is_enabled = True
+        db.flush()
+    return stage, [process]
+
+
 def _load_operator_stage_and_processes(
     db: Session,
 ) -> tuple[ProcessStage, list[Process]]:
@@ -185,8 +267,18 @@ def seed_perf_capacity_users(
 
     operator_stage: ProcessStage | None = None
     operator_processes: list[Process] = []
-    if any(account.requires_stage for account in accounts):
+    equipment_stage: ProcessStage | None = None
+    equipment_processes: list[Process] = []
+    if any(
+        account.requires_stage and account.pool_name != "pool-equipment"
+        for account in accounts
+    ):
         operator_stage, operator_processes = _load_operator_stage_and_processes(db)
+    if any(
+        account.requires_stage and account.pool_name == "pool-equipment"
+        for account in accounts
+    ):
+        equipment_stage, equipment_processes = _ensure_perf_stage_processes(db)
 
     created_count = 0
     updated_count = 0
@@ -194,8 +286,12 @@ def seed_perf_capacity_users(
 
     for account in accounts:
         role = roles_by_code[account.role_code]
-        stage_id = operator_stage.id if account.requires_stage and operator_stage else None
-        processes = operator_processes if account.requires_stage else []
+        if account.requires_stage and account.pool_name == "pool-equipment":
+            stage_id = equipment_stage.id if equipment_stage else None
+            processes = equipment_processes
+        else:
+            stage_id = operator_stage.id if account.requires_stage and operator_stage else None
+            processes = operator_processes if account.requires_stage else []
         existing = get_user_by_username(db, account.username, include_deleted=True)
 
         if existing is None:

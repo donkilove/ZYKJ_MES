@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
+import time
 
 
 AUTHZ_PERMISSION_CACHE_ALL_MODULES = "__all__"
@@ -31,3 +33,24 @@ def _authz_permission_cache_key(
     joined_roles = ",".join(normalized_roles)
     digest = hashlib.sha1(f"{joined_roles}|{module_token}".encode("utf-8")).hexdigest()
     return f"{cache_prefix}:{digest}"
+
+
+def _authz_cache_generation_marker_path() -> Path:
+    repo_root = Path(__file__).resolve().parents[3]
+    return repo_root / ".tmp_runtime" / "authz_cache_generation.marker"
+
+
+def _authz_cache_generation_value() -> int:
+    marker_path = _authz_cache_generation_marker_path()
+    try:
+        return int(marker_path.stat().st_mtime_ns)
+    except FileNotFoundError:
+        return 0
+
+
+def _bump_authz_cache_generation() -> int:
+    marker_path = _authz_cache_generation_marker_path()
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    now_ns = time.time_ns()
+    marker_path.write_text(str(now_ns), encoding="utf-8")
+    return now_ns

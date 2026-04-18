@@ -7,6 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from sqlalchemy.pool import NullPool
+
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_DIR.parent
@@ -17,6 +19,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.perf import backend_capacity_gate
+from tools.perf.write_gate import sample_registry as sample_registry_module
+from tools.perf.write_gate.sample_registry import build_sample_registry
 from tools.perf.write_gate.sample_runtime import SampleExecutionResult
 
 
@@ -353,6 +357,22 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
         self.assertEqual(prepared.query["template_id"], 21)
         self.assertEqual(prepared.json_body["stage_id"], 7)
 
+    def test_materialize_request_supports_random_short_placeholder(self) -> None:
+        scenario = backend_capacity_gate.ScenarioSpec(
+            name="user-create",
+            method="POST",
+            path="/api/v1/users",
+            json_body={"username": "u{RANDOM_SHORT}"},
+        )
+
+        prepared = backend_capacity_gate._materialize_scenario_request(
+            scenario,
+            {},
+        )
+
+        self.assertTrue(str(prepared.json_body["username"]).startswith("u"))
+        self.assertEqual(len(str(prepared.json_body["username"])), 7)
+
     def test_execute_write_gate_contract_runs_prepare_and_restore_handlers(self) -> None:
         with patch.object(
             backend_capacity_gate,
@@ -380,6 +400,256 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
         self.assertEqual(result.prepare_calls, ["order:create-ready"])
         self.assertEqual(result.restore_calls, ["order:create-ready"])
         self.assertFalse(result.failed)
+
+    def test_build_sample_registry_contains_runtime_handlers_for_write_suite(self) -> None:
+        registry = build_sample_registry(
+            sample_context={
+                "product_id": 1,
+                "stage_id": 2,
+                "process_id": 3,
+                "secondary_process_id": 4,
+                "supplier_id": 5,
+                "craft_template_id": 6,
+                "admin_user_id": 7,
+            },
+            api_client=object(),
+        )
+
+        self.assertTrue(
+            {
+                "order:create-ready",
+                "craft:template-draft-ready",
+                "craft:template-published-ready",
+                "craft:template-archived-ready",
+                "craft:process-create-ready",
+                "craft:process-runtime-ready",
+                "craft:system-master-ready",
+                "product:runtime-version-create-ready",
+                "product:runtime-draft-version-ready",
+                "product:runtime-effective-version-ready",
+                "equipment:runtime-ledger-ready",
+                "equipment:runtime-item-ready",
+                "equipment:runtime-plan-create-ready",
+                "equipment:runtime-plan-ready",
+                "equipment:runtime-rule-ready",
+                "equipment:runtime-param-ready",
+                "equipment:runtime-work-order-pending-ready",
+                "equipment:runtime-work-order-in-progress-ready",
+                "equipment:runtime-record-ready",
+                "quality:runtime-supplier-ready",
+                "quality:runtime-first-article-failed-ready",
+                "quality:runtime-repair-order-ready",
+                "quality:runtime-scrap-ready",
+                "auth:runtime-registration-request-ready",
+                "message:runtime-readonly-message-ready",
+                "user:runtime-role-ready",
+                "user:runtime-user-ready",
+                "user:runtime-deleted-user-ready",
+                "user:runtime-session-user-ready",
+                "production:runtime-order-pending-ready",
+                "production:runtime-order-in-progress-ready",
+            }.issubset(registry)
+        )
+
+    def test_perf_sample_registry_uses_dedicated_null_pool_session_factory(self) -> None:
+        with patch.object(
+            sample_registry_module,
+            "create_engine",
+        ) as create_engine_mock:
+            session_factory = sample_registry_module._build_perf_session_factory(
+                "postgresql+psycopg2://demo:demo@127.0.0.1:5432/demo"
+            )
+
+        self.assertIsNotNone(session_factory)
+        _, kwargs = create_engine_mock.call_args
+        self.assertIs(kwargs["poolclass"], NullPool)
+        self.assertTrue(kwargs["pool_pre_ping"])
+        self.assertTrue(kwargs["future"])
+
+    def test_execute_scenario_runs_write_gate_around_request_with_local_sample_context(
+        self,
+    ) -> None:
+        scenario_registry = {
+            "production-order-first-article": backend_capacity_gate.ScenarioSpec(
+                name="production-order-first-article",
+                method="POST",
+                path="/api/v1/production/orders/{sample:production_order_id}/first-article",
+                sample_contract=backend_capacity_gate.SampleContract(
+                    runtime_samples=["production:runtime-order-pending-ready"],
+                    restore_strategy="delete",
+                ),
+            )
+        }
+        shared_sample_context = {
+            "production_order_id": 18,
+            "baseline_marker": "baseline",
+        }
+        event_log: list[tuple[str, dict[str, object]]] = []
+
+        class FakeRuntime:
+            def prepare_contract(self, contract, sample_context):
+                del contract
+                event_log.append(("prepare", dict(sample_context)))
+                sample_context["production_order_id"] = 501
+                sample_context["runtime_marker"] = "prepared"
+                return ["production:runtime-order-pending-ready"]
+
+            def restore_contract(self, contract, sample_context):
+                del contract
+                event_log.append(("restore", dict(sample_context)))
+                return ["production:runtime-order-pending-ready"]
+
+        async def fake_request_scenario(
+            *,
+            client,
+            base_url,
+            scenario,
+            token,
+            sample_context,
+        ):
+            del client, base_url, scenario, token
+            event_log.append(("request", dict(sample_context)))
+            return True, "200", 12.3
+
+        with (
+            patch.object(
+                backend_capacity_gate,
+                "_build_write_sample_runtime",
+                return_value=FakeRuntime(),
+            ),
+            patch.object(
+                backend_capacity_gate,
+                "_request_scenario",
+                new=AsyncMock(side_effect=fake_request_scenario),
+            ),
+            patch.object(
+                backend_capacity_gate.random,
+                "choice",
+                side_effect=lambda values: values[0],
+            ),
+        ):
+            success, status, latency_ms = asyncio.run(
+                backend_capacity_gate._execute_scenario(
+                    scenario="production-order-first-article",
+                    scenario_registry=scenario_registry,
+                    client=object(),
+                    base_url="http://127.0.0.1:8000",
+                    token_pools={"default": ["token-1"]},
+                    login_usernames_by_pool={},
+                    password="Admin@123456",
+                    sample_context=shared_sample_context,
+                )
+            )
+
+        self.assertTrue(success)
+        self.assertEqual(status, "200")
+        self.assertEqual(latency_ms, 12.3)
+        self.assertEqual(
+            event_log,
+            [
+                ("prepare", {"production_order_id": 18, "baseline_marker": "baseline"}),
+                (
+                    "request",
+                    {
+                        "production_order_id": 501,
+                        "baseline_marker": "baseline",
+                        "runtime_marker": "prepared",
+                    },
+                ),
+                (
+                    "restore",
+                    {
+                        "production_order_id": 501,
+                        "baseline_marker": "baseline",
+                        "runtime_marker": "prepared",
+                    },
+                ),
+            ],
+        )
+        self.assertEqual(
+            shared_sample_context,
+            {
+                "production_order_id": 18,
+                "baseline_marker": "baseline",
+            },
+        )
+
+    def test_execute_scenario_offloads_runtime_prepare_and_restore_to_thread(self) -> None:
+        scenario_registry = {
+            "production-order-update": backend_capacity_gate.ScenarioSpec(
+                name="production-order-update",
+                method="PUT",
+                path="/api/v1/production/orders/{sample:production_order_id}",
+                sample_contract=backend_capacity_gate.SampleContract(
+                    runtime_samples=["production:runtime-order-pending-ready"],
+                    restore_strategy="rebuild",
+                ),
+            )
+        }
+        runtime = SimpleNamespace(
+            prepare_contract=lambda contract, sample_context: None,
+            restore_contract=lambda contract, sample_context: None,
+        )
+        to_thread_calls: list[object] = []
+
+        async def fake_to_thread(func, *args, **kwargs):
+            del args, kwargs
+            to_thread_calls.append(func)
+            return func(
+                scenario_registry["production-order-update"].sample_contract,
+                {"production_order_id": 18},
+            )
+
+        async def fake_request_scenario(
+            *,
+            client,
+            base_url,
+            scenario,
+            token,
+            sample_context,
+        ):
+            del client, base_url, scenario, token, sample_context
+            return True, "200", 1.0
+
+        with (
+            patch.object(
+                backend_capacity_gate,
+                "_build_write_sample_runtime",
+                return_value=runtime,
+            ),
+            patch.object(
+                backend_capacity_gate.asyncio,
+                "to_thread",
+                new=AsyncMock(side_effect=fake_to_thread),
+            ),
+            patch.object(
+                backend_capacity_gate,
+                "_request_scenario",
+                new=AsyncMock(side_effect=fake_request_scenario),
+            ),
+            patch.object(
+                backend_capacity_gate.random,
+                "choice",
+                side_effect=lambda values: values[0],
+            ),
+        ):
+            asyncio.run(
+                backend_capacity_gate._execute_scenario(
+                    scenario="production-order-update",
+                    scenario_registry=scenario_registry,
+                    client=object(),
+                    base_url="http://127.0.0.1:8000",
+                    token_pools={"default": ["token-1"]},
+                    login_usernames_by_pool={},
+                    password="Admin@123456",
+                    sample_context={"production_order_id": 18},
+                )
+            )
+
+        self.assertEqual(
+            to_thread_calls,
+            [runtime.prepare_contract, runtime.restore_contract],
+        )
 
 
 if __name__ == "__main__":

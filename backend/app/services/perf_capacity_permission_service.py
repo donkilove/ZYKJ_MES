@@ -9,12 +9,16 @@ from app.core.rbac import (
     ROLE_MAINTENANCE_STAFF,
     ROLE_PRODUCTION_ADMIN,
     ROLE_QUALITY_ADMIN,
+    ROLE_SYSTEM_ADMIN,
 )
 from app.models.user import User
 from app.services import authz_service
 
 
 DEFAULT_PERF_CAPACITY_ROLE_MODULES: tuple[tuple[str, str], ...] = (
+    (ROLE_SYSTEM_ADMIN, "user"),
+    (ROLE_SYSTEM_ADMIN, "system"),
+    (ROLE_SYSTEM_ADMIN, "message"),
     (ROLE_PRODUCTION_ADMIN, "production"),
     (ROLE_PRODUCTION_ADMIN, "craft"),
     (ROLE_PRODUCTION_ADMIN, "product"),
@@ -35,6 +39,52 @@ class PerfCapacityPermissionApplyResult:
     updated_count: int
     role_module_pairs: int
     items: list[dict[str, object]]
+
+
+def _apply_hierarchy_rollout_if_supported(
+    db: Session,
+    *,
+    role_code: str,
+    module_code: str,
+    operator: User | None,
+) -> int:
+    if role_code != ROLE_SYSTEM_ADMIN or module_code not in {"user", "system", "message"}:
+        return 0
+
+    try:
+        payload = authz_service.get_permission_hierarchy_catalog(
+            db, module_code=module_code
+        )
+    except ValueError:
+        return 0
+    page_permission_codes = sorted(
+        {
+            str(item.get("permission_code", "")).strip()
+            for item in payload.get("pages", [])
+            if isinstance(item, dict) and str(item.get("permission_code", "")).strip()
+        }
+    )
+    feature_permission_codes = sorted(
+        {
+            str(item.get("permission_code", "")).strip()
+            for item in payload.get("features", [])
+            if isinstance(item, dict) and str(item.get("permission_code", "")).strip()
+        }
+    )
+    if not page_permission_codes and not feature_permission_codes:
+        return 0
+
+    result = authz_service.update_permission_hierarchy_role_config(
+        db,
+        role_code=role_code,
+        module_code=module_code,
+        module_enabled=True,
+        page_permission_codes=page_permission_codes,
+        feature_permission_codes=feature_permission_codes,
+        dry_run=False,
+        operator=operator,
+    )
+    return int(result.get("updated_count", 0))
 
 
 def build_perf_capacity_permission_rollout_plan(
@@ -87,16 +137,26 @@ def apply_perf_capacity_permission_rollout(
                 remark=remark,
             )
         )
-        updated_count += int(result_updated_count)
+        hierarchy_updated_count = _apply_hierarchy_rollout_if_supported(
+            db,
+            role_code=item.role_code,
+            module_code=item.module_code,
+            operator=operator,
+        )
+        updated_count += int(result_updated_count) + int(hierarchy_updated_count)
         items.append(
             {
                 "role_code": item.role_code,
                 "module_code": item.module_code,
-                "updated_count": int(result_updated_count),
+                "updated_count": int(result_updated_count) + int(hierarchy_updated_count),
+                "direct_updated_count": int(result_updated_count),
+                "hierarchy_updated_count": int(hierarchy_updated_count),
                 "before_permission_codes": before_codes,
                 "after_permission_codes": after_codes,
-            }
-        )
+                }
+            )
+    if not dry_run:
+        authz_service.invalidate_permission_cache()
     return PerfCapacityPermissionApplyResult(
         updated_count=updated_count,
         role_module_pairs=len(plan),

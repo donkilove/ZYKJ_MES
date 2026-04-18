@@ -33,9 +33,6 @@ PERF_CONTEXT_PATH = BACKEND_DIR.parent / ".tmp_runtime" / "production_craft_samp
 
 
 def load_perf_sample_context() -> dict[str, int | str]:
-    if PERF_CONTEXT_PATH.exists():
-        return json.loads(PERF_CONTEXT_PATH.read_text(encoding="utf-8"))
-
     db = SessionLocal()
     try:
         context = seed_production_craft_samples(db, run_id="baseline").context
