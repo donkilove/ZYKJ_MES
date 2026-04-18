@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import AbstractSet, Mapping, Sequence
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -24,6 +24,12 @@ DEFAULT_LOG_SERVICES = ["backend-web", "backend-worker"]
 DEFAULT_BACKEND_HTTP_HOST = "127.0.0.1"
 DEFAULT_BACKEND_HTTP_PORT = 8000
 DEFAULT_WAIT_TIMEOUT_SECONDS = 90.0
+INSECURE_JWT_SECRET_KEYS = frozenset({"", "replace_with_a_strong_secret"})
+INSECURE_BOOTSTRAP_ADMIN_PASSWORDS = frozenset({"", "Admin@123456"})
+INSECURE_PRODUCTION_DEFAULT_VERIFICATION_CODES = frozenset({"", "123456"})
+DOCKER_LOCAL_JWT_SECRET_KEY = "zykj-mes-docker-local-secret-20260419"
+DOCKER_LOCAL_BOOTSTRAP_ADMIN_PASSWORD = "Admin_Local_20260419!"
+DOCKER_LOCAL_PRODUCTION_DEFAULT_VERIFICATION_CODE = "FA20260419"
 
 
 def load_env_file(path: Path) -> dict[str, str]:
@@ -54,9 +60,54 @@ def build_compose_env(
     base_env: Mapping[str, str],
     env_file_values: Mapping[str, str],
 ) -> dict[str, str]:
-    merged_env = dict(env_file_values)
-    merged_env.update(base_env)
+    merged_env = dict(base_env)
+    jwt_secret_key = resolve_sensitive_env_value(
+        key="JWT_SECRET_KEY",
+        base_env=base_env,
+        env_file_values=env_file_values,
+        insecure_values=INSECURE_JWT_SECRET_KEYS,
+        docker_local_fallback=DOCKER_LOCAL_JWT_SECRET_KEY,
+    )
+    if jwt_secret_key:
+        merged_env["JWT_SECRET_KEY"] = jwt_secret_key
+    merged_env["BOOTSTRAP_ADMIN_PASSWORD"] = resolve_sensitive_env_value(
+        key="BOOTSTRAP_ADMIN_PASSWORD",
+        base_env=base_env,
+        env_file_values=env_file_values,
+        insecure_values=INSECURE_BOOTSTRAP_ADMIN_PASSWORDS,
+        docker_local_fallback=DOCKER_LOCAL_BOOTSTRAP_ADMIN_PASSWORD,
+    )
+    merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"] = resolve_sensitive_env_value(
+        key="PRODUCTION_DEFAULT_VERIFICATION_CODE",
+        base_env=base_env,
+        env_file_values=env_file_values,
+        insecure_values=INSECURE_PRODUCTION_DEFAULT_VERIFICATION_CODES,
+        docker_local_fallback=DOCKER_LOCAL_PRODUCTION_DEFAULT_VERIFICATION_CODE,
+    )
     return merged_env
+
+
+def normalize_setting_value(value: str | None) -> str:
+    return (value or "").strip()
+
+
+def resolve_sensitive_env_value(
+    *,
+    key: str,
+    base_env: Mapping[str, str],
+    env_file_values: Mapping[str, str],
+    insecure_values: AbstractSet[str],
+    docker_local_fallback: str,
+) -> str:
+    shell_value = normalize_setting_value(base_env.get(key))
+    if shell_value and shell_value not in insecure_values:
+        return shell_value
+
+    env_file_value = normalize_setting_value(env_file_values.get(key))
+    if env_file_value and env_file_value not in insecure_values:
+        return env_file_value
+
+    return docker_local_fallback
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -192,6 +243,8 @@ def run_compose(
         capture_output=capture_output,
         check=False,
         env=env,
+        encoding="utf-8",
+        errors="replace",
     )
 
 

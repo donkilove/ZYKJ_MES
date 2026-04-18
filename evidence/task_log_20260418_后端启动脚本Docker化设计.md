@@ -2,7 +2,7 @@
 
 - 日期：2026-04-18
 - 执行人：Codex
-- 当前状态：进行中（文档/边界收口切片）
+- 当前状态：已完成
 
 ## 1. 输入来源
 
@@ -40,6 +40,12 @@
 | --- | --- | --- | --- | --- |
 | B1 | `start_backend.py`、`compose.yml`、`Dockerfile`、`backend/README.md` | 2026-04-18 | 当前后端启动口径与 Docker 运行口径仍分离 | Codex |
 | B2 | `docs/superpowers/specs/2026-04-18-start-backend-docker-orchestrator-design.md` | 2026-04-18 | 完整设计文档已写入并通过占位词/一致性自检 | Codex |
+| B3 | `docker compose logs backend-web/backend-worker` | 2026-04-19 | 首次运行阻塞根因为镜像内入口脚本带 CRLF，导致 shebang 失效 | Codex |
+| B4 | `Dockerfile` 修复后复跑 | 2026-04-19 | 入口脚本已可正常执行，不再出现 `env: 'sh\\r'` 报错 | Codex |
+| B5 | `backend/.env` 与 `backend/app/core/config.py` 比对 | 2026-04-19 | `docker compose` 未显式继承 `backend/.env` 中关键变量时，会触发 `jwt_secret_key` fail-fast | Codex |
+| B6 | `start_backend.py` 环境注入修复后复跑 | 2026-04-19 | `JWT_SECRET_KEY`、`BOOTSTRAP_ADMIN_PASSWORD`、`PRODUCTION_DEFAULT_VERIFICATION_CODE` 已通过脚本注入，并对历史弱值做本地安全兜底 | Codex |
+| B7 | `backend-worker` 运行态日志 | 2026-04-19 | `backend/.env` 中的 `DB_HOST/DB_BOOTSTRAP_HOST=127.0.0.1` 不能直接透传到容器，需要只选择性注入安全关键变量 | Codex |
+| B8 | `python start_backend.py` / `ps` / `logs --no-follow` / `--expose-db --db-port 5433` / `down` | 2026-04-19 | 默认启动、状态摘要、日志入口、临时数据库暴露和停止流程均已打通 | Codex |
 
 ## 4. 当前交付
 
@@ -72,9 +78,38 @@
 
 ## 7. 验证与结果
 
-1. `python -m pytest backend/tests/test_start_backend_script_unit.py -q`：通过（`10 passed`）。
-2. `docker compose config`：通过（配置可解析，且 PostgreSQL 默认仍未暴露宿主端口）。
-3. 未修改 `start_frontend.py`，按约束无需执行 `python -m py_compile start_frontend.py`。
+1. `python -m pytest backend/tests/test_start_backend_script_unit.py -q`
+   - 结果：通过（`16 passed`）
+2. `python start_backend.py`
+   - 结果：通过
+   - 默认后台拉起 `backend-web`、`backend-worker`、`postgres`、`redis`
+   - 脚本会打印服务集合、HTTP 地址和后续命令摘要
+3. `python start_backend.py ps`
+   - 结果：通过
+   - 可见 4 个服务均在运行
+4. `python start_backend.py logs --service backend-web --no-follow`
+   - 结果：通过
+   - 可读到 `gunicorn` 与应用启动日志
+5. 默认数据库/缓存边界验证：`docker compose ps`
+   - `backend-web` 暴露 `8000`
+   - `postgres` 仅显示 `5432/tcp`
+   - `redis` 仅显示 `6379/tcp`
+6. `python start_backend.py --expose-db --db-port 5433`
+   - 结果：通过
+   - 摘要中显示数据库暴露已开启
+7. `docker compose -f compose.yml -f .tmp_runtime\\start_backend.compose.override.yml ps`
+   - 结果：`postgres` 出现 `127.0.0.1:5433->5432`
+8. `docker port zykjsb-postgres-1`
+   - 结果：`5432/tcp -> 127.0.0.1:5433`
+9. `python -c "import socket; ... 127.0.0.1:5433 ..."`
+   - 结果：输出 `db-port-open`
+10. `python start_backend.py down`
+    - 结果：通过
+    - 容器、网络已清理
+11. `docker compose config`
+    - 结果：通过（配置可解析，且 PostgreSQL 默认仍未暴露宿主端口）
+12. 未修改 `start_frontend.py`
+    - 按约束无需执行 `python -m py_compile start_frontend.py`
 
 ## 8. 迁移说明
 
