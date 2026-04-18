@@ -50,19 +50,65 @@ class StartBackendScriptUnitTest(unittest.TestCase):
         self.assertEqual(values["EMPTY"], "")
         self.assertNotIn("INVALID_LINE", values)
 
-    def test_build_compose_env_prefers_shell_and_falls_back_to_env_file(self) -> None:
+    def test_build_compose_env_replaces_insecure_defaults_with_local_safe_values(self) -> None:
         env_file_values = {
             "JWT_SECRET_KEY": "from-env-file",
             "BOOTSTRAP_ADMIN_PASSWORD": "Admin@123456",
             "PRODUCTION_DEFAULT_VERIFICATION_CODE": "123456",
+            "DB_HOST": "127.0.0.1",
+            "DB_BOOTSTRAP_HOST": "127.0.0.1",
         }
         with patch.dict(os.environ, {"JWT_SECRET_KEY": "from-shell", "PATH": "test-path"}, clear=True):
             merged_env = start_backend.build_compose_env(dict(os.environ), env_file_values)
 
         self.assertEqual(merged_env["JWT_SECRET_KEY"], "from-shell")
-        self.assertEqual(merged_env["BOOTSTRAP_ADMIN_PASSWORD"], "Admin@123456")
-        self.assertEqual(merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "123456")
+        self.assertEqual(
+            merged_env["BOOTSTRAP_ADMIN_PASSWORD"],
+            start_backend.DOCKER_LOCAL_BOOTSTRAP_ADMIN_PASSWORD,
+        )
+        self.assertEqual(
+            merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"],
+            start_backend.DOCKER_LOCAL_PRODUCTION_DEFAULT_VERIFICATION_CODE,
+        )
         self.assertEqual(merged_env["PATH"], "test-path")
+        self.assertNotIn("DB_HOST", merged_env)
+        self.assertNotIn("DB_BOOTSTRAP_HOST", merged_env)
+
+    def test_build_compose_env_prefers_secure_shell_values(self) -> None:
+        env_file_values = {
+            "BOOTSTRAP_ADMIN_PASSWORD": "EnvFileSafe_20260419!",
+            "PRODUCTION_DEFAULT_VERIFICATION_CODE": "ENVSAFE20260419",
+        }
+        with patch.dict(
+            os.environ,
+            {
+                "BOOTSTRAP_ADMIN_PASSWORD": "ShellSafe_20260419!",
+                "PRODUCTION_DEFAULT_VERIFICATION_CODE": "SHELLSAFE20260419",
+            },
+            clear=True,
+        ):
+            merged_env = start_backend.build_compose_env(dict(os.environ), env_file_values)
+
+        self.assertEqual(merged_env["BOOTSTRAP_ADMIN_PASSWORD"], "ShellSafe_20260419!")
+        self.assertEqual(merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "SHELLSAFE20260419")
+
+    def test_build_compose_env_uses_secure_env_file_when_shell_value_insecure(self) -> None:
+        env_file_values = {
+            "BOOTSTRAP_ADMIN_PASSWORD": "EnvFileSafe_20260419!",
+            "PRODUCTION_DEFAULT_VERIFICATION_CODE": "ENVSAFE20260419",
+        }
+        with patch.dict(
+            os.environ,
+            {
+                "BOOTSTRAP_ADMIN_PASSWORD": "Admin@123456",
+                "PRODUCTION_DEFAULT_VERIFICATION_CODE": "123456",
+            },
+            clear=True,
+        ):
+            merged_env = start_backend.build_compose_env(dict(os.environ), env_file_values)
+
+        self.assertEqual(merged_env["BOOTSTRAP_ADMIN_PASSWORD"], "EnvFileSafe_20260419!")
+        self.assertEqual(merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "ENVSAFE20260419")
 
     @patch("start_backend.run_up_action", return_value=0)
     @patch("start_backend.resolve_compose_files", return_value=["compose.yml"])
@@ -91,9 +137,25 @@ class StartBackendScriptUnitTest(unittest.TestCase):
         kwargs = mock_run_up_action.call_args.kwargs
         env = kwargs["env"]
         self.assertEqual(env["JWT_SECRET_KEY"], "from-shell")
-        self.assertEqual(env["BOOTSTRAP_ADMIN_PASSWORD"], "Admin@123456")
-        self.assertEqual(env["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "123456")
+        self.assertEqual(env["BOOTSTRAP_ADMIN_PASSWORD"], start_backend.DOCKER_LOCAL_BOOTSTRAP_ADMIN_PASSWORD)
+        self.assertEqual(
+            env["PRODUCTION_DEFAULT_VERIFICATION_CODE"],
+            start_backend.DOCKER_LOCAL_PRODUCTION_DEFAULT_VERIFICATION_CODE,
+        )
+        self.assertNotIn("DB_HOST", env)
         mock_load_env_file.assert_called_once()
+
+    @patch("start_backend.subprocess.run")
+    def test_run_compose_uses_utf8_decoding(self, mock_subprocess_run) -> None:
+        mock_subprocess_run.return_value = _completed_process(returncode=0)
+
+        result = start_backend.run_compose(["docker", "compose", "ps"], {"PATH": "test-path"})
+
+        self.assertEqual(result.returncode, 0)
+        mock_subprocess_run.assert_called_once()
+        kwargs = mock_subprocess_run.call_args.kwargs
+        self.assertEqual(kwargs["encoding"], "utf-8")
+        self.assertEqual(kwargs["errors"], "replace")
 
     def test_parse_args_defaults_to_up_and_db_hidden(self) -> None:
         args = start_backend.parse_args([])
