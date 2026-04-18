@@ -99,3 +99,4 @@ evidence/**/.pnpm-store/
 evidence/**/.yarn/
 evidence/**/.npm/
 evidence/**/.cache/
+dump.rdb
