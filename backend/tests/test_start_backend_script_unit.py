@@ -1,5 +1,7 @@
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -23,6 +25,76 @@ def _completed_process(returncode: int = 0, stdout: str = "", stderr: str = "") 
 
 
 class StartBackendScriptUnitTest(unittest.TestCase):
+    def test_load_env_file_supports_export_and_quotes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            env_file = Path(tmp_dir) / ".env"
+            env_file.write_text(
+                "\n".join(
+                    [
+                        "# comment",
+                        "JWT_SECRET_KEY='from-file'",
+                        'BOOTSTRAP_ADMIN_PASSWORD="Admin@123456"',
+                        "export PRODUCTION_DEFAULT_VERIFICATION_CODE=123456",
+                        "EMPTY=",
+                        "INVALID_LINE",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            values = start_backend.load_env_file(env_file)
+
+        self.assertEqual(values["JWT_SECRET_KEY"], "from-file")
+        self.assertEqual(values["BOOTSTRAP_ADMIN_PASSWORD"], "Admin@123456")
+        self.assertEqual(values["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "123456")
+        self.assertEqual(values["EMPTY"], "")
+        self.assertNotIn("INVALID_LINE", values)
+
+    def test_build_compose_env_prefers_shell_and_falls_back_to_env_file(self) -> None:
+        env_file_values = {
+            "JWT_SECRET_KEY": "from-env-file",
+            "BOOTSTRAP_ADMIN_PASSWORD": "Admin@123456",
+            "PRODUCTION_DEFAULT_VERIFICATION_CODE": "123456",
+        }
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": "from-shell", "PATH": "test-path"}, clear=True):
+            merged_env = start_backend.build_compose_env(dict(os.environ), env_file_values)
+
+        self.assertEqual(merged_env["JWT_SECRET_KEY"], "from-shell")
+        self.assertEqual(merged_env["BOOTSTRAP_ADMIN_PASSWORD"], "Admin@123456")
+        self.assertEqual(merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "123456")
+        self.assertEqual(merged_env["PATH"], "test-path")
+
+    @patch("start_backend.run_up_action", return_value=0)
+    @patch("start_backend.resolve_compose_files", return_value=["compose.yml"])
+    @patch("start_backend.require_docker")
+    @patch("start_backend.load_env_file")
+    def test_main_injects_merged_env_into_up_action(
+        self,
+        mock_load_env_file,
+        _mock_require_docker,
+        _mock_resolve_compose_files,
+        mock_run_up_action,
+    ) -> None:
+        mock_load_env_file.return_value = {
+            "JWT_SECRET_KEY": "from-env-file",
+            "BOOTSTRAP_ADMIN_PASSWORD": "Admin@123456",
+            "PRODUCTION_DEFAULT_VERIFICATION_CODE": "123456",
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            compose_file = Path(tmp_dir) / "compose.yml"
+            compose_file.write_text("services: {}\n", encoding="utf-8")
+            with patch.object(start_backend, "COMPOSE_FILE", compose_file):
+                with patch.dict(os.environ, {"JWT_SECRET_KEY": "from-shell"}, clear=True):
+                    exit_code = start_backend.main(["up"])
+
+        self.assertEqual(exit_code, 0)
+        kwargs = mock_run_up_action.call_args.kwargs
+        env = kwargs["env"]
+        self.assertEqual(env["JWT_SECRET_KEY"], "from-shell")
+        self.assertEqual(env["BOOTSTRAP_ADMIN_PASSWORD"], "Admin@123456")
+        self.assertEqual(env["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "123456")
+        mock_load_env_file.assert_called_once()
+
     def test_parse_args_defaults_to_up_and_db_hidden(self) -> None:
         args = start_backend.parse_args([])
 

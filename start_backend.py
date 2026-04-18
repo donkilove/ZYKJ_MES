@@ -12,6 +12,8 @@ from typing import Mapping, Sequence
 
 
 ROOT_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = ROOT_DIR / "backend"
+DEFAULT_ENV_FILE = BACKEND_DIR / ".env"
 COMPOSE_FILE = ROOT_DIR / "compose.yml"
 RUNTIME_DIR = ROOT_DIR / ".tmp_runtime"
 DB_EXPOSE_OVERRIDE_FILE = RUNTIME_DIR / "start_backend.compose.override.yml"
@@ -22,6 +24,39 @@ DEFAULT_LOG_SERVICES = ["backend-web", "backend-worker"]
 DEFAULT_BACKEND_HTTP_HOST = "127.0.0.1"
 DEFAULT_BACKEND_HTTP_PORT = 8000
 DEFAULT_WAIT_TIMEOUT_SECONDS = 90.0
+
+
+def load_env_file(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        values[key] = value
+    return values
+
+
+def build_compose_env(
+    base_env: Mapping[str, str],
+    env_file_values: Mapping[str, str],
+) -> dict[str, str]:
+    merged_env = dict(env_file_values)
+    merged_env.update(base_env)
+    return merged_env
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -345,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[ERROR] 未找到 compose 文件：{COMPOSE_FILE}")
         return 1
 
-    env = os.environ.copy()
+    env = build_compose_env(os.environ.copy(), load_env_file(DEFAULT_ENV_FILE))
     compose_files = resolve_compose_files(args)
     action = args.action
 
