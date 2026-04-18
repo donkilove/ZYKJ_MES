@@ -467,6 +467,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Backend base URL. Default: %(default)s",
     )
     capacity_parser.add_argument(
+        "--gate-mode",
+        choices=("read", "write"),
+        default="read",
+        help="Gate mode. Default: %(default)s",
+    )
+    capacity_parser.add_argument(
         "--scenarios",
         default="login,authz,users,production-orders,production-stats",
         help="Comma-separated scenario names. Can mix built-in scenarios and names loaded from --scenario-config-file. Default: %(default)s",
@@ -474,6 +480,10 @@ def build_parser() -> argparse.ArgumentParser:
     capacity_parser.add_argument(
         "--scenario-config-file",
         help="Optional JSON scenario config path. Supports top-level token_pools plus scenario fields: name, method, path, requires_auth, role_domain, token_pool, headers, query, json_body, form_body, success_statuses.",
+    )
+    capacity_parser.add_argument(
+        "--sample-context-file",
+        help="Optional sample context JSON used to replace {sample:key} placeholders.",
     )
     capacity_parser.add_argument(
         "--duration-seconds",

@@ -1,0 +1,396 @@
+{
+  "token_pools": [
+    {
+      "name": "pool-production",
+      "login_user_prefix": "ltprd",
+      "token_count": 4
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "production-order-create",
+      "method": "POST",
+      "path": "/api/v1/production/orders",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "product:PERF-PRODUCT-STD-01",
+          "supplier:PERF-SUPPLIER-STD-01",
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [
+          "order:create-ready"
+        ],
+        "state_assertions": [
+          "production.order.create"
+        ],
+        "restore_strategy": "delete"
+      },
+      "json_body": {
+        "order_code": "PERF-ORDER-{RANDOM_INT}",
+        "product_id": "{sample:product_id}",
+        "supplier_id": "{sample:supplier_id}",
+        "quantity": 100,
+        "remark": "production craft write suite",
+        "template_id": "{sample:craft_template_id}",
+        "save_as_template": false
+      },
+      "success_statuses": [201]
+    },
+    {
+      "name": "production-order-update-pipeline-mode",
+      "method": "PUT",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/pipeline-mode",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "order:PERF-ORDER-OPEN-01"
+        ],
+        "runtime_samples": [
+          "production:runtime-order-pending-ready"
+        ],
+        "state_assertions": [
+          "production.order.pipeline_mode"
+        ],
+        "restore_strategy": "rebuild"
+      },
+      "json_body": {
+        "enabled": true,
+        "process_codes": [
+          "{sample:process_code}",
+          "{sample:secondary_process_code}"
+        ]
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-order-update",
+      "method": "PUT",
+      "path": "/api/v1/production/orders/{sample:production_order_id}",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "order:PERF-ORDER-OPEN-01",
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [
+          "production:runtime-order-pending-ready"
+        ],
+        "state_assertions": [
+          "production.order.update"
+        ],
+        "restore_strategy": "rebuild"
+      },
+      "json_body": {
+        "product_id": "{sample:product_id}",
+        "supplier_id": "{sample:supplier_id}",
+        "quantity": 120,
+        "remark": "updated by production craft suite",
+        "template_id": "{sample:craft_template_id}",
+        "save_as_template": false
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-order-first-article",
+      "method": "POST",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/first-article",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "order:PERF-ORDER-OPEN-01",
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [
+          "production:runtime-order-pending-ready"
+        ],
+        "state_assertions": [
+          "production.first_article.submit"
+        ],
+        "restore_strategy": "rebuild"
+      },
+      "json_body": {
+        "order_process_id": "{sample:order_process_id}",
+        "template_id": "{sample:first_article_template_id}",
+        "check_content": "首件检查",
+        "test_value": "通过",
+        "result": "passed",
+        "participant_user_ids": [
+          "{sample:admin_user_id}"
+        ],
+        "verification_code": "{sample:verification_code}",
+        "effective_operator_user_id": "{sample:runtime_operator_user_id}",
+        "remark": "performance suite first article"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-order-end-production",
+      "method": "POST",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/end-production",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "order:PERF-ORDER-OPEN-01"
+        ],
+        "runtime_samples": [
+          "production:runtime-order-in-progress-ready"
+        ],
+        "state_assertions": [
+          "production.end_production.submit"
+        ],
+        "restore_strategy": "rebuild"
+      },
+      "json_body": {
+        "order_process_id": "{sample:order_process_id}",
+        "effective_operator_user_id": "{sample:runtime_operator_user_id}",
+        "quantity": 1,
+        "remark": "performance suite end production",
+        "defect_items": []
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "production-assist-authorization-create",
+      "method": "POST",
+      "path": "/api/v1/production/orders/{sample:production_order_id}/assist-authorizations",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "order:PERF-ORDER-OPEN-01"
+        ],
+        "runtime_samples": [
+          "production:runtime-order-pending-ready"
+        ],
+        "state_assertions": [
+          "production.assist.create"
+        ],
+        "restore_strategy": "rebuild"
+      },
+      "json_body": {
+        "order_process_id": "{sample:order_process_id}",
+        "target_operator_user_id": "{sample:runtime_operator_user_id}",
+        "helper_user_id": "{sample:admin_user_id}",
+        "reason": "performance suite assist"
+      },
+      "success_statuses": [201]
+    },
+    {
+      "name": "craft-stage-create",
+      "method": "POST",
+      "path": "/api/v1/craft/stages",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "stage:PERF-STAGE-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "craft.stage.create"
+        ],
+        "restore_strategy": "delete"
+      },
+      "json_body": {
+        "code": "PERF-STAGE-{RANDOM_INT}",
+        "name": "PERF-STAGE-{RANDOM_INT}",
+        "sort_order": 0,
+        "remark": "production craft write suite"
+      },
+      "success_statuses": [201]
+    },
+    {
+      "name": "craft-process-create",
+      "method": "POST",
+      "path": "/api/v1/craft/processes",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "stage:PERF-STAGE-STD-01"
+        ],
+        "runtime_samples": [
+          "craft:process-create-ready"
+        ],
+        "state_assertions": [
+          "craft.process.create"
+        ],
+        "restore_strategy": "delete"
+      },
+      "json_body": {
+        "code": "{sample:runtime_process_code}",
+        "name": "{sample:runtime_process_name}",
+        "stage_id": "{sample:stage_id}",
+        "remark": "production craft write suite"
+      },
+      "success_statuses": [201]
+    },
+    {
+      "name": "craft-template-create",
+      "method": "POST",
+      "path": "/api/v1/craft/templates",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "product:PERF-PRODUCT-STD-01",
+          "stage:PERF-STAGE-STD-01"
+        ],
+        "runtime_samples": [],
+        "state_assertions": [
+          "craft.template.create"
+        ],
+        "restore_strategy": "delete"
+      },
+      "json_body": {
+        "product_id": "{sample:product_id}",
+        "template_name": "PERF-TPL-{RANDOM_INT}",
+        "is_default": false,
+        "remark": "production craft write suite",
+        "steps": [
+          {
+            "step_order": 1,
+            "stage_id": "{sample:stage_id}",
+            "process_id": "{sample:process_id}"
+          },
+          {
+            "step_order": 2,
+            "stage_id": "{sample:stage_id}",
+            "process_id": "{sample:secondary_process_id}"
+          }
+        ]
+      },
+      "success_statuses": [201]
+    },
+    {
+      "name": "craft-template-update",
+      "method": "PUT",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [
+          "craft:template-draft-ready"
+        ],
+        "state_assertions": [
+          "craft.template.update"
+        ],
+        "restore_strategy": "rebuild"
+      },
+      "json_body": {
+        "template_name": "{sample:craft_template_name}",
+        "is_default": true,
+        "is_enabled": true,
+        "remark": "updated by production craft suite",
+        "steps": [
+          {
+            "step_order": 1,
+            "stage_id": "{sample:stage_id}",
+            "process_id": "{sample:process_id}"
+          },
+          {
+            "step_order": 2,
+            "stage_id": "{sample:stage_id}",
+            "process_id": "{sample:secondary_process_id}"
+          }
+        ],
+        "sync_orders": false
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-template-publish",
+      "method": "POST",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}/publish",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [
+          "craft:template-draft-ready"
+        ],
+        "state_assertions": [
+          "craft.template.publish"
+        ],
+        "restore_strategy": "rebuild"
+      },
+      "json_body": {
+        "apply_order_sync": false,
+        "confirmed": true,
+        "expected_version": 1,
+        "note": "production craft write suite"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-template-rollback",
+      "method": "POST",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}/rollback",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [
+          "craft:template-published-ready"
+        ],
+        "state_assertions": [
+          "craft.template.rollback"
+        ],
+        "restore_strategy": "rebuild"
+      },
+      "json_body": {
+        "target_version": 1,
+        "apply_order_sync": false,
+        "confirmed": true,
+        "note": "production craft rollback suite"
+      },
+      "success_statuses": [200]
+    },
+    {
+      "name": "craft-template-draft",
+      "method": "POST",
+      "path": "/api/v1/craft/templates/{sample:craft_template_id}/draft",
+      "role_domain": "production",
+      "token_pool": "pool-production",
+      "layer": "L3",
+      "sample_contract": {
+        "baseline_refs": [
+          "template:PERF-TEMPLATE-STD-01"
+        ],
+        "runtime_samples": [
+          "craft:template-published-ready"
+        ],
+        "state_assertions": [
+          "craft.template.draft"
+        ],
+        "restore_strategy": "rebuild"
+      },
+      "success_statuses": [200]
+    }
+  ]
+}

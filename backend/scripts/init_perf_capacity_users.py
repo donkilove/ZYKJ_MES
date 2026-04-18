@@ -12,6 +12,9 @@ if str(BACKEND_DIR) not in sys.path:
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services.bootstrap_seed_service import seed_initial_data
+from app.services.perf_capacity_permission_service import (
+    apply_perf_capacity_permission_rollout,
+)
 from app.services.perf_user_seed_service import seed_perf_capacity_users
 
 
@@ -35,9 +38,11 @@ def main() -> None:
             admin_password=settings.bootstrap_admin_password,
         )
         result = seed_perf_capacity_users(db, password=args.password)
+        permission_result = apply_perf_capacity_permission_rollout(db)
         print(
             "Initialized perf capacity users. "
             f"created={result.created_count}, updated={result.updated_count}, "
+            f"permission_updates={permission_result.updated_count}, "
             f"usernames={','.join(result.usernames)}"
         )
     finally:

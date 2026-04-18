@@ -5,6 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy.exc import IntegrityError
+
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -34,6 +36,8 @@ class AuthzServiceUnitTest(unittest.TestCase):
         authz_service._AUTHZ_DEFAULTS_READY = False
         authz_service._AUTHZ_PERMISSION_REDIS_INIT = True
         authz_service._AUTHZ_PERMISSION_REDIS_CLIENT = None
+        authz_service._AUTHZ_PERMISSION_REDIS_DISABLED_UNTIL = 0.0
+        authz_service._AUTHZ_CACHE_GENERATION = 0
         authz_service._AUTHZ_PERMISSION_INFLIGHT.clear()
         authz_service._AUTHZ_READ_INFLIGHT.clear()
         authz_snapshot_service._AUTHZ_SNAPSHOT_LOCAL_CACHE.clear()
@@ -44,6 +48,8 @@ class AuthzServiceUnitTest(unittest.TestCase):
         authz_service._AUTHZ_DEFAULTS_READY = False
         authz_service._AUTHZ_PERMISSION_REDIS_INIT = False
         authz_service._AUTHZ_PERMISSION_REDIS_CLIENT = None
+        authz_service._AUTHZ_PERMISSION_REDIS_DISABLED_UNTIL = 0.0
+        authz_service._AUTHZ_CACHE_GENERATION = 0
         authz_service._AUTHZ_PERMISSION_INFLIGHT.clear()
         authz_service._AUTHZ_READ_INFLIGHT.clear()
         authz_snapshot_service._AUTHZ_SNAPSHOT_LOCAL_CACHE.clear()
@@ -86,23 +92,25 @@ class AuthzServiceUnitTest(unittest.TestCase):
                 "authz_permission_cache_redis_enabled",
                 False,
             ),
-            patch.object(authz_service.settings, "authz_permission_cache_ttl_seconds", 1),
+            patch.object(
+                authz_service.authz_cache_service,
+                "_authz_cache_generation_value",
+                return_value=0,
+            ),
             patch.object(authz_service, "ensure_authz_defaults"),
             patch.object(
                 authz_service,
                 "_query_effective_permission_codes_for_role_codes",
                 side_effect=[{"page.user"}, {"page.user"}],
             ) as query_codes,
-            patch.object(
-                authz_service.time,
-                "monotonic",
-                side_effect=[0.0, 2.0, 2.0, 2.0],
-            ),
         ):
             authz_service.get_permission_codes_for_role_codes(
                 db,
                 role_codes=["operator"],
             )
+            cache_key = next(iter(authz_service._AUTHZ_PERMISSION_LOCAL_CACHE))
+            _, cached_codes = authz_service._AUTHZ_PERMISSION_LOCAL_CACHE[cache_key]
+            authz_service._AUTHZ_PERMISSION_LOCAL_CACHE[cache_key] = (-1.0, cached_codes)
             authz_service.get_permission_codes_for_role_codes(
                 db,
                 role_codes=["operator"],
@@ -189,6 +197,78 @@ class AuthzServiceUnitTest(unittest.TestCase):
         self.assertEqual(second, {"page.user"})
         ensure_defaults.assert_called_once_with(db)
         self.assertEqual(query_codes.call_count, 2)
+
+    def test_ensure_role_permission_defaults_retries_when_role_deleted_during_insert(
+        self,
+    ) -> None:
+        db = MagicMock()
+        fk_violation = IntegrityError(
+            statement="INSERT",
+            params={},
+            orig=SimpleNamespace(pgcode="23503"),
+        )
+        db.execute.side_effect = [
+            _FakeScalarResult(["volatile_role"]),
+            _FakeScalarResult([]),
+            fk_violation,
+            _FakeScalarResult([]),
+            _FakeScalarResult([]),
+        ]
+
+        with patch.object(authz_service, "_ensure_role_rows"):
+            changed = authz_service.ensure_role_permission_defaults(db)
+
+        self.assertFalse(changed)
+        db.rollback.assert_called_once()
+
+    def test_generation_change_clears_local_permission_and_read_cache(self) -> None:
+        db = MagicMock()
+        authz_service._AUTHZ_PERMISSION_LOCAL_CACHE["stale"] = (999.0, {"stale"})
+        authz_service._AUTHZ_READ_LOCAL_CACHE["stale"] = (999.0, {"stale": True})
+        authz_service._AUTHZ_CACHE_GENERATION = 1
+
+        with (
+            patch.object(
+                authz_service.settings,
+                "authz_permission_cache_redis_enabled",
+                False,
+            ),
+            patch.object(
+                authz_service.authz_cache_service,
+                "_authz_cache_generation_value",
+                return_value=2,
+            ),
+            patch.object(authz_service, "ensure_authz_defaults"),
+            patch.object(
+                authz_service,
+                "_query_effective_permission_codes_for_role_codes",
+                return_value={"page.user"},
+            ) as query_codes,
+        ):
+            result = authz_service.get_permission_codes_for_role_codes(
+                db,
+                role_codes=["operator"],
+            )
+
+        self.assertEqual(result, {"page.user"})
+        self.assertNotIn("stale", authz_service._AUTHZ_PERMISSION_LOCAL_CACHE)
+        self.assertNotIn("stale", authz_service._AUTHZ_READ_LOCAL_CACHE)
+        self.assertEqual(query_codes.call_count, 1)
+
+    def test_redis_read_failure_opens_local_only_backoff(self) -> None:
+        redis_client = MagicMock()
+        redis_client.get.side_effect = authz_service.RedisError("boom")
+        authz_service._AUTHZ_PERMISSION_REDIS_CLIENT = redis_client
+        authz_service._AUTHZ_PERMISSION_REDIS_INIT = True
+        authz_service._AUTHZ_PERMISSION_REDIS_DISABLED_UNTIL = 0.0
+
+        with patch.object(authz_service.time, "monotonic", return_value=10.0):
+            result = authz_service._get_permission_codes_from_redis_cache("demo")
+
+        self.assertIsNone(result)
+        self.assertIsNone(authz_service._AUTHZ_PERMISSION_REDIS_CLIENT)
+        self.assertFalse(authz_service._AUTHZ_PERMISSION_REDIS_INIT)
+        self.assertGreater(authz_service._AUTHZ_PERMISSION_REDIS_DISABLED_UNTIL, 10.0)
 
     def test_get_user_permission_codes_skips_default_initialization_on_read_path(self) -> None:
         db = MagicMock()

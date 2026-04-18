@@ -14,6 +14,12 @@ import httpx
 
 from tools.perf.write_gate.sample_contract import SampleContract, normalize_sample_contract
 from tools.perf.write_gate.result_summary import ScenarioResult, build_write_gate_summary
+from tools.perf.write_gate.sample_context import (
+    load_sample_context,
+    materialize_sample_value,
+)
+from tools.perf.write_gate.sample_registry import build_sample_registry
+from tools.perf.write_gate.sample_runtime import SampleExecutionResult, WriteSampleRuntime
 
 DEFAULT_SCENARIOS = (
     "login",
@@ -54,6 +60,14 @@ class TokenPoolSpec:
 class ScenarioConfigBundle:
     scenarios: dict[str, ScenarioSpec]
     token_pools: dict[str, TokenPoolSpec]
+
+
+@dataclass(slots=True)
+class MaterializedScenarioRequest:
+    path: str
+    query: dict[str, Any]
+    json_body: Any | None
+    form_body: dict[str, Any] | None
 
 
 @dataclass
@@ -99,7 +113,10 @@ def _normalize_base_url(raw_base_url: str) -> str:
 
 
 def _replace_random_int(value: str) -> str:
-    return value.replace("{RANDOM_INT}", str(int(time.time() * 1000)))
+    return (
+        value.replace("{RANDOM_INT}", str(time.time_ns()))
+        .replace("{RANDOM_SHORT}", str(time.time_ns())[-6:])
+    )
 
 
 def _materialize_payload(raw: Any) -> Any:
@@ -334,6 +351,27 @@ def _build_token_pool_registry(
     return registry
 
 
+def _filter_token_pool_specs_for_scenarios(
+    *,
+    scenarios: list[str],
+    scenario_registry: dict[str, ScenarioSpec],
+    token_pool_specs: dict[str, TokenPoolSpec],
+) -> dict[str, TokenPoolSpec]:
+    required_pool_names: set[str] = set()
+    for scenario_name in scenarios:
+        scenario_spec = scenario_registry[scenario_name]
+        if scenario_name == "login":
+            required_pool_names.add("default")
+            continue
+        if scenario_spec.requires_auth:
+            required_pool_names.add(scenario_spec.token_pool or "default")
+    return {
+        name: spec
+        for name, spec in token_pool_specs.items()
+        if name in required_pool_names
+    }
+
+
 def _build_scenario_runtime(
     args,
 ) -> tuple[dict[str, ScenarioSpec], dict[str, TokenPoolSpec]]:
@@ -374,6 +412,51 @@ def _build_scenario_registry(args) -> dict[str, ScenarioSpec]:
 def _build_write_gate_summary_payload(results: list[ScenarioResult]) -> dict[str, object]:
     summary = build_write_gate_summary(results)
     return summary.to_dict()
+
+
+def _materialize_scenario_request(
+    scenario: ScenarioSpec,
+    sample_context: dict[str, Any],
+) -> MaterializedScenarioRequest:
+    return MaterializedScenarioRequest(
+        path=str(materialize_sample_value(scenario.path, sample_context)),
+        query=materialize_sample_value(dict(scenario.query), sample_context),
+        json_body=materialize_sample_value(scenario.json_body, sample_context),
+        form_body=materialize_sample_value(scenario.form_body, sample_context)
+        if scenario.form_body is not None
+        else None,
+    )
+
+
+def _build_write_sample_runtime(
+    *,
+    sample_context: dict[str, Any],
+    api_client: Any,
+) -> WriteSampleRuntime:
+    return WriteSampleRuntime(
+        registry=build_sample_registry(
+            sample_context=sample_context,
+            api_client=api_client,
+        )
+    )
+
+
+def _execute_write_gate_contract(
+    *,
+    scenario_name: str,
+    contract: SampleContract,
+    sample_context: dict[str, Any],
+    api_client: Any,
+) -> SampleExecutionResult:
+    runtime = _build_write_sample_runtime(
+        sample_context=sample_context,
+        api_client=api_client,
+    )
+    return runtime.execute_contract(
+        scenario_name=scenario_name,
+        contract=contract,
+        sample_context=sample_context,
+    )
 
 
 def _scenario_status_code(metric_payload: dict[str, Any]) -> int:
@@ -552,9 +635,11 @@ async def _request_scenario(
     base_url: str,
     scenario: ScenarioSpec,
     token: str | None,
+    sample_context: dict[str, Any],
 ) -> tuple[bool, str, float]:
     started_at = time.perf_counter()
     try:
+        prepared = _materialize_scenario_request(scenario, sample_context)
         headers = dict(scenario.headers)
         if scenario.requires_auth:
             if not token:
@@ -562,11 +647,11 @@ async def _request_scenario(
             headers.setdefault("Authorization", f"Bearer {token}")
         response = await client.request(
             scenario.method,
-            f"{base_url}{scenario.path}",
+            f"{base_url}{prepared.path}",
             headers=headers,
-            params=scenario.query or None,
-            json=_materialize_payload(scenario.json_body),
-            data=_materialize_payload(scenario.form_body),
+            params=prepared.query or None,
+            json=prepared.json_body,
+            data=prepared.form_body,
         )
         latency_ms = (time.perf_counter() - started_at) * 1000.0
         if scenario.success_statuses is None:
@@ -588,10 +673,13 @@ async def _execute_scenario(
     token_pools: dict[str, list[str]],
     login_usernames_by_pool: dict[str, list[str]],
     password: str,
+    sample_context: dict[str, Any],
 ) -> tuple[bool, str, float]:
     scenario_spec = scenario_registry.get(scenario)
     if scenario_spec is None:
         return False, "UNSUPPORTED_SCENARIO", 0.0
+
+    local_sample_context = dict(sample_context)
 
     if scenario == "login":
         default_login_usernames = login_usernames_by_pool.get("default", [])
@@ -616,18 +704,41 @@ async def _execute_scenario(
     if scenario_spec.requires_auth and not target_pool:
         return False, "NO_TOKEN", 0.0
 
+    runtime = None
+    contract = scenario_spec.sample_contract
+    if contract is not None:
+        runtime = _build_write_sample_runtime(
+            sample_context=local_sample_context,
+            api_client=client,
+        )
+        await asyncio.to_thread(
+            runtime.prepare_contract,
+            contract,
+            local_sample_context,
+        )
+
     token = random.choice(target_pool) if scenario_spec.requires_auth else None
-    return await _request_scenario(
-        client=client,
-        base_url=base_url,
-        scenario=scenario_spec,
-        token=token,
-    )
+    try:
+        return await _request_scenario(
+            client=client,
+            base_url=base_url,
+            scenario=scenario_spec,
+            token=token,
+            sample_context=local_sample_context,
+        )
+    finally:
+        if runtime is not None and contract is not None:
+            await asyncio.to_thread(
+                runtime.restore_contract,
+                contract,
+                local_sample_context,
+            )
 
 
 async def _run_capacity_gate(args) -> dict[str, Any]:
     base_url = _normalize_base_url(args.base_url)
     scenario_registry, token_pool_specs = _build_scenario_runtime(args)
+    sample_context = load_sample_context(getattr(args, "sample_context_file", None))
     scenarios = _parse_scenarios(args.scenarios, available=set(scenario_registry))
     if args.concurrency < 1:
         raise ValueError("concurrency must be >= 1")
@@ -654,14 +765,20 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
         for _ in range(session_pool_size)
     ]
 
-    token_pools = await _build_token_pools(
-        clients=clients,
-        base_url=base_url,
+    required_token_pool_specs = _filter_token_pool_specs_for_scenarios(
+        scenarios=scenarios,
+        scenario_registry=scenario_registry,
         token_pool_specs=token_pool_specs,
     )
 
+    token_pools = await _build_token_pools(
+        clients=clients,
+        base_url=base_url,
+        token_pool_specs=required_token_pool_specs,
+    )
+
     login_usernames_by_pool: dict[str, list[str]] = {}
-    for name, spec in token_pool_specs.items():
+    for name, spec in required_token_pool_specs.items():
         if not spec.login_user_prefix:
             continue
         login_pool_size = max(args.session_pool_size, spec.token_count or 1)
@@ -703,6 +820,7 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
                 token_pools=token_pools,
                 login_usernames_by_pool=login_usernames_by_pool,
                 password=args.password,
+                sample_context=sample_context,
             )
 
             total_bucket.record(latency_ms=latency_ms, status=status, success=success)
@@ -741,8 +859,8 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
         "token_pools": {
             name: {
                 "token_count": len(tokens),
-                "login_user_prefix": token_pool_specs[name].login_user_prefix,
-                "token_file": token_pool_specs[name].token_file,
+                "login_user_prefix": required_token_pool_specs[name].login_user_prefix,
+                "token_file": required_token_pool_specs[name].token_file,
             }
             for name, tokens in token_pools.items()
         },
@@ -816,6 +934,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--p95-ms", type=float, default=500.0)
     parser.add_argument("--error-rate-threshold", type=float, default=0.05)
     parser.add_argument("--output-json")
+    parser.add_argument("--sample-context-file")
     parser.add_argument("--request-timeout-seconds", type=float, default=10.0)
     return parser
 

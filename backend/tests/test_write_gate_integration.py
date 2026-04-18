@@ -16,13 +16,22 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from app.db.session import SessionLocal
+from app.core.config import settings
 from app.main import app
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.models.production_order import ProductionOrder
+from app.models.production_order_process import ProductionOrderProcess
+from app.models.production_sub_order import ProductionSubOrder
 from app.models.product import Product
 from app.models.supplier import Supplier
-from tools.perf.backend_capacity_gate import _load_scenario_config_bundle
+from app.services.perf_sample_seed_service import seed_production_craft_samples
+from tools.perf.backend_capacity_gate import (
+    ScenarioSpec,
+    _load_scenario_config_bundle,
+    _materialize_scenario_request,
+)
+from tools.perf.write_gate.sample_registry import build_sample_registry
 from tools.perf.write_gate.sample_runtime import WriteSampleRuntime
 
 
@@ -88,6 +97,8 @@ class WriteGateIntegrationTest(unittest.TestCase):
         self.product_ids: list[int] = []
         self.supplier_ids: list[int] = []
         self.order_ids: list[int] = []
+        self._previous_jwt_secret_key = settings.jwt_secret_key
+        settings.jwt_secret_key = "write-gate-test-secret"
         self.token = self._login()
         bundle = _load_scenario_config_bundle(
             "tools/perf/scenarios/write_operations_40_scan.json"
@@ -95,6 +106,7 @@ class WriteGateIntegrationTest(unittest.TestCase):
         self.scenarios = bundle.scenarios
 
     def tearDown(self) -> None:
+        settings.jwt_secret_key = self._previous_jwt_secret_key
         self._cleanup_created_records()
 
     def _cleanup_created_records(self) -> None:
@@ -236,7 +248,7 @@ class WriteGateIntegrationTest(unittest.TestCase):
         assert contract is not None
         restore_calls: list[str] = []
         try:
-            runtime.prepare_contract(contract)
+            runtime.prepare_contract(contract, self.context)
             if name == "production-order-create":
                 process = self.context["production_process"]
                 product = self.context["production_product"]
@@ -287,7 +299,7 @@ class WriteGateIntegrationTest(unittest.TestCase):
                 restore_success_rate=0.0,
             )
         finally:
-            restore_calls = runtime.restore_contract(contract)
+            restore_calls = runtime.restore_contract(contract, self.context)
             restore_success_rate = 1.0 if restore_calls else 0.0
             self.context["last_restore_success_rate"] = restore_success_rate
 
@@ -312,6 +324,99 @@ class WriteGateIntegrationTest(unittest.TestCase):
         self.assertEqual(result.success_rate, 1.0)
         self.assertEqual(result.error_types, {})
         self.assertEqual(self.context["last_restore_success_rate"], 1.0)
+
+    def test_capacity_gate_can_resolve_production_craft_placeholders_from_sample_context(
+        self,
+    ) -> None:
+        scenario = ScenarioSpec(
+            name="production-order-create",
+            method="POST",
+            path="/api/v1/production/orders/{sample:production_order_id}",
+            json_body={
+                "product_id": "{sample:product_id}",
+                "supplier_id": "{sample:supplier_id}",
+                "process_steps": [
+                    {
+                        "stage_id": "{sample:stage_id}",
+                        "process_id": "{sample:process_id}",
+                    }
+                ],
+            },
+        )
+
+        prepared = _materialize_scenario_request(
+            scenario,
+            {
+                "production_order_id": 18,
+                "product_id": 11,
+                "supplier_id": 12,
+                "stage_id": 13,
+                "process_id": 14,
+            },
+        )
+
+        self.assertEqual(prepared.path, "/api/v1/production/orders/18")
+        self.assertEqual(prepared.json_body["product_id"], 11)
+        self.assertEqual(prepared.json_body["process_steps"][0]["process_id"], 14)
+
+    def test_runtime_order_in_progress_handler_can_prepare_and_restore(self) -> None:
+        db = SessionLocal()
+        try:
+            baseline_context = seed_production_craft_samples(
+                db,
+                run_id="baseline",
+            ).context
+        finally:
+            db.close()
+
+        registry = build_sample_registry(
+            sample_context=baseline_context,
+            api_client=None,
+        )
+        handler = registry["production:runtime-order-in-progress-ready"]
+        sample_context = dict(baseline_context)
+
+        handler.prepare(sample_context)
+        runtime_order_id = int(sample_context["production_order_id"])
+        runtime_order_process_id = int(sample_context["order_process_id"])
+        try:
+            db = SessionLocal()
+            try:
+                runtime_order = db.get(ProductionOrder, runtime_order_id)
+                runtime_process = db.get(
+                    ProductionOrderProcess,
+                    runtime_order_process_id,
+                )
+                sub_orders = (
+                    db.query(ProductionSubOrder)
+                    .filter(
+                        ProductionSubOrder.order_process_id == runtime_order_process_id
+                    )
+                    .all()
+                )
+            finally:
+                db.close()
+
+            self.assertIsNotNone(runtime_order)
+            self.assertIsNotNone(runtime_process)
+            assert runtime_order is not None
+            assert runtime_process is not None
+            self.assertEqual(runtime_order.status, "in_progress")
+            self.assertEqual(runtime_process.status, "in_progress")
+            self.assertTrue(
+                any(
+                    row.is_visible and row.status == "in_progress"
+                    for row in sub_orders
+                )
+            )
+        finally:
+            handler.restore("delete", sample_context)
+
+        db = SessionLocal()
+        try:
+            self.assertIsNone(db.get(ProductionOrder, runtime_order_id))
+        finally:
+            db.close()
 
 
 if __name__ == "__main__":

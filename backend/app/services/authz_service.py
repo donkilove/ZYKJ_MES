@@ -12,6 +12,7 @@ import time
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 try:
     from redis import Redis
@@ -110,6 +111,9 @@ _AUTHZ_DEFAULTS_READY = False
 _AUTHZ_DEFAULTS_READY_LOCK = RLock()
 _AUTHZ_PERMISSION_REDIS_CLIENT = None
 _AUTHZ_PERMISSION_REDIS_INIT = False
+_AUTHZ_PERMISSION_REDIS_DISABLED_UNTIL = 0.0
+_AUTHZ_PERMISSION_REDIS_BACKOFF_SECONDS = 30.0
+_AUTHZ_CACHE_GENERATION = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +147,7 @@ def _authz_read_cache_key(*, cache_type: str, values: list[str]) -> str:
 
 
 def _get_authz_read_cache(cache_key: str, *, copy_payload: bool = False):
+    _sync_local_authz_caches_with_generation()
     return authz_read_service.get_authz_read_cache(
         local_cache=_AUTHZ_READ_LOCAL_CACHE,
         local_cache_lock=_AUTHZ_READ_LOCAL_CACHE_LOCK,
@@ -154,6 +159,7 @@ def _get_authz_read_cache(cache_key: str, *, copy_payload: bool = False):
 def _set_authz_read_cache(
     cache_key: str, payload: object, *, copy_payload: bool = False
 ) -> None:
+    _sync_local_authz_caches_with_generation()
     authz_read_service.set_authz_read_cache(
         local_cache=_AUTHZ_READ_LOCAL_CACHE,
         local_cache_lock=_AUTHZ_READ_LOCAL_CACHE_LOCK,
@@ -170,6 +176,7 @@ def _get_or_build_authz_read_cache(
     *,
     copy_payload: bool = False,
 ):
+    _sync_local_authz_caches_with_generation()
     return authz_read_service.get_or_build_authz_read_cache(
         local_cache=_AUTHZ_READ_LOCAL_CACHE,
         local_cache_lock=_AUTHZ_READ_LOCAL_CACHE_LOCK,
@@ -194,8 +201,11 @@ def _authz_permission_cache_key(
 
 
 def _get_authz_permission_cache_redis_client():
+    global _AUTHZ_PERMISSION_REDIS_DISABLED_UNTIL
     global _AUTHZ_PERMISSION_REDIS_INIT
     global _AUTHZ_PERMISSION_REDIS_CLIENT
+    if _AUTHZ_PERMISSION_REDIS_DISABLED_UNTIL > time.monotonic():
+        return None
     if _AUTHZ_PERMISSION_REDIS_INIT:
         return _AUTHZ_PERMISSION_REDIS_CLIENT
     _AUTHZ_PERMISSION_REDIS_INIT = True
@@ -217,9 +227,38 @@ def _get_authz_permission_cache_redis_client():
         )
         _AUTHZ_PERMISSION_REDIS_CLIENT.ping()
     except Exception:
-        logger.warning("[AUTHZ_CACHE] Redis 连接失败，使用进程内缓存回退。", exc_info=True)
-        _AUTHZ_PERMISSION_REDIS_CLIENT = None
+        _mark_authz_permission_redis_unavailable(
+            "[AUTHZ_CACHE] Redis 连接失败，使用进程内缓存回退。"
+        )
     return _AUTHZ_PERMISSION_REDIS_CLIENT
+
+
+def _mark_authz_permission_redis_unavailable(message: str) -> None:
+    global _AUTHZ_PERMISSION_REDIS_CLIENT
+    global _AUTHZ_PERMISSION_REDIS_INIT
+    global _AUTHZ_PERMISSION_REDIS_DISABLED_UNTIL
+    logger.warning(message, exc_info=True)
+    _AUTHZ_PERMISSION_REDIS_CLIENT = None
+    _AUTHZ_PERMISSION_REDIS_INIT = False
+    _AUTHZ_PERMISSION_REDIS_DISABLED_UNTIL = (
+        time.monotonic() + _AUTHZ_PERMISSION_REDIS_BACKOFF_SECONDS
+    )
+
+
+def _sync_local_authz_caches_with_generation() -> None:
+    global _AUTHZ_CACHE_GENERATION
+    generation = authz_cache_service._authz_cache_generation_value()
+    if generation <= _AUTHZ_CACHE_GENERATION:
+        return
+    _AUTHZ_CACHE_GENERATION = generation
+    with _AUTHZ_PERMISSION_LOCAL_CACHE_LOCK:
+        _AUTHZ_PERMISSION_LOCAL_CACHE.clear()
+    with _AUTHZ_PERMISSION_INFLIGHT_LOCK:
+        _AUTHZ_PERMISSION_INFLIGHT.clear()
+    with _AUTHZ_READ_LOCAL_CACHE_LOCK:
+        _AUTHZ_READ_LOCAL_CACHE.clear()
+    with _AUTHZ_READ_INFLIGHT_LOCK:
+        _AUTHZ_READ_INFLIGHT.clear()
 
 
 def _get_permission_codes_from_local_cache(cache_key: str) -> set[str] | None:
@@ -248,6 +287,7 @@ def _get_or_build_permission_codes_cache(
     ttl_seconds: int,
     builder,
 ) -> set[str]:
+    _sync_local_authz_caches_with_generation()
     local_cached = _get_permission_codes_from_local_cache(cache_key)
     if local_cached is not None:
         return local_cached
@@ -300,7 +340,9 @@ def _get_permission_codes_from_redis_cache(cache_key: str) -> set[str] | None:
     try:
         payload = redis_client.get(cache_key)
     except RedisError:
-        logger.warning("[AUTHZ_CACHE] Redis 读取失败，使用进程内缓存回退。", exc_info=True)
+        _mark_authz_permission_redis_unavailable(
+            "[AUTHZ_CACHE] Redis 读取失败，使用进程内缓存回退。"
+        )
         return None
     if not payload:
         return None
@@ -326,10 +368,13 @@ def _set_permission_codes_to_redis_cache(
             json.dumps(sorted(permission_codes), ensure_ascii=False),
         )
     except RedisError:
-        logger.warning("[AUTHZ_CACHE] Redis 写入失败，使用进程内缓存回退。", exc_info=True)
+        _mark_authz_permission_redis_unavailable(
+            "[AUTHZ_CACHE] Redis 写入失败，使用进程内缓存回退。"
+        )
 
 
 def invalidate_permission_cache() -> None:
+    global _AUTHZ_CACHE_GENERATION
     with _AUTHZ_PERMISSION_LOCAL_CACHE_LOCK:
         _AUTHZ_PERMISSION_LOCAL_CACHE.clear()
     with _AUTHZ_PERMISSION_INFLIGHT_LOCK:
@@ -338,6 +383,7 @@ def invalidate_permission_cache() -> None:
         _AUTHZ_READ_LOCAL_CACHE.clear()
     with _AUTHZ_READ_INFLIGHT_LOCK:
         _AUTHZ_READ_INFLIGHT.clear()
+    _AUTHZ_CACHE_GENERATION = authz_cache_service._bump_authz_cache_generation()
     redis_client = _get_authz_permission_cache_redis_client()
     if redis_client is None:
         return
@@ -347,7 +393,9 @@ def invalidate_permission_cache() -> None:
         if cache_keys:
             redis_client.delete(*cache_keys)
     except RedisError:
-        logger.warning("[AUTHZ_CACHE] Redis 缓存清理失败。", exc_info=True)
+        _mark_authz_permission_redis_unavailable(
+            "[AUTHZ_CACHE] Redis 缓存清理失败。"
+        )
 
 
 def _ensure_authz_defaults_once(db: Session) -> None:
@@ -969,48 +1017,61 @@ def ensure_permission_catalog_defaults(db: Session) -> bool:
 
 
 def ensure_role_permission_defaults(db: Session) -> bool:
-    _ensure_role_rows(db)
-    role_codes = sorted(
-        {str(code) for code in db.execute(select(Role.code)).scalars().all()}
-    )
     permission_codes = sorted({item.permission_code for item in PERMISSION_CATALOG})
 
-    existing_rows = db.execute(select(RolePermissionGrant)).scalars().all()
-    existing_keys = {(row.role_code, row.permission_code) for row in existing_rows}
-    # SessionLocal 关闭了 autoflush，这里要把尚未落库的新授权也纳入幂等去重。
-    existing_keys.update(
-        {
-            (str(row.role_code), str(row.permission_code))
-            for row in db.new
-            if isinstance(row, RolePermissionGrant)
-            and row.role_code
-            and row.permission_code
-        }
-    )
+    for attempt in range(2):
+        _ensure_role_rows(db)
+        role_codes = sorted(
+            {str(code) for code in db.execute(select(Role.code)).scalars().all()}
+        )
 
-    pending_rows: list[dict[str, object]] = []
-    for role_code in role_codes:
-        for permission_code in permission_codes:
-            key = (role_code, permission_code)
-            if key in existing_keys:
-                continue
-            pending_rows.append(
-                {
-                    "role_code": role_code,
-                    "permission_code": permission_code,
-                    "granted": default_permission_granted(role_code, permission_code),
-                }
+        existing_rows = db.execute(select(RolePermissionGrant)).scalars().all()
+        existing_keys = {(row.role_code, row.permission_code) for row in existing_rows}
+        # SessionLocal 关闭了 autoflush，这里要把尚未落库的新授权也纳入幂等去重。
+        existing_keys.update(
+            {
+                (str(row.role_code), str(row.permission_code))
+                for row in db.new
+                if isinstance(row, RolePermissionGrant)
+                and row.role_code
+                and row.permission_code
+            }
+        )
+
+        pending_rows: list[dict[str, object]] = []
+        for role_code in role_codes:
+            for permission_code in permission_codes:
+                key = (role_code, permission_code)
+                if key in existing_keys:
+                    continue
+                pending_rows.append(
+                    {
+                        "role_code": role_code,
+                        "permission_code": permission_code,
+                        "granted": default_permission_granted(
+                            role_code, permission_code
+                        ),
+                    }
+                )
+                existing_keys.add(key)
+        if not pending_rows:
+            return False
+
+        try:
+            db.execute(
+                pg_insert(RolePermissionGrant)
+                .values(pending_rows)
+                .on_conflict_do_nothing(index_elements=["role_code", "permission_code"])
             )
-            existing_keys.add(key)
-    if not pending_rows:
-        return False
+            return True
+        except IntegrityError as error:
+            pgcode = getattr(getattr(error, "orig", None), "pgcode", "")
+            if attempt == 0 and pgcode == "23503":
+                db.rollback()
+                continue
+            raise
 
-    db.execute(
-        pg_insert(RolePermissionGrant)
-        .values(pending_rows)
-        .on_conflict_do_nothing(index_elements=["role_code", "permission_code"])
-    )
-    return True
+    return False
 
 
 def ensure_authz_module_revision_defaults(db: Session) -> bool:

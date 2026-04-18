@@ -20,11 +20,13 @@ class ApiDepsUnitTest(unittest.TestCase):
         deps._AUTH_USER_CACHE.clear()
         deps._PERMISSION_DECISION_CACHE.clear()
         deps._SESSION_PERMISSION_DECISION_CACHE.clear()
+        deps._AUTHZ_CACHE_GENERATION = 0
 
     def tearDown(self) -> None:
         deps._AUTH_USER_CACHE.clear()
         deps._PERMISSION_DECISION_CACHE.clear()
         deps._SESSION_PERMISSION_DECISION_CACHE.clear()
+        deps._AUTHZ_CACHE_GENERATION = 0
 
     def test_get_current_user_skips_commit_when_session_not_touched(self) -> None:
         db = MagicMock()
@@ -133,6 +135,21 @@ class ApiDepsUnitTest(unittest.TestCase):
         )
         self.assertFalse(deps._allow_auth_user_cache(post_request, "sid-1"))
         self.assertFalse(deps._allow_auth_user_cache(production_request, None))
+
+    def test_sync_permission_decision_caches_with_generation_clears_local_entries(self) -> None:
+        deps._PERMISSION_DECISION_CACHE["role|perm"] = (999.0, False)
+        deps._SESSION_PERMISSION_DECISION_CACHE["sid|perm"] = (999.0, False)
+        deps._AUTHZ_CACHE_GENERATION = 1
+
+        with patch.object(
+            deps.authz_cache_service,
+            "_authz_cache_generation_value",
+            return_value=2,
+        ):
+            deps._sync_permission_decision_caches_with_generation()
+
+        self.assertEqual(deps._PERMISSION_DECISION_CACHE, {})
+        self.assertEqual(deps._SESSION_PERMISSION_DECISION_CACHE, {})
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import TokenPayload
+from app.services import authz_cache_service
 from app.services.online_status_service import touch_user
 from app.services.authz_service import get_user_permission_codes, validate_permission_code
 from app.services.session_service import touch_session_by_token_id
@@ -27,6 +28,7 @@ _PERMISSION_DECISION_CACHE_TTL_SECONDS = 10
 _SESSION_PERMISSION_DECISION_CACHE_LOCK = RLock()
 _SESSION_PERMISSION_DECISION_CACHE: dict[str, tuple[float, bool]] = {}
 _SESSION_PERMISSION_DECISION_CACHE_TTL_SECONDS = 20
+_AUTHZ_CACHE_GENERATION = 0
 
 
 def _allow_auth_user_cache(request: Request, session_token_id: str | None) -> bool:
@@ -114,6 +116,18 @@ def _forget_cached_session_permission_decision(session_token_id: str | None) -> 
         ]
         for key in keys:
             _SESSION_PERMISSION_DECISION_CACHE.pop(key, None)
+
+
+def _sync_permission_decision_caches_with_generation() -> None:
+    global _AUTHZ_CACHE_GENERATION
+    generation = authz_cache_service._authz_cache_generation_value()
+    if generation <= _AUTHZ_CACHE_GENERATION:
+        return
+    _AUTHZ_CACHE_GENERATION = generation
+    with _PERMISSION_DECISION_CACHE_LOCK:
+        _PERMISSION_DECISION_CACHE.clear()
+    with _SESSION_PERMISSION_DECISION_CACHE_LOCK:
+        _SESSION_PERMISSION_DECISION_CACHE.clear()
 
 
 def _role_code_key(user: User) -> str:
@@ -237,6 +251,7 @@ def require_permission(permission_code: str) -> Callable[[User, Session], User]:
         current_user: User = Depends(get_current_active_user),
         db: Session = Depends(get_db),
     ) -> User:
+        _sync_permission_decision_caches_with_generation()
         role_key = _role_code_key(current_user)
         cache_key = _permission_decision_cache_key(
             role_key=role_key,
@@ -266,6 +281,7 @@ def require_any_permission(permission_codes: list[str]) -> Callable[[User, Sessi
         current_user: User = Depends(get_current_active_user),
         db: Session = Depends(get_db),
     ) -> User:
+        _sync_permission_decision_caches_with_generation()
         role_key = _role_code_key(current_user)
         permission_key = ",".join(sorted(normalized_code_set))
         cache_key = _permission_decision_cache_key(
@@ -292,6 +308,7 @@ def require_permission_fast(permission_code: str) -> Callable[[str, Request, Ses
         request: Request = None,
         db: Session = Depends(get_db),
     ) -> None:
+        _sync_permission_decision_caches_with_generation()
         credentials_error = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

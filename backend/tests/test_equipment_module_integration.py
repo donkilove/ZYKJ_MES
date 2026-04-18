@@ -60,6 +60,11 @@ from app.services.equipment_rule_service import (  # noqa: E402
     create_runtime_parameter,
     list_runtime_parameters,
 )
+from app.services.perf_user_seed_service import seed_perf_capacity_users  # noqa: E402
+from app.services.user_service import (  # noqa: E402
+    get_user_for_auth,
+    normalize_users_to_single_role,
+)
 
 
 class EquipmentModuleIntegrationTest(unittest.TestCase):
@@ -1748,6 +1753,57 @@ class EquipmentModuleIntegrationTest(unittest.TestCase):
             403,
             readonly_cancel_response.text,
         )
+
+    def test_get_user_for_auth_loads_processes_for_stage_scoped_equipment_user(
+        self,
+    ) -> None:
+        seed_perf_capacity_users(self.db, password="Admin@123456")
+        perf_user = (
+            self.db.execute(select(User).where(User.username == "ltmnt1"))
+            .scalars()
+            .first()
+        )
+        assert perf_user is not None
+
+        fresh_db = SessionLocal()
+        try:
+            auth_user = get_user_for_auth(fresh_db, int(perf_user.id))
+            self.assertEqual(
+                [process.code for process in auth_user.processes],
+                ["perf_product_testing_default"],
+            )
+        finally:
+            fresh_db.close()
+
+    def test_normalize_users_to_single_role_keeps_equipment_perf_stage_scope(self) -> None:
+        seed_perf_capacity_users(self.db, password="Admin@123456")
+        perf_user = (
+            self.db.execute(select(User).where(User.username == "ltmnt1"))
+            .scalars()
+            .first()
+        )
+        assert perf_user is not None
+        self.assertEqual([process.code for process in perf_user.processes], ["perf_product_testing_default"])
+        self.assertIsNotNone(perf_user.stage_id)
+
+        normalize_users_to_single_role(self.db)
+        self.db.commit()
+
+        fresh_db = SessionLocal()
+        try:
+            refreshed = (
+                fresh_db.execute(select(User).where(User.username == "ltmnt1"))
+                .scalars()
+                .first()
+            )
+            assert refreshed is not None
+            self.assertEqual(
+                [process.code for process in refreshed.processes],
+                ["perf_product_testing_default"],
+            )
+            self.assertIsNotNone(refreshed.stage_id)
+        finally:
+            fresh_db.close()
 
 
 if __name__ == "__main__":

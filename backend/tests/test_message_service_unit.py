@@ -248,7 +248,7 @@ class MessageServiceUnitTest(unittest.TestCase):
         self.assertEqual(compensated_ids, [8])
         push_once.assert_awaited_once_with(31, 12)
 
-    def test_push_message_created_async_runs_sync_compensation_without_event_loop(self):
+    def test_push_message_created_async_skips_sync_compensation_without_event_loop(self):
         db = MagicMock()
         db.execute.return_value = _FakeScalarResult(all_rows=[3, 7])
         msg = SimpleNamespace(id=15)
@@ -267,7 +267,7 @@ class MessageServiceUnitTest(unittest.TestCase):
         ):
             message_service._push_message_created_async(db, msg)
 
-        push_batch.assert_awaited_once_with(15, [3, 7])
+        push_batch.assert_not_awaited()
 
     def test_get_message_detail_returns_failure_hint(self):
         now = datetime.now(UTC)

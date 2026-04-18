@@ -14,6 +14,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.db.session import SessionLocal  # noqa: E402
+from app.core.config import settings  # noqa: E402
 from app.main import app  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.models.process import Process  # noqa: E402
@@ -25,6 +26,24 @@ from app.models.production_order_process import ProductionOrderProcess  # noqa: 
 from app.models.production_record import ProductionRecord  # noqa: E402
 from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.services.perf_sample_seed_service import seed_production_craft_samples  # noqa: E402
+
+
+PERF_CONTEXT_PATH = BACKEND_DIR.parent / ".tmp_runtime" / "production_craft_samples.json"
+
+
+def load_perf_sample_context() -> dict[str, int | str]:
+    db = SessionLocal()
+    try:
+        context = seed_production_craft_samples(db, run_id="baseline").context
+    finally:
+        db.close()
+    PERF_CONTEXT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PERF_CONTEXT_PATH.write_text(
+        json.dumps(context, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return context
 
 
 class CraftModuleIntegrationTest(unittest.TestCase):
@@ -33,6 +52,8 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         cls.client = TestClient(app)
 
     def setUp(self) -> None:
+        self._previous_jwt_secret_key = settings.jwt_secret_key
+        settings.jwt_secret_key = "craft-module-test-secret"
         self.token = self._login()
         self.stage_ids: list[int] = []
         self.process_ids: list[int] = []
@@ -42,6 +63,7 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         self.user_ids: list[int] = []
 
     def tearDown(self) -> None:
+        settings.jwt_secret_key = self._previous_jwt_secret_key
         db = SessionLocal()
         try:
             for order_id in reversed(self.order_ids):
@@ -218,6 +240,38 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         row = response.json()["data"]
         self.supplier_ids.append(int(row["id"]))
         return row
+
+    def test_perf_seeded_template_supports_detail_publish_and_rollback(self) -> None:
+        context = load_perf_sample_context()
+
+        detail_response = self.client.get(
+            f"/api/v1/craft/templates/{context['craft_template_id']}",
+            headers=self._headers(),
+        )
+        publish_response = self.client.post(
+            f"/api/v1/craft/templates/{context['craft_template_id']}/publish",
+            headers=self._headers(),
+            json={
+                "apply_order_sync": False,
+                "confirmed": True,
+                "expected_version": 1,
+                "note": "perf seeded publish",
+            },
+        )
+        rollback_response = self.client.post(
+            f"/api/v1/craft/templates/{context['craft_template_id']}/rollback",
+            headers=self._headers(),
+            json={
+                "target_version": 1,
+                "apply_order_sync": False,
+                "confirmed": True,
+                "note": "perf seeded rollback",
+            },
+        )
+
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        self.assertIn(publish_response.status_code, {200, 400}, publish_response.text)
+        self.assertIn(rollback_response.status_code, {200, 400}, rollback_response.text)
 
     def _set_stage_sort_order(self, *, stage_id: int, sort_order: int) -> None:
         db = SessionLocal()

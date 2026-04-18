@@ -17,6 +17,24 @@ cd backend
 
 `start_frontend.py` 默认以 Windows 桌面应用方式启动；如需切换设备，可额外传入 `--device <id>`。
 
+### 本地性能宿主模式
+
+如需按当前压测口径启动后端，可在仓库根目录执行：
+
+```bash
+./.venv/bin/python start_backend.py --mode perf --no-reload
+```
+
+说明：
+
+- `--mode perf` 会切到 `gunicorn + uvicorn worker` 启动方式。
+- perf 模式默认关闭 bootstrap、后台循环和 reload，避免把启动/后台开销混入压测结果。
+- perf 模式默认采用当前安全连接池预算：
+  - `DB_POOL_SIZE=6`
+  - `DB_MAX_OVERFLOW=4`
+  - `DB_POOL_TIMEOUT_SECONDS=5`
+- 如需覆盖 worker 数，可额外传入 `--workers 4` 等参数。
+
 Backend startup now performs bootstrap automatically:
 
 - ensure database exists (create if missing)
