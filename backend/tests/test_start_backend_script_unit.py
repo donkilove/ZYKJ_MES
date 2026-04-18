@@ -53,8 +53,8 @@ class StartBackendScriptUnitTest(unittest.TestCase):
     def test_build_compose_env_replaces_insecure_defaults_with_local_safe_values(self) -> None:
         env_file_values = {
             "JWT_SECRET_KEY": "from-env-file",
-            "BOOTSTRAP_ADMIN_PASSWORD": "Admin@123456",
-            "PRODUCTION_DEFAULT_VERIFICATION_CODE": "123456",
+            "BOOTSTRAP_ADMIN_PASSWORD": "EnvFileSafe_20260419!",
+            "PRODUCTION_DEFAULT_VERIFICATION_CODE": "ENVSAFE20260419",
             "DB_HOST": "127.0.0.1",
             "DB_BOOTSTRAP_HOST": "127.0.0.1",
         }
@@ -62,20 +62,15 @@ class StartBackendScriptUnitTest(unittest.TestCase):
             merged_env = start_backend.build_compose_env(dict(os.environ), env_file_values)
 
         self.assertEqual(merged_env["JWT_SECRET_KEY"], "from-shell")
-        self.assertEqual(
-            merged_env["BOOTSTRAP_ADMIN_PASSWORD"],
-            start_backend.DOCKER_LOCAL_BOOTSTRAP_ADMIN_PASSWORD,
-        )
-        self.assertEqual(
-            merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"],
-            start_backend.DOCKER_LOCAL_PRODUCTION_DEFAULT_VERIFICATION_CODE,
-        )
+        self.assertEqual(merged_env["BOOTSTRAP_ADMIN_PASSWORD"], "EnvFileSafe_20260419!")
+        self.assertEqual(merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "ENVSAFE20260419")
         self.assertEqual(merged_env["PATH"], "test-path")
         self.assertNotIn("DB_HOST", merged_env)
         self.assertNotIn("DB_BOOTSTRAP_HOST", merged_env)
 
     def test_build_compose_env_prefers_secure_shell_values(self) -> None:
         env_file_values = {
+            "JWT_SECRET_KEY": "env-file-jwt-secret",
             "BOOTSTRAP_ADMIN_PASSWORD": "EnvFileSafe_20260419!",
             "PRODUCTION_DEFAULT_VERIFICATION_CODE": "ENVSAFE20260419",
         }
@@ -96,10 +91,12 @@ class StartBackendScriptUnitTest(unittest.TestCase):
         env_file_values = {
             "BOOTSTRAP_ADMIN_PASSWORD": "EnvFileSafe_20260419!",
             "PRODUCTION_DEFAULT_VERIFICATION_CODE": "ENVSAFE20260419",
+            "JWT_SECRET_KEY": "env-file-jwt-secret",
         }
         with patch.dict(
             os.environ,
             {
+                "JWT_SECRET_KEY": "replace_with_a_strong_secret",
                 "BOOTSTRAP_ADMIN_PASSWORD": "Admin@123456",
                 "PRODUCTION_DEFAULT_VERIFICATION_CODE": "123456",
             },
@@ -109,6 +106,18 @@ class StartBackendScriptUnitTest(unittest.TestCase):
 
         self.assertEqual(merged_env["BOOTSTRAP_ADMIN_PASSWORD"], "EnvFileSafe_20260419!")
         self.assertEqual(merged_env["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "ENVSAFE20260419")
+        self.assertEqual(merged_env["JWT_SECRET_KEY"], "env-file-jwt-secret")
+
+    def test_build_compose_env_raises_when_sensitive_values_missing_or_insecure(self) -> None:
+        env_file_values = {
+            "JWT_SECRET_KEY": "",
+            "BOOTSTRAP_ADMIN_PASSWORD": "Admin@123456",
+            "PRODUCTION_DEFAULT_VERIFICATION_CODE": "123456",
+        }
+
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "JWT_SECRET_KEY"):
+                start_backend.build_compose_env(dict(os.environ), env_file_values)
 
     @patch("start_backend.run_up_action", return_value=0)
     @patch("start_backend.resolve_compose_files", return_value=["compose.yml"])
@@ -123,8 +132,8 @@ class StartBackendScriptUnitTest(unittest.TestCase):
     ) -> None:
         mock_load_env_file.return_value = {
             "JWT_SECRET_KEY": "from-env-file",
-            "BOOTSTRAP_ADMIN_PASSWORD": "Admin@123456",
-            "PRODUCTION_DEFAULT_VERIFICATION_CODE": "123456",
+            "BOOTSTRAP_ADMIN_PASSWORD": "EnvFileSafe_20260419!",
+            "PRODUCTION_DEFAULT_VERIFICATION_CODE": "ENVSAFE20260419",
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
             compose_file = Path(tmp_dir) / "compose.yml"
@@ -137,11 +146,8 @@ class StartBackendScriptUnitTest(unittest.TestCase):
         kwargs = mock_run_up_action.call_args.kwargs
         env = kwargs["env"]
         self.assertEqual(env["JWT_SECRET_KEY"], "from-shell")
-        self.assertEqual(env["BOOTSTRAP_ADMIN_PASSWORD"], start_backend.DOCKER_LOCAL_BOOTSTRAP_ADMIN_PASSWORD)
-        self.assertEqual(
-            env["PRODUCTION_DEFAULT_VERIFICATION_CODE"],
-            start_backend.DOCKER_LOCAL_PRODUCTION_DEFAULT_VERIFICATION_CODE,
-        )
+        self.assertEqual(env["BOOTSTRAP_ADMIN_PASSWORD"], "EnvFileSafe_20260419!")
+        self.assertEqual(env["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "ENVSAFE20260419")
         self.assertNotIn("DB_HOST", env)
         mock_load_env_file.assert_called_once()
 

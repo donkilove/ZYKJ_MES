@@ -75,11 +75,17 @@
 2. `compose.yml` 默认宿主暴露已收紧：PostgreSQL 与 Redis 默认不开放宿主端口，服务间通信走容器网络。
 3. 文档/边界收口切片已完成：`compose.yml` 明确默认不暴露数据库且给出 `--expose-db --db-port` 临时开启路径；`backend/README.md` 已改为 `python start_backend.py` 主线并补齐 `logs`、`ps`、`down` 与 `--expose-db --db-port 5433` 示例。
 4. `start_frontend.py` 已核查：未包含后端启动口径提示，本轮无需联动修改。
+5. 运行态阻塞已全部收口：
+   - 镜像入口脚本 CRLF
+   - 缺失 `backend/.env` 安全关键变量注入
+   - 将 `DB_HOST/DB_BOOTSTRAP_HOST=127.0.0.1` 误透传到容器
+   - `python start_backend.py ps` 的 Windows 编码问题
+6. `backend/README.md` 中旧的 `--mode perf/--workers` 与 `NO_PROXY` 说明已移除，避免文档和当前脚本行为继续漂移。
 
 ## 7. 验证与结果
 
 1. `python -m pytest backend/tests/test_start_backend_script_unit.py -q`
-   - 结果：通过（`16 passed`）
+   - 结果：通过（`17 passed`）
 2. `python start_backend.py`
    - 结果：通过
    - 默认后台拉起 `backend-web`、`backend-worker`、`postgres`、`redis`
