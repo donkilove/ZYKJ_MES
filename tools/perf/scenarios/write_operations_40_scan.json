@@ -354,10 +354,16 @@
     {
       "name": "craft-stage-delete",
       "method": "DELETE",
-      "path": "/api/v1/craft/stages/9999",
+      "path": "/api/v1/craft/stages/{sample:runtime_stage_id}",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
+      "sample_contract": {
+        "runtime_samples": [
+          "craft:stage-delete-ready"
+        ],
+        "restore_strategy": "delete"
+      },
       "success_statuses": [
         200
       ]
@@ -872,15 +878,20 @@
     {
       "name": "products-product-update",
       "method": "PUT",
-      "path": "/api/v1/products/1",
+      "path": "/api/v1/products/{sample:product_id}",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "product_name": "更新后的产品",
-        "category": "标准件",
-        "unit": "件",
-        "is_enabled": true
+        "name": "更新后的产品",
+        "category": "贴片",
+        "remark": "Updated product"
+      },
+      "sample_contract": {
+        "runtime_samples": [
+          "product:runtime-version-create-ready"
+        ],
+        "restore_strategy": "delete"
       },
       "success_statuses": [
         200
@@ -889,10 +900,19 @@
     {
       "name": "products-product-delete",
       "method": "POST",
-      "path": "/api/v1/products/1/delete",
+      "path": "/api/v1/products/{sample:product_id}/delete",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
+      "json_body": {
+        "password": "Admin@123456"
+      },
+      "sample_contract": {
+        "runtime_samples": [
+          "product:runtime-version-create-ready"
+        ],
+        "restore_strategy": "delete"
+      },
       "success_statuses": [
         200
       ]
@@ -900,20 +920,15 @@
     {
       "name": "products-parameter-version-create",
       "method": "POST",
-      "path": "/api/v1/products/1/parameter-versions",
+      "path": "/api/v1/products/{sample:product_id}/versions",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
-      "json_body": {
-        "version_name": "V2.0",
-        "parameters": [
-          {
-            "param_name": "长度",
-            "param_value": "100",
-            "unit": "mm"
-          }
+      "sample_contract": {
+        "runtime_samples": [
+          "product:runtime-version-create-ready"
         ],
-        "is_active": true
+        "restore_strategy": "delete"
       },
       "success_statuses": [
         201
@@ -922,19 +937,35 @@
     {
       "name": "products-parameter-update",
       "method": "PUT",
-      "path": "/api/v1/products/1/parameters",
+      "path": "/api/v1/products/{sample:product_id}/parameters",
       "requires_auth": true,
       "role_domain": "production",
       "token_pool": "pool-production",
       "json_body": {
-        "version_id": 1,
-        "parameters": [
+        "remark": "perf parameter update",
+        "confirmed": false,
+        "items": [
           {
-            "param_name": "长度",
-            "param_value": "105",
-            "unit": "mm"
+            "name": "产品名称",
+            "category": "基础参数",
+            "type": "Text",
+            "value": "{sample:product_name}",
+            "description": ""
+          },
+          {
+            "name": "产品芯片",
+            "category": "基础参数",
+            "type": "Text",
+            "value": "PERF-UPDATED-CHIP",
+            "description": "性能压测参数更新"
           }
         ]
+      },
+      "sample_contract": {
+        "runtime_samples": [
+          "product:runtime-draft-version-ready"
+        ],
+        "restore_strategy": "delete"
       },
       "success_statuses": [
         200
@@ -1067,12 +1098,14 @@
       "role_domain": "user-admin",
       "token_pool": "pool-user-admin",
       "json_body": {
+        "format": "csv",
         "keyword": null,
-        "role_ids": null,
-        "is_active": null
+        "role_code": null,
+        "is_active": null,
+        "deleted_scope": "active"
       },
       "success_statuses": [
-        201
+        200
       ]
     },
     {

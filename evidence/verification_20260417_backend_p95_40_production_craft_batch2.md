@@ -166,3 +166,72 @@
 | `backend-capacity-gate` | 新失败名单二次回归 | `quality-trend / production-data-manual-export / authz-capability-pack-update / auth-bootstrap-admin / messages-announcements / equipment-record-detail` | `.tmp_runtime/focus_combined_failure_list_round4.json` 全绿 | 通过 |
 | `backend-capacity-gate` | `products-lifecycle` 当前契约 + runtime 样本 | `products-lifecycle` 单场景复跑 | `.tmp_runtime/focus_products_lifecycle_after_runtime_fix.json` 全绿 | 通过 |
 | `backend-capacity-gate` | 修复后的稳定全量基线 | `combined_40` @ `18081`, `4 workers`, `40` 并发 | `.tmp_runtime/backend_40_e2e_combined_perf_20260418_1932stable.json`：`success_rate=98.24%`，`error_rate=1.76%`，`p95_ms=8436.03` | 功能基本收口，性能仍严重超标 |
+
+## 11. 当前会话追加验证（残余功能失败第二轮收口）
+
+| 验证工具 | 验证对象 | 验证动作 | 结果 | 结论 |
+| --- | --- | --- | --- | --- |
+| `/root/code/ZYKJ_MES/.venv/bin/python -m pytest` | `products-template-references-1` / `craft-stage-delete` / `products-parameter-update` 场景契约回归 | `backend/tests/test_combined_products_scenarios_unit.py backend/tests/test_production_craft_scenarios_unit.py backend/tests/test_backend_capacity_gate_unit.py -q` | `23 passed` | 通过 |
+| `backend-capacity-gate` | `products-template-references-1` | 单场景复跑 | `.tmp_runtime/focus_products_template_references_1_fixed.json` => `200` | 通过 |
+| `backend-capacity-gate` | `craft-stage-delete` | 单场景复跑 | `.tmp_runtime/focus_craft_stage_delete_fixed.json` => `200` | 通过 |
+| `backend-capacity-gate` | `products-parameter-update` | 单场景复跑 | `.tmp_runtime/focus_products_parameter_update_fixed.json` => `200` | 通过 |
+| `backend-capacity-gate` | 三场景组合 smoke | `products-template-references-1,craft-stage-delete,products-parameter-update` | `.tmp_runtime/focus_three_residuals_fixed_batch.json`：`success_rate=100%`、`error_rate=0` | 通过 |
+
+## 12. 当前会话追加验证（4 workers 稳定基线复跑）
+
+| 验证工具 | 验证对象 | 验证动作 | 结果 | 结论 |
+| --- | --- | --- | --- | --- |
+| `curl` + `ss` | `18081` perf 宿主 | 健康检查并确认 `4 workers` 监听 | 健康 `200`，`gunicorn + 4 workers` | 通过 |
+| `backend/scripts/init_perf_capacity_users.py` | perf 账号状态 | 重建/刷新 perf 账号、权限与工段绑定 | 执行成功 | 通过 |
+| `backend/scripts/init_perf_production_craft_samples.py` | `production/craft` 样本上下文 | `--mode ensure --output-json .tmp_runtime/production_craft_samples.json` | 执行成功 | 通过 |
+| `backend-capacity-gate` | `combined_40` 稳定基线 | `40` 并发、`4 workers`、`20s + 5s warmup` 全量复跑 | `.tmp_runtime/backend_40_e2e_combined_perf_20260418_1942baseline.json`：`success_rate=97.14%`、`error_rate=2.86%`、`p95_ms=7019.64` | 未通过 |
+
+## 13. 当前会话追加验证（六个失败场景完全收口）
+
+| 验证工具 | 验证对象 | 验证动作 | 结果 | 结论 |
+| --- | --- | --- | --- | --- |
+| `/root/code/ZYKJ_MES/.venv/bin/python -m pytest` | `products-product-delete` / `products-parameter-version-create` 场景契约回归 | `backend/tests/test_combined_products_scenarios_unit.py -q` | 通过 | 通过 |
+| `backend-capacity-gate` | `production-order-update-pipeline-mode` | 单场景复跑 | `.tmp_runtime/focus_production_order_update_pipeline_mode_now.json` => `200` | 通过 |
+| `backend-capacity-gate` | `craft-kanban-process-metrics-export` | 单场景复跑 | `.tmp_runtime/focus_craft_kanban_process_metrics_export_now.json` => `200` | 通过 |
+| `backend-capacity-gate` | `craft-template-references` | 单场景复跑 | `.tmp_runtime/focus_craft_template_references_now.json` => `200` | 通过 |
+| `backend-capacity-gate` | `products-product-delete` | 单场景复跑 | `.tmp_runtime/focus_products_product_delete_fixed.json` => `200` | 通过 |
+| `backend-capacity-gate` | `products-parameter-version-create` | 单场景复跑 | `.tmp_runtime/focus_products_parameter_version_create_fixed.json` => `201` | 通过 |
+| `backend-capacity-gate` | `auth-register-requests-detail` | 单场景复跑 | `.tmp_runtime/focus_auth_register_requests_detail_after_rollout.json` => `200` | 通过 |
+| `backend-capacity-gate` | 修复后稳定基线 | `combined_40` @ `18081`, `4 workers`, `40` 并发 | `.tmp_runtime/backend_40_e2e_combined_perf_20260418_2000postfix.json`：这 6 条场景全部退出失败名单 | 通过 |
+
+## 14. 当前会话追加验证（五个失败场景完全收口）
+
+| 验证工具 | 验证对象 | 验证动作 | 结果 | 结论 |
+| --- | --- | --- | --- | --- |
+| `/root/code/ZYKJ_MES/.venv/bin/python -m pytest` | `products-product-update` / `users-export-task-create` 场景契约回归 | `backend/tests/test_combined_products_scenarios_unit.py backend/tests/test_combined_management_scenarios_unit.py -q` | `4 passed` | 通过 |
+| `backend-capacity-gate` | `products-product-update` | 单场景复跑 | `.tmp_runtime/focus_products_product_update_fixed.json` => `200` | 通过 |
+| `backend-capacity-gate` | `users-user-disable` | 单场景复跑 | `.tmp_runtime/focus_users_user_disable_after_rollout.json` => `200` | 通过 |
+| `backend-capacity-gate` | `users-user-reset-password` | 单场景复跑 | `.tmp_runtime/focus_users_user_reset_password_after_rollout.json` => `200` | 通过 |
+| `backend-capacity-gate` | `users-export-task-create` | 单场景复跑 | `.tmp_runtime/focus_users_export_task_create_fixed.json` => `200` | 通过 |
+| `backend-capacity-gate` | `roles-role-delete` | 单场景复跑 | `.tmp_runtime/focus_roles_role_delete_after_rollout.json` => `200` | 通过 |
+| `backend-capacity-gate` | 修复后稳定基线 | `combined_40` @ `18081`, `4 workers`, `40` 并发 | `.tmp_runtime/backend_40_e2e_combined_perf_20260418_2013fivefixed.json`：`success_rate=100%`、`error_rate=0`、`measured window failures=NONE` | 通过 |
+
+## 15. 当前会话追加验证（4 workers 稳定基线二次复跑）
+
+| 验证工具 | 验证对象 | 验证动作 | 结果 | 结论 |
+| --- | --- | --- | --- | --- |
+| `curl` + `ss` | `18081` perf 宿主 | 健康检查并确认 `4 workers` 监听 | 健康 `200`，`gunicorn + 4 workers` | 通过 |
+| `backend/scripts/init_perf_capacity_users.py` | perf 账号状态 | 刷新 perf 账号与权限 | 执行成功 | 通过 |
+| `backend/scripts/init_perf_production_craft_samples.py` | `production/craft` 样本上下文 | `--mode ensure --output-json .tmp_runtime/production_craft_samples.json` | 执行成功 | 通过 |
+| `backend-capacity-gate` | `combined_40` 稳定基线复跑 | `40` 并发、`4 workers`、`20s + 5s warmup` | `.tmp_runtime/backend_40_e2e_combined_perf_20260418_2019rerun.json`：`success_rate=98.63%`、`error_rate=1.37%` | 未通过 |
+
+## 16. 当前会话追加验证（两个残余失败场景根因调查）
+
+| 验证工具 | 验证对象 | 验证动作 | 结果 | 结论 |
+| --- | --- | --- | --- | --- |
+| `backend-capacity-gate` | `quality-stats-operators` | 单场景复跑 | `.tmp_runtime/investigate_quality_stats_operators.json`：`95/95` 成功，`p95_ms=59.65` | 接口逻辑单跑稳定，不是固定合同错误 |
+| `backend-capacity-gate` | `products-versions-compare` | 单场景复跑 | `.tmp_runtime/investigate_products_versions_compare.json`：`61/61` 成功，`p95_ms=76.65` | 接口逻辑单跑稳定，不是固定合同错误 |
+| 代码审读 | `quality-stats-operators` | 检查 `quality.py` 与 `quality_service.py` 实现 | 首件明细 + 缺陷/报废/维修三路聚合 + Python 归并 | 更像高压下资源争用导致偶发 `EXC` |
+| 代码审读 | `products-versions-compare` | 检查 `products.py` 与 `product_service.py` 实现 | 两个版本快照读出后在内存做 diff | 更像高压下排队/超时，而非 compare 逻辑错误 |
+
+## 17. 当前会话追加验证（合并前最小验证）
+
+| 验证工具 | 验证对象 | 验证动作 | 结果 | 结论 |
+| --- | --- | --- | --- | --- |
+| `/root/code/ZYKJ_MES/.venv/bin/python -m pytest` | 当前未提交改动直接相关测试集 | `backend/tests/test_backend_capacity_gate_unit.py backend/tests/test_combined_management_scenarios_unit.py backend/tests/test_combined_products_scenarios_unit.py backend/tests/test_production_craft_scenarios_unit.py -q` | `25 passed` | 通过 |
+| `git fetch --all --prune` + `git rev-parse` | 主仓库 `main` 与远端对齐状态 | 对比 `origin/main` 与本地 `main` | 两者同为 `8977a8f` | 通过 |

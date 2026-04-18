@@ -62,6 +62,14 @@ class CombinedProductsScenarioSuiteUnitTest(unittest.TestCase):
             bundle.scenarios["products-version-parameter-history"].path,
             "/api/v1/products/{sample:product_id}/versions/{sample:product_effective_version}/parameter-history",
         )
+        self.assertEqual(
+            bundle.scenarios["products-template-references-1"].path,
+            "/api/v1/craft/products/{sample:product_id}/template-references",
+        )
+        self.assertEqual(
+            bundle.scenarios["products-template-references-1"].sample_contract.runtime_samples,
+            ["product:runtime-effective-version-ready"],
+        )
 
     def test_combined_suite_product_mutations_use_seeded_product_context(self) -> None:
         bundle = _load_scenario_config_bundle(COMBINED_SUITE)
@@ -130,6 +138,74 @@ class CombinedProductsScenarioSuiteUnitTest(unittest.TestCase):
         self.assertEqual(
             bundle.scenarios["products-version-parameters"].sample_contract.runtime_samples,
             ["product:runtime-draft-version-ready"],
+        )
+        self.assertEqual(
+            bundle.scenarios["products-product-delete"].path,
+            "/api/v1/products/{sample:product_id}/delete",
+        )
+        self.assertEqual(
+            bundle.scenarios["products-product-delete"].json_body,
+            {"password": "Admin@123456"},
+        )
+        self.assertEqual(
+            bundle.scenarios["products-product-delete"].sample_contract.runtime_samples,
+            ["product:runtime-version-create-ready"],
+        )
+        self.assertEqual(
+            bundle.scenarios["products-product-update"].path,
+            "/api/v1/products/{sample:product_id}",
+        )
+        self.assertEqual(
+            bundle.scenarios["products-product-update"].json_body,
+            {
+                "name": "更新后的产品",
+                "category": "贴片",
+                "remark": "Updated product",
+            },
+        )
+        self.assertEqual(
+            bundle.scenarios["products-product-update"].sample_contract.runtime_samples,
+            ["product:runtime-version-create-ready"],
+        )
+        self.assertEqual(
+            bundle.scenarios["products-parameter-version-create"].path,
+            "/api/v1/products/{sample:product_id}/versions",
+        )
+        self.assertIsNone(bundle.scenarios["products-parameter-version-create"].json_body)
+        self.assertEqual(
+            bundle.scenarios["products-parameter-version-create"].sample_contract.runtime_samples,
+            ["product:runtime-version-create-ready"],
+        )
+        self.assertEqual(
+            bundle.scenarios["products-parameter-update"].path,
+            "/api/v1/products/{sample:product_id}/parameters",
+        )
+        self.assertEqual(
+            bundle.scenarios["products-parameter-update"].sample_contract.runtime_samples,
+            ["product:runtime-draft-version-ready"],
+        )
+        self.assertEqual(
+            bundle.scenarios["products-parameter-update"].json_body,
+            {
+                "remark": "perf parameter update",
+                "confirmed": False,
+                "items": [
+                    {
+                        "name": "产品名称",
+                        "category": "基础参数",
+                        "type": "Text",
+                        "value": "{sample:product_name}",
+                        "description": "",
+                    },
+                    {
+                        "name": "产品芯片",
+                        "category": "基础参数",
+                        "type": "Text",
+                        "value": "PERF-UPDATED-CHIP",
+                        "description": "性能压测参数更新",
+                    },
+                ],
+            },
         )
         self.assertEqual(
             bundle.scenarios["products-lifecycle"].path,

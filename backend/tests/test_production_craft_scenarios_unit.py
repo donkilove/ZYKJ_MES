@@ -116,6 +116,16 @@ class ProductionCraftScenarioSuiteUnitTest(unittest.TestCase):
         self.assertIn("name", craft_stage_create.json_body)
         self.assertNotIn("stage_code", craft_stage_create.json_body)
 
+        craft_stage_delete = bundle.scenarios["craft-stage-delete"]
+        self.assertEqual(
+            craft_stage_delete.path,
+            "/api/v1/craft/stages/{sample:runtime_stage_id}",
+        )
+        self.assertEqual(
+            craft_stage_delete.sample_contract.runtime_samples,
+            ["craft:stage-delete-ready"],
+        )
+
         craft_process_create = bundle.scenarios["craft-process-create"]
         self.assertIn("code", craft_process_create.json_body)
         self.assertIn("name", craft_process_create.json_body)
@@ -372,7 +382,7 @@ class ProductionCraftScenarioSuiteUnitTest(unittest.TestCase):
         assert system_master_update.sample_contract is not None
         self.assertEqual(
             system_master_update.sample_contract.runtime_samples,
-            ["craft:system-master-ready"],
+            ["order:create-ready", "craft:system-master-ready"],
         )
         self.assertEqual(
             system_master_update.json_body["steps"][0]["stage_id"],

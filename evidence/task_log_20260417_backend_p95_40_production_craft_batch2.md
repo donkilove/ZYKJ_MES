@@ -649,6 +649,225 @@
     - 并发竞态虽已补偿，但总体 `P95` 与稳定性都没有优于 `4 workers`
     - 当前仍以 `4 workers` 作为稳定分析基线
 
+## 4.20 当前会话推进结果（残余功能失败第二轮收口）
+
+- 当前批次目标：
+  - 完全收口上一轮稳定基线里剩余的 3 条残余功能失败：
+    - `products-template-references-1`
+    - `craft-stage-delete`
+    - `products-parameter-update`
+- 本轮已完成修正：
+  - `tools/perf/write_gate/sample_registry.py`
+    - 新增 `craft:stage-delete-ready`
+    - 为可删除工段场景提供运行时孤立工段样本
+  - `tools/perf/scenarios/combined_40_scan.json`
+    - `products-template-references-1` 接入 `product:runtime-effective-version-ready`
+    - `craft-stage-delete` 改为删除 `{sample:runtime_stage_id}`，不再命中固定 `9999`
+    - `products-parameter-update` 改为当前 `/api/v1/products/{product_id}/parameters` schema，并接入 `product:runtime-draft-version-ready`
+  - `tools/perf/scenarios/write_operations_40_scan.json`
+    - 同步对齐 `craft-stage-delete` 与 `products-parameter-update` 的当前合同
+  - 测试补齐：
+    - `backend/tests/test_combined_products_scenarios_unit.py`
+    - `backend/tests/test_production_craft_scenarios_unit.py`
+    - `backend/tests/test_backend_capacity_gate_unit.py`
+- 当前验证结果：
+  - 单测：
+    - `backend/tests/test_combined_products_scenarios_unit.py`
+    - `backend/tests/test_production_craft_scenarios_unit.py`
+    - `backend/tests/test_backend_capacity_gate_unit.py`
+    - 合计 `23 passed`
+  - 单场景在线验证：
+    - `.tmp_runtime/focus_products_template_references_1_fixed.json` => `200`
+    - `.tmp_runtime/focus_craft_stage_delete_fixed.json` => `200`
+    - `.tmp_runtime/focus_products_parameter_update_fixed.json` => `200`
+  - 三场景合并 smoke：
+    - `.tmp_runtime/focus_three_residuals_fixed_batch.json`
+    - `success_rate=100%`
+    - `error_rate=0`
+- 当前判断：
+  - 这 3 条残余功能失败已经收口
+  - `combined_40` 的主矛盾继续收敛到性能热点与少量高压下偶发波动，不再是这三条旧合同问题
+
+## 4.21 当前会话推进结果（4 workers 稳定基线复跑）
+
+- 当前批次目标：
+  - 使用当前更稳的 `4 workers` 口径复跑稳定基线
+  - 优先观察：
+    - `success_rate`
+    - `error_rate`
+- 执行口径：
+  - 宿主：`start_backend.py --mode perf --host 0.0.0.0 --port 18081 --workers 4 --no-reload`
+  - 账号刷新：`backend/scripts/init_perf_capacity_users.py`
+  - 样本刷新：`backend/scripts/init_perf_production_craft_samples.py --mode ensure`
+  - 套件：`tools/perf/scenarios/combined_40_scan.json`
+- 最新结果文件：
+  - `.tmp_runtime/backend_40_e2e_combined_perf_20260418_1942baseline.json`
+- 结果摘要：
+  - `overall.success_rate=97.14%`
+  - `overall.error_rate=2.86%`
+  - `overall.p95_ms=7019.64`
+  - `overall.status_counts={200:192,201:11,202:1,403:1,404:1,422:1,EXC:3}`
+  - `overall_with_warmup.success_rate=96.54%`
+  - `overall_with_warmup.error_rate=3.46%`
+- 当前未达成项：
+  - 目标 `success_rate=100% / error_rate=0` 尚未达成
+  - 本轮残余失败已缩到 6 个场景：
+    - `production-order-update-pipeline-mode` => `EXC`
+    - `products-product-delete` => `422`
+    - `products-parameter-version-create` => `404`
+    - `craft-kanban-process-metrics-export` => `EXC`
+    - `craft-template-references` => `EXC`
+    - `auth-register-requests-detail` => `403`
+- 当前判断：
+  - `4 workers` 稳定基线已经明显优于 `8 workers` 对照，后者引入了更多抖动与额外竞态，不适合作为下一阶段主线
+  - 下一步应先清掉上述 6 条残余功能失败，再重新复跑稳定基线
+
+## 4.22 当前会话推进结果（六个失败场景完全收口）
+
+- 当前批次目标：
+  - 完全解决上一轮稳定基线中的 6 条残余失败场景：
+    - `production-order-update-pipeline-mode`
+    - `products-product-delete`
+    - `products-parameter-version-create`
+    - `craft-kanban-process-metrics-export`
+    - `craft-template-references`
+    - `auth-register-requests-detail`
+- 本轮已完成修正：
+  - `tools/perf/scenarios/combined_40_scan.json`
+    - `products-product-delete` 改到当前 `/api/v1/products/{product_id}/delete` 契约，并补 `password`
+    - `products-parameter-version-create` 改到当前 `/api/v1/products/{product_id}/versions` 契约，不再使用已废弃的 `parameter-versions`
+    - 以上两条都接入 `product:runtime-version-create-ready`
+  - `tools/perf/scenarios/write_operations_40_scan.json`
+    - 同步收口 `products-product-delete` 与 `products-parameter-version-create`
+  - `backend/tests/test_combined_products_scenarios_unit.py`
+    - 新增上述两条 products 旧场景的当前合同断言
+- 本轮关键验证结果：
+  - 单测：
+    - `backend/tests/test_combined_products_scenarios_unit.py`
+    - 通过
+  - 单场景 smoke：
+    - `.tmp_runtime/focus_production_order_update_pipeline_mode_now.json` => `200`
+    - `.tmp_runtime/focus_craft_kanban_process_metrics_export_now.json` => `200`
+    - `.tmp_runtime/focus_craft_template_references_now.json` => `200`
+    - `.tmp_runtime/focus_products_product_delete_fixed.json` => `200`
+    - `.tmp_runtime/focus_products_parameter_version_create_fixed.json` => `201`
+    - `.tmp_runtime/focus_auth_register_requests_detail_after_rollout.json` => `200`
+  - 新全量基线：
+    - `.tmp_runtime/backend_40_e2e_combined_perf_20260418_2000postfix.json`
+    - 这 6 条场景已全部从失败名单中消失
+- 当前判断：
+  - 用户点名的 6 条失败场景已全部收口
+  - 复跑后新的残余失败名单已切换为另外 5 条，不再包含这 6 条
+
+## 4.23 当前会话推进结果（五个失败场景完全收口）
+
+- 当前批次目标：
+  - 完全解决最新基线中的 5 条失败场景：
+    - `products-product-update`
+    - `users-user-disable`
+    - `users-user-reset-password`
+    - `users-export-task-create`
+    - `roles-role-delete`
+- 本轮已完成修正：
+  - `tools/perf/scenarios/combined_40_scan.json`
+    - `products-product-update` 改为当前 `/api/v1/products/{product_id}` schema，并接入 `product:runtime-version-create-ready`
+    - `users-export-task-create` 成功码改为当前真实 `200`
+  - `tools/perf/scenarios/write_operations_40_scan.json`
+    - 同步收口上述两条写场景合同
+  - `backend/tests/test_combined_products_scenarios_unit.py`
+    - 新增 `products-product-update` 当前合同断言
+  - `backend/tests/test_combined_management_scenarios_unit.py`
+    - 新增 `users-export-task-create` 当前成功码断言
+- 本轮关键验证结果：
+  - 单场景 smoke：
+    - `.tmp_runtime/focus_products_product_update_fixed.json` => `200`
+    - `.tmp_runtime/focus_users_user_disable_after_rollout.json` => `200`
+    - `.tmp_runtime/focus_users_user_reset_password_after_rollout.json` => `200`
+    - `.tmp_runtime/focus_users_export_task_create_fixed.json` => `200`
+    - `.tmp_runtime/focus_roles_role_delete_after_rollout.json` => `200`
+  - 最新全量基线：
+    - `.tmp_runtime/backend_40_e2e_combined_perf_20260418_2013fivefixed.json`
+    - `overall.success_rate=1.0`
+    - `overall.error_rate=0.0`
+    - `failures in measured window = NONE`
+- 当前判断：
+  - 用户点名的这 5 条失败场景已全部收口
+  - 当前主矛盾已完全转向性能指标，功能失败不再是当前 measured window 的阻塞项
+
+## 4.24 当前会话推进结果（4 workers 稳定基线复跑二次确认）
+
+- 当前批次目标：
+  - 复跑一轮 `4 workers` 稳定基线
+  - 优先观察 `success_rate` 与 `error_rate`
+- 执行口径：
+  - 宿主：`18081`，`gunicorn + 4 workers`
+  - 账号刷新：`backend/scripts/init_perf_capacity_users.py`
+  - 样本刷新：`backend/scripts/init_perf_production_craft_samples.py --mode ensure`
+  - 套件：`tools/perf/scenarios/combined_40_scan.json`
+- 最新结果文件：
+  - `.tmp_runtime/backend_40_e2e_combined_perf_20260418_2019rerun.json`
+- 结果摘要：
+  - `overall.success_rate=98.63%`
+  - `overall.error_rate=1.37%`
+  - `overall.p95_ms=7928.41`
+- 当前残余失败：
+  - `quality-stats-operators` => `EXC`
+  - `products-versions-compare` => `EXC`
+- 当前判断：
+  - 本轮复跑未达到 `success_rate=100% / error_rate=0`
+  - 相比上一轮，失败面已继续收缩到 2 个场景，但性能仍然远高于目标
+
+## 4.25 当前会话推进结果（两个残余失败场景根因调查）
+
+- 当前调查对象：
+  - `quality-stats-operators`
+  - `products-versions-compare`
+- 本轮关键证据：
+  - 全量失败样本：
+    - `.tmp_runtime/backend_40_e2e_combined_perf_20260418_2019rerun.json`
+    - `quality-stats-operators` => `EXC`, `p95_ms=5754.75`
+    - `products-versions-compare` => `EXC`, `p95_ms=16051.87`
+  - 单场景复跑：
+    - `.tmp_runtime/investigate_quality_stats_operators.json`
+      - `95/95` 成功
+      - `p95_ms=59.65`
+    - `.tmp_runtime/investigate_products_versions_compare.json`
+      - `61/61` 成功
+      - `p95_ms=76.65`
+- 当前分析结论：
+  - 这两个场景都不是稳定的合同错误或固定业务异常
+  - `products-versions-compare` 当前实现只是读取两个版本快照并在内存里做差异比对，单跑极快，且当前场景已不与共享 baseline 产品写场景发生直接数据冲突；全量中的 `EXC` 更像是高压下排队/超时，而不是 compare 逻辑本身错误
+  - `quality-stats-operators` 当前实现会执行：
+    - 一次首件明细加载
+    - 三次质量相关聚合（缺陷 / 报废 / 维修）
+    - 最后在 Python 端做按操作员归并
+    - 单跑也稳定通过，说明逻辑正确；全量里的 `EXC` 更像是与其他高成本统计/导出接口并发时抢占 worker/DB 资源导致的瞬时失败
+
+## 4.26 当前会话推进结果（分支收尾与合并准备）
+
+- 当前批次目标：
+  - 将 `feature/backend-p95-40-production-craft-phase1` 收尾
+  - 先在当前工作树提交，再合并入 `main` 并推送远程
+- 当前状态：
+  - 工作树待提交文件仅剩：
+    - `backend/tests/test_backend_capacity_gate_unit.py`
+    - `backend/tests/test_combined_management_scenarios_unit.py`
+    - `backend/tests/test_combined_products_scenarios_unit.py`
+    - `backend/tests/test_production_craft_scenarios_unit.py`
+    - `tools/perf/write_gate/sample_registry.py`
+    - `tools/perf/scenarios/combined_40_scan.json`
+    - `tools/perf/scenarios/write_operations_40_scan.json`
+    - `evidence/*batch2.md`
+  - 明确排除项：
+    - `dump.rdb`
+  - 主仓库 `main` 已与 `origin/main` 对齐，适合执行本地合并后推送
+- 当前判断：
+  - 本轮改动已通过合并前最小验证，可进入提交流程
+  - 两个场景的共同点：
+    - 单场景稳定通过
+    - 全量高并发窗口里偶发 `EXC`
+    - 更符合“共享资源饱和 / 队头阻塞 / 请求超时”模式，而非“固定坏数据或固定坏合同”
+
 ## 5. 迁移说明
 
 - 无迁移，直接替换

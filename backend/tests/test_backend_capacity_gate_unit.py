@@ -421,6 +421,7 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
                 "craft:template-draft-ready",
                 "craft:template-published-ready",
                 "craft:template-archived-ready",
+                "craft:stage-delete-ready",
                 "craft:process-create-ready",
                 "craft:process-runtime-ready",
                 "craft:system-master-ready",

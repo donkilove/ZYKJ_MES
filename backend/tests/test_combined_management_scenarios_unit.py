@@ -94,6 +94,7 @@ class CombinedManagementScenarioSuiteUnitTest(unittest.TestCase):
         export_task = bundle.scenarios["users-export-task-create"]
         self.assertEqual(export_task.json_body["format"], "csv")
         self.assertEqual(export_task.json_body["deleted_scope"], "active")
+        self.assertEqual(export_task.success_statuses, {200})
 
     def test_combined_suite_authz_and_admin_payloads_follow_current_schema(self) -> None:
         bundle = _load_scenario_config_bundle(COMBINED_SUITE)

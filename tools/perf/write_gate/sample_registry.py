@@ -20,6 +20,7 @@ from tools.perf.write_gate.sample_runtime import SampleHandler
 
 RUNTIME_ORDER_REFS_KEY = "__write_gate_runtime_order_refs__"
 RUNTIME_TEMPLATE_IDS_KEY = "__write_gate_runtime_template_ids__"
+RUNTIME_STAGE_IDS_KEY = "__write_gate_runtime_stage_ids__"
 RUNTIME_PROCESS_CODE_KEY = "__write_gate_runtime_process_code__"
 RUNTIME_PRODUCT_IDS_KEY = "__write_gate_runtime_product_ids__"
 RUNTIME_EQUIPMENT_REFS_KEY = "__write_gate_runtime_equipment_refs__"
@@ -364,6 +365,56 @@ class RuntimeTemplateReadyHandler(SampleHandler):
         try:
             for template_id in reversed(template_ids):
                 row = db.get(deps.ProductProcessTemplate, int(template_id))
+                if row is not None:
+                    db.delete(row)
+            db.commit()
+        finally:
+            db.close()
+        return None
+
+
+@dataclass(slots=True)
+class RuntimeStageDeleteReadyHandler(SampleHandler):
+    def prepare(self, sample_context: dict[str, Any]) -> None:
+        deps = _backend_dependencies()
+        db = deps.PerfSessionLocal()
+        try:
+            run_id = _new_run_id("stg")
+            stage_code = f"PERF-STAGE-DEL-{run_id.upper()}"[:64]
+            row = deps.ProcessStage(
+                code=stage_code,
+                name=f"性能压测删除工段-{run_id}"[:128],
+                sort_order=999,
+                is_enabled=True,
+                remark="性能压测运行时删除工段样本",
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            sample_context["runtime_stage_id"] = int(row.id)
+            sample_context["runtime_stage_code"] = row.code
+            _append_context_refs(
+                sample_context,
+                key=RUNTIME_STAGE_IDS_KEY,
+                refs=[int(row.id)],
+            )
+        finally:
+            db.close()
+
+    def restore(
+        self,
+        strategy: str | None,
+        sample_context: dict[str, Any],
+    ) -> None:
+        del strategy
+        deps = _backend_dependencies()
+        stage_ids = sample_context.pop(RUNTIME_STAGE_IDS_KEY, [])
+        if not stage_ids:
+            return None
+        db = deps.PerfSessionLocal()
+        try:
+            for stage_id in reversed(stage_ids):
+                row = db.get(deps.ProcessStage, int(stage_id))
                 if row is not None:
                     db.delete(row)
             db.commit()
@@ -1658,6 +1709,7 @@ def build_sample_registry(
         "craft:template-draft-ready": draft_template_handler,
         "craft:template-published-ready": published_template_handler,
         "craft:template-archived-ready": archived_template_handler,
+        "craft:stage-delete-ready": RuntimeStageDeleteReadyHandler(),
         "craft:template-publish-ready": draft_template_handler,
         "craft:process-create-ready": CraftProcessCreateReadyHandler(),
         "craft:process-runtime-ready": CraftProcessRuntimeReadyHandler(),
