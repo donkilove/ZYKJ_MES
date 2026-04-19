@@ -108,3 +108,4 @@ evidence/**/.npm/
 evidence/**/.cache/
 dump.rdb
 .claude/settings.local.json
+.env
