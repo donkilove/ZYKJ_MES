@@ -41,8 +41,11 @@ class MessageWsService {
     if (_disposed) return;
     try {
       final wsBase = baseUrl.replaceFirst(RegExp(r'^http'), 'ws');
-      final uri = Uri.parse('$wsBase/messages/ws?token=$accessToken');
+      final uri = Uri.parse('$wsBase/messages/ws');
       _channel = (channelFactory ?? WebSocketChannel.connect)(uri);
+      _channel!.sink.add(
+        '{"type":"auth","token":"$accessToken"}',
+      );
       _sub = _channel!.stream.listen(
         _onData,
         onError: _onError,

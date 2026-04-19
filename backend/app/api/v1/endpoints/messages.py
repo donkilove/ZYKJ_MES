@@ -326,11 +326,17 @@ def api_get_message_jump_target(
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)) -> None:
-    """WebSocket 实时消息推送端点，通过 token 鉴权"""
-    # 鉴权
+async def websocket_endpoint(websocket: WebSocket) -> None:
+    """WebSocket 实时消息推送端点，通过首条 JSON 消息中的 token 鉴权"""
+    await websocket.accept()
+    # 等待客户端发送鉴权消息 {"type": "auth", "token": "<jwt>"}
     user_id: int | None = None
     try:
+        auth_msg = await websocket.receive_json()
+        if auth_msg.get("type") != "auth":
+            await websocket.close(code=4001)
+            return
+        token = auth_msg.get("token", "")
         payload = decode_access_token(token)
         sub = str(payload.get("sub", "")).strip()
         if sub:
@@ -352,7 +358,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)) -> N
             await websocket.close(code=4003)
             return
 
-    await message_connection_manager.connect(websocket, user_id)
+    await message_connection_manager.connect_already_accepted(websocket, user_id)
     try:
         # 连接成功后推送当前未读数
         with SessionLocal() as db:

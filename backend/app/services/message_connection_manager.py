@@ -27,6 +27,15 @@ class MessageConnectionManager:
             len(self._connections[user_id]),
         )
 
+    async def connect_already_accepted(self, websocket: WebSocket, user_id: int) -> None:
+        async with self._lock:
+            self._connections[user_id].add(websocket)
+        logger.debug(
+            "[MSG_WS] 用户 %s 建立连接，当前连接数 %s",
+            user_id,
+            len(self._connections[user_id]),
+        )
+
     async def disconnect(self, websocket: WebSocket, user_id: int) -> None:
         async with self._lock:
             self._connections[user_id].discard(websocket)

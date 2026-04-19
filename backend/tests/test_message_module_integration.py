@@ -966,8 +966,9 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         self,
     ) -> None:
         with self.client.websocket_connect(
-            f"/api/v1/messages/ws?token={self.token}"
+            "/api/v1/messages/ws"
         ) as websocket:
+            websocket.send_json({"type": "auth", "token": self.token})
             payload = websocket.receive_json()
             self.assertEqual(payload["event"], "connected")
             self.assertEqual(payload["user_id"], 1)
@@ -978,8 +979,9 @@ class MessageModuleIntegrationTest(unittest.TestCase):
 
         with self.assertRaises(WebSocketDisconnect) as ctx:
             with self.client.websocket_connect(
-                "/api/v1/messages/ws?token=invalid-token"
+                "/api/v1/messages/ws"
             ) as websocket:
+                websocket.send_json({"type": "auth", "token": "invalid-token"})
                 websocket.receive_text()
 
         self.assertEqual(ctx.exception.code, 4001)
