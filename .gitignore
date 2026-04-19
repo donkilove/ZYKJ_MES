@@ -12,6 +12,7 @@ $RECYCLE.BIN/
 *.bak
 *.orig
 *.log
+.claude/
 
 # ===============================
 # Python / 后端产物与本地环境
@@ -106,3 +107,4 @@ evidence/**/.yarn/
 evidence/**/.npm/
 evidence/**/.cache/
 dump.rdb
+.claude/settings.local.json
