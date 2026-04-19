@@ -10,11 +10,14 @@ import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
-import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
-
-enum _UserAction { edit, disable, enable, resetPassword, delete, restore }
+import 'package:mes_client/features/user/presentation/widgets/user_create_dialog.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_edit_dialog.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_export_task_dialog.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_filter_toolbar.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_reset_password_dialog.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_action_dialogs.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_data_table.dart';
 
 typedef UserExportFileSaver =
     Future<String?> Function({
@@ -64,7 +67,6 @@ class LegacyLegacyUserManagementPage extends StatefulWidget {
 
 class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagementPage> {
   static const String _roleSystemAdmin = 'system_admin';
-  static const String _roleOperator = 'operator';
   static const String _deletedScopeActive = 'active';
   static const String _deletedScopeDeleted = 'deleted';
   static const String _deletedScopeAll = 'all';
@@ -204,7 +206,6 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
     ).showSnackBar(const SnackBar(content: Text('当前账号没有操作权限')));
   }
 
-  bool _isOperator(String? roleCode) => roleCode == _roleOperator;
 
   RoleItem? _findRoleByCode(String? roleCode) {
     if (roleCode == null) {
@@ -216,16 +217,6 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
       }
     }
     return null;
-  }
-
-  bool _canAssignStage(String? roleCode) {
-    final role = _findRoleByCode(roleCode);
-    if (role == null) {
-      return _isOperator(roleCode);
-    }
-    return _isOperator(roleCode) ||
-        role.roleType == 'custom' ||
-        !role.isBuiltin;
   }
 
   List<RoleItem> _assignableRoles({String? includeRoleCode}) {
@@ -290,48 +281,8 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
     return '未分配';
   }
 
-  bool _isCurrentLoginUser(UserItem user) =>
-      _myUserId != null && user.id == _myUserId;
 
-  String _formatLifecycleSuccessMessage(
-    UserLifecycleResult result, {
-    required bool active,
-  }) {
-    if (active) {
-      return '用户 ${result.user.username} 已启用，需重新登录后才会恢复在线状态。';
-    }
-    final forcedOfflineCount = result.forcedOfflineSessionCount;
-    if (forcedOfflineCount > 0) {
-      return '用户 ${result.user.username} 已停用，并强制下线 $forcedOfflineCount 个会话。';
-    }
-    if (result.clearedOnlineStatus) {
-      return '用户 ${result.user.username} 已停用，在线状态已清除。';
-    }
-    return '用户 ${result.user.username} 已停用。';
-  }
 
-  String _formatDeleteSuccessMessage(UserDeleteResult result) {
-    final forcedOfflineCount = result.forcedOfflineSessionCount;
-    if (forcedOfflineCount > 0) {
-      return '已逻辑删除用户 ${result.user.username}，并强制下线 $forcedOfflineCount 个会话；用户已移入已删除视图。';
-    }
-    return '已逻辑删除用户 ${result.user.username}；用户已移入已删除视图。';
-  }
-
-  String _formatRestoreSuccessMessage(UserLifecycleResult result) {
-    return '用户 ${result.user.username} 已恢复到常规列表，当前保持停用状态。';
-  }
-
-  String _formatPasswordResetSuccessMessage(UserPasswordResetResult result) {
-    final forcedOfflineCount = result.forcedOfflineSessionCount;
-    if (forcedOfflineCount > 0) {
-      return '用户 ${result.user.username} 密码已重置，并强制下线 $forcedOfflineCount 个会话。';
-    }
-    if (result.clearedOnlineStatus) {
-      return '用户 ${result.user.username} 密码已重置，在线状态已清除。';
-    }
-    return '用户 ${result.user.username} 密码已重置。';
-  }
 
   Future<String?> _saveExportFile({
     required String filename,
@@ -633,1046 +584,51 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
     }
   }
 
-  Future<void> _showCreateUserDialog() async {
-    if (!widget.canCreateUser) {
-      _showNoPermission();
-      return;
-    }
-    final currentStages = await _loadEnabledStagesForDialog();
-    if (!mounted) {
-      return;
-    }
-    final assignableRoles = _assignableRoles();
-    if (assignableRoles.isEmpty) {
-      setState(() {
-        _message = '当前没有可分配的启用角色。';
-      });
-      return;
-    }
-    final accountController = TextEditingController();
-    final passwordController = TextEditingController();
-    bool isActive = true;
-    final formKey = GlobalKey<FormState>();
-    String? selectedRoleCode;
-    int? selectedStageId;
-    int accountCheckSequence = 0;
-    bool checkingAccountConflict = false;
-    String? accountConflictError;
-    String? createdAccount;
-    bool createdActive = true;
 
-    Future<void> checkAccountConflict(
-      StateSetter setDialogState, {
-      bool force = false,
-    }) async {
-      final account = accountController.text.trim();
-      if (account.isEmpty || account.length < 2 || account.length > 10) {
-        setDialogState(() {
-          checkingAccountConflict = false;
-          accountConflictError = null;
-        });
-        formKey.currentState?.validate();
-        return;
-      }
-      if (!force && !accountController.selection.isValid) {
-        return;
-      }
-      final currentSequence = ++accountCheckSequence;
-      setDialogState(() {
-        checkingAccountConflict = true;
-        accountConflictError = null;
-      });
-      try {
-        final result = await _userService.listUsers(
-          page: 1,
-          pageSize: 20,
-          keyword: account,
-        );
-        if (!mounted || currentSequence != accountCheckSequence) {
-          return;
-        }
-        final duplicated = result.items.any(
-          (user) => user.username.trim().toLowerCase() == account.toLowerCase(),
-        );
-        setDialogState(() {
-          checkingAccountConflict = false;
-          accountConflictError = duplicated ? '账号已存在，请更换后再创建' : null;
-        });
-        formKey.currentState?.validate();
-      } catch (error) {
-        if (_isUnauthorized(error)) {
-          widget.onLogout();
-          return;
-        }
-        if (!mounted || currentSequence != accountCheckSequence) {
-          return;
-        }
-        setDialogState(() {
-          checkingAccountConflict = false;
-          accountConflictError = null;
-        });
-      }
-    }
 
-    final created = await showLockedFormDialog<bool>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final isOperatorSelected = _isOperator(selectedRoleCode);
-            final canAssignStage = _canAssignStage(selectedRoleCode);
-            final stageHelperText = selectedRoleCode == null
-                ? '请先选择角色，再确定是否需要分配工段'
-                : isOperatorSelected
-                ? '操作员必须选择一个工段后才能创建'
-                : canAssignStage
-                ? '当前角色可选工段，不选则默认无工段'
-                : '该角色无需分配工段';
 
-            return AlertDialog(
-              title: const Text('新建用户'),
-              content: SizedBox(
-                width: 520,
-                child: SingleChildScrollView(
-                  child: Form(
-                    key: formKey,
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextFormField(
-                          controller: accountController,
-                          autovalidateMode: AutovalidateMode.onUserInteraction,
-                          decoration: InputDecoration(
-                            labelText: '账号',
-                            helperText: checkingAccountConflict
-                                ? '正在检查账号是否可用...'
-                                : null,
-                            suffixIcon: checkingAccountConflict
-                                ? const Padding(
-                                    padding: EdgeInsets.all(12),
-                                    child: SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          onChanged: (_) {
-                            setDialogState(() {
-                              accountConflictError = null;
-                            });
-                            checkAccountConflict(setDialogState);
-                          },
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入账号';
-                            }
-                            if (value.trim().length < 2) {
-                              return '账号至少 2 个字符';
-                            }
-                            if (value.trim().length > 10) {
-                              return '账号最多 10 个字符';
-                            }
-                            if (accountConflictError != null) {
-                              return accountConflictError;
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: passwordController,
-                          obscureText: true,
-                          autovalidateMode: AutovalidateMode.onUserInteraction,
-                          decoration: const InputDecoration(
-                            labelText: '密码',
-                            helperText: '密码规则：至少6位；不能包含连续4位相同字符。',
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return '请输入密码';
-                            }
-                            if (value.length < 6) {
-                              return '密码至少 6 个字符';
-                            }
-                            if (RegExp(r'(.)\1\1\1').hasMatch(value)) {
-                              return '密码不能包含连续4位相同字符';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            const Text('账号状态：'),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: const Text('启用'),
-                              selected: isActive,
-                              onSelected: (_) =>
-                                  setDialogState(() => isActive = true),
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: const Text('停用'),
-                              selected: !isActive,
-                              onSelected: (_) =>
-                                  setDialogState(() => isActive = false),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          '角色分配（单选）',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        RadioGroup<String>(
-                          groupValue: selectedRoleCode,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              selectedRoleCode = value;
-                              if (!_isOperator(selectedRoleCode)) {
-                                selectedStageId = null;
-                              }
-                            });
-                          },
-                          child: Column(
-                            children: assignableRoles.map((role) {
-                              return RadioListTile<String>(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(role.name),
-                                subtitle: Text(
-                                  '${role.code} · ${role.roleType == 'builtin' ? '系统内置' : '自定义'}',
-                                ),
-                                value: role.code,
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                        if (selectedRoleCode == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Text(
-                              '请选择一个角色',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '工段分配（单选，操作员必选，自定义角色可选）',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          stageHelperText,
-                          style: TextStyle(
-                            color: isOperatorSelected
-                                ? Colors.red
-                                : Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                            fontWeight: isOperatorSelected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Opacity(
-                          opacity: canAssignStage ? 1 : 0.5,
-                          child: IgnorePointer(
-                            ignoring: !canAssignStage,
-                            child: currentStages.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text('暂无可分配工段'),
-                                  )
-                                : RadioGroup<int>(
-                                    groupValue: selectedStageId,
-                                    onChanged: (value) {
-                                      if (value == null) {
-                                        return;
-                                      }
-                                      setDialogState(() {
-                                        selectedStageId = value;
-                                      });
-                                    },
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: currentStages.map((stage) {
-                                        return RadioListTile<int>(
-                                          dense: true,
-                                          contentPadding: EdgeInsets.zero,
-                                          title: Text(stage.name),
-                                          subtitle: Text(stage.code),
-                                          value: stage.id,
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        if (isOperatorSelected && selectedStageId == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Text(
-                              '操作员角色必须选择一个工段',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    await checkAccountConflict(setDialogState, force: true);
-                    if (checkingAccountConflict ||
-                        accountConflictError != null) {
-                      return;
-                    }
-                    if (selectedRoleCode == null) {
-                      return;
-                    }
-                    if (_isOperator(selectedRoleCode) &&
-                        selectedStageId == null) {
-                      return;
-                    }
-
-                    try {
-                      await _userService.createUser(
-                        account: accountController.text.trim(),
-                        password: passwordController.text,
-                        roleCode: selectedRoleCode!,
-                        stageId: selectedStageId,
-                        isActive: isActive,
-                      );
-                      createdAccount = accountController.text.trim();
-                      createdActive = isActive;
-                      if (context.mounted) {
-                        Navigator.of(context).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('创建用户失败：${_errorMessage(error)}'),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('创建'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (created == true) {
-      await _loadUsers();
-      if (mounted && createdAccount != null) {
-        final followup = createdActive
-            ? '用户 $createdAccount 已创建，首次登录需修改密码。'
-            : '用户 $createdAccount 已创建，首次登录需修改密码；当前为停用状态，启用后方可登录。';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(followup)));
-      }
-    }
-  }
-
-  Future<void> _showEditUserDialog(UserItem user) async {
-    if (!widget.canEditUser) {
-      _showNoPermission();
-      return;
-    }
-    late final List<CraftStageItem> currentStages;
-    var detailUser = user;
-    String? detailWarning;
-    try {
-      final results = await _runWithOnlineRefreshPaused(() async {
-        return Future.wait<dynamic>([
-          _loadEnabledStagesForDialog(),
-          _userService.getUserDetail(userId: user.id),
-        ]);
-      });
-      currentStages = results[0] as List<CraftStageItem>;
-      detailUser = results[1] as UserItem;
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      currentStages = await _loadEnabledStagesForDialog();
-      detailWarning = '部分详情刷新失败，以下内容已回退为列表中的当前数据。';
-    }
-    if (!mounted) {
-      return;
-    }
-    final assignableRoles = _assignableRoles(
-      includeRoleCode: detailUser.roleCode,
-    );
-    if (assignableRoles.isEmpty) {
-      setState(() {
-        _message = '当前没有可分配的启用角色。';
-      });
-      return;
-    }
-    final accountController = TextEditingController(text: detailUser.username);
-    final formKey = GlobalKey<FormState>();
-    final canEditAccount = _isCurrentUserSystemAdmin();
-    final originalAccount = detailUser.username.trim();
-    final originalRoleCode = detailUser.roleCode;
-    final originalRoleName = _roleLabelForUser(
-      detailUser.roleCode,
-      detailUser.roleName,
-    );
-    final originalStageId = detailUser.stageId;
-    final originalStageName = _stageLabelForUser(
-      detailUser.stageId,
-      detailUser.stageName,
-    );
-    final originalActive = detailUser.isActive;
-    final originalMustChangePassword = detailUser.mustChangePassword;
-    String? selectedRoleCode = detailUser.roleCode;
-    int? selectedStageId = _canAssignStage(selectedRoleCode)
-        ? detailUser.stageId
-        : null;
-    bool isActive = detailUser.isActive;
-    bool mustChangePassword = detailUser.mustChangePassword;
-
-    final updated = await showLockedFormDialog<bool>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final isOperatorSelected = _isOperator(selectedRoleCode);
-            final canAssignStage = _canAssignStage(selectedRoleCode);
-            final theme = Theme.of(context);
-            final stageHelperText = selectedRoleCode == null
-                ? '请先选择角色，再确定是否需要分配工段'
-                : isOperatorSelected
-                ? '操作员必须选择一个工段后才能保存'
-                : canAssignStage
-                ? '当前角色可选工段，不选则默认无工段'
-                : '该角色无需分配工段';
-
-            Widget buildInfoItem(String label, String value) {
-              return SizedBox(
-                width: 220,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      value,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            return AlertDialog(
-              title: Text('编辑用户：${detailUser.username}'),
-              content: SizedBox(
-                width: 520,
-                child: SingleChildScrollView(
-                  child: Form(
-                    key: formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '当前信息',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: [
-                            buildInfoItem(
-                              '当前账号状态',
-                              originalActive ? '启用' : '停用',
-                            ),
-                            buildInfoItem(
-                              '首次登录需改密',
-                              originalMustChangePassword ? '是' : '否',
-                            ),
-                            buildInfoItem(
-                              '最近登录时间',
-                              _formatDialogDateTime(detailUser.lastLoginAt),
-                            ),
-                            buildInfoItem(
-                              '最近改密时间',
-                              _formatDialogDateTime(
-                                detailUser.passwordChangedAt,
-                              ),
-                            ),
-                            buildInfoItem(
-                              '最近登录 IP',
-                              detailUser.lastLoginIp?.trim().isNotEmpty == true
-                                  ? detailUser.lastLoginIp!.trim()
-                                  : '-',
-                            ),
-                            buildInfoItem('当前角色', originalRoleName),
-                            buildInfoItem('当前工段', originalStageName),
-                          ],
-                        ),
-                        if (detailWarning != null) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            detailWarning,
-                            key: const ValueKey('userEditDetailWarning'),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.error,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 20),
-                        Text(
-                          '编辑内容',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: accountController,
-                          readOnly: !canEditAccount,
-                          decoration: InputDecoration(
-                            labelText: '账号',
-                            helperText: canEditAccount ? null : '仅系统管理员可修改账号',
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入账号';
-                            }
-                            if (value.trim().length < 2) {
-                              return '账号至少 2 个字符';
-                            }
-                            if (value.trim().length > 10) {
-                              return '账号最多 10 个字符';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            const Text('账号状态：'),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              key: const ValueKey('userEditStatusEnabled'),
-                              label: const Text('启用'),
-                              selected: isActive,
-                              onSelected: (_) =>
-                                  setDialogState(() => isActive = true),
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              key: const ValueKey('userEditStatusDisabled'),
-                              label: const Text('停用'),
-                              selected: !isActive,
-                              onSelected: (_) =>
-                                  setDialogState(() => isActive = false),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        SwitchListTile.adaptive(
-                          key: const ValueKey('userEditMustChangePassword'),
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('下次登录强制改密'),
-                          subtitle: Text(
-                            mustChangePassword
-                                ? '用户下次登录后必须先修改密码'
-                                : '用户下次登录无需强制修改密码',
-                          ),
-                          value: mustChangePassword,
-                          onChanged: (value) =>
-                              setDialogState(() => mustChangePassword = value),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          '角色分配（单选）',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        RadioGroup<String>(
-                          groupValue: selectedRoleCode,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              selectedRoleCode = value;
-                              if (!_isOperator(selectedRoleCode)) {
-                                selectedStageId = null;
-                              }
-                            });
-                          },
-                          child: Column(
-                            children: assignableRoles.map((role) {
-                              return RadioListTile<String>(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(role.name),
-                                subtitle: Text(
-                                  '${role.code} · ${role.roleType == 'builtin' ? '系统内置' : '自定义'}',
-                                ),
-                                value: role.code,
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                        if (selectedRoleCode == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Text(
-                              '请选择一个角色',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '工段分配（单选，操作员必选，自定义角色可选）',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          stageHelperText,
-                          style: TextStyle(
-                            color: isOperatorSelected
-                                ? Colors.red
-                                : theme.colorScheme.onSurfaceVariant,
-                            fontWeight: isOperatorSelected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Opacity(
-                          opacity: canAssignStage ? 1 : 0.5,
-                          child: IgnorePointer(
-                            ignoring: !canAssignStage,
-                            child: currentStages.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text('暂无可分配工段'),
-                                  )
-                                : RadioGroup<int>(
-                                    groupValue: selectedStageId,
-                                    onChanged: (value) {
-                                      if (value == null) {
-                                        return;
-                                      }
-                                      setDialogState(() {
-                                        selectedStageId = value;
-                                      });
-                                    },
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: currentStages.map((stage) {
-                                        return RadioListTile<int>(
-                                          dense: true,
-                                          contentPadding: EdgeInsets.zero,
-                                          title: Text(stage.name),
-                                          subtitle: Text(stage.code),
-                                          value: stage.id,
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        if (isOperatorSelected && selectedStageId == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Text(
-                              '操作员角色必须选择一个工段',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    if (selectedRoleCode == null) {
-                      return;
-                    }
-                    if (_isOperator(selectedRoleCode) &&
-                        selectedStageId == null) {
-                      return;
-                    }
-
-                    final updatedAccount = accountController.text.trim();
-                    final updatedRoleCode = selectedRoleCode!;
-                    final updatedStageId = _canAssignStage(updatedRoleCode)
-                        ? selectedStageId
-                        : null;
-                    final updatedRoleName = _roleLabelForUser(
-                      updatedRoleCode,
-                      null,
-                    );
-                    final updatedStageName = _stageLabelForUser(
-                      updatedStageId,
-                      null,
-                    );
-                    final accountChanged =
-                        canEditAccount && updatedAccount != originalAccount;
-                    final roleChanged = updatedRoleCode != originalRoleCode;
-                    final stageChanged = updatedStageId != originalStageId;
-                    final activeChanged = isActive != originalActive;
-                    final mustChangePasswordChanged =
-                        mustChangePassword != originalMustChangePassword;
-
-                    if (!accountChanged &&
-                        !roleChanged &&
-                        !stageChanged &&
-                        !activeChanged &&
-                        !mustChangePasswordChanged) {
-                      if (context.mounted) {
-                        Navigator.of(context).pop(false);
-                      }
-                      return;
-                    }
-
-                    final summaryLines = <String>[];
-                    if (accountChanged) {
-                      summaryLines.add(
-                        '账号：$originalAccount -> $updatedAccount',
-                      );
-                    }
-                    if (roleChanged) {
-                      summaryLines.add(
-                        '角色：$originalRoleName -> $updatedRoleName',
-                      );
-                    }
-                    if (stageChanged) {
-                      summaryLines.add(
-                        '工段：$originalStageName -> $updatedStageName',
-                      );
-                    }
-                    if (activeChanged) {
-                      summaryLines.add(
-                        '账号状态：${originalActive ? '启用' : '停用'} -> ${isActive ? '启用' : '停用'}',
-                      );
-                    }
-                    if (mustChangePasswordChanged) {
-                      summaryLines.add(
-                        '下次登录强制改密：${originalMustChangePassword ? '开启' : '关闭'} -> ${mustChangePassword ? '开启' : '关闭'}',
-                      );
-                    }
-
-                    final riskHints = <String>[];
-                    if (originalActive && !isActive) {
-                      riskHints.add('用户将无法继续登录，在线状态会被置为离线，并收到停用通知');
-                    }
-                    if (!originalMustChangePassword && mustChangePassword) {
-                      riskHints.add('用户下次登录后必须修改密码');
-                    }
-                    if (roleChanged &&
-                        originalStageId != null &&
-                        updatedStageId == null) {
-                      riskHints.add('角色变更后原工段分配将失效');
-                    }
-
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (dialogContext) {
-                        return AlertDialog(
-                          title: const Text('确认保存用户变更'),
-                          content: SizedBox(
-                            width: 420,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '本次变更摘要',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                ),
-                                const SizedBox(height: 8),
-                                ...summaryLines.map(
-                                  (line) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: Text(line),
-                                  ),
-                                ),
-                                if (riskHints.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '风险提示',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: theme.colorScheme.error,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ...riskHints.map(
-                                    (hint) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 6),
-                                      child: Text(hint),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(false),
-                              child: const Text('取消'),
-                            ),
-                            FilledButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(true),
-                              child: const Text('确认保存'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                    if (confirmed != true) {
-                      return;
-                    }
-
-                    try {
-                      await _userService.updateUser(
-                        userId: detailUser.id,
-                        account: accountChanged ? updatedAccount : null,
-                        roleCode: roleChanged ? updatedRoleCode : null,
-                        stageId: stageChanged ? updatedStageId : null,
-                        isActive: activeChanged ? isActive : null,
-                        mustChangePassword: mustChangePasswordChanged
-                            ? mustChangePassword
-                            : null,
-                      );
-                      if (context.mounted) {
-                        Navigator.of(context).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('更新用户失败：${_errorMessage(error)}'),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (updated == true) {
-      await _loadUsers();
-    }
-  }
 
   Future<void> _confirmDeleteUser(UserItem user) async {
     if (!widget.canDeleteUser) {
       _showNoPermission();
       return;
     }
-    final remarkController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    var submitting = false;
-    final confirmed = await showLockedFormDialog<bool>(
+    await showConfirmDeleteUserDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final theme = Theme.of(context);
-            return AlertDialog(
-              title: const Text('逻辑删除用户'),
-              content: SizedBox(
-                width: 440,
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '影响摘要',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('目标账号：${user.username}'),
-                      const SizedBox(height: 4),
-                      Text('当前在线状态：${user.isOnline ? '在线' : '离线'}'),
-                      const SizedBox(height: 4),
-                      Text(
-                        '当前角色：${_roleLabelForUser(user.roleCode, user.roleName)}',
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '当前工段：${_stageLabelForUser(user.stageId, user.stageName)}',
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '删除后用户会被停用、从常规列表隐藏，且数据仍保留，可在已删除视图中恢复。',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        user.isOnline ? '提交后将强制下线当前会话。' : '删除后账号不可登录，需恢复后重新管理。',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: user.isOnline ? theme.colorScheme.error : null,
-                          fontWeight: user.isOnline
-                              ? FontWeight.w700
-                              : FontWeight.w400,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: remarkController,
-                        enabled: !submitting,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: '删除原因',
-                          hintText: '请输入逻辑删除原因',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入删除原因';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: submitting
-                      ? null
-                      : () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: submitting
-                      ? null
-                      : () {
-                          if (!formKey.currentState!.validate()) {
-                            return;
-                          }
-                          setDialogState(() => submitting = true);
-                          Navigator.of(context).pop(true);
-                        },
-                  child: Text(submitting ? '删除中...' : '确认删除'),
-                ),
-              ],
-            );
-          },
-        );
+      userService: _userService,
+      user: user,
+      roleLabel: _roleLabelForUser(user.roleCode, user.roleName),
+      stageLabel: _stageLabelForUser(user.stageId, user.stageName),
+      onError: (error) {
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+        } else if (mounted) {
+          setState(() => _message = '删除用户失败：${_errorMessage(error)}');
+        }
+      },
+      onSuccess: (result) async {
+        if (mounted) {
+          setState(() {
+            if (_deletedScope == _deletedScopeAll) {
+              _users = _users
+                  .map((existing) => existing.id == user.id
+                      ? result.user.copyWith(isOnline: false)
+                      : existing)
+                  .toList(growable: false);
+            } else {
+              _users = _users
+                  .where((existing) => existing.id != user.id)
+                  .toList(growable: false);
+              _total = (_total > 0) ? _total - 1 : 0;
+            }
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(formatDeleteSuccessMessage(result))),
+          );
+        }
+        await _loadUsers(silent: true);
       },
     );
-    final remark = remarkController.text.trim();
-
-    if (confirmed != true) {
-      return;
-    }
-
-    try {
-      final result = await _userService.deleteUser(
-        userId: user.id,
-        remark: remark,
-      );
-      if (mounted) {
-        setState(() {
-          if (_deletedScope == _deletedScopeAll) {
-            _users = _users
-                .map(
-                  (existing) => existing.id == user.id
-                      ? result.user.copyWith(isOnline: false)
-                      : existing,
-                )
-                .toList(growable: false);
-          } else {
-            _users = _users
-                .where((existing) => existing.id != user.id)
-                .toList(growable: false);
-            _total = (_total > 0) ? _total - 1 : 0;
-          }
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_formatDeleteSuccessMessage(result))),
-        );
-      }
-      await _loadUsers(silent: true);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      setState(() {
-        _message = '删除用户失败：${_errorMessage(error)}';
-      });
-    }
   }
 
   Future<void> _confirmRestoreUser(UserItem user) async {
@@ -1680,129 +636,41 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
       _showNoPermission();
       return;
     }
-    final remarkController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    var submitting = false;
-
-    final confirmed = await showLockedFormDialog<bool>(
+    await showConfirmRestoreUserDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final theme = Theme.of(context);
-            return AlertDialog(
-              title: const Text('恢复用户'),
-              content: SizedBox(
-                width: 420,
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '恢复后用户会回到常规列表，但默认保持停用状态，需要管理员显式启用后才可再次登录。',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      Text('目标账号：${user.username}'),
-                      const SizedBox(height: 4),
-                      Text(
-                        '当前角色：${_roleLabelForUser(user.roleCode, user.roleName)}',
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '当前工段：${_stageLabelForUser(user.stageId, user.stageName)}',
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: remarkController,
-                        enabled: !submitting,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: '恢复原因',
-                          hintText: '请输入恢复原因',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入恢复原因';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: submitting
-                      ? null
-                      : () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: submitting
-                      ? null
-                      : () {
-                          if (!formKey.currentState!.validate()) {
-                            return;
-                          }
-                          setDialogState(() => submitting = true);
-                          Navigator.of(context).pop(true);
-                        },
-                  child: Text(submitting ? '恢复中...' : '确认恢复'),
-                ),
-              ],
-            );
-          },
-        );
+      userService: _userService,
+      user: user,
+      roleLabel: _roleLabelForUser(user.roleCode, user.roleName),
+      stageLabel: _stageLabelForUser(user.stageId, user.stageName),
+      onError: (error) {
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+        } else if (mounted) {
+          setState(() => _message = '恢复用户失败：${_errorMessage(error)}');
+        }
+      },
+      onSuccess: (result) async {
+        if (mounted) {
+          setState(() {
+            if (_deletedScope == _deletedScopeDeleted) {
+              _users = _users
+                  .where((existing) => existing.id != user.id)
+                  .toList(growable: false);
+              _total = (_total > 0) ? _total - 1 : 0;
+            } else {
+              _users = _users
+                  .map((existing) =>
+                      existing.id == user.id ? result.user : existing)
+                  .toList(growable: false);
+            }
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(formatRestoreSuccessMessage(result))),
+          );
+        }
+        await _loadUsers(silent: true);
       },
     );
-    final remark = remarkController.text.trim();
-    if (confirmed != true) {
-      return;
-    }
-
-    try {
-      final result = await _userService.restoreUser(
-        userId: user.id,
-        remark: remark,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        if (_deletedScope == _deletedScopeDeleted) {
-          _users = _users
-              .where((existing) => existing.id != user.id)
-              .toList(growable: false);
-          _total = (_total > 0) ? _total - 1 : 0;
-        } else {
-          _users = _users
-              .map(
-                (existing) => existing.id == user.id ? result.user : existing,
-              )
-              .toList(growable: false);
-        }
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_formatRestoreSuccessMessage(result))),
-      );
-      await _loadUsers(silent: true);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      setState(() {
-        _message = '恢复用户失败：${_errorMessage(error)}';
-      });
-    }
   }
 
   Future<void> _toggleUserActive(UserItem user, {required bool active}) async {
@@ -1810,303 +678,31 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
       _showNoPermission();
       return;
     }
-    final actionLabel = active ? '启用' : '停用';
-    final remarkController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    var submitting = false;
-
-    final confirmed = await showLockedFormDialog<bool>(
+    await showToggleUserActiveDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final theme = Theme.of(context);
-            final roleLabel = _roleLabelForUser(user.roleCode, user.roleName);
-            final statusLabel = user.isActive ? '启用' : '停用';
-            final onlineLabel = user.isOnline ? '在线' : '离线';
-            final helperText = active
-                ? '启用后账号可重新登录，但不会自动恢复在线状态。'
-                : '停用后账号将无法继续登录，系统会强制下线该用户所有活跃会话。';
-            return AlertDialog(
-              title: Text('$actionLabel用户'),
-              content: SizedBox(
-                width: 420,
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '目标账号：${user.username}',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('当前角色：$roleLabel'),
-                      const SizedBox(height: 4),
-                      Text('当前账号状态：$statusLabel'),
-                      const SizedBox(height: 4),
-                      Text('当前在线状态：$onlineLabel'),
-                      const SizedBox(height: 12),
-                      Text(
-                        helperText,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: !active ? theme.colorScheme.error : null,
-                          fontWeight: !active
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: remarkController,
-                        enabled: !submitting,
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          labelText: active ? '备注（可选）' : '停用原因',
-                          hintText: active ? '可填写启用说明' : '请输入停用原因',
-                          border: const OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (!active &&
-                              (value == null || value.trim().isEmpty)) {
-                            return '请输入停用原因';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: submitting
-                      ? null
-                      : () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: submitting
-                      ? null
-                      : () {
-                          if (!formKey.currentState!.validate()) {
-                            return;
-                          }
-                          setDialogState(() => submitting = true);
-                          Navigator.of(context).pop(true);
-                        },
-                  child: Text(submitting ? '$actionLabel中...' : actionLabel),
-                ),
-              ],
-            );
-          },
-        );
+      userService: _userService,
+      user: user,
+      active: active,
+      roleLabel: _roleLabelForUser(user.roleCode, user.roleName),
+      myUserId: _myUserId,
+      onLogout: widget.onLogout,
+      onError: (error) {
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+        } else if (mounted) {
+          final actionLabel = active ? '启用' : '停用';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$actionLabel用户失败：${_errorMessage(error)}')),
+          );
+        }
+      },
+      onSuccess: (result) async {
+        await _loadUsers(silent: true);
       },
     );
-    final remark = remarkController.text.trim();
-    if (confirmed != true) {
-      return;
-    }
-
-    try {
-      late final UserLifecycleResult result;
-      if (active) {
-        result = await _userService.enableUser(
-          userId: user.id,
-          remark: remark.isEmpty ? null : remark,
-        );
-      } else {
-        result = await _userService.disableUser(
-          userId: user.id,
-          remark: remark,
-        );
-      }
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_formatLifecycleSuccessMessage(result, active: active)),
-        ),
-      );
-      final disabledCurrentUser = !active && result.user.id == _myUserId;
-      if (disabledCurrentUser) {
-        widget.onLogout();
-        return;
-      }
-      await _loadUsers(silent: true);
-    } catch (error) {
-      if (!mounted) return;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$actionLabel用户失败：${_errorMessage(error)}')),
-        );
-      }
-    }
   }
 
-  Future<void> _showResetPasswordDialog(UserItem user) async {
-    if (!widget.canResetPassword) {
-      _showNoPermission();
-      return;
-    }
-    final passwordController = TextEditingController();
-    final remarkController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    var submitting = false;
 
-    final confirmed = await showLockedFormDialog<bool>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final theme = Theme.of(context);
-            return AlertDialog(
-              title: Text('重置密码：${user.username}'),
-              content: SizedBox(
-                width: 460,
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '当前信息',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text('目标账号：${user.username}'),
-                      const SizedBox(height: 4),
-                      Text(
-                        '角色：${_roleLabelForUser(user.roleCode, user.roleName)}',
-                      ),
-                      const SizedBox(height: 4),
-                      Text('当前账号状态：${user.isActive ? '启用' : '停用'}'),
-                      const SizedBox(height: 4),
-                      Text('当前在线状态：${user.isOnline ? '在线' : '离线'}'),
-                      const SizedBox(height: 12),
-                      Text(
-                        '风险提示：旧密码会立即失效；当前在线会话将被强制下线；下次登录必须修改密码。',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: passwordController,
-                        enabled: !submitting,
-                        decoration: const InputDecoration(
-                          labelText: '新密码',
-                          helperText: '密码规则：至少6位；不能包含连续4位相同字符。',
-                          border: OutlineInputBorder(),
-                        ),
-                        obscureText: true,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) return '请输入新密码';
-                          if (value.length < 6) return '密码至少 6 个字符';
-                          if (RegExp(r'(.)\1\1\1').hasMatch(value)) {
-                            return '新密码不能包含连续4位相同字符';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: remarkController,
-                        enabled: !submitting,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: '重置原因',
-                          hintText: '请输入本次重置密码的原因',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入重置原因';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: submitting
-                      ? null
-                      : () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: submitting
-                      ? null
-                      : () async {
-                          if (!formKey.currentState!.validate()) return;
-                          setDialogState(() => submitting = true);
-                          try {
-                            final result = await _userService.resetUserPassword(
-                              userId: user.id,
-                              password: passwordController.text,
-                              remark: remarkController.text,
-                            );
-                            if (!context.mounted) {
-                              return;
-                            }
-                            Navigator.of(context).pop(true);
-                            if (!mounted) {
-                              return;
-                            }
-                            ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  _formatPasswordResetSuccessMessage(result),
-                                ),
-                              ),
-                            );
-                            await _loadUsers(silent: true);
-                          } catch (error) {
-                            if (!context.mounted) {
-                              return;
-                            }
-                            setDialogState(() => submitting = false);
-                            if (_isUnauthorized(error)) {
-                              widget.onLogout();
-                              return;
-                            }
-                            if (!mounted) {
-                              return;
-                            }
-                            ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(
-                                content: Text('重置密码失败：${_errorMessage(error)}'),
-                              ),
-                            );
-                          }
-                        },
-                  child: Text(submitting ? '重置中...' : '确认重置'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    if (confirmed == true) {
-      return;
-    }
-  }
 
   String? get _normalizedKeyword {
     final keyword = _keywordController.text.trim();
@@ -2213,7 +809,7 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return _UserExportTaskDialog(
+        return UserExportTaskDialog(
           userService: _userService,
           onLogout: widget.onLogout,
           highlightTaskId: highlightTaskId,
@@ -2223,116 +819,67 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
     );
   }
 
-  Future<void> _handleUserAction(_UserAction action, UserItem user) async {
-    if (action == _UserAction.resetPassword) {
-      await _showResetPasswordDialog(user);
+  Future<void> _handleUserAction(UserTableAction action, UserItem user) async {
+    if (action == UserTableAction.resetPassword) {
+      if (!widget.canResetPassword) {
+        _showNoPermission();
+        return;
+      }
+      await showUserResetPasswordDialog(
+        context: context,
+        user: user,
+        roleLabel: _roleLabelForUser(user.roleCode, user.roleName),
+        userService: _userService,
+        onLogout: widget.onLogout,
+        onSuccess: () => _loadUsers(silent: true),
+      );
       return;
     }
     switch (action) {
-      case _UserAction.edit:
-        await _showEditUserDialog(user);
+      case UserTableAction.edit:
+        if (!widget.canEditUser) {
+          _showNoPermission();
+          return;
+        }
+        await showUserEditDialog(
+          context: context,
+          userService: _userService,
+          user: user,
+          allRoles: _roles,
+          loadEnabledStages: _loadEnabledStagesForDialog,
+          runWithOnlineRefreshPaused: _runWithOnlineRefreshPaused,
+          assignableRoles: _assignableRoles,
+          isCurrentUserSystemAdmin: _isCurrentUserSystemAdmin,
+          roleLabelForUser: _roleLabelForUser,
+          stageLabelForUser: _stageLabelForUser,
+          formatDialogDateTime: _formatDialogDateTime,
+          onLogout: widget.onLogout,
+          onSuccess: () => _loadUsers(),
+        );
         return;
-      case _UserAction.disable:
+      case UserTableAction.disable:
         await _toggleUserActive(user, active: false);
         return;
-      case _UserAction.enable:
+      case UserTableAction.enable:
         await _toggleUserActive(user, active: true);
         return;
-      case _UserAction.resetPassword:
-        await _showResetPasswordDialog(user);
+      case UserTableAction.resetPassword:
+        await showUserResetPasswordDialog(
+          context: context,
+          user: user,
+          roleLabel: _roleLabelForUser(user.roleCode, user.roleName),
+          userService: _userService,
+          onLogout: widget.onLogout,
+          onSuccess: () => _loadUsers(silent: true),
+        );
         return;
-      case _UserAction.delete:
+      case UserTableAction.delete:
         await _confirmDeleteUser(user);
         return;
-      case _UserAction.restore:
+      case UserTableAction.restore:
         await _confirmRestoreUser(user);
         return;
     }
-  }
-
-  Widget _buildKeywordField() {
-    return TextField(
-      key: const ValueKey('userToolbarKeywordField'),
-      controller: _keywordController,
-      decoration: const InputDecoration(
-        labelText: '按账号搜索',
-        border: OutlineInputBorder(),
-      ),
-      onSubmitted: (_) => _loadUsers(page: 1),
-    );
-  }
-
-  Widget _buildRoleFilter() {
-    return DropdownButtonFormField<String?>(
-      key: const ValueKey('userToolbarRoleFilter'),
-      initialValue: _filterRoleCode,
-      decoration: const InputDecoration(
-        labelText: '用户角色',
-        border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      ),
-      isExpanded: true,
-      items: [
-        const DropdownMenuItem(value: null, child: Text('全部')),
-        ..._roles.map(
-          (role) => DropdownMenuItem(
-            value: role.code,
-            child: Text(role.name, overflow: TextOverflow.ellipsis),
-          ),
-        ),
-      ],
-      onChanged: (value) {
-        setState(() => _filterRoleCode = value);
-        _loadUsers(page: 1);
-      },
-    );
-  }
-
-  Widget _buildStatusFilter() {
-    return DropdownButtonFormField<bool?>(
-      key: const ValueKey('userToolbarStatusFilter'),
-      initialValue: _filterIsActive,
-      decoration: const InputDecoration(
-        labelText: '账号状态',
-        border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      ),
-      isExpanded: true,
-      items: const [
-        DropdownMenuItem(value: null, child: Text('全部')),
-        DropdownMenuItem(value: true, child: Text('启用')),
-        DropdownMenuItem(value: false, child: Text('停用')),
-      ],
-      onChanged: (value) {
-        setState(() => _filterIsActive = value);
-        _loadUsers(page: 1);
-      },
-    );
-  }
-
-  Widget _buildDeletedScopeFilter() {
-    return DropdownButtonFormField<String>(
-      key: const ValueKey('userToolbarDeletedScopeFilter'),
-      initialValue: _deletedScope,
-      decoration: const InputDecoration(
-        labelText: '数据范围',
-        border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      ),
-      isExpanded: true,
-      items: const [
-        DropdownMenuItem(value: _deletedScopeActive, child: Text('常规用户')),
-        DropdownMenuItem(value: _deletedScopeDeleted, child: Text('仅已删除')),
-        DropdownMenuItem(value: _deletedScopeAll, child: Text('全部用户')),
-      ],
-      onChanged: (value) {
-        if (value == null) {
-          return;
-        }
-        setState(() => _deletedScope = value);
-        _loadUsers(page: 1);
-      },
-    );
   }
 
   List<Widget> _buildToolbarButtons() {
@@ -2364,7 +911,15 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
       FilledButton.icon(
         onPressed: (_loading || !widget.canCreateUser)
             ? null
-            : _showCreateUserDialog,
+            : () => showUserCreateDialog(
+                  context: context,
+                  userService: _userService,
+                  assignableRoles: _assignableRoles(),
+                  allRoles: _roles,
+                  loadEnabledStages: _loadEnabledStagesForDialog,
+                  onLogout: widget.onLogout,
+                  onSuccess: () => _loadUsers(),
+                ),
         icon: const Icon(Icons.person_add),
         label: const Text('新建用户'),
       ),
@@ -2412,78 +967,6 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
     return buttons;
   }
 
-  Widget _buildToolbar() {
-    const spacing = 12.0;
-    const roleWidth = 150.0;
-    const statusWidth = 130.0;
-    const deletedScopeWidth = 150.0;
-    const desktopSearchMinWidth = 320.0;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final buttons = _buildToolbarButtons();
-        final roleFilter = SizedBox(
-          width: roleWidth,
-          child: _buildRoleFilter(),
-        );
-        final statusFilter = SizedBox(
-          width: statusWidth,
-          child: _buildStatusFilter(),
-        );
-        final deletedScopeFilter = SizedBox(
-          width: deletedScopeWidth,
-          child: _buildDeletedScopeFilter(),
-        );
-        final desktopToolbarMinWidth =
-            roleWidth +
-            statusWidth +
-            deletedScopeWidth +
-            desktopSearchMinWidth +
-            (buttons.length * 120) +
-            ((buttons.length + 4) * spacing);
-
-        if (constraints.maxWidth >= desktopToolbarMinWidth) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(child: _buildKeywordField()),
-              const SizedBox(width: spacing),
-              statusFilter,
-              const SizedBox(width: spacing),
-              roleFilter,
-              const SizedBox(width: spacing),
-              deletedScopeFilter,
-              const SizedBox(width: spacing),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Wrap(
-                  spacing: spacing,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  alignment: WrapAlignment.end,
-                  children: buttons,
-                ),
-              ),
-            ],
-          );
-        }
-
-        return Wrap(
-          spacing: spacing,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            SizedBox(width: 280, child: _buildKeywordField()),
-            statusFilter,
-            roleFilter,
-            deletedScopeFilter,
-            ...buttons,
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -2499,7 +982,27 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
             onRefresh: _loading ? null : _refreshUsersFromHeader,
           ),
           const SizedBox(height: 12),
-          _buildToolbar(),
+          UserFilterToolbar(
+            keywordController: _keywordController,
+            filterRoleCode: _filterRoleCode,
+            filterIsActive: _filterIsActive,
+            deletedScope: _deletedScope,
+            roles: _roles,
+            onFilterRoleCodeChanged: (value) {
+              setState(() => _filterRoleCode = value);
+              _loadUsers(page: 1);
+            },
+            onFilterIsActiveChanged: (value) {
+              setState(() => _filterIsActive = value);
+              _loadUsers(page: 1);
+            },
+            onFilterDeletedScopeChanged: (value) {
+              setState(() => _deletedScope = value);
+              _loadUsers(page: 1);
+            },
+            onSearch: () => _loadUsers(page: 1),
+            actions: _buildToolbarButtons(),
+          ),
           const SizedBox(height: 12),
           if (_message.isNotEmpty)
             Padding(
@@ -2512,133 +1015,17 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
               ),
             ),
           Expanded(
-            child: CrudListTableSection(
-              key: const ValueKey('userListSection'),
-              cardKey: const ValueKey('userListCard'),
+            child: UserDataTable(
+              users: _users,
               loading: _loading,
-              isEmpty: _users.isEmpty,
               emptyText: emptyListHint,
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columnSpacing: 16,
-                columns: [
-                  UnifiedListTableHeaderStyle.column(context, '账号'),
-                  UnifiedListTableHeaderStyle.column(context, '角色'),
-                  UnifiedListTableHeaderStyle.column(context, '工段'),
-                  UnifiedListTableHeaderStyle.column(context, '在线'),
-                  UnifiedListTableHeaderStyle.column(context, '状态'),
-                  UnifiedListTableHeaderStyle.column(context, '创建时间'),
-                  UnifiedListTableHeaderStyle.column(context, '操作'),
-                ],
-                rows: _users.map((user) {
-                  final statusLabel = user.isOnline ? '在线' : '离线';
-                  final statusColor = user.isOnline
-                      ? Colors.green
-                      : theme.colorScheme.outline;
-                  final activeLabel = user.isDeleted
-                      ? '已删除'
-                      : user.isActive
-                      ? '启用'
-                      : '停用';
-                  final activeColor = user.isDeleted
-                      ? theme.colorScheme.outline
-                      : user.isActive
-                      ? Colors.blue
-                      : Colors.red;
-                  final createdAtStr = user.createdAt != null
-                      ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
-                      : '-';
-                  return DataRow(
-                    color: user.isDeleted
-                        ? WidgetStatePropertyAll<Color?>(
-                            theme.colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.35),
-                          )
-                        : null,
-                    cells: [
-                      DataCell(Text(user.username)),
-                      DataCell(
-                        Text(
-                          user.roleName?.trim().isNotEmpty == true
-                              ? user.roleName!
-                              : '-',
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                          user.stageName?.trim().isNotEmpty == true
-                              ? user.stageName!
-                              : '/',
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                          statusLabel,
-                          style: TextStyle(
-                            color: statusColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                          activeLabel,
-                          style: TextStyle(
-                            color: activeColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      DataCell(Text(createdAtStr)),
-                      DataCell(
-                        UnifiedListTableHeaderStyle.actionMenuButton<
-                          _UserAction
-                        >(
-                          theme: theme,
-                          onSelected: (action) =>
-                              _handleUserAction(action, user),
-                          itemBuilder: (context) => [
-                            if (!user.isDeleted && widget.canEditUser)
-                              const PopupMenuItem(
-                                value: _UserAction.edit,
-                                child: Text('编辑'),
-                              ),
-                            if (!user.isDeleted &&
-                                widget.canToggleUser &&
-                                user.isActive)
-                              const PopupMenuItem(
-                                value: _UserAction.disable,
-                                child: Text('停用'),
-                              )
-                            else if (!user.isDeleted && widget.canToggleUser)
-                              const PopupMenuItem(
-                                value: _UserAction.enable,
-                                child: Text('启用'),
-                              ),
-                            if (!user.isDeleted && widget.canResetPassword)
-                              const PopupMenuItem(
-                                value: _UserAction.resetPassword,
-                                child: Text('重置密码'),
-                              ),
-                            if (!user.isDeleted &&
-                                widget.canDeleteUser &&
-                                !_isCurrentLoginUser(user))
-                              const PopupMenuItem(
-                                value: _UserAction.delete,
-                                child: Text('逻辑删除'),
-                              ),
-                            if (user.isDeleted && widget.canRestoreUser)
-                              const PopupMenuItem(
-                                value: _UserAction.restore,
-                                child: Text('恢复用户'),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
-              ),
+              canEditUser: widget.canEditUser,
+              canToggleUser: widget.canToggleUser,
+              canResetPassword: widget.canResetPassword,
+              canDeleteUser: widget.canDeleteUser,
+              canRestoreUser: widget.canRestoreUser,
+              myUserId: _myUserId,
+              onAction: _handleUserAction,
             ),
           ),
           const SizedBox(height: 12),
@@ -2657,374 +1044,3 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
   }
 }
 
-class _UserExportTaskDialog extends StatefulWidget {
-  const _UserExportTaskDialog({
-    required this.userService,
-    required this.onLogout,
-    required this.saveExportFile,
-    this.highlightTaskId,
-  });
-
-  final UserService userService;
-  final VoidCallback onLogout;
-  final Future<String?> Function({
-    required String filename,
-    required List<int> bytes,
-    required String mimeType,
-    required String format,
-  })
-  saveExportFile;
-  final int? highlightTaskId;
-
-  @override
-  State<_UserExportTaskDialog> createState() => _UserExportTaskDialogState();
-}
-
-class _UserExportTaskDialogState extends State<_UserExportTaskDialog> {
-  static const Duration _pollInterval = Duration(seconds: 3);
-
-  Timer? _pollTimer;
-  bool _loading = true;
-  String _error = '';
-  String _notice = '';
-  int? _downloadingTaskId;
-  List<UserExportTaskItem> _tasks = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTasks();
-  }
-
-  @override
-  void dispose() {
-    _pollTimer?.cancel();
-    super.dispose();
-  }
-
-  bool _isTaskPending(UserExportTaskItem task) =>
-      task.status == 'pending' || task.status == 'processing';
-
-  String _taskStatusLabel(String status) {
-    switch (status) {
-      case 'processing':
-        return '生成中';
-      case 'succeeded':
-        return '可下载';
-      case 'failed':
-        return '失败';
-      case 'expired':
-        return '已过期';
-      case 'pending':
-      default:
-        return '排队中';
-    }
-  }
-
-  String _deletedScopeLabel(String deletedScope) {
-    switch (deletedScope) {
-      case 'deleted':
-        return '仅已删除';
-      case 'all':
-        return '全部用户';
-      case 'active':
-      default:
-        return '常规用户';
-    }
-  }
-
-  Color _taskStatusColor(BuildContext context, String status) {
-    final scheme = Theme.of(context).colorScheme;
-    switch (status) {
-      case 'succeeded':
-        return Colors.green;
-      case 'failed':
-      case 'expired':
-        return scheme.error;
-      case 'processing':
-        return Colors.orange;
-      case 'pending':
-      default:
-        return scheme.primary;
-    }
-  }
-
-  String _formatTaskTime(DateTime? value) {
-    if (value == null) {
-      return '-';
-    }
-    final local = value.toLocal();
-    final date =
-        '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
-    final time =
-        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-    return '$date $time';
-  }
-
-  void _schedulePollingIfNeeded() {
-    _pollTimer?.cancel();
-    if (_tasks.any(_isTaskPending)) {
-      _pollTimer = Timer(_pollInterval, () => _loadTasks(silent: true));
-    }
-  }
-
-  Future<void> _loadTasks({bool silent = false}) async {
-    if (!silent && mounted) {
-      setState(() {
-        _loading = true;
-        _error = '';
-      });
-    }
-    try {
-      final result = await widget.userService.listUserExportTasks();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _tasks = result.items;
-        _loading = false;
-        _error = '';
-      });
-      _schedulePollingIfNeeded();
-    } catch (error) {
-      _pollTimer?.cancel();
-      if (!mounted) {
-        return;
-      }
-      if (error is ApiException && error.statusCode == 401) {
-        widget.onLogout();
-        Navigator.of(context).pop();
-        return;
-      }
-      setState(() {
-        _loading = false;
-        _error = '加载导出任务失败：$error';
-      });
-    }
-  }
-
-  Future<void> _downloadTask(UserExportTaskItem task) async {
-    setState(() => _downloadingTaskId = task.id);
-    try {
-      final download = await widget.userService.downloadUserExportTask(
-        taskId: task.id,
-      );
-      if (!mounted) {
-        return;
-      }
-      final savedPath = await widget.saveExportFile(
-        filename: download.filename,
-        bytes: download.bytes,
-        mimeType: download.mimeType,
-        format: task.format,
-      );
-      if (!mounted) {
-        return;
-      }
-      if (savedPath == null) {
-        setState(() => _notice = '已取消下载保存');
-        return;
-      }
-      setState(() => _notice = '已下载到 $savedPath');
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      if (error is ApiException && error.statusCode == 401) {
-        widget.onLogout();
-        Navigator.of(context).pop();
-        return;
-      }
-      setState(() => _notice = '下载失败：$error');
-    } finally {
-      if (mounted) {
-        setState(() => _downloadingTaskId = null);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      title: const Text('导出任务'),
-      content: SizedBox(
-        width: 920,
-        height: 460,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  '最近 20 条任务',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: _loading ? null : _loadTasks,
-                  icon: const Icon(Icons.refresh),
-                  tooltip: '刷新任务',
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_notice.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  _notice,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            if (_loading)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
-            else if (_error.isNotEmpty)
-              Expanded(
-                child: Center(
-                  child: Text(
-                    _error,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                ),
-              )
-            else if (_tasks.isEmpty)
-              const Expanded(child: Center(child: Text('暂无导出任务')))
-            else
-              Expanded(
-                child: ListView.separated(
-                  itemCount: _tasks.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final task = _tasks[index];
-                    final highlighted = widget.highlightTaskId == task.id;
-                    final statusColor = _taskStatusColor(context, task.status);
-                    return Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: highlighted
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.outlineVariant,
-                          width: highlighted ? 2 : 1,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                        color: highlighted
-                            ? theme.colorScheme.primaryContainer.withValues(
-                                alpha: 0.35,
-                              )
-                            : theme.colorScheme.surface,
-                      ),
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  task.fileName?.trim().isNotEmpty == true
-                                      ? task.fileName!
-                                      : '任务 ${task.taskCode}',
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                _taskStatusLabel(task.status),
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: statusColor,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 16,
-                            runSpacing: 6,
-                            children: [
-                              Text(
-                                '格式：${task.format == 'excel' ? 'Excel' : 'CSV'}',
-                              ),
-                              Text(
-                                '数据范围：${_deletedScopeLabel(task.deletedScope)}',
-                              ),
-                              Text('记录数：${task.recordCount}'),
-                              Text('导出时间：${_formatTaskTime(task.requestedAt)}'),
-                              Text('完成时间：${_formatTaskTime(task.finishedAt)}'),
-                            ],
-                          ),
-                          if (task.keyword != null &&
-                              task.keyword!.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text('关键词：${task.keyword}'),
-                          ],
-                          if (task.roleCode != null &&
-                              task.roleCode!.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text('角色筛选：${task.roleCode}'),
-                          ],
-                          if (task.isActive != null) ...[
-                            const SizedBox(height: 4),
-                            Text('账号状态筛选：${task.isActive! ? '启用' : '停用'}'),
-                          ],
-                          if (task.failureReason != null &&
-                              task.failureReason!.trim().isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              '失败原因：${task.failureReason}',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.error,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              if (task.status == 'succeeded')
-                                FilledButton.icon(
-                                  onPressed: _downloadingTaskId == task.id
-                                      ? null
-                                      : () => _downloadTask(task),
-                                  icon: const Icon(Icons.download),
-                                  label: Text(
-                                    _downloadingTaskId == task.id
-                                        ? '下载中...'
-                                        : '下载',
-                                  ),
-                                )
-                              else
-                                Text(
-                                  task.status == 'expired'
-                                      ? '文件已过期，请重新创建任务'
-                                      : '等待任务进入终态后可下载',
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
-        ),
-      ],
-    );
-  }
-}
