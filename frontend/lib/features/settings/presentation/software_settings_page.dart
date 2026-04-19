@@ -109,20 +109,29 @@ class _PageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final statusText = switch ((saveMessage, saveFailed)) {
-      (null, _) => '设置变更后会自动保存',
-      (_, false) => '已自动保存',
-      (_, true) => saveMessage ?? '保存失败，请稍后重试',
-    };
-    final statusColor = saveFailed
+    final hasMessage = saveMessage != null;
+    final isFailure = hasMessage && saveFailed;
+    final isSuccess = hasMessage && !saveFailed;
+    final statusText = isFailure
+        ? saveMessage ?? '保存失败，请稍后重试'
+        : isSuccess
+        ? saveMessage ?? '已自动保存'
+        : '尚未检测到新的设置变更';
+    final statusColor = isFailure
         ? colorScheme.errorContainer
-        : colorScheme.secondaryContainer;
-    final textColor = saveFailed
+        : isSuccess
+        ? colorScheme.secondaryContainer
+        : colorScheme.surfaceContainerHighest;
+    final textColor = isFailure
         ? colorScheme.onErrorContainer
-        : colorScheme.onSecondaryContainer;
-    final statusIcon = saveFailed
+        : isSuccess
+        ? colorScheme.onSecondaryContainer
+        : colorScheme.onSurfaceVariant;
+    final statusIcon = isFailure
         ? Icons.error_outline_rounded
-        : Icons.check_circle_outline_rounded;
+        : isSuccess
+        ? Icons.check_circle_outline_rounded
+        : Icons.info_outline_rounded;
 
     return Card(
       child: Padding(

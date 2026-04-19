@@ -7,11 +7,20 @@ import 'package:mes_client/features/settings/presentation/software_settings_page
 void main() {
   Future<void> pumpPage(
     WidgetTester tester,
-    SoftwareSettingsController controller,
+    SoftwareSettingsController controller, {
+    double? contentWidth,
+  }
   ) async {
+    Widget page = SoftwareSettingsPage(controller: controller);
+    if (contentWidth != null) {
+      page = Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(width: contentWidth, height: 900, child: page),
+      );
+    }
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: SoftwareSettingsPage(controller: controller)),
+        home: Scaffold(body: page),
       ),
     );
     await tester.pumpAndSettle();
@@ -42,13 +51,14 @@ void main() {
     expect(find.text('当前密度：紧凑'), findsOneWidget);
   });
 
-  testWidgets('恢复默认会清回默认值并展示自动保存提示', (tester) async {
+  testWidgets('恢复默认会清回默认值并展示真实成功提示', (tester) async {
     final controller = SoftwareSettingsController.memory(
       initialSettings: const SoftwareSettings(
         themePreference: AppThemePreference.dark,
         densityPreference: AppDensityPreference.compact,
         launchTargetPreference: AppLaunchTargetPreference.lastVisitedModule,
         sidebarPreference: AppSidebarPreference.collapsed,
+        lastVisitedPageCode: 'quality',
       ),
     );
 
@@ -57,6 +67,40 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.settings, const SoftwareSettings.defaults());
-    expect(find.text('已自动保存'), findsOneWidget);
+    expect(find.text('软件设置已恢复默认值'), findsOneWidget);
+    expect(find.text('已自动保存'), findsNothing);
+  });
+
+  testWidgets('切换到布局偏好后可修改启动入口与侧边栏状态', (tester) async {
+    final controller = SoftwareSettingsController.memory();
+
+    await pumpPage(tester, controller);
+    await tester.tap(find.text('布局偏好').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('启动后默认进入'), findsOneWidget);
+    expect(find.text('侧边栏默认状态'), findsOneWidget);
+
+    await tester.tap(find.text('上次停留模块'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('折叠'));
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.settings.launchTargetPreference,
+      AppLaunchTargetPreference.lastVisitedModule,
+    );
+    expect(controller.settings.sidebarPreference, AppSidebarPreference.collapsed);
+  });
+
+  testWidgets('窄屏下仍可切换到布局偏好并显示对应内容', (tester) async {
+    final controller = SoftwareSettingsController.memory();
+
+    await pumpPage(tester, controller, contentWidth: 600);
+    await tester.tap(find.text('布局偏好').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('启动后默认进入'), findsOneWidget);
+    expect(find.text('侧边栏默认状态'), findsOneWidget);
   });
 }
