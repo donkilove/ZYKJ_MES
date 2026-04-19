@@ -6,6 +6,8 @@ enum AppLaunchTargetPreference { home, lastVisitedModule }
 
 enum AppSidebarPreference { expanded, collapsed }
 
+const Object _unsetLastVisitedPageCode = Object();
+
 class SoftwareSettings {
   const SoftwareSettings({
     required this.themePreference,
@@ -33,7 +35,7 @@ class SoftwareSettings {
     AppDensityPreference? densityPreference,
     AppLaunchTargetPreference? launchTargetPreference,
     AppSidebarPreference? sidebarPreference,
-    String? lastVisitedPageCode,
+    Object? lastVisitedPageCode = _unsetLastVisitedPageCode,
   }) {
     return SoftwareSettings(
       themePreference: themePreference ?? this.themePreference,
@@ -41,7 +43,10 @@ class SoftwareSettings {
       launchTargetPreference:
           launchTargetPreference ?? this.launchTargetPreference,
       sidebarPreference: sidebarPreference ?? this.sidebarPreference,
-      lastVisitedPageCode: lastVisitedPageCode ?? this.lastVisitedPageCode,
+      lastVisitedPageCode:
+          identical(lastVisitedPageCode, _unsetLastVisitedPageCode)
+          ? this.lastVisitedPageCode
+          : lastVisitedPageCode as String?,
     );
   }
 
