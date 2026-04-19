@@ -98,6 +98,51 @@ class PerfUserSeedServiceUnitTest(unittest.TestCase):
         self.assertEqual(len(created_user.processes), 1)
         self.assertEqual(created_user.processes[0].code, "perf_product_testing_default")
 
+    def test_seed_perf_capacity_users_operator_pool_creates_fallback_stage_when_missing(
+        self,
+    ) -> None:
+        db = MagicMock()
+        operator_role = Role(code=ROLE_OPERATOR, name="操作员")
+        pool_specs = [
+            perf_user_seed_service.PerfUserPoolSpec(
+                pool_name="pool-operator",
+                role_code=ROLE_OPERATOR,
+                username_prefix="ltopr",
+                count=1,
+                requires_stage=True,
+            )
+        ]
+
+        with (
+            patch.object(
+                perf_user_seed_service,
+                "get_roles_by_codes",
+                return_value=([operator_role], []),
+            ),
+            patch.object(
+                perf_user_seed_service,
+                "get_user_by_username",
+                return_value=None,
+            ),
+        ):
+            db.execute.return_value = _FakeScalarResult([])
+            result = perf_user_seed_service.seed_perf_capacity_users(
+                db,
+                password="Admin@123456",
+                pool_specs=pool_specs,
+            )
+
+        self.assertEqual(result.created_count, 1)
+        created_stage = db.add.call_args_list[0].args[0]
+        created_process = db.add.call_args_list[1].args[0]
+        created_user = db.add.call_args_list[-1].args[0]
+        self.assertEqual(created_stage.code, "product_testing")
+        self.assertEqual(created_process.code, "perf_product_testing_default")
+        self.assertEqual(created_user.username, "ltopr1")
+        self.assertEqual(created_user.stage_id, created_stage.id)
+        self.assertEqual(len(created_user.processes), 1)
+        self.assertEqual(created_user.processes[0].code, "perf_product_testing_default")
+
     def test_seed_perf_capacity_users_creates_missing_users(self) -> None:
         db = MagicMock()
         production_role = Role(code=ROLE_PRODUCTION_ADMIN, name="生产管理员")

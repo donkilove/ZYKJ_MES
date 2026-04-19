@@ -239,7 +239,8 @@ def _load_operator_stage_and_processes(
         .first()
     )
     if stage is None:
-        raise ValueError("operator 压测池至少需要一个已启用的工序阶段")
+        # 当环境尚未初始化任何工序阶段时，复用性能回归兜底阶段，避免压测账号初始化直接失败。
+        return _ensure_perf_stage_processes(db)
     processes = (
         db.execute(
             select(Process)
@@ -252,6 +253,8 @@ def _load_operator_stage_and_processes(
         .scalars()
         .all()
     )
+    if not processes:
+        return _ensure_perf_stage_processes(db)
     return stage, list(processes)
 
 

@@ -629,6 +629,17 @@ async def _build_token_pools(
     return token_pools
 
 
+def _build_login_usernames_for_pool(spec: TokenPoolSpec) -> list[str]:
+    if not spec.login_user_prefix:
+        return []
+    # 登录场景只应使用当前池约定的账号数量，避免探测到不存在账号导致伪 401 噪声。
+    login_pool_size = max(1, spec.token_count or 1)
+    return [
+        f"{spec.login_user_prefix}{index + 1}"
+        for index in range(login_pool_size)
+    ]
+
+
 async def _request_scenario(
     *,
     client: httpx.AsyncClient,
@@ -779,12 +790,10 @@ async def _run_capacity_gate(args) -> dict[str, Any]:
 
     login_usernames_by_pool: dict[str, list[str]] = {}
     for name, spec in required_token_pool_specs.items():
-        if not spec.login_user_prefix:
+        login_usernames = _build_login_usernames_for_pool(spec)
+        if not login_usernames:
             continue
-        login_pool_size = max(args.session_pool_size, spec.token_count or 1)
-        login_usernames_by_pool[name] = [
-            f"{spec.login_user_prefix}{index + 1}" for index in range(login_pool_size)
-        ]
+        login_usernames_by_pool[name] = login_usernames
 
     measure_bucket = MetricBucket()
     scenario_bucket: dict[str, MetricBucket] = {

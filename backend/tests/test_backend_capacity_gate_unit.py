@@ -335,6 +335,18 @@ class BackendCapacityGateUnitTest(unittest.TestCase):
 
         self.assertEqual(list(filtered.keys()), ["pool-production"])
 
+    def test_build_login_usernames_for_pool_uses_token_count(self) -> None:
+        spec = backend_capacity_gate.TokenPoolSpec(
+            name="pool-admin",
+            login_user_prefix="ltadm",
+            password="Admin@123456",
+            token_count=2,
+        )
+
+        usernames = backend_capacity_gate._build_login_usernames_for_pool(spec)
+
+        self.assertEqual(usernames, ["ltadm1", "ltadm2"])
+
     def test_materialize_request_supports_sample_placeholders(self) -> None:
         scenario = backend_capacity_gate.ScenarioSpec(
             name="production-order-detail",
