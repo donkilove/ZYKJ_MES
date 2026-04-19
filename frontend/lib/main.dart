@@ -2,49 +2,93 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/misc/presentation/force_change_password_page.dart';
 import 'package:mes_client/features/misc/presentation/login_page.dart';
+import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
+import 'package:mes_client/features/settings/services/software_settings_service.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
-import 'package:mes_client/features/auth/services/auth_service.dart';
 
-void main() {
-  runApp(const MesClientApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final service = await SoftwareSettingsService.create();
+  final softwareSettingsController = SoftwareSettingsController(
+    service: service,
+  );
+  await softwareSettingsController.load();
+
+  runApp(MesClientApp(softwareSettingsController: softwareSettingsController));
 }
 
 class MesClientApp extends StatelessWidget {
-  const MesClientApp({super.key});
+  const MesClientApp({required this.softwareSettingsController, super.key});
+
+  final SoftwareSettingsController softwareSettingsController;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ZYKJ MES 系统',
-      debugShowCheckedModeBanner: false,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('zh', 'CN')],
-      locale: const Locale('zh', 'CN'),
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF006A67)),
-        useMaterial3: true,
-        fontFamily: 'Microsoft YaHei',
-        fontFamilyFallback: const [
-          '微软雅黑',
-          'Microsoft YaHei',
-          'PingFang SC',
-          'Noto Sans CJK SC',
-          'sans-serif',
-        ],
+    return ListenableBuilder(
+      listenable: softwareSettingsController,
+      builder: (context, child) {
+        return MaterialApp(
+          title: 'ZYKJ MES 系统',
+          debugShowCheckedModeBanner: false,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('zh', 'CN')],
+          locale: const Locale('zh', 'CN'),
+          theme: _buildTheme(
+            brightness: Brightness.light,
+            visualDensity: softwareSettingsController.visualDensity,
+          ),
+          darkTheme: _buildTheme(
+            brightness: Brightness.dark,
+            visualDensity: softwareSettingsController.visualDensity,
+          ),
+          themeMode: softwareSettingsController.themeMode,
+          home: AppBootstrapPage(
+            softwareSettingsController: softwareSettingsController,
+          ),
+        );
+      },
+    );
+  }
+
+  ThemeData _buildTheme({
+    required Brightness brightness,
+    required VisualDensity visualDensity,
+  }) {
+    return ThemeData(
+      brightness: brightness,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF006A67),
+        brightness: brightness,
       ),
-      home: const AppBootstrapPage(),
+      useMaterial3: true,
+      visualDensity: visualDensity,
+      fontFamily: 'Microsoft YaHei',
+      fontFamilyFallback: const [
+        '微软雅黑',
+        'Microsoft YaHei',
+        'PingFang SC',
+        'Noto Sans CJK SC',
+        'sans-serif',
+      ],
     );
   }
 }
 
 class AppBootstrapPage extends StatefulWidget {
-  const AppBootstrapPage({super.key});
+  const AppBootstrapPage({
+    required this.softwareSettingsController,
+    super.key,
+  });
+
+  final SoftwareSettingsController softwareSettingsController;
 
   @override
   State<AppBootstrapPage> createState() => _AppBootstrapPageState();
