@@ -1415,13 +1415,7 @@ class _MainShellPageState extends State<MainShellPage>
                   Expanded(
                     child: Container(
                       key: ValueKey('main-shell-content-$selectedMenuCode'),
-                      child: IndexedStack(
-                        index: safeSelectedIndex,
-
-                        children: _menus
-                            .map((menu) => _buildContent(menu.code))
-                            .toList(),
-                      ),
+                      child: _buildContent(selectedMenuCode),
                     ),
                   ),
                 ],
