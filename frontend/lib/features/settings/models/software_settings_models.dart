@@ -34,7 +34,6 @@ class SoftwareSettings {
     AppLaunchTargetPreference? launchTargetPreference,
     AppSidebarPreference? sidebarPreference,
     String? lastVisitedPageCode,
-    bool clearLastVisitedPageCode = false,
   }) {
     return SoftwareSettings(
       themePreference: themePreference ?? this.themePreference,
@@ -42,13 +41,9 @@ class SoftwareSettings {
       launchTargetPreference:
           launchTargetPreference ?? this.launchTargetPreference,
       sidebarPreference: sidebarPreference ?? this.sidebarPreference,
-      lastVisitedPageCode: clearLastVisitedPageCode
-          ? null
-          : lastVisitedPageCode ?? this.lastVisitedPageCode,
+      lastVisitedPageCode: lastVisitedPageCode ?? this.lastVisitedPageCode,
     );
   }
-
-  static const defaultsValue = SoftwareSettings.defaults();
 
   @override
   bool operator ==(Object other) {
