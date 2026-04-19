@@ -13,6 +13,8 @@ import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/message/services/message_ws_service.dart';
+import 'package:mes_client/features/settings/models/software_settings_models.dart';
+import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
@@ -397,6 +399,7 @@ Future<void> _pumpMainShellPage(
     VoidCallback? onVisibilityConfigSaved,
   })?
   userPageBuilder,
+  SoftwareSettingsController? softwareSettingsController,
   required VoidCallback onLogout,
 }) async {
   tester.view.physicalSize = const Size(1600, 1200);
@@ -411,6 +414,8 @@ Future<void> _pumpMainShellPage(
       home: MainShellPage(
         session: _session,
         onLogout: onLogout,
+        softwareSettingsController:
+            softwareSettingsController ?? SoftwareSettingsController.memory(),
         authService: authService,
         authzService: authzService,
         pageCatalogService: pageCatalogService,
@@ -425,6 +430,127 @@ Future<void> _pumpMainShellPage(
 }
 
 void main() {
+  testWidgets('点击软件设置入口后显示软件设置页面说明', (tester) async {
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      softwareSettingsController: SoftwareSettingsController.memory(),
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) => _FakeMessageWsService(
+            baseUrl: baseUrl,
+            accessToken: accessToken,
+            onEvent: onEvent,
+            onDisconnected: onDisconnected,
+          ),
+      onLogout: () {},
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('main-shell-entry-software-settings')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('控制本机软件的外观和布局偏好。'), findsOneWidget);
+  });
+
+  testWidgets('软件设置页展示启动后默认进入选项并可更新 controller', (tester) async {
+    final softwareSettingsController = SoftwareSettingsController.memory();
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      softwareSettingsController: softwareSettingsController,
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) => _FakeMessageWsService(
+            baseUrl: baseUrl,
+            accessToken: accessToken,
+            onEvent: onEvent,
+            onDisconnected: onDisconnected,
+          ),
+      onLogout: () {},
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('main-shell-entry-software-settings')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('启动后默认进入：首页'), findsOneWidget);
+    expect(find.text('启动后默认进入：上次停留模块'), findsOneWidget);
+    expect(
+      softwareSettingsController.settings.launchTargetPreference,
+      AppLaunchTargetPreference.home,
+    );
+
+    await tester.tap(find.text('启动后默认进入：上次停留模块'));
+    await tester.pumpAndSettle();
+
+    expect(
+      softwareSettingsController.settings.launchTargetPreference,
+      AppLaunchTargetPreference.lastVisitedModule,
+    );
+  });
+
+  testWidgets('软件设置打开期间首页不应视为可见，消息事件不触发工作台刷新', (tester) async {
+    _FakeMessageWsService? wsService;
+    final homeDashboardService = _CountingHomeDashboardService();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) {
+            wsService = _FakeMessageWsService(
+              baseUrl: baseUrl,
+              accessToken: accessToken,
+              onEvent: onEvent,
+              onDisconnected: onDisconnected,
+            );
+            return wsService!;
+          },
+      homeDashboardService: homeDashboardService,
+      onLogout: () {},
+    );
+
+    expect(homeDashboardService.loadCount, 1);
+
+    await tester.tap(
+      find.byKey(const ValueKey('main-shell-entry-software-settings')),
+    );
+    await tester.pumpAndSettle();
+
+    wsService!.emit(
+      const WsEvent(event: 'message_created', userId: 1, unreadCount: 3),
+    );
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(homeDashboardService.loadCount, 1);
+  });
+
   testWidgets('主壳页会把用户模块可见页签按目录顺序装配给用户页', (tester) async {
     await _pumpMainShellPage(
       tester,

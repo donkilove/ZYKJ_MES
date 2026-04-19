@@ -8,6 +8,8 @@ import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/message/services/message_ws_service.dart';
+import 'package:mes_client/features/settings/models/software_settings_models.dart';
+import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_controller.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page_registry.dart';
 import 'package:mes_client/features/shell/presentation/widgets/main_shell_scaffold.dart';
@@ -22,6 +24,7 @@ class MainShellPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    required this.softwareSettingsController,
     this.messageWsServiceFactory,
     this.authService,
     this.authzService,
@@ -38,6 +41,7 @@ class MainShellPage extends StatefulWidget {
 
   final AppSession session;
   final VoidCallback onLogout;
+  final SoftwareSettingsController softwareSettingsController;
   final MessageWsService Function({
     required String baseUrl,
     required String accessToken,
@@ -75,7 +79,8 @@ class _MainShellPageState extends State<MainShellPage>
     final authzService = widget.authzService ?? AuthzService(widget.session);
     final pageCatalogService =
         widget.pageCatalogService ?? PageCatalogService(widget.session);
-    final messageService = widget.messageService ?? MessageService(widget.session);
+    final messageService =
+        widget.messageService ?? MessageService(widget.session);
     final homeDashboardService =
         widget.homeDashboardService ?? HomeDashboardService(widget.session);
 
@@ -87,6 +92,7 @@ class _MainShellPageState extends State<MainShellPage>
       pageCatalogService: pageCatalogService,
       messageService: messageService,
       homeDashboardService: homeDashboardService,
+      softwareSettingsController: widget.softwareSettingsController,
       messageWsServiceFactory:
           widget.messageWsServiceFactory ??
           ({
@@ -163,22 +169,24 @@ class _MainShellPageState extends State<MainShellPage>
       state: _controller.state,
       onLogout: widget.onLogout,
       onRefreshShellData: _controller.refreshShellDataFromUi,
-      onNavigateToPageTarget: ({
-        required String pageCode,
-        String? tabCode,
-        String? routePayloadJson,
-      }) {
-        _navigateToPageTarget(
-          pageCode: pageCode,
-          tabCode: tabCode,
-          routePayloadJson: routePayloadJson,
-        );
-      },
+      onNavigateToPageTarget:
+          ({
+            required String pageCode,
+            String? tabCode,
+            String? routePayloadJson,
+          }) {
+            _navigateToPageTarget(
+              pageCode: pageCode,
+              tabCode: tabCode,
+              routePayloadJson: routePayloadJson,
+            );
+          },
       onVisibilityConfigSaved: () {
         unawaited(_controller.refreshVisibility(loadCatalog: false));
       },
       onUnreadCountChanged: _controller.updateUnreadCount,
       messageService: _controller.messageService,
+      softwareSettingsController: widget.softwareSettingsController,
       homeRefreshStatusText: _controller.homeRefreshStatusText(),
       userPageBuilder: widget.userPageBuilder,
       productPageBuilder: widget.productPageBuilder,
@@ -192,7 +200,10 @@ class _MainShellPageState extends State<MainShellPage>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _controller,
+      animation: Listenable.merge([
+        _controller,
+        widget.softwareSettingsController,
+      ]),
       builder: (context, _) {
         final state = _controller.state;
         if (state.loading) {
@@ -204,19 +215,26 @@ class _MainShellPageState extends State<MainShellPage>
         final showErrorPage =
             state.currentUser == null || state.authzSnapshot == null;
         final showNoAccessPage = !showErrorPage && state.menus.isEmpty;
-        final selectedMenuCode = state.menus
-            .where((item) => item.code == state.selectedPageCode)
-            .map((item) => item.code)
-            .firstOrNull ??
+        final selectedMenuCode =
+            state.menus
+                .where((item) => item.code == state.selectedPageCode)
+                .map((item) => item.code)
+                .firstOrNull ??
             (state.menus.isEmpty ? 'home' : state.menus.first.code);
+        final contentPageCode = state.activeUtilityCode ?? selectedMenuCode;
+        final sidebarCollapsed =
+            widget.softwareSettingsController.settings.sidebarPreference ==
+            AppSidebarPreference.collapsed;
 
         return MainShellScaffold(
           state: state,
           currentUserDisplayName: state.currentUser?.displayName ?? '',
           content: showErrorPage || showNoAccessPage
               ? const SizedBox.shrink()
-              : _buildContent(selectedMenuCode),
+              : _buildContent(contentPageCode),
           onSelectMenu: _controller.selectMenu,
+          onOpenSoftwareSettings: _controller.openSoftwareSettings,
+          sidebarCollapsed: sidebarCollapsed,
           onLogout: widget.onLogout,
           onRetry: () {
             unawaited(_handleRetry());

@@ -9,6 +9,8 @@ class MainShellScaffold extends StatelessWidget {
     required this.currentUserDisplayName,
     required this.content,
     required this.onSelectMenu,
+    required this.onOpenSoftwareSettings,
+    required this.sidebarCollapsed,
     required this.onLogout,
     required this.onRetry,
     required this.showNoAccessPage,
@@ -19,6 +21,8 @@ class MainShellScaffold extends StatelessWidget {
   final String currentUserDisplayName;
   final Widget content;
   final ValueChanged<String> onSelectMenu;
+  final VoidCallback onOpenSoftwareSettings;
+  final bool sidebarCollapsed;
   final VoidCallback onLogout;
   final VoidCallback onRetry;
   final bool showNoAccessPage;
@@ -34,17 +38,22 @@ class MainShellScaffold extends StatelessWidget {
     }
 
     final theme = Theme.of(context);
-    final selectedMenuCode = state.menus
-        .where((item) => item.code == state.selectedPageCode)
-        .map((item) => item.code)
-        .firstOrNull ??
+    final selectedMenuCode =
+        state.menus
+            .where((item) => item.code == state.selectedPageCode)
+            .map((item) => item.code)
+            .firstOrNull ??
         state.menus.first.code;
+    final contentPageCode = state.activeUtilityCode ?? selectedMenuCode;
+    final isSoftwareSettingsActive =
+        state.activeUtilityCode == softwareSettingsUtilityCode;
+    final hasActiveUtility = state.activeUtilityCode != null;
 
     return Scaffold(
       body: Row(
         children: [
           Container(
-            width: 240,
+            width: sidebarCollapsed ? 76 : 240,
             color: theme.colorScheme.surfaceContainerHighest,
             child: SafeArea(
               child: Column(
@@ -52,22 +61,27 @@ class MainShellScaffold extends StatelessWidget {
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ZYKJ MES',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
+                    child: sidebarCollapsed
+                        ? Icon(
+                            Icons.dashboard_customize_rounded,
+                            color: theme.colorScheme.primary,
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'ZYKJ MES',
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                currentUserDisplayName,
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          currentUserDisplayName,
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
                   ),
                   const Divider(height: 1),
                   Expanded(
@@ -75,7 +89,8 @@ class MainShellScaffold extends StatelessWidget {
                       itemCount: state.menus.length,
                       itemBuilder: (context, index) {
                         final menu = state.menus[index];
-                        final selected = menu.code == selectedMenuCode;
+                        final selected =
+                            !hasActiveUtility && menu.code == selectedMenuCode;
                         final isMessage = menu.code == 'message';
                         return ListTile(
                           key: ValueKey('main-shell-menu-${menu.code}'),
@@ -90,7 +105,7 @@ class MainShellScaffold extends StatelessWidget {
                                   child: Icon(menu.icon),
                                 )
                               : Icon(menu.icon),
-                          title: Text(menu.title),
+                          title: sidebarCollapsed ? null : Text(menu.title),
                           onTap: () => onSelectMenu(menu.code),
                         );
                       },
@@ -98,8 +113,15 @@ class MainShellScaffold extends StatelessWidget {
                   ),
                   const Divider(height: 1),
                   ListTile(
+                    key: const ValueKey('main-shell-entry-software-settings'),
+                    selected: isSoftwareSettingsActive,
+                    leading: const Icon(Icons.tune_rounded),
+                    title: sidebarCollapsed ? null : const Text('软件设置'),
+                    onTap: onOpenSoftwareSettings,
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.logout),
-                    title: const Text('退出登录'),
+                    title: sidebarCollapsed ? null : const Text('退出登录'),
                     onTap: onLogout,
                   ),
                   const SizedBox(height: 8),
@@ -127,7 +149,7 @@ class MainShellScaffold extends StatelessWidget {
                     ),
                   Expanded(
                     child: Container(
-                      key: ValueKey('main-shell-content-$selectedMenuCode'),
+                      key: ValueKey('main-shell-content-$contentPageCode'),
                       child: content,
                     ),
                   ),

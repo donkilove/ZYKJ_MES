@@ -15,7 +15,8 @@ typedef SoftwareSettingsServiceFactory =
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final softwareSettingsController = await bootstrapSoftwareSettingsController();
+  final softwareSettingsController =
+      await bootstrapSoftwareSettingsController();
 
   runApp(MesClientApp(softwareSettingsController: softwareSettingsController));
 }
@@ -95,10 +96,7 @@ class MesClientApp extends StatelessWidget {
 }
 
 class AppBootstrapPage extends StatefulWidget {
-  const AppBootstrapPage({
-    required this.softwareSettingsController,
-    super.key,
-  });
+  const AppBootstrapPage({required this.softwareSettingsController, super.key});
 
   final SoftwareSettingsController softwareSettingsController;
 
@@ -172,6 +170,10 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
       );
     }
 
-    return MainShellPage(session: _session!, onLogout: _handleLogout);
+    return MainShellPage(
+      session: _session!,
+      onLogout: _handleLogout,
+      softwareSettingsController: widget.softwareSettingsController,
+    );
   }
 }

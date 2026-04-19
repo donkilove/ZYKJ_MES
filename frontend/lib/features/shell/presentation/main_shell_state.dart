@@ -4,6 +4,8 @@ import 'package:mes_client/core/models/current_user.dart';
 import 'package:mes_client/core/models/page_catalog_models.dart';
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 
+const String softwareSettingsUtilityCode = 'software_settings';
+
 class MainShellMenuItem {
   const MainShellMenuItem({
     required this.code,
@@ -43,6 +45,7 @@ class MainShellViewState {
     this.tabCodesByParent = const {},
     this.menus = const [],
     this.selectedPageCode = 'home',
+    this.activeUtilityCode,
     this.unreadCount = 0,
     this.preferredTabCode,
     this.preferredRoutePayloadJson,
@@ -62,6 +65,7 @@ class MainShellViewState {
   final Map<String, List<String>> tabCodesByParent;
   final List<MainShellMenuItem> menus;
   final String selectedPageCode;
+  final String? activeUtilityCode;
   final int unreadCount;
   final String? preferredTabCode;
   final String? preferredRoutePayloadJson;
@@ -81,6 +85,7 @@ class MainShellViewState {
     Map<String, List<String>>? tabCodesByParent,
     List<MainShellMenuItem>? menus,
     String? selectedPageCode,
+    Object? activeUtilityCode = _mainShellUnset,
     int? unreadCount,
     Object? preferredTabCode = _mainShellUnset,
     Object? preferredRoutePayloadJson = _mainShellUnset,
@@ -104,17 +109,18 @@ class MainShellViewState {
       tabCodesByParent: tabCodesByParent ?? this.tabCodesByParent,
       menus: menus ?? this.menus,
       selectedPageCode: selectedPageCode ?? this.selectedPageCode,
+      activeUtilityCode: activeUtilityCode == _mainShellUnset
+          ? this.activeUtilityCode
+          : activeUtilityCode as String?,
       unreadCount: unreadCount ?? this.unreadCount,
       preferredTabCode: preferredTabCode == _mainShellUnset
           ? this.preferredTabCode
           : preferredTabCode as String?,
-      preferredRoutePayloadJson:
-          preferredRoutePayloadJson == _mainShellUnset
+      preferredRoutePayloadJson: preferredRoutePayloadJson == _mainShellUnset
           ? this.preferredRoutePayloadJson
           : preferredRoutePayloadJson as String?,
       manualRefreshing: manualRefreshing ?? this.manualRefreshing,
-      homeDashboardLoading:
-          homeDashboardLoading ?? this.homeDashboardLoading,
+      homeDashboardLoading: homeDashboardLoading ?? this.homeDashboardLoading,
       homeDashboardRefreshPending:
           homeDashboardRefreshPending ?? this.homeDashboardRefreshPending,
       lastManualRefreshAt: lastManualRefreshAt == _mainShellUnset

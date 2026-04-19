@@ -8,29 +8,33 @@ import 'package:mes_client/features/production/presentation/production_page.dart
 import 'package:mes_client/features/quality/presentation/quality_page.dart';
 import 'package:mes_client/features/craft/presentation/craft_page.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_page.dart';
+import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
+import 'package:mes_client/features/settings/presentation/software_settings_page.dart';
 import 'package:mes_client/features/shell/presentation/home_page.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_navigation.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_state.dart';
 import 'package:mes_client/features/user/presentation/user_page.dart';
 
-typedef MainShellUserPageBuilder = Widget Function({
-  required AppSession session,
-  required VoidCallback onLogout,
-  required List<String> visibleTabCodes,
-  required Set<String> capabilityCodes,
-  String? preferredTabCode,
-  String? routePayloadJson,
-  VoidCallback? onVisibilityConfigSaved,
-});
+typedef MainShellUserPageBuilder =
+    Widget Function({
+      required AppSession session,
+      required VoidCallback onLogout,
+      required List<String> visibleTabCodes,
+      required Set<String> capabilityCodes,
+      String? preferredTabCode,
+      String? routePayloadJson,
+      VoidCallback? onVisibilityConfigSaved,
+    });
 
-typedef MainShellModulePageBuilder = Widget Function({
-  required AppSession session,
-  required VoidCallback onLogout,
-  required List<String> visibleTabCodes,
-  required Set<String> capabilityCodes,
-  String? preferredTabCode,
-  String? routePayloadJson,
-});
+typedef MainShellModulePageBuilder =
+    Widget Function({
+      required AppSession session,
+      required VoidCallback onLogout,
+      required List<String> visibleTabCodes,
+      required Set<String> capabilityCodes,
+      String? preferredTabCode,
+      String? routePayloadJson,
+    });
 
 class MainShellPageRegistry {
   const MainShellPageRegistry();
@@ -45,9 +49,11 @@ class MainShellPageRegistry {
       required String pageCode,
       String? tabCode,
       String? routePayloadJson,
-    }) onNavigateToPageTarget,
+    })
+    onNavigateToPageTarget,
     required VoidCallback onVisibilityConfigSaved,
     required MessageService messageService,
+    required SoftwareSettingsController softwareSettingsController,
     String? homeRefreshStatusText,
     void Function(int count)? onUnreadCountChanged,
     MainShellUserPageBuilder? userPageBuilder,
@@ -235,6 +241,8 @@ class MainShellPageRegistry {
           },
           routePayloadJson: state.preferredRoutePayloadJson,
         );
+      case softwareSettingsUtilityCode:
+        return SoftwareSettingsPage(controller: softwareSettingsController);
       default:
         return Center(child: Text('页面暂未实现：$pageCode'));
     }

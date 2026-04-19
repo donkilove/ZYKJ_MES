@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
@@ -10,6 +12,8 @@ import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/message/services/message_ws_service.dart';
+import 'package:mes_client/features/settings/models/software_settings_models.dart';
+import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_navigation.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_refresh_coordinator.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_state.dart';
@@ -24,6 +28,7 @@ class MainShellController extends ChangeNotifier {
     required PageCatalogService pageCatalogService,
     required MessageService messageService,
     required HomeDashboardService homeDashboardService,
+    SoftwareSettingsController? softwareSettingsController,
     required MessageWsService Function({
       required String baseUrl,
       required String accessToken,
@@ -36,6 +41,8 @@ class MainShellController extends ChangeNotifier {
        _pageCatalogService = pageCatalogService,
        _messageService = messageService,
        _homeDashboardService = homeDashboardService,
+       _softwareSettingsController =
+           softwareSettingsController ?? SoftwareSettingsController.memory(),
        _messageWsServiceFactory = messageWsServiceFactory;
 
   final AppSession session;
@@ -45,6 +52,7 @@ class MainShellController extends ChangeNotifier {
   final PageCatalogService _pageCatalogService;
   final MessageService _messageService;
   final HomeDashboardService _homeDashboardService;
+  final SoftwareSettingsController _softwareSettingsController;
   final MessageWsService Function({
     required String baseUrl,
     required String accessToken,
@@ -116,7 +124,10 @@ class MainShellController extends ChangeNotifier {
 
     _setState(_state.copyWith(currentUser: currentUser));
 
-    await refreshVisibility(loadCatalog: true);
+    await refreshVisibility(
+      loadCatalog: true,
+      applyLaunchTargetPreference: true,
+    );
     await refreshHomeDashboard(silent: true);
     _setState(_state.copyWith(loading: false));
   }
@@ -124,6 +135,7 @@ class MainShellController extends ChangeNotifier {
   Future<void> refreshVisibility({
     bool loadCatalog = false,
     bool silent = false,
+    bool applyLaunchTargetPreference = false,
   }) async {
     var catalog = _state.catalog;
     var usedFallbackCatalog = false;
@@ -152,6 +164,7 @@ class MainShellController extends ChangeNotifier {
         iconForPage: _iconForPage,
       );
       var selectedPageCode = _state.selectedPageCode;
+      final rememberedPageCode = _rememberedLaunchPageCode(menus);
       String? preferredTabCode = _state.preferredTabCode;
       String? preferredRoutePayloadJson = _state.preferredRoutePayloadJson;
       var message = _state.message;
@@ -161,10 +174,22 @@ class MainShellController extends ChangeNotifier {
         preferredTabCode = null;
         preferredRoutePayloadJson = null;
       } else if (!menus.any((item) => item.code == selectedPageCode)) {
-        selectedPageCode = menus.first.code;
+        selectedPageCode = rememberedPageCode ?? menus.first.code;
         preferredTabCode = null;
         preferredRoutePayloadJson = null;
-        message = '当前页面权限已变更，已切换到${menus.first.title}';
+        final fallbackTitle = menus
+            .where((item) => item.code == selectedPageCode)
+            .map((item) => item.title)
+            .firstOrNull;
+        if (fallbackTitle != null) {
+          message = '当前页面权限已变更，已切换到$fallbackTitle';
+        }
+      } else if (applyLaunchTargetPreference &&
+          selectedPageCode == 'home' &&
+          rememberedPageCode != null) {
+        selectedPageCode = rememberedPageCode;
+        preferredTabCode = null;
+        preferredRoutePayloadJson = null;
       } else if (!silent) {
         message = '';
       }
@@ -191,11 +216,7 @@ class MainShellController extends ChangeNotifier {
         return;
       }
       if (!silent) {
-        _setState(
-          _state.copyWith(
-            message: '加载权限快照失败：${_errorMessage(error)}',
-          ),
-        );
+        _setState(_state.copyWith(message: '加载权限快照失败：${_errorMessage(error)}'));
       }
     }
   }
@@ -258,7 +279,9 @@ class MainShellController extends ChangeNotifier {
         baseUrl: session.baseUrl,
         accessToken: session.accessToken,
       );
-      final refreshVisibilityFuture = refreshVisibility(loadCatalog: loadCatalog);
+      final refreshVisibilityFuture = refreshVisibility(
+        loadCatalog: loadCatalog,
+      );
       final refreshUnreadFuture = refreshUnreadCount();
       final refreshDashboardFuture = refreshHomeDashboard(silent: true);
 
@@ -300,18 +323,39 @@ class MainShellController extends ChangeNotifier {
     _setState(
       _state.copyWith(
         selectedPageCode: result.pageCode,
+        activeUtilityCode: null,
         preferredTabCode: result.tabCode,
         preferredRoutePayloadJson: result.routePayloadJson,
       ),
     );
+    if (result.pageCode != 'home') {
+      unawaited(
+        _softwareSettingsController.rememberLastVisitedPageCode(
+          result.pageCode,
+        ),
+      );
+    }
     return true;
   }
 
   void selectMenu(String pageCode) {
-    if (_state.selectedPageCode == pageCode) {
+    if (_state.selectedPageCode == pageCode &&
+        _state.activeUtilityCode == null) {
+      return;
+    }
+    if (_state.activeUtilityCode != null &&
+        _state.selectedPageCode == pageCode) {
+      _setState(_state.copyWith(activeUtilityCode: null));
       return;
     }
     navigateToPageTarget(pageCode: pageCode);
+  }
+
+  void openSoftwareSettings() {
+    if (_state.activeUtilityCode == softwareSettingsUtilityCode) {
+      return;
+    }
+    _setState(_state.copyWith(activeUtilityCode: softwareSettingsUtilityCode));
   }
 
   String? homeRefreshStatusText() {
@@ -372,8 +416,23 @@ class MainShellController extends ChangeNotifier {
   }
 
   bool _isHomePageVisible() {
-    return _state.selectedPageCode == 'home' &&
+    return _state.activeUtilityCode == null &&
+        _state.selectedPageCode == 'home' &&
         _state.menus.any((item) => item.code == 'home');
+  }
+
+  String? _rememberedLaunchPageCode(List<MainShellMenuItem> menus) {
+    final settings = _softwareSettingsController.settings;
+    if (settings.launchTargetPreference !=
+        AppLaunchTargetPreference.lastVisitedModule) {
+      return null;
+    }
+    final rememberedPageCode = settings.lastVisitedPageCode;
+    if (rememberedPageCode == null || rememberedPageCode == 'home') {
+      return null;
+    }
+    final hasAccess = menus.any((item) => item.code == rememberedPageCode);
+    return hasAccess ? rememberedPageCode : null;
   }
 
   bool _isUnauthorized(Object error) {
