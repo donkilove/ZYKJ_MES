@@ -10,7 +10,7 @@ from passlib.context import CryptContext
 from app.core.config import ensure_runtime_settings_secure, settings
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=10)
 _PASSWORD_VERIFY_LOCAL_CACHE: dict[str, float] = {}
 _PASSWORD_VERIFY_LOCAL_CACHE_LOCK = RLock()
 _PASSWORD_VERIFY_CACHE_TTL_SECONDS = 60
@@ -40,6 +40,12 @@ def verify_password_cached(
         with _PASSWORD_VERIFY_LOCAL_CACHE_LOCK:
             _PASSWORD_VERIFY_LOCAL_CACHE[cache_key] = now_monotonic + max(1, ttl_seconds)
     return verified
+
+
+def rehash_password_if_needed(plain_password: str, hashed_password: str) -> str | None:
+    if not pwd_context.needs_update(hashed_password):
+        return None
+    return pwd_context.hash(plain_password)
 
 
 def get_password_hash(password: str) -> str:

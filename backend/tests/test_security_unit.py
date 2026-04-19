@@ -65,5 +65,20 @@ class SecurityUnitTest(unittest.TestCase):
                 security.create_access_token("7")
 
 
+    def test_rehash_password_if_needed_returns_new_hash_for_rounds12(self) -> None:
+        from passlib.context import CryptContext
+        old_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+        old_hash = old_ctx.hash("Pwd@123")
+        result = security.rehash_password_if_needed("Pwd@123", old_hash)
+        self.assertIsNotNone(result)
+        # 新哈希应可用当前 context 验证通过
+        self.assertTrue(security.pwd_context.verify("Pwd@123", result))
+
+    def test_rehash_password_if_needed_returns_none_for_current_rounds(self) -> None:
+        current_hash = security.pwd_context.hash("Pwd@123")
+        result = security.rehash_password_if_needed("Pwd@123", current_hash)
+        self.assertIsNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()
