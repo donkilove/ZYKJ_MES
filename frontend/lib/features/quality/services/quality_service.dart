@@ -70,7 +70,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/first-articles',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -94,7 +94,7 @@ class QualityService implements RepairScrapService {
 
   Future<FirstArticleDetail> _getFirstArticleDetail(String path) async {
     final uri = Uri.parse(path);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -137,7 +137,7 @@ class QualityService implements RepairScrapService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -168,7 +168,7 @@ class QualityService implements RepairScrapService {
         'recheck_result': recheckResult,
         'final_judgment': finalJudgment,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -204,7 +204,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/stats/products',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -247,7 +247,7 @@ class QualityService implements RepairScrapService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -288,7 +288,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/trend',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -330,7 +330,7 @@ class QualityService implements RepairScrapService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -375,7 +375,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/stats/overview',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -417,7 +417,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/stats/processes',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -464,7 +464,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/stats/operators',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -516,7 +516,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/scrap-statistics',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -560,7 +560,7 @@ class QualityService implements RepairScrapService {
     required int scrapId,
   }) async {
     final uri = Uri.parse('$_basePath/scrap-statistics/$scrapId');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -598,7 +598,7 @@ class QualityService implements RepairScrapService {
         'start_date': startDate == null ? null : _formatDate(startDate),
         'end_date': endDate == null ? null : _formatDate(endDate),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -638,7 +638,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/repair-orders',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -678,7 +678,7 @@ class QualityService implements RepairScrapService {
     required int repairOrderId,
   }) async {
     final uri = Uri.parse('$_basePath/repair-orders/$repairOrderId/detail');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -704,7 +704,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/repair-orders/$repairOrderId/phenomena-summary',
     );
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -720,7 +720,7 @@ class QualityService implements RepairScrapService {
   @override
   Future<ProductionOrderDetail> getOrderDetail({required int orderId}) async {
     final uri = Uri.parse('${session.baseUrl}/production/orders/$orderId');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -751,7 +751,7 @@ class QualityService implements RepairScrapService {
             .map((item) => item.toJson())
             .toList(),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -781,7 +781,7 @@ class QualityService implements RepairScrapService {
         'start_date': startDate == null ? null : _formatDate(startDate),
         'end_date': endDate == null ? null : _formatDate(endDate),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -849,7 +849,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '${session.baseUrl}/quality/defect-analysis',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -857,7 +857,7 @@ class QualityService implements RepairScrapService {
         response.statusCode,
       );
     }
-    return DefectAnalysisResult.fromJson(json['data'] as Map<String, dynamic>);
+    return DefectAnalysisResult.fromJson((json['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<QualityExportFile> exportDefectAnalysis({
@@ -888,7 +888,7 @@ class QualityService implements RepairScrapService {
     final uri = Uri.parse(
       '${session.baseUrl}/quality/defect-analysis/export',
     ).replace(queryParameters: query);
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(

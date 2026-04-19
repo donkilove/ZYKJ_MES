@@ -16,7 +16,7 @@ class AuthService {
       uri,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: {'username': username, 'password': password},
-    );
+    ).timeout(const Duration(seconds: 30));
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode != 200) {
@@ -45,7 +45,7 @@ class AuthService {
       uri,
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'account': account, 'password': password}),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -61,7 +61,7 @@ class AuthService {
     final response = await http.get(
       uri,
       headers: {'Content-Type': 'application/json'},
-    );
+    ).timeout(const Duration(seconds: 30));
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode != 200) {
@@ -91,7 +91,7 @@ class AuthService {
         'Authorization': 'Bearer $accessToken',
         'Content-Type': 'application/json',
       },
-    );
+    ).timeout(const Duration(seconds: 30));
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode != 200) {
@@ -119,7 +119,7 @@ class AuthService {
         'Authorization': 'Bearer $accessToken',
         'Content-Type': 'application/json',
       },
-    );
+    ).timeout(const Duration(seconds: 30));
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {

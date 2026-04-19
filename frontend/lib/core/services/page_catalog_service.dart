@@ -20,7 +20,7 @@ class PageCatalogService {
 
   Future<List<PageCatalogItem>> listPageCatalog() async {
     final uri = Uri.parse('${session.baseUrl}/ui/page-catalog');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -29,7 +29,7 @@ class PageCatalogService {
       );
     }
 
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items =
         (data['items'] as List<dynamic>? ?? const [])
             .map((entry) => PageCatalogItem.fromJson(entry as Map<String, dynamic>))

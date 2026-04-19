@@ -20,7 +20,7 @@ class HomeDashboardService {
 
   Future<HomeDashboardData> load() async {
     final uri = Uri.parse('${session.baseUrl}/ui/home-dashboard');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200) {
       final body = _tryDecodeBody(response);
       throw ApiException(

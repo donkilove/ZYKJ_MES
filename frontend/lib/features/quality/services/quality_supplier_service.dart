@@ -35,7 +35,7 @@ class QualitySupplierService {
     final uri = Uri.parse(
       _basePath,
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -55,7 +55,7 @@ class QualitySupplierService {
       Uri.parse(_basePath),
       headers: _authHeaders,
       body: jsonEncode(payload.toJson()),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw ApiException(
@@ -76,7 +76,7 @@ class QualitySupplierService {
       Uri.parse('$_basePath/$supplierId'),
       headers: _authHeaders,
       body: jsonEncode(payload.toJson()),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -93,7 +93,7 @@ class QualitySupplierService {
     final response = await http.delete(
       Uri.parse('$_basePath/$supplierId'),
       headers: _authHeaders,
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(

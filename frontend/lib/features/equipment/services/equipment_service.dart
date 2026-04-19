@@ -22,7 +22,7 @@ class EquipmentService {
 
   Future<List<EquipmentOwnerOption>> listAllOwners() async {
     final uri = Uri.parse('$_basePath/owners');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -30,7 +30,7 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -43,7 +43,7 @@ class EquipmentService {
     required int equipmentId,
   }) async {
     final uri = Uri.parse('$_basePath/ledger/$equipmentId/detail');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -51,14 +51,14 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    return EquipmentDetailResult.fromJson(json['data'] as Map<String, dynamic>);
+    return EquipmentDetailResult.fromJson((json['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<MaintenanceWorkOrderDetail> getWorkOrderDetail({
     required int workOrderId,
   }) async {
     final uri = Uri.parse('$_basePath/executions/$workOrderId/detail');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -67,13 +67,13 @@ class EquipmentService {
       );
     }
     return MaintenanceWorkOrderDetail.fromJson(
-      json['data'] as Map<String, dynamic>,
+      (json['data'] as Map<String, dynamic>?) ?? const {},
     );
   }
 
   Future<void> cancelExecution({required int workOrderId}) async {
     final uri = Uri.parse('$_basePath/executions/$workOrderId/cancel');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -87,7 +87,7 @@ class EquipmentService {
     required int recordId,
   }) async {
     final uri = Uri.parse('$_basePath/records/$recordId/detail');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -96,7 +96,7 @@ class EquipmentService {
       );
     }
     return MaintenanceRecordDetail.fromJson(
-      json['data'] as Map<String, dynamic>,
+      (json['data'] as Map<String, dynamic>?) ?? const {},
     );
   }
 
@@ -122,7 +122,7 @@ class EquipmentService {
       query['owner_name'] = ownerName.trim();
     }
     final uri = Uri.parse('$_basePath/ledger').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -130,7 +130,7 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -163,7 +163,7 @@ class EquipmentService {
         'owner_name': ownerName,
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -194,7 +194,7 @@ class EquipmentService {
         'owner_name': ownerName,
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -213,7 +213,7 @@ class EquipmentService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'enabled': enabled}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -229,7 +229,7 @@ class EquipmentService {
 
   Future<void> deleteEquipment({required int equipmentId}) async {
     final uri = Uri.parse('$_basePath/ledger/$equipmentId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -257,7 +257,7 @@ class EquipmentService {
       query['category'] = category.trim();
     }
     final uri = Uri.parse('$_basePath/items').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -265,7 +265,7 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -296,7 +296,7 @@ class EquipmentService {
         'default_duration_minutes': defaultDurationMinutes,
         'standard_description': standardDescription,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -325,7 +325,7 @@ class EquipmentService {
         'default_duration_minutes': defaultDurationMinutes,
         'standard_description': standardDescription,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -344,7 +344,7 @@ class EquipmentService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'enabled': enabled}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -360,7 +360,7 @@ class EquipmentService {
 
   Future<void> deleteMaintenanceItem({required int itemId}) async {
     final uri = Uri.parse('$_basePath/items/$itemId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -397,7 +397,7 @@ class EquipmentService {
       query['default_executor_user_id'] = '$defaultExecutorUserId';
     }
     final uri = Uri.parse('$_basePath/plans').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -405,7 +405,7 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -442,7 +442,7 @@ class EquipmentService {
         'default_executor_user_id': defaultExecutorUserId,
         'cycle_days': cycleDays,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -477,7 +477,7 @@ class EquipmentService {
         'default_executor_user_id': defaultExecutorUserId,
         'cycle_days': cycleDays,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -496,7 +496,7 @@ class EquipmentService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'enabled': enabled}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -508,7 +508,7 @@ class EquipmentService {
 
   Future<void> deleteMaintenancePlan({required int planId}) async {
     final uri = Uri.parse('$_basePath/plans/$planId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -522,7 +522,7 @@ class EquipmentService {
     required int planId,
   }) async {
     final uri = Uri.parse('$_basePath/plans/$planId/generate');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -530,7 +530,7 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return MaintenancePlanGenerateResult.fromJson(data);
   }
 
@@ -566,7 +566,7 @@ class EquipmentService {
     final uri = Uri.parse(
       '$_basePath/executions',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -574,7 +574,7 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -589,7 +589,7 @@ class EquipmentService {
 
   Future<void> startExecution({required int workOrderId}) async {
     final uri = Uri.parse('$_basePath/executions/$workOrderId/start');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -614,7 +614,7 @@ class EquipmentService {
         'result_remark': resultRemark,
         'attachment_link': attachmentLink,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -654,7 +654,7 @@ class EquipmentService {
       query['equipment_id'] = '$equipmentId';
     }
     final uri = Uri.parse('$_basePath/records').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -662,7 +662,7 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -719,7 +719,7 @@ class EquipmentService {
     if (keyword != null && keyword.isNotEmpty) query['keyword'] = keyword;
     if (isEnabled != null) query['is_enabled'] = '$isEnabled';
     final uri = Uri.parse('$_basePath/rules').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -727,11 +727,11 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
-    final items = (data['items'] as List)
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
+    final items = (data['items'] as List? ?? const [])
         .map((e) => EquipmentRuleItem.fromJson(e as Map<String, dynamic>))
         .toList();
-    return EquipmentRuleListResult(total: data['total'] as int, items: items);
+    return EquipmentRuleListResult(total: (data['total'] as int?) ?? 0, items: items);
   }
 
   Future<void> createEquipmentRule({
@@ -759,7 +759,7 @@ class EquipmentService {
           : _formatDateTimeIso(effectiveAt),
       'remark': remark,
     });
-    final response = await http.post(uri, headers: _authHeaders, body: body);
+    final response = await http.post(uri, headers: _authHeaders, body: body).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -795,7 +795,7 @@ class EquipmentService {
           : _formatDateTimeIso(effectiveAt),
       'remark': remark,
     });
-    final response = await http.put(uri, headers: _authHeaders, body: body);
+    final response = await http.put(uri, headers: _authHeaders, body: body).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -811,7 +811,7 @@ class EquipmentService {
   }) async {
     final uri = Uri.parse('$_basePath/rules/$ruleId/toggle');
     final body = jsonEncode({'enabled': isEnabled});
-    final response = await http.patch(uri, headers: _authHeaders, body: body);
+    final response = await http.patch(uri, headers: _authHeaders, body: body).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -823,7 +823,7 @@ class EquipmentService {
 
   Future<void> deleteEquipmentRule(int ruleId) async {
     final uri = Uri.parse('$_basePath/rules/$ruleId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -853,7 +853,7 @@ class EquipmentService {
     final uri = Uri.parse(
       '$_basePath/runtime-parameters',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -861,15 +861,15 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
-    final items = (data['items'] as List)
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
+    final items = (data['items'] as List? ?? const [])
         .map(
           (e) =>
               EquipmentRuntimeParameterItem.fromJson(e as Map<String, dynamic>),
         )
         .toList();
     return EquipmentRuntimeParameterListResult(
-      total: data['total'] as int,
+      total: (data['total'] as int?) ?? 0,
       items: items,
     );
   }
@@ -909,7 +909,7 @@ class EquipmentService {
       'is_enabled': isEnabled,
       'remark': remark,
     });
-    final response = await http.post(uri, headers: _authHeaders, body: body);
+    final response = await http.post(uri, headers: _authHeaders, body: body).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -955,7 +955,7 @@ class EquipmentService {
       'is_enabled': isEnabled,
       'remark': remark,
     });
-    final response = await http.put(uri, headers: _authHeaders, body: body);
+    final response = await http.put(uri, headers: _authHeaders, body: body).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -967,7 +967,7 @@ class EquipmentService {
 
   Future<void> deleteRuntimeParameter(int paramId) async {
     final uri = Uri.parse('$_basePath/runtime-parameters/$paramId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -986,7 +986,7 @@ class EquipmentService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'enabled': enabled}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(

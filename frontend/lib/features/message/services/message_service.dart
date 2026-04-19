@@ -20,19 +20,19 @@ class MessageService {
 
   Future<int> getUnreadCount() async {
     final uri = Uri.parse('$_base/unread-count');
-    final resp = await http.get(uri, headers: _headers);
+    final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 30));
     _checkStatus(resp);
     final body = jsonDecode(resp.body) as Map<String, dynamic>;
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return (data['unread_count'] as int?) ?? 0;
   }
 
   Future<MessageSummaryResult> getSummary() async {
     final uri = Uri.parse('$_base/summary');
-    final resp = await http.get(uri, headers: _headers);
+    final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 30));
     _checkStatus(resp);
     final body = jsonDecode(resp.body) as Map<String, dynamic>;
-    return MessageSummaryResult.fromJson(body['data'] as Map<String, dynamic>);
+    return MessageSummaryResult.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<MessageListResult> listMessages({
@@ -64,21 +64,21 @@ class MessageService {
       if (!activeOnly) 'active_only': 'false',
     };
     final uri = Uri.parse(_base).replace(queryParameters: params);
-    final resp = await http.get(uri, headers: _headers);
+    final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 30));
     _checkStatus(resp);
     final body = jsonDecode(resp.body) as Map<String, dynamic>;
-    return MessageListResult.fromJson(body['data'] as Map<String, dynamic>);
+    return MessageListResult.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<void> markRead(int messageId) async {
     final uri = Uri.parse('$_base/$messageId/read');
-    final resp = await http.post(uri, headers: _headers);
+    final resp = await http.post(uri, headers: _headers).timeout(const Duration(seconds: 30));
     _checkStatus(resp);
   }
 
   Future<void> markAllRead() async {
     final uri = Uri.parse('$_base/read-all');
-    final resp = await http.post(uri, headers: _headers);
+    final resp = await http.post(uri, headers: _headers).timeout(const Duration(seconds: 30));
     _checkStatus(resp);
   }
 
@@ -88,7 +88,7 @@ class MessageService {
       uri,
       headers: _headers,
       body: jsonEncode({'message_ids': messageIds}),
-    );
+    ).timeout(const Duration(seconds: 30));
     _checkStatus(resp);
     final body = jsonDecode(resp.body) as Map<String, dynamic>;
     final data = body['data'] as Map<String, dynamic>? ?? const {};
@@ -103,38 +103,38 @@ class MessageService {
       uri,
       headers: _headers,
       body: jsonEncode(request.toJson()),
-    );
+    ).timeout(const Duration(seconds: 30));
     _checkStatus(resp);
     final body = jsonDecode(resp.body) as Map<String, dynamic>;
     return AnnouncementPublishResult.fromJson(
-      body['data'] as Map<String, dynamic>,
+      (body['data'] as Map<String, dynamic>?) ?? const {},
     );
   }
 
   Future<MessageMaintenanceResult> runMaintenance() async {
     final uri = Uri.parse('$_base/maintenance/run');
-    final resp = await http.post(uri, headers: _headers);
+    final resp = await http.post(uri, headers: _headers).timeout(const Duration(seconds: 30));
     _checkStatus(resp);
     final body = jsonDecode(resp.body) as Map<String, dynamic>;
     return MessageMaintenanceResult.fromJson(
-      body['data'] as Map<String, dynamic>,
+      (body['data'] as Map<String, dynamic>?) ?? const {},
     );
   }
 
   Future<MessageDetailResult> getMessageDetail(int messageId) async {
     final uri = Uri.parse('$_base/$messageId');
-    final resp = await http.get(uri, headers: _headers);
+    final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 30));
     _checkStatus(resp);
     final body = jsonDecode(resp.body) as Map<String, dynamic>;
-    return MessageDetailResult.fromJson(body['data'] as Map<String, dynamic>);
+    return MessageDetailResult.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<MessageJumpResult> getMessageJumpTarget(int messageId) async {
     final uri = Uri.parse('$_base/$messageId/jump-target');
-    final resp = await http.get(uri, headers: _headers);
+    final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 30));
     _checkStatus(resp);
     final body = jsonDecode(resp.body) as Map<String, dynamic>;
-    return MessageJumpResult.fromJson(body['data'] as Map<String, dynamic>);
+    return MessageJumpResult.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   void _checkStatus(http.Response resp) {

@@ -34,7 +34,7 @@ class CraftService {
       query['enabled'] = '$enabled';
     }
     final uri = Uri.parse('$_basePath/stages').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -43,7 +43,7 @@ class CraftService {
       );
     }
 
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map((entry) => CraftStageItem.fromJson(entry as Map<String, dynamic>))
         .toList();
@@ -63,7 +63,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/stages/light',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -71,7 +71,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -100,7 +100,7 @@ class CraftService {
         'sort_order': sortOrder,
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -108,7 +108,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftStageItem.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftStageItem.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftStageItem> updateStage({
@@ -133,7 +133,7 @@ class CraftService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -141,12 +141,12 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftStageItem.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftStageItem.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<void> deleteStage({required int stageId}) async {
     final uri = Uri.parse('$_basePath/stages/$stageId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -170,7 +170,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/stages/detail',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -178,7 +178,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftStageItem.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftStageItem.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftProcessListResult> listProcesses({
@@ -201,7 +201,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/processes',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -210,7 +210,7 @@ class CraftService {
       );
     }
 
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) => CraftProcessItem.fromJson(entry as Map<String, dynamic>),
@@ -236,7 +236,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/processes/light',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -244,7 +244,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -273,7 +273,7 @@ class CraftService {
         'stage_id': stageId,
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -281,7 +281,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftProcessItem.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftProcessItem.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftProcessItem> updateProcess({
@@ -306,7 +306,7 @@ class CraftService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -314,12 +314,12 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftProcessItem.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftProcessItem.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<void> deleteProcess({required int processId}) async {
     final uri = Uri.parse('$_basePath/processes/$processId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -343,7 +343,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/processes/detail',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -351,7 +351,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftProcessItem.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftProcessItem.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftTemplateListResult> listTemplates({
@@ -394,7 +394,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/templates',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -403,7 +403,7 @@ class CraftService {
       );
     }
 
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) => CraftTemplateItem.fromJson(entry as Map<String, dynamic>),
@@ -417,7 +417,7 @@ class CraftService {
 
   Future<CraftSystemMasterTemplateItem?> getSystemMasterTemplate() async {
     final uri = Uri.parse('$_basePath/system-master-template');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -440,7 +440,7 @@ class CraftService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'steps': steps.map((item) => item.toJson()).toList()}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -461,7 +461,7 @@ class CraftService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'steps': steps.map((item) => item.toJson()).toList()}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -477,7 +477,7 @@ class CraftService {
   Future<CraftSystemMasterTemplateVersionListResult>
   listSystemMasterTemplateVersions() async {
     final uri = Uri.parse('$_basePath/system-master-template/versions');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -494,7 +494,7 @@ class CraftService {
     required int templateId,
   }) async {
     final uri = Uri.parse('$_basePath/templates/$templateId');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -502,7 +502,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftTemplateDetail.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftTemplateDetail> createTemplate({
@@ -523,7 +523,7 @@ class CraftService {
         'remark': remark,
         'steps': steps.map((item) => item.toJson()).toList(),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -531,7 +531,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftTemplateDetail.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftTemplateUpdateResult> updateTemplate({
@@ -558,7 +558,7 @@ class CraftService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -567,7 +567,7 @@ class CraftService {
       );
     }
     return CraftTemplateUpdateResult.fromJson(
-      body['data'] as Map<String, dynamic>,
+      (body['data'] as Map<String, dynamic>?) ?? const {},
     );
   }
 
@@ -582,7 +582,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/templates/$templateId/impact-analysis',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -615,7 +615,7 @@ class CraftService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -632,7 +632,7 @@ class CraftService {
     required int templateId,
   }) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/versions');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -665,7 +665,7 @@ class CraftService {
             'to_version': '$toVersion',
           },
         );
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -695,7 +695,7 @@ class CraftService {
         'confirmed': confirmed,
         'note': note,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -746,7 +746,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/templates/export',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -761,7 +761,7 @@ class CraftService {
 
   Future<String> exportTemplateDetail({required int templateId}) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/export');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -780,7 +780,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/templates/$templateId/versions/$version/export',
     );
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -804,7 +804,7 @@ class CraftService {
         'overwrite_existing': overwriteExisting,
         'items': items.map((item) => item.toJson()).toList(),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -819,7 +819,7 @@ class CraftService {
 
   Future<void> deleteTemplate({required int templateId}) async {
     final uri = Uri.parse('$_basePath/templates/$templateId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -838,7 +838,7 @@ class CraftService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'new_name': newName}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -846,7 +846,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftTemplateDetail.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftTemplateDetail> copyTemplateToProduct({
@@ -862,7 +862,7 @@ class CraftService {
         'target_product_id': targetProductId,
         'new_name': newName,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -870,7 +870,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftTemplateDetail.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftTemplateDetail> copySystemMasterToProduct({
@@ -882,7 +882,7 @@ class CraftService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'product_id': productId, 'new_name': newName}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -890,12 +890,12 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftTemplateDetail.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftTemplateDetail> enableTemplate({required int templateId}) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/enable');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -903,12 +903,12 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftTemplateDetail.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftTemplateDetail> disableTemplate({required int templateId}) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/disable');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -916,14 +916,14 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftTemplateDetail.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftTemplateDetail> createTemplateDraft({
     required int templateId,
   }) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/draft');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -931,12 +931,12 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftTemplateDetail.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftTemplateDetail> archiveTemplate({required int templateId}) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/archive');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -944,14 +944,14 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftTemplateDetail.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftTemplateDetail> unarchiveTemplate({
     required int templateId,
   }) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/unarchive');
-    final response = await http.post(uri, headers: _authHeaders);
+    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -959,7 +959,7 @@ class CraftService {
         response.statusCode,
       );
     }
-    return CraftTemplateDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return CraftTemplateDetail.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<CraftKanbanProcessMetricsResult> getCraftKanbanProcessMetrics({
@@ -989,7 +989,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/kanban/process-metrics',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1029,7 +1029,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/kanban/process-metrics/export',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1045,7 +1045,7 @@ class CraftService {
     required int stageId,
   }) async {
     final uri = Uri.parse('$_basePath/stages/$stageId/references');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1062,7 +1062,7 @@ class CraftService {
     required int processId,
   }) async {
     final uri = Uri.parse('$_basePath/processes/$processId/references');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1079,7 +1079,7 @@ class CraftService {
     required int templateId,
   }) async {
     final uri = Uri.parse('$_basePath/templates/$templateId/references');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1096,7 +1096,7 @@ class CraftService {
     required int productId,
   }) async {
     final uri = Uri.parse('$_basePath/products/$productId/template-references');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1120,7 +1120,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/stages/export',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1150,7 +1150,7 @@ class CraftService {
     final uri = Uri.parse(
       '$_basePath/processes/export',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(

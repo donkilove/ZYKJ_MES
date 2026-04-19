@@ -22,7 +22,7 @@ class AuthzService {
 
   Future<AuthzSnapshotResult> loadAuthzSnapshot() async {
     final uri = Uri.parse('$_basePath/snapshot');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -30,7 +30,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return AuthzSnapshotResult.fromJson(data);
   }
 
@@ -42,7 +42,7 @@ class AuthzService {
     final uri = Uri.parse(
       '$_basePath/permissions/me',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -50,7 +50,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return (data['permission_codes'] as List<dynamic>? ?? const [])
         .cast<String>();
   }
@@ -65,7 +65,7 @@ class AuthzService {
     final uri = Uri.parse(
       '$_basePath/permissions/catalog',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -73,7 +73,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -89,7 +89,7 @@ class AuthzService {
     final uri = Uri.parse(
       '$_basePath/role-permissions',
     ).replace(queryParameters: {'role_code': roleCode, 'module': moduleCode});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -97,7 +97,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return RolePermissionResult.fromJson(data);
   }
 
@@ -116,7 +116,7 @@ class AuthzService {
         'granted_permission_codes': grantedPermissionCodes,
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -124,7 +124,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return RolePermissionUpdateResult.fromJson(data);
   }
 
@@ -134,7 +134,7 @@ class AuthzService {
     final uri = Uri.parse(
       '$_basePath/role-permissions/matrix',
     ).replace(queryParameters: {'module': moduleCode});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -142,7 +142,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return RolePermissionMatrixResult.fromJson(data);
   }
 
@@ -171,7 +171,7 @@ class AuthzService {
             .toList(),
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -179,7 +179,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return RolePermissionMatrixUpdateResult.fromJson(data);
   }
 
@@ -189,7 +189,7 @@ class AuthzService {
     final uri = Uri.parse(
       '$_basePath/hierarchy/catalog',
     ).replace(queryParameters: {'module': moduleCode});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -197,7 +197,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return PermissionHierarchyCatalogResult.fromJson(data);
   }
 
@@ -209,7 +209,7 @@ class AuthzService {
     final uri = Uri.parse(
       '$_basePath/hierarchy/role-config',
     ).replace(queryParameters: {'role_code': roleCode, 'module': moduleCode});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -217,7 +217,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return PermissionHierarchyRoleConfigResult.fromJson(data);
   }
 
@@ -243,7 +243,7 @@ class AuthzService {
         'dry_run': dryRun,
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -251,7 +251,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return PermissionHierarchyRoleUpdateResult.fromJson(data);
   }
 
@@ -267,7 +267,7 @@ class AuthzService {
         'module_code': moduleCode,
         'role_items': roleItems.map((item) => item.toJson()).toList(),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -275,7 +275,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return PermissionHierarchyPreviewResult.fromJson(data);
   }
 
@@ -285,7 +285,7 @@ class AuthzService {
     final uri = Uri.parse(
       '$_basePath/capability-packs/catalog',
     ).replace(queryParameters: {'module': moduleCode});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -293,7 +293,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return CapabilityPackCatalogResult.fromJson(data);
   }
 
@@ -304,7 +304,7 @@ class AuthzService {
     final uri = Uri.parse(
       '$_basePath/capability-packs/role-config',
     ).replace(queryParameters: {'role_code': roleCode, 'module': moduleCode});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -312,7 +312,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return CapabilityPackRoleConfigResult.fromJson(data);
   }
 
@@ -335,7 +335,7 @@ class AuthzService {
         'dry_run': dryRun,
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -343,7 +343,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return CapabilityPackRoleUpdateResult.fromJson(data);
   }
 
@@ -363,7 +363,7 @@ class AuthzService {
         'expected_revision': expectedRevision,
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -371,7 +371,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return CapabilityPackPreviewResult.fromJson(data);
   }
 
@@ -382,7 +382,7 @@ class AuthzService {
     final uri = Uri.parse(
       '$_basePath/capability-packs/effective',
     ).replace(queryParameters: {'role_code': roleCode, 'module': moduleCode});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -390,7 +390,7 @@ class AuthzService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return PermissionExplainResult.fromJson(data);
   }
 

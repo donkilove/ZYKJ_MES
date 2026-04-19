@@ -55,7 +55,7 @@ class ProductionService implements RepairScrapService {
     final dueDateToText = _formatDateOrNull(dueDateTo);
     if (dueDateToText != null) query['due_date_to'] = dueDateToText;
     final uri = Uri.parse('$_basePath/orders').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -64,7 +64,7 @@ class ProductionService implements RepairScrapService {
       );
     }
 
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -121,7 +121,7 @@ class ProductionService implements RepairScrapService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -129,7 +129,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    return body['data'] as Map<String, dynamic>;
+    return (body['data'] as Map<String, dynamic>?) ?? const {};
   }
 
   Future<ProductionEventLogListResult> searchOrderEvents({
@@ -157,7 +157,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/order-events/search',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -165,7 +165,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -212,7 +212,7 @@ class ProductionService implements RepairScrapService {
         'due_date': _formatDateOrNull(dueDate),
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -220,7 +220,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionOrderItem.fromJson(data);
   }
 
@@ -257,7 +257,7 @@ class ProductionService implements RepairScrapService {
         'due_date': _formatDateOrNull(dueDate),
         'remark': remark,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -265,13 +265,13 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionOrderItem.fromJson(data);
   }
 
   Future<void> deleteOrder({required int orderId}) async {
     final uri = Uri.parse('$_basePath/orders/$orderId');
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -290,7 +290,7 @@ class ProductionService implements RepairScrapService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'password': password}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -298,14 +298,14 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionActionResult.fromJson(data);
   }
 
   @override
   Future<ProductionOrderDetail> getOrderDetail({required int orderId}) async {
     final uri = Uri.parse('$_basePath/orders/$orderId');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -313,7 +313,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionOrderDetail.fromJson(data);
   }
 
@@ -321,7 +321,7 @@ class ProductionService implements RepairScrapService {
     required int orderId,
   }) async {
     final uri = Uri.parse('$_basePath/orders/$orderId/pipeline-mode');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -329,7 +329,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return OrderPipelineModeItem.fromJson(data);
   }
 
@@ -343,7 +343,7 @@ class ProductionService implements RepairScrapService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'enabled': enabled, 'process_codes': processCodes}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -351,7 +351,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return OrderPipelineModeItem.fromJson(data);
   }
 
@@ -389,7 +389,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/my-orders',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -397,7 +397,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map((entry) => MyOrderItem.fromJson(entry as Map<String, dynamic>))
         .toList();
@@ -423,7 +423,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/my-orders/$orderId/context',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -431,7 +431,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return MyOrderContextResult.fromJson(data);
   }
 
@@ -462,7 +462,7 @@ class ProductionService implements RepairScrapService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -470,7 +470,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionExportResult.fromJson(data);
   }
 
@@ -481,7 +481,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/orders/$orderId/first-article/templates',
     ).replace(queryParameters: {'order_process_id': '$orderProcessId'});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -489,7 +489,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -507,7 +507,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/orders/$orderId/first-article/participant-users',
     );
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -515,7 +515,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) => FirstArticleParticipantOptionItem.fromJson(
@@ -536,7 +536,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/orders/$orderId/first-article/parameters',
     ).replace(queryParameters: {'order_process_id': '$orderProcessId'});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -544,7 +544,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return FirstArticleParameterListResult.fromJson(data);
   }
 
@@ -557,7 +557,7 @@ class ProductionService implements RepairScrapService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(request.toJson()),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -565,7 +565,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionActionResult.fromJson(data);
   }
 
@@ -594,7 +594,7 @@ class ProductionService implements RepairScrapService {
             .map((item) => item.toJson())
             .toList(),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -602,13 +602,13 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionActionResult.fromJson(data);
   }
 
   Future<ProductionStatsOverview> getOverviewStats() async {
     final uri = Uri.parse('$_basePath/stats/overview');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -616,13 +616,13 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionStatsOverview.fromJson(data);
   }
 
   Future<List<ProductionProcessStatItem>> getProcessStats() async {
     final uri = Uri.parse('$_basePath/stats/processes');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -630,7 +630,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -641,7 +641,7 @@ class ProductionService implements RepairScrapService {
 
   Future<List<ProductionOperatorStatItem>> getOperatorStats() async {
     final uri = Uri.parse('$_basePath/stats/operators');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -649,7 +649,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) => ProductionOperatorStatItem.fromJson(
@@ -679,7 +679,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/data/today-realtime',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -687,7 +687,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionTodayRealtimeResult.fromJson(data);
   }
 
@@ -707,7 +707,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/data/unfinished-progress',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -715,7 +715,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionUnfinishedProgressResult.fromJson(data);
   }
 
@@ -749,7 +749,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/data/manual',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -757,7 +757,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionManualQueryResult.fromJson(data);
   }
 
@@ -785,7 +785,7 @@ class ProductionService implements RepairScrapService {
         'operator_user_ids': operatorUserIds ?? const <int>[],
         'order_status': orderStatus,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -793,7 +793,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionManualExportResult.fromJson(data);
   }
 
@@ -833,7 +833,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/scrap-statistics',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -841,7 +841,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -875,7 +875,7 @@ class ProductionService implements RepairScrapService {
         'start_date': _formatDateOrNull(startDate),
         'end_date': _formatDateOrNull(endDate),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -883,7 +883,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionExportResult.fromJson(data);
   }
 
@@ -892,7 +892,7 @@ class ProductionService implements RepairScrapService {
     required int scrapId,
   }) async {
     final uri = Uri.parse('$_basePath/scrap-statistics/$scrapId');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -900,7 +900,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ScrapStatisticsItem.fromJson(data);
   }
 
@@ -909,7 +909,7 @@ class ProductionService implements RepairScrapService {
     required int repairOrderId,
   }) async {
     final uri = Uri.parse('$_basePath/repair-orders/$repairOrderId/detail');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -917,7 +917,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return RepairOrderDetailItem.fromJson(data);
   }
 
@@ -949,7 +949,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/repair-orders',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -957,7 +957,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map((entry) => RepairOrderItem.fromJson(entry as Map<String, dynamic>))
         .toList();
@@ -982,7 +982,7 @@ class ProductionService implements RepairScrapService {
         'production_quantity': productionQuantity,
         'defect_items': defectItems.map((item) => item.toJson()).toList(),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -990,7 +990,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return RepairOrderItem.fromJson(data);
   }
 
@@ -1001,7 +1001,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/repair-orders/$repairOrderId/phenomena-summary',
     );
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1009,7 +1009,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return RepairOrderPhenomenaSummaryResult.fromJson(data);
   }
 
@@ -1031,7 +1031,7 @@ class ProductionService implements RepairScrapService {
             .map((item) => item.toJson())
             .toList(),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1039,7 +1039,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return RepairOrderItem.fromJson(data);
   }
 
@@ -1060,7 +1060,7 @@ class ProductionService implements RepairScrapService {
         'start_date': _formatDateOrNull(startDate),
         'end_date': _formatDateOrNull(endDate),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1068,7 +1068,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return ProductionExportResult.fromJson(data);
   }
 
@@ -1076,7 +1076,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '${session.baseUrl}/products',
     ).replace(queryParameters: {'page': '1', 'page_size': '200'});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1084,7 +1084,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -1097,7 +1097,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '${session.baseUrl}/processes',
     ).replace(queryParameters: {'page': '1', 'page_size': '200'});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1105,7 +1105,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -1151,7 +1151,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/assist-authorizations',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1159,7 +1159,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -1189,7 +1189,7 @@ class ProductionService implements RepairScrapService {
         'helper_user_id': helperUserId,
         'reason': reason,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -1197,7 +1197,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     return AssistAuthorizationItem.fromJson(data);
   }
 
@@ -1224,7 +1224,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/assist-user-options',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1232,7 +1232,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>
@@ -1276,7 +1276,7 @@ class ProductionService implements RepairScrapService {
     final uri = Uri.parse(
       '$_basePath/pipeline-instances',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -1284,7 +1284,7 @@ class ProductionService implements RepairScrapService {
         response.statusCode,
       );
     }
-    final data = body['data'] as Map<String, dynamic>;
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) =>

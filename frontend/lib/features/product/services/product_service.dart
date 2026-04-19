@@ -66,7 +66,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -75,7 +75,7 @@ class ProductService {
       );
     }
 
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map((entry) => ProductItem.fromJson(entry as Map<String, dynamic>))
         .toList();
@@ -111,7 +111,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products/parameter-query',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -120,7 +120,7 @@ class ProductService {
       );
     }
 
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map((entry) => ProductItem.fromJson(entry as Map<String, dynamic>))
         .toList();
@@ -141,7 +141,7 @@ class ProductService {
         'category': category.trim(),
         'remark': remark.trim(),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -153,7 +153,7 @@ class ProductService {
 
   Future<ProductItem> getProduct({required int productId}) async {
     final uri = Uri.parse('${session.baseUrl}/products/$productId');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -161,13 +161,13 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductItem.fromJson(data);
   }
 
   Future<ProductDetailResult> getProductDetail({required int productId}) async {
     final uri = Uri.parse('${session.baseUrl}/products/$productId/detail');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -175,7 +175,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductDetailResult.fromJson(data);
   }
 
@@ -194,7 +194,7 @@ class ProductService {
         'category': category.trim(),
         'remark': remark.trim(),
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -202,7 +202,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductItem.fromJson(data);
   }
 
@@ -215,7 +215,7 @@ class ProductService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'password': password}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -286,7 +286,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products/parameter-versions',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -294,7 +294,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) => ProductParameterVersionListItem.fromJson(
@@ -315,7 +315,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products/$productId/versions/$version/parameters',
     );
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -323,7 +323,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductParameterListResult.fromJson(data);
   }
 
@@ -333,7 +333,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products/$productId/effective-parameters',
     );
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -341,7 +341,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductParameterListResult.fromJson(data);
   }
 
@@ -363,7 +363,7 @@ class ProductService {
         'items': items.map((entry) => entry.toJson()).toList(),
         'confirmed': confirmed,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -371,7 +371,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductParameterUpdateResult.fromJson(data);
   }
 
@@ -386,7 +386,7 @@ class ProductService {
           ? '${session.baseUrl}/products/$productId/versions/$version/parameter-history'
           : '${session.baseUrl}/products/$productId/parameter-history',
     ).replace(queryParameters: {'page': '$page', 'page_size': '$pageSize'});
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -394,7 +394,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) => ProductParameterHistoryItem.fromJson(
@@ -420,7 +420,7 @@ class ProductService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload.toJson()),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -428,7 +428,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductItem.fromJson(data);
   }
 
@@ -448,7 +448,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products/$productId/impact-analysis',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -456,7 +456,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductImpactAnalysisResult.fromJson(data);
   }
 
@@ -464,7 +464,7 @@ class ProductService {
     required int productId,
   }) async {
     final uri = Uri.parse('${session.baseUrl}/products/$productId/versions');
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -472,7 +472,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     final items = (data['items'] as List<dynamic>? ?? const [])
         .map(
           (entry) => ProductVersionItem.fromJson(entry as Map<String, dynamic>),
@@ -488,7 +488,7 @@ class ProductService {
     required int productId,
   }) async {
     final uri = Uri.parse('${session.baseUrl}/products/$productId/versions');
-    final response = await http.post(uri, headers: _authHeaders, body: '{}');
+    final response = await http.post(uri, headers: _authHeaders, body: '{}').timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -496,7 +496,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductVersionItem.fromJson(data);
   }
 
@@ -511,7 +511,7 @@ class ProductService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'source_version': sourceVersion}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -519,7 +519,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductVersionItem.fromJson(data);
   }
 
@@ -539,7 +539,7 @@ class ProductService {
         'confirmed': confirmed,
         'expected_effective_version': expectedEffectiveVersion,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -547,7 +547,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductVersionItem.fromJson(data);
   }
 
@@ -558,7 +558,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products/$productId/versions/$version/disable',
     );
-    final response = await http.post(uri, headers: _authHeaders, body: '{}');
+    final response = await http.post(uri, headers: _authHeaders, body: '{}').timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -566,7 +566,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductVersionItem.fromJson(data);
   }
 
@@ -577,7 +577,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products/$productId/versions/$version',
     );
-    final response = await http.delete(uri, headers: _authHeaders);
+    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -599,7 +599,7 @@ class ProductService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'note': note}),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -607,7 +607,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    return ProductVersionItem.fromJson(json['data'] as Map<String, dynamic>);
+    return ProductVersionItem.fromJson((json['data'] as Map<String, dynamic>?) ?? const {});
   }
 
   Future<ProductVersionCompareResult> compareProductVersions({
@@ -624,7 +624,7 @@ class ProductService {
             'to_version': '$toVersion',
           },
         );
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -632,7 +632,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductVersionCompareResult.fromJson(data);
   }
 
@@ -651,7 +651,7 @@ class ProductService {
         'confirmed': confirmed,
         'note': note,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -659,7 +659,7 @@ class ProductService {
         response.statusCode,
       );
     }
-    final data = json['data'] as Map<String, dynamic>;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
     return ProductRollbackResult.fromJson(data);
   }
 
@@ -712,7 +712,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products/export/list',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200) {
       final json = _decodeBody(response);
       throw ApiException(
@@ -730,7 +730,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products/$productId/versions/$version/export',
     );
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200) {
       final json = _decodeBody(response);
       throw ApiException(
@@ -784,7 +784,7 @@ class ProductService {
     final uri = Uri.parse(
       '${session.baseUrl}/products/parameters/export',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders);
+    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200) {
       final json = _decodeBody(response);
       throw ApiException(
