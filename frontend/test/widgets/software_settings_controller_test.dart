@@ -25,12 +25,84 @@ void main() {
     expect(controller.themeMode, ThemeMode.dark);
     expect(controller.visualDensity, VisualDensity.compact);
   });
+
+  test('updateThemePreference() 会更新内存态并调用 save()', () async {
+    final service = _FakeSoftwareSettingsService(
+      settingsToLoad: const SoftwareSettings.defaults(),
+    );
+    final controller = SoftwareSettingsController(service: service);
+
+    await controller.updateThemePreference(AppThemePreference.dark);
+
+    expect(controller.settings.themePreference, AppThemePreference.dark);
+    expect(controller.themeMode, ThemeMode.dark);
+    expect(service.saveCallCount, 1);
+    expect(
+      service.savedSettings.single.themePreference,
+      AppThemePreference.dark,
+    );
+    expect(controller.saveFailed, isFalse);
+    expect(controller.saveMessage, '主题偏好已保存');
+  });
+
+  test('restoreDefaults() 会回到默认值', () async {
+    final service = _FakeSoftwareSettingsService(
+      settingsToLoad: const SoftwareSettings.defaults(),
+    );
+    final controller = SoftwareSettingsController(service: service);
+
+    await controller.updateThemePreference(AppThemePreference.dark);
+    await controller.updateDensityPreference(AppDensityPreference.compact);
+    await controller.rememberLastVisitedPageCode('QUALITY_DASHBOARD');
+    await controller.restoreDefaults();
+
+    expect(controller.settings, const SoftwareSettings.defaults());
+    expect(service.savedSettings.last, const SoftwareSettings.defaults());
+  });
+
+  test('保存失败时会写入失败状态和失败提示', () async {
+    final controller = SoftwareSettingsController(
+      service: _FakeSoftwareSettingsService(
+        settingsToLoad: const SoftwareSettings.defaults(),
+        saveError: Exception('save failed'),
+      ),
+    );
+
+    await controller.updateDensityPreference(AppDensityPreference.compact);
+
+    expect(controller.settings.densityPreference, AppDensityPreference.compact);
+    expect(controller.saveFailed, isTrue);
+    expect(controller.saveMessage, '界面密度偏好保存失败');
+  });
+
+  test('状态变化后会通知监听器', () async {
+    final controller = SoftwareSettingsController(
+      service: _FakeSoftwareSettingsService(
+        settingsToLoad: const SoftwareSettings.defaults(),
+      ),
+    );
+    var notifications = 0;
+    controller.addListener(() {
+      notifications += 1;
+    });
+
+    await controller.updateSidebarPreference(AppSidebarPreference.collapsed);
+
+    expect(notifications, 1);
+  });
 }
 
 class _FakeSoftwareSettingsService implements SoftwareSettingsService {
-  _FakeSoftwareSettingsService({required this.settingsToLoad});
+  _FakeSoftwareSettingsService({
+    required this.settingsToLoad,
+    this.saveError,
+  });
 
   final SoftwareSettings settingsToLoad;
+  final Object? saveError;
+  final List<SoftwareSettings> savedSettings = <SoftwareSettings>[];
+
+  int get saveCallCount => savedSettings.length;
 
   @override
   Future<SoftwareSettings> load() async => settingsToLoad;
@@ -39,7 +111,12 @@ class _FakeSoftwareSettingsService implements SoftwareSettingsService {
   Future<void> restoreDefaults() async {}
 
   @override
-  Future<void> save(SoftwareSettings settings) async {}
+  Future<void> save(SoftwareSettings settings) async {
+    savedSettings.add(settings);
+    if (saveError != null) {
+      throw saveError!;
+    }
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) {

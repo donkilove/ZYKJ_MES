@@ -9,16 +9,28 @@ import 'package:mes_client/features/settings/presentation/software_settings_cont
 import 'package:mes_client/features/settings/services/software_settings_service.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
 
+typedef SoftwareSettingsServiceFactory =
+    Future<SoftwareSettingsService> Function();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final service = await SoftwareSettingsService.create();
-  final softwareSettingsController = SoftwareSettingsController(
-    service: service,
-  );
-  await softwareSettingsController.load();
+  final softwareSettingsController = await bootstrapSoftwareSettingsController();
 
   runApp(MesClientApp(softwareSettingsController: softwareSettingsController));
+}
+
+Future<SoftwareSettingsController> bootstrapSoftwareSettingsController({
+  SoftwareSettingsServiceFactory createService = SoftwareSettingsService.create,
+}) async {
+  try {
+    final service = await createService();
+    final controller = SoftwareSettingsController(service: service);
+    await controller.load();
+    return controller;
+  } catch (_) {
+    return SoftwareSettingsController.memory();
+  }
 }
 
 class MesClientApp extends StatelessWidget {
