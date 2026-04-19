@@ -41,6 +41,7 @@ class AuthEndpointUnitTest(unittest.TestCase):
         with (
             patch.object(auth, "get_user_by_username", return_value=user),
             patch.object(auth, "verify_password_cached", return_value=True),
+            patch.object(auth, "rehash_password_if_needed", return_value=None),
             patch.object(auth, "create_or_reuse_user_session", return_value=session_row),
             patch.object(auth, "should_record_success_login", return_value=True),
             patch.object(auth, "create_login_log") as create_login_log,
@@ -61,6 +62,89 @@ class AuthEndpointUnitTest(unittest.TestCase):
         touch_user.assert_called_once_with(7)
         self.assertEqual(result.data.access_token, "token-1")
         self.assertEqual(user.last_login_at, now)
+
+    def test_login_rehashes_password_when_needed(self) -> None:
+        db = MagicMock()
+        from datetime import UTC, datetime
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        user = SimpleNamespace(
+            id=9,
+            is_active=True,
+            is_deleted=False,
+            password_hash="old-hash-rounds12",
+            must_change_password=False,
+            last_login_at=None,
+            last_login_ip=None,
+            last_login_terminal=None,
+        )
+        session_row = SimpleNamespace(
+            session_token_id="sid-2",
+            login_time=now,
+            expires_at=now.replace(hour=12),
+        )
+        form_data = SimpleNamespace(username="demo2", password="Pwd@123")
+        request = SimpleNamespace(
+            client=SimpleNamespace(host="127.0.0.1"),
+            headers={"user-agent": "pytest"},
+        )
+
+        with (
+            patch.object(auth, "get_user_by_username", return_value=user),
+            patch.object(auth, "verify_password_cached", return_value=True),
+            patch.object(auth, "rehash_password_if_needed", return_value="new-hash-rounds10"),
+            patch.object(auth, "create_or_reuse_user_session", return_value=session_row),
+            patch.object(auth, "should_record_success_login", return_value=False),
+            patch.object(auth, "create_login_log"),
+            patch.object(auth, "cleanup_expired_login_logs_if_due"),
+            patch.object(auth, "remember_active_session_token"),
+            patch.object(auth, "touch_user"),
+            patch.object(auth, "create_access_token", return_value="token-2"),
+        ):
+            auth.login(form_data=form_data, request=request, db=db)
+
+        self.assertEqual(user.password_hash, "new-hash-rounds10")
+
+    def test_login_skips_rehash_when_not_needed(self) -> None:
+        db = MagicMock()
+        from datetime import UTC, datetime
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        user = SimpleNamespace(
+            id=10,
+            is_active=True,
+            is_deleted=False,
+            password_hash="current-hash-rounds10",
+            must_change_password=False,
+            last_login_at=None,
+            last_login_ip=None,
+            last_login_terminal=None,
+        )
+        session_row = SimpleNamespace(
+            session_token_id="sid-3",
+            login_time=now,
+            expires_at=now.replace(hour=12),
+        )
+        form_data = SimpleNamespace(username="demo3", password="Pwd@123")
+        request = SimpleNamespace(
+            client=SimpleNamespace(host="127.0.0.1"),
+            headers={"user-agent": "pytest"},
+        )
+        original_hash = user.password_hash
+
+        with (
+            patch.object(auth, "get_user_by_username", return_value=user),
+            patch.object(auth, "verify_password_cached", return_value=True),
+            patch.object(auth, "rehash_password_if_needed", return_value=None),
+            patch.object(auth, "create_or_reuse_user_session", return_value=session_row),
+            patch.object(auth, "should_record_success_login", return_value=False),
+            patch.object(auth, "create_login_log"),
+            patch.object(auth, "cleanup_expired_login_logs_if_due"),
+            patch.object(auth, "remember_active_session_token"),
+            patch.object(auth, "touch_user"),
+            patch.object(auth, "create_access_token", return_value="token-3"),
+        ):
+            auth.login(form_data=form_data, request=request, db=db)
+
+        self.assertEqual(user.password_hash, original_hash)
 
     def test_get_current_login_user_reads_stage_name_locally(self) -> None:
         db = MagicMock()

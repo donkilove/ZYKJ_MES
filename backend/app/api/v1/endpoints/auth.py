@@ -11,6 +11,7 @@ from app.core.rbac import ROLE_SYSTEM_ADMIN
 from app.core.security import (
     create_access_token,
     decode_access_token,
+    rehash_password_if_needed,
     verify_password_cached,
 )
 from app.db.session import get_db
@@ -151,6 +152,10 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
+
+    new_hash = rehash_password_if_needed(form_data.password, user.password_hash)
+    if new_hash is not None:
+        user.password_hash = new_hash
 
     session_row = create_or_reuse_user_session(
         db,
