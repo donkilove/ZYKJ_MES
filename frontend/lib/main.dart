@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/config/runtime_endpoints.dart';
 import 'package:mes_client/core/services/effective_clock.dart';
+import 'package:mes_client/core/ui/foundation/mes_theme.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/misc/presentation/force_change_password_page.dart';
 import 'package:mes_client/features/misc/presentation/login_page.dart';
@@ -85,11 +86,11 @@ class MesClientApp extends StatelessWidget {
           ],
           supportedLocales: const [Locale('zh', 'CN')],
           locale: const Locale('zh', 'CN'),
-          theme: _buildTheme(
+          theme: buildMesTheme(
             brightness: Brightness.light,
             visualDensity: softwareSettingsController.visualDensity,
           ),
-          darkTheme: _buildTheme(
+          darkTheme: buildMesTheme(
             brightness: Brightness.dark,
             visualDensity: softwareSettingsController.visualDensity,
           ),
@@ -100,29 +101,6 @@ class MesClientApp extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  ThemeData _buildTheme({
-    required Brightness brightness,
-    required VisualDensity visualDensity,
-  }) {
-    return ThemeData(
-      brightness: brightness,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF006A67),
-        brightness: brightness,
-      ),
-      useMaterial3: true,
-      visualDensity: visualDensity,
-      fontFamily: 'Microsoft YaHei',
-      fontFamilyFallback: const [
-        '微软雅黑',
-        'Microsoft YaHei',
-        'PingFang SC',
-        'Noto Sans CJK SC',
-        'sans-serif',
-      ],
     );
   }
 }
@@ -227,9 +205,9 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     });
   }
 
