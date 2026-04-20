@@ -61,19 +61,11 @@ class UserDataTable extends StatelessWidget {
         ],
         rows: users.map((user) {
           final statusLabel = user.isOnline ? '在线' : '离线';
-          final statusColor = user.isOnline
-              ? Colors.green
-              : theme.colorScheme.outline;
           final activeLabel = user.isDeleted
               ? '已删除'
               : user.isActive
-              ? '启用'
-              : '停用';
-          final activeColor = user.isDeleted
-              ? theme.colorScheme.outline
-              : user.isActive
-              ? Colors.blue
-              : Colors.red;
+                  ? '启用'
+                  : '停用';
           final createdAtStr = user.createdAt != null
               ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
               : '-';

@@ -180,32 +180,6 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     _jumpRequestId = null;
   }
 
-  String _statusLabel(String status) {
-    switch (status) {
-      case 'pending':
-        return '待审批';
-      case 'approved':
-        return '已通过';
-      case 'rejected':
-        return '已驳回';
-      default:
-        return status;
-    }
-  }
-
-  Color _statusColor(String status, ThemeData theme) {
-    switch (status) {
-      case 'pending':
-        return Colors.orange;
-      case 'approved':
-        return Colors.green;
-      case 'rejected':
-        return theme.colorScheme.error;
-      default:
-        return theme.colorScheme.onSurfaceVariant;
-    }
-  }
-
   String? _defaultRoleCode() {
     final roles = _assignableRoles();
     if (roles.isEmpty) {

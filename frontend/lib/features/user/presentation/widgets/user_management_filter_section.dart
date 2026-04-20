@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/presentation/widgets/shared/user_module_filter_panel.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_filter_toolbar.dart';
-import 'package:mes_client/features/user/presentation/widgets/user_management_action_bar.dart';
 
 class UserManagementFilterSection extends StatelessWidget {
   const UserManagementFilterSection({
@@ -34,23 +33,17 @@ class UserManagementFilterSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return UserModuleFilterPanel(
       sectionKey: const ValueKey('user-management-filter-section'),
-      child: Column(
-        children: [
-          UserFilterToolbar(
-            keywordController: keywordController,
-            filterRoleCode: filterRoleCode,
-            filterIsActive: filterIsActive,
-            deletedScope: deletedScope,
-            roles: roles,
-            onFilterRoleCodeChanged: onFilterRoleCodeChanged,
-            onFilterIsActiveChanged: onFilterIsActiveChanged,
-            onFilterDeletedScopeChanged: onFilterDeletedScopeChanged,
-            onSearch: onSearch,
-            actions: const [],
-          ),
-          const SizedBox(height: 12),
-          UserManagementActionBar(actions: actions),
-        ],
+      child: UserFilterToolbar(
+        keywordController: keywordController,
+        filterRoleCode: filterRoleCode,
+        filterIsActive: filterIsActive,
+        deletedScope: deletedScope,
+        roles: roles,
+        onFilterRoleCodeChanged: onFilterRoleCodeChanged,
+        onFilterIsActiveChanged: onFilterIsActiveChanged,
+        onFilterDeletedScopeChanged: onFilterDeletedScopeChanged,
+        onSearch: onSearch,
+        actions: actions,
       ),
     );
   }

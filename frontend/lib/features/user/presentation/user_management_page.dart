@@ -308,8 +308,6 @@ class _LegacyLegacyUserManagementPageState
     );
   }
 
-  Future<void> _reloadCurrentPage() => _loadUsers(page: _userPage);
-
   Future<void> _applyFiltersAndReload() => _loadUsers(page: 1);
 
   Future<void> _handleActionSuccess() =>

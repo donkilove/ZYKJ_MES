@@ -307,9 +307,7 @@ Future<void> showToggleUserActiveDialog({
                       helperText,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: !active ? theme.colorScheme.error : null,
-                        fontWeight: !active
-                            ? FontWeight.w600
-                            : FontWeight.w400,
+                        fontWeight: !active ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -372,12 +370,20 @@ Future<void> showToggleUserActiveDialog({
         remark: remark.isEmpty ? null : remark,
       );
     } else {
-      result = await userService.disableUser(
-        userId: user.id,
-        remark: remark,
-      );
+      result = await userService.disableUser(userId: user.id, remark: remark);
     }
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(formatLifecycleSuccessMessage(result, active: active)),
+      ),
+    );
     await onSuccess(result);
+    if (!active && myUserId != null && user.id == myUserId) {
+      onLogout();
+    }
   } catch (error) {
     onError(error);
   }
