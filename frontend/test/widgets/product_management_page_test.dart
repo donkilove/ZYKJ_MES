@@ -12,6 +12,7 @@ import 'package:mes_client/features/product/presentation/widgets/product_managem
 import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart'
     show ProductManagementTableAction;
+import 'package:mes_client/features/product/presentation/widgets/product_version_dialog.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
 
 final DateTime _fixedDate = DateTime.parse('2026-04-20T00:00:00Z');
@@ -361,5 +362,108 @@ void main() {
     expect(find.text('当前版本参数快照（V1.1）'), findsOneWidget);
     expect(find.text('关联工艺路线'), findsOneWidget);
     expect(find.byKey(const ValueKey('product-history-timeline')), findsOneWidget);
+  });
+
+  testWidgets('ProductVersionDialog 展示版本对比区和动作入口', (tester) async {
+    final product = ProductItem(
+      id: 41,
+      name: '产品41',
+      category: '贴片',
+      remark: '',
+      lifecycleStatus: 'active',
+      currentVersion: 2,
+      currentVersionLabel: 'V1.1',
+      effectiveVersion: 1,
+      effectiveVersionLabel: 'V1.0',
+      effectiveAt: _fixedDate,
+      inactiveReason: null,
+      lastParameterSummary: null,
+      createdAt: _fixedDate,
+      updatedAt: _fixedDate,
+    );
+    final versions = [
+      ProductVersionItem(
+        version: 2,
+        versionLabel: 'V1.1',
+        lifecycleStatus: 'draft',
+        action: 'create',
+        note: '草稿版本',
+        effectiveAt: null,
+        sourceVersion: 1,
+        sourceVersionLabel: 'V1.0',
+        createdByUserId: 1,
+        createdByUsername: 'admin',
+        createdAt: _fixedDate,
+      ),
+      ProductVersionItem(
+        version: 1,
+        versionLabel: 'V1.0',
+        lifecycleStatus: 'effective',
+        action: 'create',
+        note: '当前生效',
+        effectiveAt: _fixedDate,
+        sourceVersion: null,
+        sourceVersionLabel: null,
+        createdByUserId: 1,
+        createdByUsername: 'admin',
+        createdAt: _fixedDate,
+      ),
+    ];
+    final compareResult = ProductVersionCompareResult(
+      fromVersion: 1,
+      toVersion: 2,
+      addedItems: 1,
+      removedItems: 0,
+      changedItems: 1,
+      items: [
+        ProductVersionDiffItem(
+          key: '产品芯片',
+          diffType: 'changed',
+          fromValue: 'CHIP-A',
+          toValue: 'CHIP-B',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductVersionDialog(
+            product: product,
+            versions: versions,
+            loadingVersions: false,
+            operationLoading: false,
+            compareLoading: false,
+            compareResult: compareResult,
+            fromVersion: 1,
+            toVersion: 2,
+            operationLabel: null,
+            canCompareVersions: true,
+            canManageVersions: true,
+            canActivateVersions: true,
+            canEditParameters: true,
+            canRollbackVersion: true,
+            onClose: () {},
+            onCreateVersion: () {},
+            onFromVersionChanged: (_) {},
+            onToVersionChanged: (_) {},
+            onCompare: () {},
+            buildVersionActions: (_) => [
+              TextButton(onPressed: () {}, child: const Text('激活')),
+            ],
+            lifecycleLabel: (value) => value == 'draft' ? '草稿' : '已生效',
+            formatTime: (_) => '2026-04-20 08:00:00',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('product-version-dialog')), findsOneWidget);
+    expect(find.textContaining('版本管理 - 产品41'), findsOneWidget);
+    expect(find.text('新建版本'), findsOneWidget);
+    expect(find.text('版本对比'), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-version-compare-panel')), findsOneWidget);
+    expect(find.textContaining('对比结果：新增 1，移除 0，变更 1'), findsOneWidget);
+    expect(find.text('激活'), findsWidgets);
   });
 }
