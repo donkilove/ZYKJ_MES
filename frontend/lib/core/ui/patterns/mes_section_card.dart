@@ -10,12 +10,14 @@ class MesSectionCard extends StatelessWidget {
     required this.child,
     this.subtitle,
     this.trailing,
+    this.expandChild = false,
   });
 
   final String title;
   final String? subtitle;
   final Widget child;
   final Widget? trailing;
+  final bool expandChild;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +60,7 @@ class MesSectionCard extends StatelessWidget {
             ],
           ),
           MesGap.vertical(tokens?.spacing.md ?? 16),
-          child,
+          if (expandChild) Expanded(child: child) else child,
         ],
       ),
     );

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_detail_panel.dart';
+import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/craft/presentation/craft_page.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
@@ -612,6 +617,18 @@ void main() {
     );
 
     expect(find.text('2026-04-20 10:30'), findsOneWidget);
+  });
+
+  testWidgets('message center 使用统一骨架组件', (tester) async {
+    final service = _FakeMessageService();
+
+    await _pumpMessageCenterPage(tester, service: service);
+
+    expect(find.byType(MesPageHeader), findsOneWidget);
+    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
+    expect(find.byType(MesDetailPanel), findsOneWidget);
+    expect(find.byType(MesPaginationBar), findsOneWidget);
   });
 
   testWidgets(
