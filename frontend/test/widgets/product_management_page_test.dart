@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/product_management_page.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart'
     show ProductManagementTableAction;
+import 'package:mes_client/features/product/services/product_service.dart';
 
 final DateTime _fixedDate = DateTime.parse('2026-04-20T00:00:00Z');
 
@@ -35,6 +39,39 @@ ProductItem _buildProduct({
     createdAt: _fixedDate,
     updatedAt: _fixedDate,
   );
+}
+
+class _PageStructureService extends ProductService {
+  _PageStructureService()
+    : super(AppSession(baseUrl: '', accessToken: 'token'));
+
+  @override
+  Future<ProductListResult> listProducts({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
+  }) async {
+    return ProductListResult(
+      total: 2,
+      items: [
+        _buildProduct(id: 41),
+        _buildProduct(
+          id: 42,
+          lifecycleStatus: 'inactive',
+          currentVersion: 1,
+          effectiveVersion: 0,
+        ),
+      ],
+    );
+  }
 }
 
 void main() {
@@ -155,5 +192,51 @@ void main() {
 
     expect(find.text('启用'), findsWidgets);
     expect(find.text('停用'), findsWidgets);
+  });
+
+  testWidgets('ProductManagementPage 接入 MesCrudPageScaffold 并展示统一锚点', (tester) async {
+    final service = _PageStructureService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductManagementPage(
+              session: AppSession(baseUrl: '', accessToken: 'token'),
+              onLogout: () {},
+              canCreateProduct: true,
+              canExportProducts: true,
+              canDeleteProduct: true,
+              canUpdateLifecycle: true,
+              canViewVersions: true,
+              canCompareVersions: true,
+              canRollbackVersion: true,
+              canManageVersions: true,
+              canActivateVersions: true,
+              canViewImpactAnalysis: true,
+              canViewParameters: true,
+              canEditParameters: true,
+              canExportParameters: true,
+              onViewParameters: (_) {},
+              onEditParameters: (_) {},
+              service: service,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MesCrudPageScaffold), findsOneWidget);
+    expect(find.byType(ProductManagementPageHeader), findsOneWidget);
+    expect(find.byType(ProductManagementFilterSection), findsOneWidget);
+    expect(find.byType(ProductManagementTableSection), findsOneWidget);
+    expect(find.byType(ProductManagementFeedbackBanner), findsNothing);
   });
 }

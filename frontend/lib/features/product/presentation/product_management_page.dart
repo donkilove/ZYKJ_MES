@@ -3,27 +3,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/features/product/services/product_service.dart';
-import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/widgets/locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
-import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_management_feedback_banner.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_management_filter_section.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_management_page_header.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart'
+    show ProductManagementTableAction;
+import 'package:mes_client/features/product/services/product_service.dart';
 
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
-
-enum _ProductTableAction {
-  viewDetail,
-  edit,
-  deactivate,
-  reactivate,
-  version,
-  viewParams,
-  editParams,
-  delete,
-}
 
 class ProductManagementPage extends StatefulWidget {
   const ProductManagementPage({
@@ -1693,12 +1686,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     }
   }
 
-  List<PopupMenuEntry<_ProductTableAction>> _buildProductActionMenuItems(
+  List<PopupMenuEntry<ProductManagementTableAction>> _buildProductActionMenuItems(
     ProductItem product,
   ) {
-    final items = <PopupMenuEntry<_ProductTableAction>>[
+    final items = <PopupMenuEntry<ProductManagementTableAction>>[
       const PopupMenuItem(
-        value: _ProductTableAction.viewDetail,
+        value: ProductManagementTableAction.viewDetail,
         child: Text('查看详情'),
       ),
     ];
@@ -1708,7 +1701,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         case 'effective':
           items.add(
             const PopupMenuItem(
-              value: _ProductTableAction.deactivate,
+              value: ProductManagementTableAction.deactivate,
               child: Text('停用'),
             ),
           );
@@ -1716,7 +1709,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         case 'inactive':
           items.add(
             const PopupMenuItem(
-              value: _ProductTableAction.reactivate,
+              value: ProductManagementTableAction.reactivate,
               child: Text('启用'),
             ),
           );
@@ -1726,11 +1719,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       }
     }
 
-    final utilityItems = <PopupMenuEntry<_ProductTableAction>>[];
+    final utilityItems = <PopupMenuEntry<ProductManagementTableAction>>[];
     if (widget.canCreateProduct) {
       utilityItems.add(
         const PopupMenuItem(
-          value: _ProductTableAction.edit,
+          value: ProductManagementTableAction.edit,
           child: Text('编辑产品'),
         ),
       );
@@ -1738,7 +1731,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     if (widget.canViewVersions) {
       utilityItems.add(
         const PopupMenuItem(
-          value: _ProductTableAction.version,
+          value: ProductManagementTableAction.version,
           child: Text('版本管理'),
         ),
       );
@@ -1746,7 +1739,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     if (widget.canViewParameters) {
       utilityItems.add(
         const PopupMenuItem(
-          value: _ProductTableAction.viewParams,
+          value: ProductManagementTableAction.viewParams,
           child: Text('查看参数'),
         ),
       );
@@ -1754,7 +1747,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     if (widget.canEditParameters) {
       utilityItems.add(
         const PopupMenuItem(
-          value: _ProductTableAction.editParams,
+          value: ProductManagementTableAction.editParams,
           child: Text('编辑参数'),
         ),
       );
@@ -1762,7 +1755,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     if (widget.canDeleteProduct) {
       utilityItems.add(
         const PopupMenuItem(
-          value: _ProductTableAction.delete,
+          value: ProductManagementTableAction.delete,
           child: Text('删除产品'),
         ),
       );
@@ -1775,32 +1768,32 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   }
 
   Future<void> _handleProductTableAction(
-    _ProductTableAction action,
+    ProductManagementTableAction action,
     ProductItem product,
   ) async {
     switch (action) {
-      case _ProductTableAction.viewDetail:
+      case ProductManagementTableAction.viewDetail:
         await _showDetailDrawer(product);
         return;
-      case _ProductTableAction.edit:
+      case ProductManagementTableAction.edit:
         await _showEditProductDialog(product);
         return;
-      case _ProductTableAction.reactivate:
+      case ProductManagementTableAction.reactivate:
         await _changeLifecycle(product, 'active');
         return;
-      case _ProductTableAction.deactivate:
+      case ProductManagementTableAction.deactivate:
         await _changeLifecycle(product, 'inactive');
         return;
-      case _ProductTableAction.version:
+      case ProductManagementTableAction.version:
         await _showVersionDialog(product);
         return;
-      case _ProductTableAction.viewParams:
+      case ProductManagementTableAction.viewParams:
         widget.onViewParameters(product);
         return;
-      case _ProductTableAction.editParams:
+      case ProductManagementTableAction.editParams:
         widget.onEditParameters(product);
         return;
-      case _ProductTableAction.delete:
+      case ProductManagementTableAction.delete:
         await _deleteProduct(product);
         return;
     }
@@ -2270,220 +2263,61 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(
-            title: '产品管理',
-            onRefresh: _loading ? null : _loadProducts,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '搜索产品名称',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadProducts(page: 1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedCategoryFilter,
-                  decoration: const InputDecoration(
-                    labelText: '分类筛选',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    ..._productCategoryOptions.map(
-                      (category) => DropdownMenuItem<String>(
-                        value: category,
-                        child: Text(category),
-                      ),
-                    ),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _selectedCategoryFilter = value ?? '';
-                          });
-                          _loadProducts(page: 1);
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedStatusFilter,
-                  decoration: const InputDecoration(
-                    labelText: '状态筛选',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    DropdownMenuItem<String>(
-                      value: 'active',
-                      child: Text('启用'),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: 'inactive',
-                      child: Text('停用'),
-                    ),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _selectedStatusFilter = value ?? '';
-                          });
-                          _loadProducts(page: 1);
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedEffectiveVersionFilter,
-                  decoration: const InputDecoration(
-                    labelText: '生效版本',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem<String>(value: '', child: Text('全部')),
-                    DropdownMenuItem<String>(
-                      value: 'yes',
-                      child: Text('有生效版本'),
-                    ),
-                    DropdownMenuItem<String>(value: 'no', child: Text('无生效版本')),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _selectedEffectiveVersionFilter = value ?? '';
-                          });
-                          _loadProducts(page: 1);
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadProducts(page: 1),
-                icon: const Icon(Icons.search),
-                label: const Text('搜索产品'),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading || !widget.canCreateProduct
-                    ? null
-                    : _showCreateProductDialog,
-                icon: const Icon(Icons.add),
-                label: const Text('添加产品'),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: _loading || !widget.canExportProducts
-                    ? null
-                    : _exportProducts,
-                icon: const Icon(Icons.download),
-                label: const Text('导出产品'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          Expanded(
-            child: CrudListTableSection(
-              loading: _loading,
-              isEmpty: _products.isEmpty,
-              emptyText: '暂无产品',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columns: [
-                  UnifiedListTableHeaderStyle.column(context, '产品名称'),
-                  UnifiedListTableHeaderStyle.column(context, '产品分类'),
-                  UnifiedListTableHeaderStyle.column(context, '状态'),
-                  UnifiedListTableHeaderStyle.column(context, '当前版本'),
-                  UnifiedListTableHeaderStyle.column(context, '生效版本'),
-                  UnifiedListTableHeaderStyle.column(context, '创建时间'),
-                  UnifiedListTableHeaderStyle.column(context, '更新时间'),
-                  UnifiedListTableHeaderStyle.column(
-                    context,
-                    '操作',
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-                rows: _products.map((product) {
-                  final actions = _buildProductActionMenuItems(product);
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(product.name)),
-                      DataCell(Text(product.category)),
-                      DataCell(Text(_lifecycleLabel(product.lifecycleStatus))),
-                      DataCell(
-                        Text(_formatDisplayVersion(product.currentVersion)),
-                      ),
-                      DataCell(
-                        Text(
-                          product.effectiveVersion > 0
-                              ? _formatDisplayVersion(product.effectiveVersion)
-                              : '-',
-                        ),
-                      ),
-                      DataCell(Text(_formatTime(product.createdAt))),
-                      DataCell(Text(_formatTime(product.updatedAt))),
-                      DataCell(
-                        actions.isEmpty
-                            ? const Text('-')
-                            : UnifiedListTableHeaderStyle.actionMenuButton<
-                                _ProductTableAction
-                              >(
-                                theme: theme,
-                                onSelected: (action) {
-                                  _handleProductTableAction(action, product);
-                                },
-                                itemBuilder: (context) => actions,
-                              ),
-                      ),
-                    ],
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _productPage,
-            totalPages: _productTotalPages,
-            total: _total,
-            showTotal: false,
-            loading: _loading,
-            onPrevious: () => _loadProducts(page: _productPage - 1),
-            onNext: () => _loadProducts(page: _productPage + 1),
-          ),
-        ],
+    return MesCrudPageScaffold(
+      header: ProductManagementPageHeader(
+        loading: _loading,
+        onRefresh: _loadProducts,
+      ),
+      filters: ProductManagementFilterSection(
+        keywordController: _keywordController,
+        categoryOptions: _productCategoryOptions,
+        selectedCategory: _selectedCategoryFilter,
+        selectedStatus: _selectedStatusFilter,
+        selectedEffectiveVersion: _selectedEffectiveVersionFilter,
+        loading: _loading,
+        canCreateProduct: widget.canCreateProduct,
+        canExportProducts: widget.canExportProducts,
+        onCategoryChanged: (value) {
+          setState(() {
+            _selectedCategoryFilter = value;
+          });
+          _loadProducts(page: 1);
+        },
+        onStatusChanged: (value) {
+          setState(() {
+            _selectedStatusFilter = value;
+          });
+          _loadProducts(page: 1);
+        },
+        onEffectiveVersionChanged: (value) {
+          setState(() {
+            _selectedEffectiveVersionFilter = value;
+          });
+          _loadProducts(page: 1);
+        },
+        onSearch: () => _loadProducts(page: 1),
+        onCreate: _showCreateProductDialog,
+        onExport: _exportProducts,
+      ),
+      banner: _message.isEmpty
+          ? null
+          : ProductManagementFeedbackBanner(message: _message),
+      content: ProductManagementTableSection(
+        products: _products,
+        loading: _loading,
+        emptyText: '暂无产品',
+        formatTime: _formatTime,
+        buildActionItems: _buildProductActionMenuItems,
+        onSelected: _handleProductTableAction,
+      ),
+      pagination: SimplePaginationBar(
+        page: _productPage,
+        totalPages: _productTotalPages,
+        total: _total,
+        showTotal: false,
+        loading: _loading,
+        onPrevious: () => _loadProducts(page: _productPage - 1),
+        onNext: () => _loadProducts(page: _productPage + 1),
       ),
     );
   }
