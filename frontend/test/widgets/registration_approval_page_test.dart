@@ -7,6 +7,8 @@ import 'package:mes_client/features/user/presentation/registration_approval_page
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 
@@ -234,6 +236,60 @@ void main() {
     expect(find.byType(CrudPageHeader), findsOneWidget);
     expect(find.text('注册审批'), findsOneWidget);
     expect(find.byTooltip('刷新'), findsOneWidget);
+  });
+
+  testWidgets('注册审批页接入 CRUD 骨架并保留 route payload 定位提示', (tester) async {
+    final userService = _FakeApprovalUserService()
+      ..listResponses = [
+        [
+          RegistrationRequestItem(
+            id: 572,
+            account: 'pending_572',
+            status: 'pending',
+            rejectedReason: null,
+            reviewedByUserId: null,
+            reviewedAt: null,
+            createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
+          ),
+        ],
+      ];
+    final craftService = _FakeApprovalCraftService();
+
+    tester.view.physicalSize = const Size(1920, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RegistrationApprovalPage(
+            session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
+            onLogout: () {},
+            canApprove: true,
+            canReject: true,
+            routePayloadJson: '{"request_id":572}',
+            userService: userService,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MesCrudPageScaffold), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('registration-approval-filter-section')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('registration-approval-table-section')),
+      findsOneWidget,
+    );
+    expect(find.byType(MesPaginationBar), findsOneWidget);
+    expect(find.textContaining('已定位注册申请 #572'), findsOneWidget);
   });
 
   testWidgets('审批通过弹窗打开时会刷新工段列表', (tester) async {

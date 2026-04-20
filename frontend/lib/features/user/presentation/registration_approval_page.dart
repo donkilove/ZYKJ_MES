@@ -6,13 +6,15 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
-import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+import 'package:mes_client/features/user/presentation/widgets/registration_approval_feedback_banner.dart';
+import 'package:mes_client/features/user/presentation/widgets/registration_approval_filter_section.dart';
+import 'package:mes_client/features/user/presentation/widgets/registration_approval_page_header.dart';
+import 'package:mes_client/features/user/presentation/widgets/registration_approval_table_section.dart';
 
 class RegistrationApprovalPage extends StatefulWidget {
   const RegistrationApprovalPage({
@@ -153,14 +155,11 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       });
       final shouldReloadAllStatuses = _statusFilter != null;
       if (shouldReloadAllStatuses) {
-        setState(() => _statusFilter = null);
+        _applyStatusFilterAndReload(null);
+        return;
       }
       if (_items.isNotEmpty || _total > 0 || _loading) {
-        if (shouldReloadAllStatuses) {
-          _loadRequests(page: 1);
-        } else {
-          _applyJumpTargetHint();
-        }
+        _applyJumpTargetHint();
       }
     } catch (_) {
       return;
@@ -363,6 +362,15 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     }
   }
 
+  Future<void> _reloadCurrentPage() => _loadRequests(page: _requestPage);
+
+  Future<void> _applyStatusFilterAndReload(String? value) async {
+    setState(() => _statusFilter = value);
+    await _loadRequests(page: 1);
+  }
+
+  Future<void> _handleActionSuccess() => _reloadCurrentPage();
+
   Future<bool> _approveRequest({
     required RegistrationRequestItem item,
     required String account,
@@ -384,7 +392,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('已通过账号 $account 的注册申请。')));
-      await _loadRequests();
+      await _handleActionSuccess();
       return true;
     } catch (error) {
       if (!mounted) {
@@ -644,7 +652,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('已驳回账号 ${item.account} 的注册申请。')));
-      await _loadRequests();
+      await _handleActionSuccess();
     } catch (error) {
       if (!mounted) {
         return;
@@ -713,145 +721,35 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(
-            title: '注册审批',
-            onRefresh: _loading
-                ? null
-                : () => _loadInitialData(page: _requestPage),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: 150,
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _statusFilter,
-                  decoration: const InputDecoration(
-                    labelText: '申请状态',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: const [
-                    DropdownMenuItem<String?>(value: null, child: Text('全部')),
-                    DropdownMenuItem<String?>(
-                      value: 'pending',
-                      child: Text('待审批'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'approved',
-                      child: Text('已通过'),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'rejected',
-                      child: Text('已驳回'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _statusFilter = value);
-                    _loadRequests(page: 1);
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          Expanded(
-            child: CrudListTableSection(
-              loading: _loading,
-              isEmpty: _items.isEmpty,
-              emptyText: _statusFilter == null ? '暂无注册申请记录' : '当前状态下暂无注册申请记录',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columnSpacing: 16,
-                columns: [
-                  UnifiedListTableHeaderStyle.column(context, '用户名'),
-                  UnifiedListTableHeaderStyle.column(context, '申请时间'),
-                  UnifiedListTableHeaderStyle.column(context, '申请状态'),
-                  UnifiedListTableHeaderStyle.column(context, '驳回原因'),
-                  UnifiedListTableHeaderStyle.column(context, '操作'),
-                ],
-                rows: _items.map((item) {
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(item.account)),
-                      DataCell(Text(_formatTime(item.createdAt))),
-                      DataCell(
-                        Text(
-                          _statusLabel(item.status),
-                          style: TextStyle(
-                            color: _statusColor(item.status, theme),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      DataCell(Text(item.rejectedReason ?? '-')),
-                      DataCell(
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (item.status == 'pending') ...[
-                              if (widget.canApprove)
-                                TextButton(
-                                  onPressed: () => _openApproveDialog(item),
-                                  child: const Text('通过'),
-                                ),
-                              if (widget.canReject)
-                                TextButton(
-                                  onPressed: () => _confirmReject(item),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: theme.colorScheme.error,
-                                  ),
-                                  child: const Text('驳回'),
-                                ),
-                              if (!widget.canApprove && !widget.canReject)
-                                const Text(
-                                  '-',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                            ] else
-                              const Text(
-                                '-',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _requestPage,
-            totalPages: _requestTotalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _loadRequests(page: _requestPage - 1),
-            onNext: () => _loadRequests(page: _requestPage + 1),
-          ),
-        ],
+    return MesCrudPageScaffold(
+      header: RegistrationApprovalPageHeader(
+        loading: _loading,
+        onRefresh: () => _loadInitialData(page: _requestPage),
+      ),
+      filters: RegistrationApprovalFilterSection(
+        statusFilter: _statusFilter,
+        onChanged: _applyStatusFilterAndReload,
+      ),
+      banner: _message.isEmpty
+          ? null
+          : RegistrationApprovalFeedbackBanner(message: _message),
+      content: RegistrationApprovalTableSection(
+        items: _items,
+        loading: _loading,
+        emptyText: _statusFilter == null ? '暂无注册申请记录' : '当前状态下暂无注册申请记录',
+        canApprove: widget.canApprove,
+        canReject: widget.canReject,
+        onApprove: _openApproveDialog,
+        onReject: _confirmReject,
+        formatTime: _formatTime,
+      ),
+      pagination: SimplePaginationBar(
+        page: _requestPage,
+        totalPages: _requestTotalPages,
+        total: _total,
+        loading: _loading,
+        onPrevious: () => _loadRequests(page: _requestPage - 1),
+        onNext: () => _loadRequests(page: _requestPage + 1),
       ),
     );
   }
