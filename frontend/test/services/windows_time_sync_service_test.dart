@@ -18,7 +18,8 @@ void main() {
     });
 
     final service = WindowsTimeSyncService(
-      processRunner: (_, __) async => ProcessResult(1, 0, '', ''),
+      processRunner: (ignoredCommand, ignoredArguments) async =>
+          ProcessResult(1, 0, '', ''),
       resultFileFactory: () => resultFile,
       executablePath: r'C:\demo\mes_client.exe',
     );

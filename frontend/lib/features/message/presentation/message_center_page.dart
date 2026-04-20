@@ -42,7 +42,8 @@ class MessageCenterPage extends StatefulWidget {
     this.refreshTick = 0,
     this.onPickDateRange,
     this.routePayloadJson,
-  });
+    DateTime Function()? nowProvider,
+  }) : nowProvider = nowProvider ?? DateTime.now;
 
   final AppSession session;
   final VoidCallback onLogout;
@@ -62,6 +63,7 @@ class MessageCenterPage extends StatefulWidget {
   final Future<DateTimeRange?> Function(DateTimeRange? initialDateRange)?
   onPickDateRange;
   final String? routePayloadJson;
+  final DateTime Function() nowProvider;
 
   @override
   State<MessageCenterPage> createState() => _MessageCenterPageState();
@@ -399,10 +401,11 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     if (picker != null) {
       picked = await picker(_dateRange);
     } else {
+      final now = widget.nowProvider();
       picked = await showDateRangePicker(
         context: context,
-        firstDate: DateTime(DateTime.now().year - 2),
-        lastDate: DateTime.now(),
+        firstDate: DateTime(now.year - 2, now.month, now.day),
+        lastDate: DateTime(now.year, now.month, now.day),
         initialDateRange: _dateRange,
       );
     }
@@ -560,15 +563,28 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   }
 
   Widget _buildToolbar(ThemeData theme) {
+    final effectiveNow = widget.nowProvider();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          Text(
-            '消息中心',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '消息中心',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatDateTime(effectiveNow),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+            ],
           ),
           const Spacer(),
           if (_error.isNotEmpty)

@@ -5,11 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/features/settings/models/software_settings_models.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/settings/presentation/widgets/software_settings_preview_card.dart';
+import 'package:mes_client/features/settings/presentation/widgets/software_time_sync_section.dart';
+import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
 
 class SoftwareSettingsPage extends StatefulWidget {
-  const SoftwareSettingsPage({super.key, required this.controller});
+  const SoftwareSettingsPage({
+    super.key,
+    required this.controller,
+    required this.timeSyncController,
+    required this.apiBaseUrl,
+  });
 
   final SoftwareSettingsController controller;
+  final TimeSyncController timeSyncController;
+  final String apiBaseUrl;
 
   @override
   State<SoftwareSettingsPage> createState() => _SoftwareSettingsPageState();
@@ -21,7 +30,10 @@ class _SoftwareSettingsPageState extends State<SoftwareSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.controller,
+      animation: Listenable.merge([
+        widget.controller,
+        widget.timeSyncController,
+      ]),
       builder: (context, _) {
         final settings = widget.controller.settings;
         return LayoutBuilder(
@@ -55,6 +67,8 @@ class _SoftwareSettingsPageState extends State<SoftwareSettingsPage> {
                           section: _selectedSection,
                           settings: settings,
                           controller: widget.controller,
+                          timeSyncController: widget.timeSyncController,
+                          apiBaseUrl: widget.apiBaseUrl,
                         ),
                       ),
                     ],
@@ -71,6 +85,8 @@ class _SoftwareSettingsPageState extends State<SoftwareSettingsPage> {
                         section: _selectedSection,
                         settings: settings,
                         controller: widget.controller,
+                        timeSyncController: widget.timeSyncController,
+                        apiBaseUrl: widget.apiBaseUrl,
                       ),
                     ],
                   ),
@@ -92,7 +108,7 @@ class _SoftwareSettingsPageState extends State<SoftwareSettingsPage> {
   }
 }
 
-enum _SettingsSectionType { appearance, layout }
+enum _SettingsSectionType { appearance, layout, timeSync }
 
 class _PageHeader extends StatelessWidget {
   const _PageHeader({
@@ -226,6 +242,13 @@ class _SectionNavigation extends StatelessWidget {
             selected: selectedSection == _SettingsSectionType.layout,
             onTap: () => onSelect(_SettingsSectionType.layout),
           ),
+          const Divider(height: 1),
+          _SectionNavTile(
+            title: '时间同步',
+            subtitle: '服务器对时与系统改时',
+            selected: selectedSection == _SettingsSectionType.timeSync,
+            onTap: () => onSelect(_SettingsSectionType.timeSync),
+          ),
         ],
       ),
     );
@@ -262,11 +285,15 @@ class _SectionContent extends StatelessWidget {
     required this.section,
     required this.settings,
     required this.controller,
+    required this.timeSyncController,
+    required this.apiBaseUrl,
   });
 
   final _SettingsSectionType section;
   final SoftwareSettings settings;
   final SoftwareSettingsController controller;
+  final TimeSyncController timeSyncController;
+  final String apiBaseUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -275,6 +302,12 @@ class _SectionContent extends StatelessWidget {
         return _AppearanceSection(settings: settings, controller: controller);
       case _SettingsSectionType.layout:
         return _LayoutSection(settings: settings, controller: controller);
+      case _SettingsSectionType.timeSync:
+        return SoftwareTimeSyncSection(
+          softwareSettingsController: controller,
+          timeSyncController: timeSyncController,
+          apiBaseUrl: apiBaseUrl,
+        );
     }
   }
 }

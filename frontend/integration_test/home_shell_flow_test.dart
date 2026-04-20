@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/core/models/current_user.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
@@ -38,6 +39,10 @@ import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/message/services/message_ws_service.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
+import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
+import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
+import 'package:mes_client/features/time_sync/services/server_time_service.dart';
+import 'package:mes_client/features/time_sync/services/windows_time_sync_service.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
@@ -1194,6 +1199,9 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
   AppSession? _session;
   final SoftwareSettingsController _softwareSettingsController =
       SoftwareSettingsController.memory();
+  late final TimeSyncController _timeSyncController = _buildTimeSyncController(
+    _softwareSettingsController,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1219,6 +1227,7 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
         });
       },
       softwareSettingsController: _softwareSettingsController,
+      timeSyncController: _timeSyncController,
       authService: widget.authService,
       authzService: useRealBackend ? null : _IntegrationAuthzService(),
       pageCatalogService: useRealBackend
@@ -1431,6 +1440,31 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
     );
   }
 }
+
+TimeSyncController _buildTimeSyncController(
+  SoftwareSettingsController controller,
+) {
+  return TimeSyncController(
+    softwareSettingsController: controller,
+    serverTimeService: _FakeServerTimeService(),
+    systemTimeSyncService: _FakeWindowsTimeSyncService(),
+    effectiveClock: EffectiveClock(),
+  );
+}
+
+class _FakeServerTimeService extends ServerTimeService {
+  @override
+  Future<ServerTimeSnapshot> fetchSnapshot({required String baseUrl}) async {
+    return ServerTimeSnapshot(
+      serverUtc: DateTime.utc(2026, 4, 20, 2, 0, 0),
+      serverTimezoneOffsetMinutes: 480,
+      sampledAtEpochMs:
+          DateTime.utc(2026, 4, 20, 2, 0, 0).millisecondsSinceEpoch,
+    );
+  }
+}
+
+class _FakeWindowsTimeSyncService extends WindowsTimeSyncService {}
 
 class _RealBackendConfig {
   const _RealBackendConfig({

@@ -6,6 +6,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/core/models/current_user.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
+import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/core/models/page_catalog_models.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
 import 'package:mes_client/core/network/api_exception.dart';
@@ -18,6 +19,10 @@ import 'package:mes_client/features/settings/presentation/software_settings_cont
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
+import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
+import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
+import 'package:mes_client/features/time_sync/services/server_time_service.dart';
+import 'package:mes_client/features/time_sync/services/windows_time_sync_service.dart';
 
 final AppSession _session = AppSession(
   baseUrl: 'http://example.test/api/v1',
@@ -400,6 +405,7 @@ Future<void> _pumpMainShellPage(
   })?
   userPageBuilder,
   SoftwareSettingsController? softwareSettingsController,
+  TimeSyncController? timeSyncController,
   required VoidCallback onLogout,
 }) async {
   tester.view.physicalSize = const Size(1600, 1200);
@@ -408,14 +414,17 @@ Future<void> _pumpMainShellPage(
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+  final settingsController =
+      softwareSettingsController ?? SoftwareSettingsController.memory();
 
   await tester.pumpWidget(
     MaterialApp(
       home: MainShellPage(
         session: _session,
         onLogout: onLogout,
-        softwareSettingsController:
-            softwareSettingsController ?? SoftwareSettingsController.memory(),
+        softwareSettingsController: settingsController,
+        timeSyncController:
+            timeSyncController ?? _buildTimeSyncController(settingsController),
         authService: authService,
         authzService: authzService,
         pageCatalogService: pageCatalogService,
@@ -428,6 +437,32 @@ Future<void> _pumpMainShellPage(
   );
   await tester.pumpAndSettle();
 }
+
+TimeSyncController _buildTimeSyncController(
+  SoftwareSettingsController settingsController, {
+  EffectiveClock? effectiveClock,
+}) {
+  return TimeSyncController(
+    softwareSettingsController: settingsController,
+    serverTimeService: _FakeServerTimeService(),
+    systemTimeSyncService: _FakeWindowsTimeSyncService(),
+    effectiveClock: effectiveClock ?? EffectiveClock(),
+  );
+}
+
+class _FakeServerTimeService extends ServerTimeService {
+  @override
+  Future<ServerTimeSnapshot> fetchSnapshot({required String baseUrl}) async {
+    return ServerTimeSnapshot(
+      serverUtc: DateTime.utc(2026, 4, 20, 2, 0, 0),
+      serverTimezoneOffsetMinutes: 480,
+      sampledAtEpochMs:
+          DateTime.utc(2026, 4, 20, 2, 0, 0).millisecondsSinceEpoch,
+    );
+  }
+}
+
+class _FakeWindowsTimeSyncService extends WindowsTimeSyncService {}
 
 void main() {
   testWidgets('点击软件设置入口后显示软件设置页面说明', (tester) async {
@@ -516,6 +551,45 @@ void main() {
       softwareSettingsController.settings.launchTargetPreference,
       AppLaunchTargetPreference.lastVisitedModule,
     );
+  });
+
+  testWidgets('主壳层可打开时间同步分区并显示当前模式', (tester) async {
+    final softwareSettingsController = SoftwareSettingsController.memory();
+    final timeSyncController = _buildTimeSyncController(
+      softwareSettingsController,
+    );
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      softwareSettingsController: softwareSettingsController,
+      timeSyncController: timeSyncController,
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) => _FakeMessageWsService(
+            baseUrl: baseUrl,
+            accessToken: accessToken,
+            onEvent: onEvent,
+            onDisconnected: onDisconnected,
+          ),
+      onLogout: () {},
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('main-shell-entry-software-settings')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('时间同步').first);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('当前模式：'), findsOneWidget);
   });
 
   testWidgets('软件设置打开期间首页不应视为可见，消息事件不触发工作台刷新', (tester) async {

@@ -554,6 +554,7 @@ Future<void> _pumpMessageCenterPage(
   void Function(String pageCode, {String? tabCode, String? routePayloadJson})?
   onNavigateToPage,
   Future<DateTimeRange?> Function(DateTimeRange?)? onPickDateRange,
+  DateTime Function()? nowProvider,
 }) async {
   tester.view.physicalSize = const Size(1600, 1200);
   tester.view.devicePixelRatio = 1.0;
@@ -580,6 +581,7 @@ Future<void> _pumpMessageCenterPage(
             onNavigateToPage:
                 onNavigateToPage ?? (pageCode, {tabCode, routePayloadJson}) {},
             onPickDateRange: onPickDateRange,
+            nowProvider: nowProvider,
           ),
         ),
       ),
@@ -598,6 +600,18 @@ void main() {
     );
 
     expect(service.lastTodoOnly, isTrue);
+  });
+
+  testWidgets('message center 使用统一有效时间展示当前生效时间', (tester) async {
+    final service = _FakeMessageService();
+
+    await _pumpMessageCenterPage(
+      tester,
+      service: service,
+      nowProvider: () => DateTime(2026, 4, 20, 10, 30),
+    );
+
+    expect(find.text('2026-04-20 10:30'), findsOneWidget);
   });
 
   testWidgets(

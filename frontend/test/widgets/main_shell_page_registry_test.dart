@@ -1,14 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/features/message/presentation/message_center_page.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
+import 'package:mes_client/features/settings/presentation/software_settings_page.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page_registry.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_state.dart';
+import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
+import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
+import 'package:mes_client/features/time_sync/services/server_time_service.dart';
+import 'package:mes_client/features/time_sync/services/windows_time_sync_service.dart';
 
 import 'main_shell_test_support.dart';
 
 void main() {
+  final fixedClock = _FixedEffectiveClock();
+  final softwareSettingsController = SoftwareSettingsController.memory();
+  final timeSyncController = _buildTimeSyncController(
+    softwareSettingsController,
+    effectiveClock: fixedClock,
+  );
+
   test('用户模块优先使用注入 builder', () {
     const registry = MainShellPageRegistry();
     final state = MainShellViewState(
@@ -36,7 +49,8 @@ void main() {
       onVisibilityConfigSaved: () {},
       onUnreadCountChanged: (_) {},
       messageService: MessageService(testSession),
-      softwareSettingsController: SoftwareSettingsController.memory(),
+      softwareSettingsController: softwareSettingsController,
+      timeSyncController: timeSyncController,
       userPageBuilder:
           ({
             required session,
@@ -101,12 +115,84 @@ void main() {
       onVisibilityConfigSaved: () {},
       onUnreadCountChanged: (_) {},
       messageService: MessageService(testSession),
-      softwareSettingsController: SoftwareSettingsController.memory(),
+      softwareSettingsController: softwareSettingsController,
+      timeSyncController: timeSyncController,
     );
 
     expect(widget, isA<MessageCenterPage>());
     final messagePage = widget as MessageCenterPage;
     expect(messagePage.refreshTick, 3);
     expect(messagePage.routePayloadJson, '{"preset":"todo_only"}');
+    expect(
+      messagePage.nowProvider().toUtc(),
+      DateTime.utc(2026, 4, 20, 10, 30),
+    );
   });
+
+  test('软件设置工具页会透传 timeSyncController 与 apiBaseUrl', () {
+    const registry = MainShellPageRegistry();
+    final state = MainShellViewState(
+      currentUser: buildCurrentUser(),
+      authzSnapshot: buildSnapshot(),
+      catalog: buildCatalog(),
+      tabCodesByParent: const {
+        'user': ['user_management'],
+      },
+      menus: const [
+        MainShellMenuItem(code: 'home', title: '首页', icon: Icons.home),
+      ],
+      selectedPageCode: 'home',
+    );
+
+    final widget = registry.build(
+      pageCode: softwareSettingsUtilityCode,
+      session: testSession,
+      state: state,
+      onLogout: () {},
+      onRefreshShellData: ({bool loadCatalog = true}) async {},
+      onNavigateToPageTarget:
+          ({required pageCode, String? tabCode, String? routePayloadJson}) {},
+      onVisibilityConfigSaved: () {},
+      onUnreadCountChanged: (_) {},
+      messageService: MessageService(testSession),
+      softwareSettingsController: softwareSettingsController,
+      timeSyncController: timeSyncController,
+    );
+
+    expect(widget, isA<SoftwareSettingsPage>());
+    final settingsPage = widget as SoftwareSettingsPage;
+    expect(identical(settingsPage.timeSyncController, timeSyncController), isTrue);
+    expect(settingsPage.apiBaseUrl, testSession.baseUrl);
+  });
+}
+
+TimeSyncController _buildTimeSyncController(
+  SoftwareSettingsController settingsController, {
+  EffectiveClock? effectiveClock,
+}) {
+  return TimeSyncController(
+    softwareSettingsController: settingsController,
+    serverTimeService: _FakeServerTimeService(),
+    systemTimeSyncService: _FakeWindowsTimeSyncService(),
+    effectiveClock: effectiveClock ?? EffectiveClock(),
+  );
+}
+
+class _FakeServerTimeService extends ServerTimeService {
+  @override
+  Future<ServerTimeSnapshot> fetchSnapshot({required String baseUrl}) async {
+    return ServerTimeSnapshot(
+      serverUtc: DateTime.utc(2026, 4, 20, 2, 0, 0),
+      serverTimezoneOffsetMinutes: 480,
+      sampledAtEpochMs:
+          DateTime.utc(2026, 4, 20, 2, 0, 0).millisecondsSinceEpoch,
+    );
+  }
+}
+
+class _FakeWindowsTimeSyncService extends WindowsTimeSyncService {}
+
+class _FixedEffectiveClock extends EffectiveClock {
+  @override
+  DateTime now() => DateTime.utc(2026, 4, 20, 10, 30);
 }

@@ -1,17 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mes_client/core/config/runtime_endpoints.dart';
+import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/features/settings/models/software_settings_models.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_page.dart';
+import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
+import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
+import 'package:mes_client/features/time_sync/services/server_time_service.dart';
+import 'package:mes_client/features/time_sync/services/windows_time_sync_service.dart';
 
 void main() {
   Future<void> pumpPage(
     WidgetTester tester,
     SoftwareSettingsController controller, {
+    TimeSyncController? timeSyncController,
     double? contentWidth,
-  }
-  ) async {
-    Widget page = SoftwareSettingsPage(controller: controller);
+  }) async {
+    final effectiveTimeSyncController =
+        timeSyncController ?? _buildTimeSyncController(controller);
+    Widget page = SoftwareSettingsPage(
+      controller: controller,
+      timeSyncController: effectiveTimeSyncController,
+      apiBaseUrl: defaultApiBaseUrl,
+    );
     if (contentWidth != null) {
       page = Align(
         alignment: Alignment.topLeft,
@@ -33,6 +45,7 @@ void main() {
 
     expect(find.text('外观'), findsWidgets);
     expect(find.text('布局偏好'), findsWidgets);
+    expect(find.text('时间同步'), findsWidgets);
     expect(find.widgetWithText(OutlinedButton, '恢复默认'), findsOneWidget);
   });
 
@@ -58,6 +71,7 @@ void main() {
         densityPreference: AppDensityPreference.compact,
         launchTargetPreference: AppLaunchTargetPreference.lastVisitedModule,
         sidebarPreference: AppSidebarPreference.collapsed,
+        timeSyncEnabled: true,
         lastVisitedPageCode: 'quality',
       ),
     );
@@ -103,4 +117,56 @@ void main() {
     expect(find.text('启动后默认进入'), findsOneWidget);
     expect(find.text('侧边栏默认状态'), findsOneWidget);
   });
+
+  testWidgets('切换到时间同步分区后显示同步策略与操作按钮', (tester) async {
+    final controller = SoftwareSettingsController.memory();
+    final timeSyncController = _buildTimeSyncController(
+      controller,
+      nowProvider: () => DateTime.utc(2026, 4, 20, 2, 0, 0),
+    );
+    await timeSyncController.checkAtStartup(baseUrl: defaultApiBaseUrl);
+
+    await pumpPage(
+      tester,
+      controller,
+      timeSyncController: timeSyncController,
+    );
+    await tester.tap(find.text('时间同步').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('启用时间同步'), findsOneWidget);
+    expect(find.text('立即检查并同步'), findsOneWidget);
+    expect(find.text('仅重新校准软件内时间'), findsOneWidget);
+    expect(find.textContaining('服务器时间：'), findsOneWidget);
+    expect(find.textContaining('本机时间：'), findsOneWidget);
+    expect(find.textContaining('最近同步结果：'), findsOneWidget);
+    expect(find.textContaining('最近同步时间：'), findsOneWidget);
+  });
 }
+
+TimeSyncController _buildTimeSyncController(
+  SoftwareSettingsController controller, {
+  DateTime Function()? nowProvider,
+}) {
+  return TimeSyncController(
+    softwareSettingsController: controller,
+    serverTimeService: _FakeServerTimeService(),
+    systemTimeSyncService: _FakeWindowsTimeSyncService(),
+    effectiveClock: EffectiveClock(),
+    nowProvider: nowProvider,
+  );
+}
+
+class _FakeServerTimeService extends ServerTimeService {
+  @override
+  Future<ServerTimeSnapshot> fetchSnapshot({required String baseUrl}) async {
+    return ServerTimeSnapshot(
+      serverUtc: DateTime.utc(2026, 4, 20, 2, 0, 0),
+      serverTimezoneOffsetMinutes: 480,
+      sampledAtEpochMs:
+          DateTime.utc(2026, 4, 20, 2, 0, 0).millisecondsSinceEpoch,
+    );
+  }
+}
+
+class _FakeWindowsTimeSyncService extends WindowsTimeSyncService {}

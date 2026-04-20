@@ -13,6 +13,7 @@ import 'package:mes_client/features/settings/presentation/software_settings_page
 import 'package:mes_client/features/shell/presentation/home_page.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_navigation.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_state.dart';
+import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
 import 'package:mes_client/features/user/presentation/user_page.dart';
 
 typedef MainShellUserPageBuilder =
@@ -54,6 +55,7 @@ class MainShellPageRegistry {
     required VoidCallback onVisibilityConfigSaved,
     required MessageService messageService,
     required SoftwareSettingsController softwareSettingsController,
+    required TimeSyncController timeSyncController,
     String? homeRefreshStatusText,
     void Function(int count)? onUnreadCountChanged,
     MainShellUserPageBuilder? userPageBuilder,
@@ -240,9 +242,14 @@ class MainShellPageRegistry {
             );
           },
           routePayloadJson: state.preferredRoutePayloadJson,
+          nowProvider: timeSyncController.effectiveClock.now,
         );
       case softwareSettingsUtilityCode:
-        return SoftwareSettingsPage(controller: softwareSettingsController);
+        return SoftwareSettingsPage(
+          controller: softwareSettingsController,
+          timeSyncController: timeSyncController,
+          apiBaseUrl: session.baseUrl,
+        );
       default:
         return Center(child: Text('页面暂未实现：$pageCode'));
     }

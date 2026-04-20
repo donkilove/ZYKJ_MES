@@ -1,24 +1,50 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/config/runtime_endpoints.dart';
+import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/misc/presentation/force_change_password_page.dart';
 import 'package:mes_client/features/misc/presentation/login_page.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/settings/services/software_settings_service.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
+import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
+import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
+import 'package:mes_client/features/time_sync/services/server_time_service.dart';
+import 'package:mes_client/features/time_sync/services/windows_time_sync_service.dart';
 
 typedef SoftwareSettingsServiceFactory =
     Future<SoftwareSettingsService> Function();
 
-Future<void> main() async {
+Future<void> main([List<String> args = const []]) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final softwareSettingsController =
       await bootstrapSoftwareSettingsController();
+  final effectiveClock = EffectiveClock();
+  final systemTimeSyncService = WindowsTimeSyncService();
+  if (systemTimeSyncService.isCommand(args)) {
+    final exitCode = await systemTimeSyncService.handleCommandMode(args);
+    exit(exitCode);
+  }
+  final timeSyncController = TimeSyncController(
+    softwareSettingsController: softwareSettingsController,
+    serverTimeService: ServerTimeService(),
+    systemTimeSyncService: systemTimeSyncService,
+    effectiveClock: effectiveClock,
+  );
 
-  runApp(MesClientApp(softwareSettingsController: softwareSettingsController));
+  runApp(
+    MesClientApp(
+      softwareSettingsController: softwareSettingsController,
+      timeSyncController: timeSyncController,
+    ),
+  );
 }
 
 Future<SoftwareSettingsController> bootstrapSoftwareSettingsController({
@@ -35,9 +61,14 @@ Future<SoftwareSettingsController> bootstrapSoftwareSettingsController({
 }
 
 class MesClientApp extends StatelessWidget {
-  const MesClientApp({required this.softwareSettingsController, super.key});
+  const MesClientApp({
+    required this.softwareSettingsController,
+    required this.timeSyncController,
+    super.key,
+  });
 
   final SoftwareSettingsController softwareSettingsController;
+  final TimeSyncController timeSyncController;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +96,7 @@ class MesClientApp extends StatelessWidget {
           themeMode: softwareSettingsController.themeMode,
           home: AppBootstrapPage(
             softwareSettingsController: softwareSettingsController,
+            timeSyncController: timeSyncController,
           ),
         );
       },
@@ -96,9 +128,14 @@ class MesClientApp extends StatelessWidget {
 }
 
 class AppBootstrapPage extends StatefulWidget {
-  const AppBootstrapPage({required this.softwareSettingsController, super.key});
+  const AppBootstrapPage({
+    required this.softwareSettingsController,
+    required this.timeSyncController,
+    super.key,
+  });
 
   final SoftwareSettingsController softwareSettingsController;
+  final TimeSyncController timeSyncController;
 
   @override
   State<AppBootstrapPage> createState() => _AppBootstrapPageState();
@@ -108,10 +145,15 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
   final AuthService _authService = AuthService();
   AppSession? _session;
   String? _loginNotice;
+  String? _lastTimeSyncNotice;
 
   @override
   void initState() {
     super.initState();
+    widget.timeSyncController.addListener(_handleTimeSyncChanged);
+    unawaited(
+      widget.timeSyncController.checkAtStartup(baseUrl: defaultApiBaseUrl),
+    );
   }
 
   void _handleLoginSuccess(AppSession session) {
@@ -122,6 +164,12 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
       _session = session;
       _loginNotice = null;
     });
+    unawaited(
+      widget.timeSyncController.checkAtStartup(
+        baseUrl: session.baseUrl,
+        force: session.baseUrl != defaultApiBaseUrl,
+      ),
+    );
   }
 
   Future<void> _handleForcePasswordChanged() async {
@@ -155,6 +203,37 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
   }
 
   @override
+  void dispose() {
+    widget.timeSyncController.removeListener(_handleTimeSyncChanged);
+    super.dispose();
+  }
+
+  void _handleTimeSyncChanged() {
+    if (!mounted) {
+      return;
+    }
+    final state = widget.timeSyncController.state;
+    final shouldWarn =
+        state.lastResultCode == TimeSyncResultCode.cancelledByUser ||
+        state.lastResultCode == TimeSyncResultCode.permissionDenied ||
+        state.lastResultCode == TimeSyncResultCode.syncFailed ||
+        state.lastResultCode == TimeSyncResultCode.serverTimeUnavailable;
+    final message = state.message;
+    if (!shouldWarn || message == null || message == _lastTimeSyncNotice) {
+      return;
+    }
+    _lastTimeSyncNotice = message;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (_session == null) {
       return LoginPage(
@@ -174,6 +253,7 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
       session: _session!,
       onLogout: _handleLogout,
       softwareSettingsController: widget.softwareSettingsController,
+      timeSyncController: widget.timeSyncController,
     );
   }
 }

@@ -10,11 +10,16 @@ import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/message/services/message_ws_service.dart';
+import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
 import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
+import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
+import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
+import 'package:mes_client/features/time_sync/services/server_time_service.dart';
+import 'package:mes_client/features/time_sync/services/windows_time_sync_service.dart';
 
 final AppSession _session = AppSession(
   baseUrl: 'http://example.test/api/v1',
@@ -213,6 +218,31 @@ class _FakeMessageWsService extends MessageWsService {
   void reconnect() {}
 }
 
+TimeSyncController _buildTimeSyncController(
+  SoftwareSettingsController controller,
+) {
+  return TimeSyncController(
+    softwareSettingsController: controller,
+    serverTimeService: _FakeServerTimeService(),
+    systemTimeSyncService: _FakeWindowsTimeSyncService(),
+    effectiveClock: EffectiveClock(),
+  );
+}
+
+class _FakeServerTimeService extends ServerTimeService {
+  @override
+  Future<ServerTimeSnapshot> fetchSnapshot({required String baseUrl}) async {
+    return ServerTimeSnapshot(
+      serverUtc: DateTime.utc(2026, 4, 20, 2, 0, 0),
+      serverTimezoneOffsetMinutes: 480,
+      sampledAtEpochMs:
+          DateTime.utc(2026, 4, 20, 2, 0, 0).millisecondsSinceEpoch,
+    );
+  }
+}
+
+class _FakeWindowsTimeSyncService extends WindowsTimeSyncService {}
+
 Future<void> _pumpHomeDashboardShell(
   WidgetTester tester, {
   required _FakeMessageService messageService,
@@ -227,13 +257,15 @@ Future<void> _pumpHomeDashboardShell(
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
+  final settingsController = SoftwareSettingsController.memory();
 
   await tester.pumpWidget(
     MaterialApp(
       home: MainShellPage(
         session: _session,
         onLogout: () {},
-        softwareSettingsController: SoftwareSettingsController.memory(),
+        softwareSettingsController: settingsController,
+        timeSyncController: _buildTimeSyncController(settingsController),
         authService: _FakeAuthService(),
         authzService: _FakeAuthzService(),
         pageCatalogService: _FakePageCatalogService(),

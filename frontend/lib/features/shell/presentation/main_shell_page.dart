@@ -14,6 +14,7 @@ import 'package:mes_client/features/shell/presentation/main_shell_controller.dar
 import 'package:mes_client/features/shell/presentation/main_shell_page_registry.dart';
 import 'package:mes_client/features/shell/presentation/widgets/main_shell_scaffold.dart';
 import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
+import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
 
 const Duration _visibilityRefreshInterval = Duration(seconds: 15);
 const Duration _unreadPollInterval = Duration(seconds: 30);
@@ -25,6 +26,7 @@ class MainShellPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.softwareSettingsController,
+    required this.timeSyncController,
     this.messageWsServiceFactory,
     this.authService,
     this.authzService,
@@ -42,6 +44,7 @@ class MainShellPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final SoftwareSettingsController softwareSettingsController;
+  final TimeSyncController timeSyncController;
   final MessageWsService Function({
     required String baseUrl,
     required String accessToken,
@@ -187,6 +190,7 @@ class _MainShellPageState extends State<MainShellPage>
       onUnreadCountChanged: _controller.updateUnreadCount,
       messageService: _controller.messageService,
       softwareSettingsController: widget.softwareSettingsController,
+      timeSyncController: widget.timeSyncController,
       homeRefreshStatusText: _controller.homeRefreshStatusText(),
       userPageBuilder: widget.userPageBuilder,
       productPageBuilder: widget.productPageBuilder,
@@ -203,6 +207,7 @@ class _MainShellPageState extends State<MainShellPage>
       animation: Listenable.merge([
         _controller,
         widget.softwareSettingsController,
+        widget.timeSyncController,
       ]),
       builder: (context, _) {
         final state = _controller.state;
