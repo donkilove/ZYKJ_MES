@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 
 class CrudPageHeader extends StatelessWidget {
-  static const double _buttonSize = 40;
-
   const CrudPageHeader({super.key, required this.title, this.onRefresh});
 
   final String title;
@@ -10,41 +9,21 @@ class CrudPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+    return MesPageHeader(
+      title: title,
+      actions: [
+        Tooltip(
+          message: '刷新',
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: IconButton(
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh),
             ),
           ),
-          const SizedBox(width: 12),
-          Tooltip(
-            message: '刷新',
-            child: SizedBox(
-              width: _buttonSize,
-              height: _buttonSize,
-              child: IconButton(
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh),
-                style: IconButton.styleFrom(
-                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                  foregroundColor: theme.colorScheme.onSurface,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

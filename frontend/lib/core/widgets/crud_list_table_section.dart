@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
@@ -39,7 +39,7 @@ class CrudListTableSection extends StatelessWidget {
     if (loading) {
       body = loadingWidget ?? const Center(child: CircularProgressIndicator());
     } else if (isEmpty) {
-      body = emptyWidget ?? Center(child: Text(emptyText));
+      body = emptyWidget ?? MesEmptyState(title: emptyText);
     } else {
       final content = enableUnifiedHeaderStyle
           ? UnifiedListTableHeaderStyle.wrap(theme: theme, child: child)

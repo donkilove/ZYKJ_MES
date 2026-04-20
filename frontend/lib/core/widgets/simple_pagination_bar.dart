@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class SimplePaginationBar extends StatelessWidget {
   const SimplePaginationBar({
@@ -22,23 +23,14 @@ class SimplePaginationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text('第 $page / $totalPages 页'),
-        if (showTotal) ...[const SizedBox(width: 12), Text('总数：$total')],
-        const Spacer(),
-        OutlinedButton.icon(
-          onPressed: loading || page <= 1 ? null : onPrevious,
-          icon: const Icon(Icons.chevron_left),
-          label: const Text('上一页'),
-        ),
-        const SizedBox(width: 8),
-        OutlinedButton.icon(
-          onPressed: loading || page >= totalPages ? null : onNext,
-          icon: const Icon(Icons.chevron_right),
-          label: const Text('下一页'),
-        ),
-      ],
+    return MesPaginationBar(
+      page: page,
+      totalPages: totalPages,
+      total: total,
+      loading: loading,
+      showTotal: showTotal,
+      onPrevious: onPrevious,
+      onNext: onNext,
     );
   }
 }
