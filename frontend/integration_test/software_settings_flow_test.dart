@@ -5,16 +5,21 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/core/models/current_user.dart';
 import 'package:mes_client/core/models/page_catalog_models.dart';
+import 'package:mes_client/core/services/page_catalog_service.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/message/services/message_ws_service.dart';
+import 'package:mes_client/features/misc/presentation/login_page.dart';
+import 'package:mes_client/features/settings/models/software_settings_models.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
+import 'package:mes_client/features/settings/services/software_settings_service.dart';
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
 import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
-import 'package:mes_client/core/services/page_catalog_service.dart';
+import 'package:mes_client/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 final AppSession _session = AppSession(
   baseUrl: 'http://example.test/api/v1',
@@ -33,94 +38,6 @@ CurrentUser _buildCurrentUser() {
   );
 }
 
-List<PageCatalogItem> _buildCatalog() {
-  return const [
-    PageCatalogItem(
-      code: 'home',
-      name: '首页',
-      pageType: 'sidebar',
-      parentCode: null,
-      alwaysVisible: true,
-      sortOrder: 10,
-    ),
-    PageCatalogItem(
-      code: 'message',
-      name: '消息',
-      pageType: 'sidebar',
-      parentCode: null,
-      alwaysVisible: false,
-      sortOrder: 80,
-    ),
-    PageCatalogItem(
-      code: 'message_center',
-      name: '消息中心',
-      pageType: 'tab',
-      parentCode: 'message',
-      alwaysVisible: false,
-      sortOrder: 81,
-    ),
-  ];
-}
-
-AuthzSnapshotResult _buildSnapshot() {
-  return const AuthzSnapshotResult(
-    revision: 1,
-    roleCodes: ['system_admin'],
-    visibleSidebarCodes: ['message'],
-    tabCodesByParent: {
-      'message': ['message_center'],
-    },
-    moduleItems: [],
-  );
-}
-
-HomeDashboardData _buildDashboardData() {
-  return HomeDashboardData(
-    generatedAt: DateTime.parse('2026-04-12T12:00:00Z'),
-    noticeCount: 2,
-    todoSummary: const HomeDashboardTodoSummary(
-      totalCount: 4,
-      pendingApprovalCount: 1,
-      highPriorityCount: 1,
-      exceptionCount: 1,
-      overdueCount: 0,
-    ),
-    todoItems: const [
-      HomeDashboardTodoItem(
-        id: 1,
-        title: '待办 A',
-        categoryLabel: '审批',
-        priorityLabel: '高优',
-        targetPageCode: 'user',
-      ),
-      HomeDashboardTodoItem(
-        id: 2,
-        title: '待办 B',
-        categoryLabel: '生产',
-        priorityLabel: '普通',
-        targetPageCode: 'production',
-      ),
-      HomeDashboardTodoItem(
-        id: 3,
-        title: '待办 C',
-        categoryLabel: '质量',
-        priorityLabel: '普通',
-        targetPageCode: 'quality',
-      ),
-      HomeDashboardTodoItem(
-        id: 4,
-        title: '待办 D',
-        categoryLabel: '设备',
-        priorityLabel: '普通',
-        targetPageCode: 'equipment',
-      ),
-    ],
-    riskItems: const [],
-    kpiItems: const [],
-    degradedBlocks: const [],
-  );
-}
-
 class _FakeAuthService extends AuthService {
   @override
   Future<CurrentUser> getCurrentUser({
@@ -136,7 +53,26 @@ class _FakeAuthzService extends AuthzService {
 
   @override
   Future<AuthzSnapshotResult> loadAuthzSnapshot() async {
-    return _buildSnapshot();
+    return const AuthzSnapshotResult(
+      revision: 1,
+      roleCodes: ['system_admin'],
+      visibleSidebarCodes: ['message'],
+      tabCodesByParent: {
+        'message': ['message_center'],
+      },
+      moduleItems: [
+        AuthzSnapshotModuleItem(
+          moduleCode: 'message',
+          moduleName: '消息',
+          moduleRevision: 1,
+          moduleEnabled: true,
+          effectivePermissionCodes: [],
+          effectivePagePermissionCodes: [],
+          effectiveCapabilityCodes: [],
+          effectiveActionPermissionCodes: [],
+        ),
+      ],
+    );
   }
 }
 
@@ -145,14 +81,37 @@ class _FakePageCatalogService extends PageCatalogService {
 
   @override
   Future<List<PageCatalogItem>> listPageCatalog() async {
-    return _buildCatalog();
+    return const [
+      PageCatalogItem(
+        code: 'home',
+        name: '首页',
+        pageType: 'sidebar',
+        parentCode: null,
+        alwaysVisible: true,
+        sortOrder: 10,
+      ),
+      PageCatalogItem(
+        code: 'message',
+        name: '消息',
+        pageType: 'sidebar',
+        parentCode: null,
+        alwaysVisible: false,
+        sortOrder: 80,
+      ),
+      PageCatalogItem(
+        code: 'message_center',
+        name: '消息中心',
+        pageType: 'tab',
+        parentCode: 'message',
+        alwaysVisible: false,
+        sortOrder: 81,
+      ),
+    ];
   }
 }
 
 class _FakeMessageService extends MessageService {
   _FakeMessageService() : super(_session);
-
-  bool lastTodoOnly = false;
 
   @override
   Future<int> getUnreadCount() async => 0;
@@ -160,9 +119,9 @@ class _FakeMessageService extends MessageService {
   @override
   Future<MessageSummaryResult> getSummary() async {
     return const MessageSummaryResult(
-      totalCount: 1,
-      unreadCount: 1,
-      todoUnreadCount: 1,
+      totalCount: 0,
+      unreadCount: 0,
+      todoUnreadCount: 0,
       urgentUnreadCount: 0,
     );
   }
@@ -181,7 +140,6 @@ class _FakeMessageService extends MessageService {
     bool todoOnly = false,
     bool activeOnly = true,
   }) async {
-    lastTodoOnly = todoOnly;
     return const MessageListResult(items: [], total: 0, page: 1, pageSize: 20);
   }
 }
@@ -191,7 +149,21 @@ class _FakeHomeDashboardService extends HomeDashboardService {
 
   @override
   Future<HomeDashboardData> load() async {
-    return _buildDashboardData();
+    return const HomeDashboardData(
+      generatedAt: null,
+      noticeCount: 0,
+      todoSummary: HomeDashboardTodoSummary(
+        totalCount: 0,
+        pendingApprovalCount: 0,
+        highPriorityCount: 0,
+        exceptionCount: 0,
+        overdueCount: 0,
+      ),
+      todoItems: [],
+      riskItems: [],
+      kpiItems: [],
+      degradedBlocks: [],
+    );
   }
 }
 
@@ -213,9 +185,9 @@ class _FakeMessageWsService extends MessageWsService {
   void reconnect() {}
 }
 
-Future<void> _pumpHomeDashboardShell(
+Future<void> _pumpMainShellPage(
   WidgetTester tester, {
-  required _FakeMessageService messageService,
+  required SoftwareSettingsController controller,
 }) async {
   tester.view.physicalSize = const Size(1600, 1200);
   tester.view.devicePixelRatio = 1.0;
@@ -233,11 +205,11 @@ Future<void> _pumpHomeDashboardShell(
       home: MainShellPage(
         session: _session,
         onLogout: () {},
-        softwareSettingsController: SoftwareSettingsController.memory(),
+        softwareSettingsController: controller,
         authService: _FakeAuthService(),
         authzService: _FakeAuthzService(),
         pageCatalogService: _FakePageCatalogService(),
-        messageService: messageService,
+        messageService: _FakeMessageService(),
         homeDashboardService: _FakeHomeDashboardService(),
         messageWsServiceFactory:
             ({
@@ -260,20 +232,39 @@ Future<void> _pumpHomeDashboardShell(
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('登录后首页工作台展示 4 条待办并可跳转到消息待办视图', (tester) async {
-    final messageService = _FakeMessageService();
-    await _pumpHomeDashboardShell(tester, messageService: messageService);
+  testWidgets('修改软件设置后重建应用会保留主题偏好但仍显示登录页', (tester) async {
+    SharedPreferences.setMockInitialValues({});
 
-    expect(find.text('我的待办队列'), findsOneWidget);
-    expect(find.text('待办 A'), findsOneWidget);
-    expect(find.text('待办 B'), findsOneWidget);
-    expect(find.text('待办 C'), findsOneWidget);
-    expect(find.text('待办 D'), findsOneWidget);
+    final firstController = SoftwareSettingsController(
+      service: await SoftwareSettingsService.create(),
+    );
+    await firstController.load();
 
-    await tester.tap(find.text('查看全部待办'));
+    await _pumpMainShellPage(tester, controller: firstController);
+
+    await tester.tap(
+      find.byKey(const ValueKey('main-shell-entry-software-settings')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.widgetWithText(RadioListTile<AppThemePreference>, '深色'),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('消息中心'), findsOneWidget);
-    expect(messageService.lastTodoOnly, isTrue);
+    expect(firstController.settings.themePreference, AppThemePreference.dark);
+
+    final secondController = SoftwareSettingsController(
+      service: await SoftwareSettingsService.create(),
+    );
+    await secondController.load();
+
+    await tester.pumpWidget(
+      MesClientApp(softwareSettingsController: secondController),
+    );
+    await tester.pumpAndSettle();
+
+    final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(materialApp.themeMode, ThemeMode.dark);
+    expect(find.byType(LoginPage), findsOneWidget);
   });
 }

@@ -490,14 +490,26 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('启动后默认进入：首页'), findsOneWidget);
-    expect(find.text('启动后默认进入：上次停留模块'), findsOneWidget);
+    await tester.tap(find.text('布局偏好'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('启动后默认进入'), findsOneWidget);
+    expect(
+      find.widgetWithText(RadioListTile<AppLaunchTargetPreference>, '首页'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(RadioListTile<AppLaunchTargetPreference>, '上次停留模块'),
+      findsOneWidget,
+    );
     expect(
       softwareSettingsController.settings.launchTargetPreference,
       AppLaunchTargetPreference.home,
     );
 
-    await tester.tap(find.text('启动后默认进入：上次停留模块'));
+    await tester.tap(
+      find.widgetWithText(RadioListTile<AppLaunchTargetPreference>, '上次停留模块'),
+    );
     await tester.pumpAndSettle();
 
     expect(

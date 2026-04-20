@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/features/message/presentation/message_center_page.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
+import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page_registry.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_state.dart';
 
@@ -30,32 +31,28 @@ void main() {
       state: state,
       onLogout: () {},
       onRefreshShellData: ({bool loadCatalog = true}) async {},
-      onNavigateToPageTarget: ({
-        required pageCode,
-        String? tabCode,
-        String? routePayloadJson,
-      }) {},
+      onNavigateToPageTarget:
+          ({required pageCode, String? tabCode, String? routePayloadJson}) {},
       onVisibilityConfigSaved: () {},
       onUnreadCountChanged: (_) {},
       messageService: MessageService(testSession),
-      userPageBuilder: ({
-        required session,
-        required onLogout,
-        required visibleTabCodes,
-        required capabilityCodes,
-        String? preferredTabCode,
-        String? routePayloadJson,
-        VoidCallback? onVisibilityConfigSaved,
-      }) {
-        return const Text('override-user-page');
-      },
+      softwareSettingsController: SoftwareSettingsController.memory(),
+      userPageBuilder:
+          ({
+            required session,
+            required onLogout,
+            required visibleTabCodes,
+            required capabilityCodes,
+            String? preferredTabCode,
+            String? routePayloadJson,
+            VoidCallback? onVisibilityConfigSaved,
+          }) {
+            return const Text('override-user-page');
+          },
     );
 
     expect(widget, isA<Text>());
-    expect(
-      (widget as Text).data,
-      'override-user-page',
-    );
+    expect((widget as Text).data, 'override-user-page');
   });
 
   test('消息模块会透传 refreshTick 与 routePayloadJson', () {
@@ -64,7 +61,9 @@ void main() {
       currentUser: buildCurrentUser(),
       authzSnapshot: buildSnapshot(
         visibleSidebarCodes: const ['message'],
-        tabCodesByParent: const {'message': ['message_center']},
+        tabCodesByParent: const {
+          'message': ['message_center'],
+        },
         moduleItems: [
           buildModuleItem(
             'message',
@@ -76,7 +75,9 @@ void main() {
         ],
       ),
       catalog: buildCatalog(),
-      tabCodesByParent: const {'message': ['message_center']},
+      tabCodesByParent: const {
+        'message': ['message_center'],
+      },
       menus: const [
         MainShellMenuItem(
           code: 'message',
@@ -95,14 +96,12 @@ void main() {
       state: state,
       onLogout: () {},
       onRefreshShellData: ({bool loadCatalog = true}) async {},
-      onNavigateToPageTarget: ({
-        required pageCode,
-        String? tabCode,
-        String? routePayloadJson,
-      }) {},
+      onNavigateToPageTarget:
+          ({required pageCode, String? tabCode, String? routePayloadJson}) {},
       onVisibilityConfigSaved: () {},
       onUnreadCountChanged: (_) {},
       messageService: MessageService(testSession),
+      softwareSettingsController: SoftwareSettingsController.memory(),
     );
 
     expect(widget, isA<MessageCenterPage>());

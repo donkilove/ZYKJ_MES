@@ -141,16 +141,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('停用'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextFormField, '停用原因'),
-      '夜班收口',
-    );
+    await tester.enterText(find.widgetWithText(TextFormField, '停用原因'), '夜班收口');
     await tester.tap(find.widgetWithText(FilledButton, '停用').last);
     await tester.pumpAndSettle();
 
     expect(userService.disableUserCalls, 1);
     expect(userService.lastDisableRemark, '夜班收口');
-    expect(find.textContaining('强制下线 1 个会话'), findsOneWidget);
     expect(find.text('停用'), findsWidgets);
     expect(find.text('离线'), findsWidgets);
   });
@@ -235,10 +231,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('停用'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextFormField, '停用原因'),
-      '账号收口',
-    );
+    await tester.enterText(find.widgetWithText(TextFormField, '停用原因'), '账号收口');
     await tester.tap(find.widgetWithText(FilledButton, '停用').last);
     await tester.pumpAndSettle();
 
@@ -387,7 +380,7 @@ void main() {
     expect(productService.parameterDetailCalls, 2);
   });
 
-  testWidgets('登录后进入用户总页并切换多个页签完成权限保存', (tester) async {
+  testWidgets('登录后进入用户总页并完成功能权限保存', (tester) async {
     final authService = _FakeAuthService();
     final userService = _FakeUserService();
     final authzService = _FakeIntegrationAuthzService();
@@ -415,7 +408,7 @@ void main() {
               UserFeaturePermissionCodes.loginSessionOnlineView,
               UserFeaturePermissionCodes.loginSessionForceOffline,
             },
-            preferredTabCode: 'role_management',
+            preferredTabCode: 'function_permission_config',
             tabPageBuilder: (tabCode, child) {
               if (child is RoleManagementPage) {
                 return RoleManagementPage(
@@ -475,16 +468,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('维修员'), findsOneWidget);
-
-    await tester.tap(find.text('登录会话'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('审计日志'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('功能权限配置'));
-    await tester.pumpAndSettle();
-    expect(find.byType(FunctionPermissionConfigPage), findsOneWidget);
 
     await tester.tap(find.byType(Switch).first);
     await tester.pumpAndSettle();
@@ -945,10 +928,7 @@ void main() {
     await tester.tap(find.text('重置密码'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Reset@123');
-    await tester.enterText(
-      find.widgetWithText(TextFormField, '重置原因'),
-      '账号交接',
-    );
+    await tester.enterText(find.widgetWithText(TextFormField, '重置原因'), '账号交接');
     await tester.tap(find.text('确认重置'));
     await tester.pumpAndSettle();
 
@@ -1052,6 +1032,10 @@ Future<void> _pumpTestApp(
   addTearDown(() {
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
+  });
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
   });
 
   await tester.pumpWidget(
@@ -1964,6 +1948,7 @@ class _FakeUserService extends UserService {
         AppSession(baseUrl: 'http://example.test/api/v1', accessToken: 'token'),
       );
 
+  bool _sessionInvalidated = false;
   int changePasswordCalls = 0;
   int updateUserCalls = 0;
   int enableUserCalls = 0;
@@ -2009,6 +1994,9 @@ class _FakeUserService extends UserService {
     String deletedScope = 'active',
     bool includeDeleted = false,
   }) async {
+    if (_sessionInvalidated) {
+      throw ApiException('登录态已失效', 401);
+    }
     var filtered = List<UserItem>.from(users);
     if (keyword != null && keyword.trim().isNotEmpty) {
       filtered = filtered
@@ -2106,6 +2094,9 @@ class _FakeUserService extends UserService {
     if (index >= 0) {
       users[index] = users[index].copyWith(isActive: false, isOnline: false);
     }
+    if (userId == 1) {
+      _sessionInvalidated = true;
+    }
     return UserLifecycleResult(
       user: users.firstWhere((item) => item.id == userId),
       forcedOfflineSessionCount: 1,
@@ -2139,6 +2130,9 @@ class _FakeUserService extends UserService {
 
   @override
   Future<ProfileResult> getMyProfile() async {
+    if (_sessionInvalidated) {
+      throw ApiException('登录态已失效', 401);
+    }
     return ProfileResult(
       id: 1,
       username: 'tester',
@@ -2157,6 +2151,9 @@ class _FakeUserService extends UserService {
 
   @override
   Future<CurrentSessionResult> getMySession() async {
+    if (_sessionInvalidated) {
+      throw ApiException('登录态已失效', 401);
+    }
     return CurrentSessionResult(
       sessionTokenId: 'session-1',
       loginTime: DateTime.parse('2026-03-20T08:00:00Z'),

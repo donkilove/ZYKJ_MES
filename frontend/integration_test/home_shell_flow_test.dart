@@ -36,6 +36,7 @@ import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/message/services/message_ws_service.dart';
+import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
@@ -61,8 +62,13 @@ void main() {
     expect(find.textContaining('测试用户'), findsWidgets);
     expect(find.byType(Badge), findsNothing);
 
+    final todoCard = find.ancestor(
+      of: find.text('我的待办队列'),
+      matching: find.byType(Card),
+    );
+
     await tester.tap(
-      find.descendant(of: find.byType(GridView), matching: find.text('用户')),
+      find.descendant(of: todoCard, matching: find.text('用户')).first,
     );
     await tester.pumpAndSettle();
 
@@ -684,6 +690,10 @@ Future<void> _pumpHomeShellApp(
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
 
   await tester.pumpWidget(
     MaterialApp(
@@ -1182,6 +1192,8 @@ class _HomeShellIntegrationApp extends StatefulWidget {
 
 class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
   AppSession? _session;
+  final SoftwareSettingsController _softwareSettingsController =
+      SoftwareSettingsController.memory();
 
   @override
   Widget build(BuildContext context) {
@@ -1206,6 +1218,7 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
           _session = null;
         });
       },
+      softwareSettingsController: _softwareSettingsController,
       authService: widget.authService,
       authzService: useRealBackend ? null : _IntegrationAuthzService(),
       pageCatalogService: useRealBackend
