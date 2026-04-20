@@ -8,6 +8,10 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_footer.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_header.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_table.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_toolbar.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_page_header.dart';
@@ -1197,115 +1201,37 @@ class _ProductParameterManagementPageState
     );
   }
 
-  Widget _buildEditorFooterActions() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        TextButton(
-          onPressed: _editorSubmitting ? null : _exitEditor,
-          child: const Text('取消'),
-        ),
-        const SizedBox(width: 12),
-        FilledButton(
-          onPressed: (_editorSubmitting || _editorReadOnly)
-              ? null
-              : _saveEditor,
-          child: _editorSubmitting
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('保存参数'),
-        ),
-      ],
-    );
-  }
-
   Widget _buildEditorView(ThemeData theme) {
     final target = _editingTarget!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            TextButton.icon(
-              onPressed: _editorSubmitting ? null : _exitEditor,
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('返回列表'),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '编辑版本参数 - ${target.productName}（${_editingVersionLabel.isEmpty ? target.versionLabel : _editingVersionLabel}）',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 12),
-            if (_editingLifecycleStatus.isNotEmpty)
-              Chip(
-                label: Text(
-                  _editingLifecycleStatus == 'draft' ? '草稿可编辑' : '非草稿只读',
-                ),
-                visualDensity: VisualDensity.compact,
-              ),
-            const SizedBox(width: 8),
-            if (_hasUnsavedChanges)
-              Chip(
-                label: const Text('有未保存修改'),
-                backgroundColor: theme.colorScheme.secondaryContainer,
-                visualDensity: VisualDensity.compact,
-              ),
-            const Spacer(),
-            SizedBox(
-              width: 180,
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: '参数分组筛选',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _editorGroupFilter,
-                    isDense: true,
-                    items: [
-                      const DropdownMenuItem<String>(
-                        value: '',
-                        child: Text('全部分组'),
-                      ),
-                      ..._buildCategorySuggestions().map(
-                        (c) =>
-                            DropdownMenuItem<String>(value: c, child: Text(c)),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _editorGroupFilter = value ?? '';
-                      });
-                    },
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: '刷新参数',
-              onPressed: _editorSubmitting
-                  ? null
-                  : () => _enterEditor(
-                      target,
-                      requestedVersionLabel: _editingVersionLabel.isEmpty
-                          ? null
-                          : _editingVersionLabel,
-                    ),
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
+        ProductParameterEditorHeader(
+          productName: target.productName,
+          versionLabel: _editingVersionLabel.isEmpty
+              ? target.versionLabel
+              : _editingVersionLabel,
+          lifecycleStatus: _editingLifecycleStatus,
+          hasUnsavedChanges: _hasUnsavedChanges,
+          onBack: _editorSubmitting ? null : _exitEditor,
+        ),
+        const SizedBox(height: 12),
+        ProductParameterEditorToolbar(
+          groupFilter: _editorGroupFilter,
+          categorySuggestions: _buildCategorySuggestions(),
+          hasUnsavedChanges: _hasUnsavedChanges,
+          onGroupChanged: (value) {
+            setState(() {
+              _editorGroupFilter = value;
+            });
+          },
+          onRefresh: () => _enterEditor(
+            target,
+            requestedVersionLabel: _editingVersionLabel.isEmpty
+                ? null
+                : _editingVersionLabel,
+          ),
+          refreshEnabled: !_editorSubmitting,
         ),
         const SizedBox(height: 12),
         if (_editorMessage.isNotEmpty)
@@ -1335,40 +1261,29 @@ class _ProductParameterManagementPageState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: _buildEditorTableArea()),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: (_editorSubmitting || _editorReadOnly)
-                          ? null
-                          : () {
-                              setState(() {
-                                final row = _ParameterEditorRow.empty(
-                                  rowId: _nextEditorRowId(),
-                                );
-                                _attachCategoryDirtyListener(row);
-                                _editorRows = [..._editorRows, row];
-                              });
-                              _markDirty();
-                            },
-                      icon: const Icon(Icons.add),
-                      label: const Text('新增参数'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _remarkController,
-                    maxLines: 2,
-                    readOnly: _editorReadOnly,
-                    onChanged: _editorReadOnly ? null : (_) => _markDirty(),
-                    decoration: const InputDecoration(
-                      labelText: '本次修改备注（必填）',
-                      border: OutlineInputBorder(),
+                  Expanded(
+                    child: ProductParameterEditorTable(
+                      child: _buildEditorTableArea(),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildEditorFooterActions(),
+                  ProductParameterEditorFooter(
+                    remarkController: _remarkController,
+                    editorReadOnly: _editorReadOnly,
+                    editorSubmitting: _editorSubmitting,
+                    onAddRow: () {
+                      setState(() {
+                        final row = _ParameterEditorRow.empty(
+                          rowId: _nextEditorRowId(),
+                        );
+                        _attachCategoryDirtyListener(row);
+                        _editorRows = [..._editorRows, row];
+                      });
+                      _markDirty();
+                    },
+                    onCancel: _exitEditor,
+                    onSave: _saveEditor,
+                  ),
                 ],
               ),
             ),

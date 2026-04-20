@@ -5,6 +5,11 @@ import 'package:mes_client/core/ui/foundation/mes_theme.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/product_parameter_management_page.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_footer.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_header.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_row_model.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_table.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_toolbar.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_page_header.dart';
@@ -195,5 +200,68 @@ void main() {
     expect(find.byType(ProductParameterManagementFilterSection), findsOneWidget);
     expect(find.byType(ProductParameterVersionTableSection), findsOneWidget);
     expect(find.byType(ProductParameterManagementFeedbackBanner), findsNothing);
+  });
+
+  testWidgets('产品参数编辑态展示头部 工具条 表格和底部动作区', (tester) async {
+    final row = ProductParameterEditorRowModel.empty(rowId: 1);
+    addTearDown(row.dispose);
+    final remarkController = TextEditingController(text: '本次修改备注');
+    addTearDown(remarkController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              const ProductParameterEditorHeader(
+                productName: '产品41',
+                versionLabel: 'V1.1',
+                lifecycleStatus: 'draft',
+                hasUnsavedChanges: true,
+                onBack: null,
+              ),
+              ProductParameterEditorToolbar(
+                groupFilter: '',
+                categorySuggestions: const ['基础参数', '产品测试参数'],
+                hasUnsavedChanges: true,
+                onGroupChanged: (_) {},
+                onRefresh: () {},
+                refreshEnabled: true,
+              ),
+              Expanded(
+                child: ProductParameterEditorTable(
+                  rows: [row],
+                  visibleRows: [row],
+                  editorReadOnly: false,
+                  editorSubmitting: false,
+                  onTypeChanged: (target, value) {},
+                  onValueChanged: (target, value) {},
+                  onDescriptionChanged: (target) {},
+                  onCategoryChanged: (target) {},
+                  onDeleteRow: (target) {},
+                  onReorder: (oldIndex, newIndex) {},
+                ),
+              ),
+              ProductParameterEditorFooter(
+                remarkController: remarkController,
+                editorReadOnly: false,
+                editorSubmitting: false,
+                onAddRow: () {},
+                onCancel: () {},
+                onSave: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('product-parameter-editor-header')), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-parameter-editor-toolbar')), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-parameter-editor-table')), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-parameter-editor-footer')), findsOneWidget);
+    expect(find.textContaining('编辑版本参数 - 产品41'), findsOneWidget);
+    expect(find.text('新增参数'), findsOneWidget);
+    expect(find.text('保存参数'), findsOneWidget);
   });
 }
