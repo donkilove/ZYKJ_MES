@@ -1599,6 +1599,10 @@ void main() {
       await tester.tap(find.text('产品31'));
       await tester.pumpAndSettle();
 
+      expect(
+        find.byKey(const ValueKey('product-version-feedback-banner')),
+        findsOneWidget,
+      );
       expect(find.text('当前无生效版本，请前往版本管理生效版本后恢复启用'), findsOneWidget);
     });
 
@@ -1685,6 +1689,10 @@ void main() {
       await tester.tap(find.text('产品61'));
       await tester.pumpAndSettle();
 
+      expect(
+        find.byKey(const ValueKey('product-version-toolbar')),
+        findsOneWidget,
+      );
       expect(find.widgetWithText(OutlinedButton, '复制版本'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, '导出参数'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, '编辑版本说明'), findsOneWidget);

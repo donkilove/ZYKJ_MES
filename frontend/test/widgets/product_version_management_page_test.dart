@@ -370,4 +370,64 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('ProductVersionManagementPage 窄宽度下仍保留产品区与版本工作区', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final service = _PageStructureService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 760,
+            height: 900,
+            child: ProductVersionManagementPage(
+              session: AppSession(baseUrl: '', accessToken: 'token'),
+              onLogout: () {},
+              tabCode: productVersionManagementTabCode,
+              canManageVersions: true,
+              canActivateVersions: true,
+              canExportVersionParameters: true,
+              service: service,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('产品101'));
+    await tester.pumpAndSettle();
+
+    final sidebarRect = tester.getRect(
+      find.byKey(const ValueKey('mes-list-detail-shell-sidebar')),
+    );
+    final contentRect = tester.getRect(
+      find.byKey(const ValueKey('mes-list-detail-shell-content')),
+    );
+
+    expect(sidebarRect.top, lessThan(contentRect.top));
+    expect(find.byKey(const ValueKey('product-version-toolbar')), findsOneWidget);
+
+    final contentScrollable = find.descendant(
+      of: find.byKey(const ValueKey('mes-list-detail-shell-content')),
+      matching: find.byType(Scrollable),
+    );
+    await tester.drag(contentScrollable.first, const Offset(0, -240));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('product-version-table-section')),
+      findsOneWidget,
+    );
+  });
 }

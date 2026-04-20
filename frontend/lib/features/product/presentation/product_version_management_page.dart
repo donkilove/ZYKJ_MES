@@ -590,110 +590,131 @@ class _ProductVersionManagementPageState
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: MesListDetailShell(
-              banner: ProductVersionFeedbackBanner(
-                message: _pageMessage,
-                hasDraft: _hasDraftVersion,
-                product: selectedProduct,
-                effectiveVersion: _effectiveVersion,
-                formatDate: _formatDate,
-              ),
-              sidebar: ProductSelectorPanel(
-                searchController: _searchController,
-                loading: _loadingProducts,
-                products: _products,
-                selectedProductId: selectedProduct?.id,
-                page: _productPage,
-                totalPages: _productTotalPages,
-                total: _productTotal,
-                onSearchSubmitted: (value) {
-                  _productKeyword = value.trim();
-                  _productPage = 1;
-                  _loadProducts();
-                },
-                onRefresh: _loadProducts,
-                onSelectProduct: (product) => _loadVersions(product),
-                onPreviousPage: _productPage > 1
-                    ? () {
-                        _productPage -= 1;
-                        _loadProducts();
-                      }
-                    : null,
-                onNextPage: _productPage < _productTotalPages
-                    ? () {
-                        _productPage += 1;
-                        _loadProducts();
-                      }
-                    : null,
-              ),
-              content: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ProductVersionToolbar(
-                    product: selectedProduct,
-                    selectedVersion: selectedVersion,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isStacked = constraints.maxWidth < 960;
+                final stackedTableHeight =
+                    (constraints.maxHeight * 0.6).clamp(320.0, 520.0).toDouble();
+
+                final toolbar = ProductVersionToolbar(
+                  product: selectedProduct,
+                  selectedVersion: selectedVersion,
+                  hasDraft: _hasDraftVersion,
+                  canManageVersions: widget.canManageVersions,
+                  canActivateVersions: widget.canActivateVersions,
+                  canExportVersionParameters:
+                      widget.canExportVersionParameters,
+                  onCreateVersion: _createVersion,
+                  onCopyVersion: () {
+                    if (selectedVersion != null) {
+                      _copyVersion(selectedVersion);
+                    }
+                  },
+                  onEditVersionNote: () {
+                    if (selectedVersion != null) {
+                      _editVersionNote(selectedVersion);
+                    }
+                  },
+                  onExportParameters: () {
+                    if (selectedVersion != null) {
+                      _exportVersionParams(selectedVersion);
+                    }
+                  },
+                  onActivateVersion: () {
+                    if (selectedVersion != null) {
+                      _activateVersion(selectedVersion);
+                    }
+                  },
+                  onRefresh: () {
+                    if (selectedProduct != null) {
+                      _loadVersions(selectedProduct);
+                    }
+                  },
+                );
+
+                final versionTable = selectedProduct == null
+                    ? const Center(child: Text('请在左侧选择产品'))
+                    : ProductVersionTableSection(
+                        versions: _versions,
+                        loading: _loadingVersions,
+                        selectedVersionNumber: _selectedVersionNumber,
+                        canManageVersions: widget.canManageVersions,
+                        canActivateVersions: widget.canActivateVersions,
+                        canExportVersionParameters:
+                            widget.canExportVersionParameters,
+                        onSelectVersion: (versionNumber) {
+                          setState(() {
+                            _selectedVersionNumber = versionNumber;
+                          });
+                        },
+                        onShowDetail: _showVersionDetail,
+                        onActivate: _activateVersion,
+                        onCopy: _copyVersion,
+                        onEditNote: _editVersionNote,
+                        onEditParameters: _navigateToEditParams,
+                        onExport: _exportVersionParams,
+                        onDisable: _disableVersion,
+                        onDelete: _deleteVersion,
+                        formatDate: _formatDate,
+                      );
+
+                return MesListDetailShell(
+                  banner: ProductVersionFeedbackBanner(
+                    message: _pageMessage,
                     hasDraft: _hasDraftVersion,
-                    canManageVersions: widget.canManageVersions,
-                    canActivateVersions: widget.canActivateVersions,
-                    canExportVersionParameters:
-                        widget.canExportVersionParameters,
-                    onCreateVersion: _createVersion,
-                    onCopyVersion: () {
-                      if (selectedVersion != null) {
-                        _copyVersion(selectedVersion);
-                      }
-                    },
-                    onEditVersionNote: () {
-                      if (selectedVersion != null) {
-                        _editVersionNote(selectedVersion);
-                      }
-                    },
-                    onExportParameters: () {
-                      if (selectedVersion != null) {
-                        _exportVersionParams(selectedVersion);
-                      }
-                    },
-                    onActivateVersion: () {
-                      if (selectedVersion != null) {
-                        _activateVersion(selectedVersion);
-                      }
-                    },
-                    onRefresh: () {
-                      if (selectedProduct != null) {
-                        _loadVersions(selectedProduct);
-                      }
-                    },
+                    product: selectedProduct,
+                    effectiveVersion: _effectiveVersion,
+                    formatDate: _formatDate,
                   ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: selectedProduct == null
-                        ? const Center(child: Text('请在左侧选择产品'))
-                        : ProductVersionTableSection(
-                            versions: _versions,
-                            loading: _loadingVersions,
-                            selectedVersionNumber: _selectedVersionNumber,
-                            canManageVersions: widget.canManageVersions,
-                            canActivateVersions: widget.canActivateVersions,
-                            canExportVersionParameters:
-                                widget.canExportVersionParameters,
-                            onSelectVersion: (versionNumber) {
-                              setState(() {
-                                _selectedVersionNumber = versionNumber;
-                              });
-                            },
-                            onShowDetail: _showVersionDetail,
-                            onActivate: _activateVersion,
-                            onCopy: _copyVersion,
-                            onEditNote: _editVersionNote,
-                            onEditParameters: _navigateToEditParams,
-                            onExport: _exportVersionParams,
-                            onDisable: _disableVersion,
-                            onDelete: _deleteVersion,
-                            formatDate: _formatDate,
-                          ),
+                  sidebar: ProductSelectorPanel(
+                    searchController: _searchController,
+                    loading: _loadingProducts,
+                    products: _products,
+                    selectedProductId: selectedProduct?.id,
+                    page: _productPage,
+                    totalPages: _productTotalPages,
+                    total: _productTotal,
+                    onSearchSubmitted: (value) {
+                      _productKeyword = value.trim();
+                      _productPage = 1;
+                      _loadProducts();
+                    },
+                    onRefresh: _loadProducts,
+                    onSelectProduct: (product) => _loadVersions(product),
+                    onPreviousPage: _productPage > 1
+                        ? () {
+                            _productPage -= 1;
+                            _loadProducts();
+                          }
+                        : null,
+                    onNextPage: _productPage < _productTotalPages
+                        ? () {
+                            _productPage += 1;
+                            _loadProducts();
+                          }
+                        : null,
                   ),
-                ],
-              ),
+                  content: isStacked
+                      ? ListView(
+                          children: [
+                            toolbar,
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: stackedTableHeight,
+                              child: versionTable,
+                            ),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            toolbar,
+                            const SizedBox(height: 16),
+                            Expanded(child: versionTable),
+                          ],
+                        ),
+                );
+              },
             ),
           ),
         ],
