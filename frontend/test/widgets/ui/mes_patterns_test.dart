@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_table_section_header.dart';
 
 void main() {
   testWidgets('MesPageHeader 展示标题、副标题和操作区', (tester) async {
@@ -54,5 +57,56 @@ void main() {
     expect(find.text('列表区'), findsOneWidget);
     expect(find.text('第 1 / 3 页'), findsOneWidget);
     expect(find.text('总数：56'), findsOneWidget);
+  });
+
+  testWidgets(
+    'MesCrudPageScaffold 按固定顺序装配 header filters banner content pagination',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildMesTheme(
+            brightness: Brightness.light,
+            visualDensity: VisualDensity.standard,
+          ),
+          home: const Scaffold(
+            body: MesCrudPageScaffold(
+              header: Text('header-slot'),
+              filters: Text('filters-slot'),
+              banner: MesInlineBanner.info(message: '页内提示'),
+              content: Placeholder(),
+              pagination: Text('pagination-slot'),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('header-slot'), findsOneWidget);
+      expect(find.text('filters-slot'), findsOneWidget);
+      expect(find.text('页内提示'), findsOneWidget);
+      expect(find.text('pagination-slot'), findsOneWidget);
+      expect(find.byType(MesInlineBanner), findsOneWidget);
+    },
+  );
+
+  testWidgets('MesTableSectionHeader 支持标题、副标题和右侧动作', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: const Scaffold(
+          body: MesTableSectionHeader(
+            title: '列表区',
+            subtitle: '统一表格说明',
+            trailing: Text('仅右侧动作'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('列表区'), findsOneWidget);
+    expect(find.text('统一表格说明'), findsOneWidget);
+    expect(find.text('仅右侧动作'), findsOneWidget);
   });
 }
