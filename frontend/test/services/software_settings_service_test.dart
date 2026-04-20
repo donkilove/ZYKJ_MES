@@ -10,6 +10,7 @@ void main() {
       densityPreference: AppDensityPreference.comfortable,
       launchTargetPreference: AppLaunchTargetPreference.home,
       sidebarPreference: AppSidebarPreference.expanded,
+      timeSyncEnabled: true,
       lastVisitedPageCode: 'quality',
     );
 
@@ -30,6 +31,7 @@ void main() {
     expect(settings.densityPreference, AppDensityPreference.comfortable);
     expect(settings.launchTargetPreference, AppLaunchTargetPreference.home);
     expect(settings.sidebarPreference, AppSidebarPreference.expanded);
+    expect(settings.timeSyncEnabled, isTrue);
     expect(settings.lastVisitedPageCode, isNull);
   });
 
@@ -39,6 +41,7 @@ void main() {
       'software_settings.density_preference': 'compact',
       'software_settings.launch_target_preference': 'last_visited_module',
       'software_settings.sidebar_preference': 'collapsed',
+      'software_settings.time_sync_enabled': false,
       'software_settings.last_visited_page_code': 'quality',
     });
     final service = SoftwareSettingsService(
@@ -54,6 +57,7 @@ void main() {
       AppLaunchTargetPreference.lastVisitedModule,
     );
     expect(settings.sidebarPreference, AppSidebarPreference.collapsed);
+    expect(settings.timeSyncEnabled, isFalse);
     expect(settings.lastVisitedPageCode, 'quality');
   });
 
@@ -75,6 +79,7 @@ void main() {
     expect(settings.densityPreference, AppDensityPreference.comfortable);
     expect(settings.launchTargetPreference, AppLaunchTargetPreference.home);
     expect(settings.sidebarPreference, AppSidebarPreference.expanded);
+    expect(settings.timeSyncEnabled, isTrue);
     expect(settings.lastVisitedPageCode, isNull);
   });
 
@@ -90,6 +95,7 @@ void main() {
         densityPreference: AppDensityPreference.compact,
         launchTargetPreference: AppLaunchTargetPreference.lastVisitedModule,
         sidebarPreference: AppSidebarPreference.collapsed,
+        timeSyncEnabled: false,
         lastVisitedPageCode: ' quality ',
       ),
     );
@@ -103,6 +109,7 @@ void main() {
       AppLaunchTargetPreference.lastVisitedModule,
     );
     expect(settings.sidebarPreference, AppSidebarPreference.collapsed);
+    expect(settings.timeSyncEnabled, isFalse);
     expect(settings.lastVisitedPageCode, 'quality');
   });
 
@@ -119,6 +126,7 @@ void main() {
         densityPreference: AppDensityPreference.comfortable,
         launchTargetPreference: AppLaunchTargetPreference.home,
         sidebarPreference: AppSidebarPreference.expanded,
+        timeSyncEnabled: true,
         lastVisitedPageCode: '   ',
       ),
     );

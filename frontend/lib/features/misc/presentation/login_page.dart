@@ -3,19 +3,15 @@ import 'package:flutter/services.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/config/runtime_endpoints.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/misc/presentation/register_page.dart';
-
-const String _defaultApiBaseUrl = String.fromEnvironment(
-  'MES_API_BASE_URL',
-  defaultValue: 'http://127.0.0.1:8000/api/v1',
-);
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
     super.key,
     required this.onLoginSuccess,
-    this.defaultBaseUrl = _defaultApiBaseUrl,
+    this.defaultBaseUrl = defaultApiBaseUrl,
     this.initialMessage,
     this.authService,
   });

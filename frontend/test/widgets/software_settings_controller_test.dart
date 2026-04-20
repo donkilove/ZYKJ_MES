@@ -12,6 +12,7 @@ void main() {
       densityPreference: AppDensityPreference.compact,
       launchTargetPreference: AppLaunchTargetPreference.lastVisitedModule,
       sidebarPreference: AppSidebarPreference.collapsed,
+      timeSyncEnabled: true,
       lastVisitedPageCode: 'QUALITY_DASHBOARD',
     );
     final controller = SoftwareSettingsController(
@@ -58,6 +59,20 @@ void main() {
 
     expect(controller.settings, const SoftwareSettings.defaults());
     expect(service.savedSettings.last, const SoftwareSettings.defaults());
+  });
+
+  test('updateTimeSyncEnabled() 会更新内存态并调用 save()', () async {
+    final service = _FakeSoftwareSettingsService(
+      settingsToLoad: const SoftwareSettings.defaults(),
+    );
+    final controller = SoftwareSettingsController(service: service);
+
+    await controller.updateTimeSyncEnabled(false);
+
+    expect(controller.settings.timeSyncEnabled, isFalse);
+    expect(service.savedSettings.single.timeSyncEnabled, isFalse);
+    expect(controller.saveFailed, isFalse);
+    expect(controller.saveMessage, '时间同步已关闭');
   });
 
   test('保存失败时会写入失败状态和失败提示', () async {

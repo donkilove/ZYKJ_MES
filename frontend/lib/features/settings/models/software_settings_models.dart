@@ -14,6 +14,7 @@ class SoftwareSettings {
     required this.densityPreference,
     required this.launchTargetPreference,
     required this.sidebarPreference,
+    required this.timeSyncEnabled,
     this.lastVisitedPageCode,
   });
 
@@ -22,12 +23,14 @@ class SoftwareSettings {
       densityPreference = AppDensityPreference.comfortable,
       launchTargetPreference = AppLaunchTargetPreference.home,
       sidebarPreference = AppSidebarPreference.expanded,
+      timeSyncEnabled = true,
       lastVisitedPageCode = null;
 
   final AppThemePreference themePreference;
   final AppDensityPreference densityPreference;
   final AppLaunchTargetPreference launchTargetPreference;
   final AppSidebarPreference sidebarPreference;
+  final bool timeSyncEnabled;
   final String? lastVisitedPageCode;
 
   SoftwareSettings copyWith({
@@ -35,6 +38,7 @@ class SoftwareSettings {
     AppDensityPreference? densityPreference,
     AppLaunchTargetPreference? launchTargetPreference,
     AppSidebarPreference? sidebarPreference,
+    bool? timeSyncEnabled,
     Object? lastVisitedPageCode = _unsetLastVisitedPageCode,
   }) {
     return SoftwareSettings(
@@ -43,6 +47,7 @@ class SoftwareSettings {
       launchTargetPreference:
           launchTargetPreference ?? this.launchTargetPreference,
       sidebarPreference: sidebarPreference ?? this.sidebarPreference,
+      timeSyncEnabled: timeSyncEnabled ?? this.timeSyncEnabled,
       lastVisitedPageCode:
           identical(lastVisitedPageCode, _unsetLastVisitedPageCode)
           ? this.lastVisitedPageCode
@@ -54,10 +59,11 @@ class SoftwareSettings {
   bool operator ==(Object other) {
     return identical(this, other) ||
         other is SoftwareSettings &&
-            other.themePreference == themePreference &&
+        other.themePreference == themePreference &&
             other.densityPreference == densityPreference &&
             other.launchTargetPreference == launchTargetPreference &&
             other.sidebarPreference == sidebarPreference &&
+            other.timeSyncEnabled == timeSyncEnabled &&
             other.lastVisitedPageCode == lastVisitedPageCode;
   }
 
@@ -67,6 +73,7 @@ class SoftwareSettings {
     densityPreference,
     launchTargetPreference,
     sidebarPreference,
+    timeSyncEnabled,
     lastVisitedPageCode,
   );
 }

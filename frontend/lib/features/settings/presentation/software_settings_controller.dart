@@ -87,6 +87,14 @@ class SoftwareSettingsController extends ChangeNotifier {
     );
   }
 
+  Future<void> updateTimeSyncEnabled(bool enabled) {
+    return _persist(
+      _settings.copyWith(timeSyncEnabled: enabled),
+      successMessage: enabled ? '时间同步已启用' : '时间同步已关闭',
+      failureMessage: enabled ? '时间同步启用失败' : '时间同步关闭失败',
+    );
+  }
+
   Future<void> rememberLastVisitedPageCode(String? pageCode) {
     return _persist(
       _settings.copyWith(lastVisitedPageCode: pageCode),

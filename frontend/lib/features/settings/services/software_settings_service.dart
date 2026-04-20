@@ -9,6 +9,7 @@ class SoftwareSettingsService {
   static const _densityKey = '${_keyPrefix}density_preference';
   static const _launchTargetKey = '${_keyPrefix}launch_target_preference';
   static const _sidebarKey = '${_keyPrefix}sidebar_preference';
+  static const _timeSyncEnabledKey = '${_keyPrefix}time_sync_enabled';
   static const _lastVisitedPageKey = '${_keyPrefix}last_visited_page_code';
 
   final SharedPreferences _preferences;
@@ -25,6 +26,7 @@ class SoftwareSettingsService {
         _preferences.getString(_launchTargetKey),
       ),
       sidebarPreference: _parseSidebar(_preferences.getString(_sidebarKey)),
+      timeSyncEnabled: _preferences.getBool(_timeSyncEnabledKey) ?? true,
       lastVisitedPageCode: _normalizePageCode(
         _preferences.getString(_lastVisitedPageKey),
       ),
@@ -48,6 +50,7 @@ class SoftwareSettingsService {
       _sidebarKey,
       _sidebarToStorage(settings.sidebarPreference),
     );
+    await _preferences.setBool(_timeSyncEnabledKey, settings.timeSyncEnabled);
 
     final normalizedPageCode = _normalizePageCode(settings.lastVisitedPageCode);
     if (normalizedPageCode == null) {
