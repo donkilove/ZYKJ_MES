@@ -5,14 +5,16 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_feedback_banner.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_filter_section.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_page_header.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_version_table_section.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_version_table_section.dart'
+    show ProductParameterManagementListAction;
 import 'package:mes_client/features/product/services/product_service.dart';
-import 'package:mes_client/core/widgets/adaptive_table_container.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
-
-enum _ProductParameterManagementListAction { view, edit, history, export }
 
 class ProductParameterManagementPage extends StatefulWidget {
   const ProductParameterManagementPage({
@@ -210,44 +212,44 @@ class _ProductParameterManagementPageState
     _markDirty();
   }
 
-  List<PopupMenuEntry<_ProductParameterManagementListAction>>
+  List<PopupMenuEntry<ProductParameterManagementListAction>>
   _buildListActionMenuItems() {
     return [
       PopupMenuItem(
-        value: _ProductParameterManagementListAction.view,
+        value: ProductParameterManagementListAction.view,
         child: Text('查看参数'),
       ),
       PopupMenuItem(
-        value: _ProductParameterManagementListAction.history,
+        value: ProductParameterManagementListAction.history,
         child: Text('查看历史'),
       ),
       PopupMenuItem(
-        value: _ProductParameterManagementListAction.edit,
+        value: ProductParameterManagementListAction.edit,
         child: Text('编辑参数'),
       ),
       if (widget.canExportParameters)
         const PopupMenuItem(
-          value: _ProductParameterManagementListAction.export,
+          value: ProductParameterManagementListAction.export,
           child: Text('导出参数'),
         ),
     ];
   }
 
   Future<void> _handleListAction(
-    _ProductParameterManagementListAction action,
+    ProductParameterManagementListAction action,
     ProductParameterVersionListItem row,
   ) async {
     switch (action) {
-      case _ProductParameterManagementListAction.view:
+      case ProductParameterManagementListAction.view:
         await _enterEditor(row);
         return;
-      case _ProductParameterManagementListAction.history:
+      case ProductParameterManagementListAction.history:
         await _showHistoryDialog(row);
         return;
-      case _ProductParameterManagementListAction.edit:
+      case ProductParameterManagementListAction.edit:
         await _enterEditor(row);
         return;
-      case _ProductParameterManagementListAction.export:
+      case ProductParameterManagementListAction.export:
         await _exportVersionParameters(row);
         return;
     }
@@ -1376,154 +1378,46 @@ class _ProductParameterManagementPageState
     );
   }
 
-  Widget _buildListView(ThemeData theme) {
+  Widget _buildListView() {
     final rows = _filteredVersionRows;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        CrudPageHeader(
-          title: '版本参数管理',
-          onRefresh: _loading ? null : _loadProducts,
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _keywordController,
-                decoration: const InputDecoration(
-                  labelText: '搜索产品名称',
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (_) => _loadProducts(),
-              ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 160,
-              child: DropdownButtonFormField<String>(
-                initialValue: _selectedCategoryFilter,
-                decoration: const InputDecoration(
-                  labelText: '分类筛选',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem<String>(value: '', child: Text('全部')),
-                  DropdownMenuItem<String>(value: '贴片', child: Text('贴片')),
-                  DropdownMenuItem<String>(value: 'DTU', child: Text('DTU')),
-                  DropdownMenuItem<String>(value: '套件', child: Text('套件')),
-                ],
-                onChanged: _loading
-                    ? null
-                    : (value) {
-                        setState(() {
-                          _selectedCategoryFilter = value ?? '';
-                        });
-                        _loadProducts();
-                      },
-              ),
-            ),
-            const SizedBox(width: 12),
-            FilledButton.icon(
-              onPressed: _loading ? null : _loadProducts,
-              icon: const Icon(Icons.search),
-              label: const Text('搜索'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        const SizedBox(height: 12),
-        if (_message.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              _message,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.error,
-              ),
-            ),
-          ),
-        Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : rows.isEmpty
-              ? const Center(child: Text('暂无版本参数记录'))
-              : Card(
-                  child: AdaptiveTableContainer(
-                    child: UnifiedListTableHeaderStyle.wrap(
-                      theme: theme,
-                      child: DataTable(
-                        columns: [
-                          UnifiedListTableHeaderStyle.column(context, '产品名称'),
-                          UnifiedListTableHeaderStyle.column(context, '产品分类'),
-                          UnifiedListTableHeaderStyle.column(
-                            context,
-                            '版本标签/版本号',
-                          ),
-                          UnifiedListTableHeaderStyle.column(context, '创建时间'),
-                          UnifiedListTableHeaderStyle.column(context, '版本状态'),
-                          UnifiedListTableHeaderStyle.column(
-                            context,
-                            '操作',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                        rows: rows.map((row) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(row.productName)),
-                              DataCell(
-                                Text(
-                                  row.productCategory.isEmpty
-                                      ? '-'
-                                      : row.productCategory,
-                                ),
-                              ),
-                              DataCell(
-                                Text('${row.versionLabel} / #${row.version}'),
-                              ),
-                              DataCell(Text(_formatTime(row.createdAt))),
-                              DataCell(
-                                Text(
-                                  [
-                                    _lifecycleLabel(row.lifecycleStatus),
-                                    if (row.isCurrentVersion) '当前版本',
-                                    if (row.isEffectiveVersion) '生效版本',
-                                  ].join(' / '),
-                                ),
-                              ),
-                              DataCell(
-                                UnifiedListTableHeaderStyle.actionMenuButton<
-                                  _ProductParameterManagementListAction
-                                >(
-                                  theme: theme,
-                                  onSelected: (action) {
-                                    _handleListAction(action, row);
-                                  },
-                                  itemBuilder: (context) =>
-                                      _buildListActionMenuItems(),
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-                ),
-        ),
-      ],
+    return MesCrudPageScaffold(
+      header: ProductParameterManagementPageHeader(
+        loading: _loading,
+        onRefresh: _loadProducts,
+      ),
+      filters: ProductParameterManagementFilterSection(
+        keywordController: _keywordController,
+        selectedCategory: _selectedCategoryFilter,
+        loading: _loading,
+        onCategoryChanged: (value) {
+          setState(() {
+            _selectedCategoryFilter = value;
+          });
+          _loadProducts();
+        },
+        onSearch: _loadProducts,
+      ),
+      banner: _message.isEmpty
+          ? null
+          : ProductParameterManagementFeedbackBanner(message: _message),
+      content: ProductParameterVersionTableSection(
+        rows: rows,
+        loading: _loading,
+        emptyText: '暂无版本参数记录',
+        formatTime: _formatTime,
+        buildActionItems: (row) => _buildListActionMenuItems(),
+        onSelected: _handleListAction,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.all(16),
       child: _editingTarget == null
-          ? _buildListView(theme)
-          : _buildEditorView(theme),
+          ? _buildListView()
+          : _buildEditorView(Theme.of(context)),
     );
   }
 }
