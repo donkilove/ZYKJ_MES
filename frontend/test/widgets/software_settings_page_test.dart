@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/config/runtime_endpoints.dart';
 import 'package:mes_client/core/services/effective_clock.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/settings/models/software_settings_models.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_page.dart';
@@ -30,11 +32,7 @@ void main() {
         child: SizedBox(width: contentWidth, height: 900, child: page),
       );
     }
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: page),
-      ),
-    );
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: page)));
     await tester.pumpAndSettle();
   }
 
@@ -43,6 +41,8 @@ void main() {
 
     await pumpPage(tester, controller);
 
+    expect(find.byType(MesPageHeader), findsOneWidget);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(1));
     expect(find.text('外观'), findsWidgets);
     expect(find.text('布局偏好'), findsWidgets);
     expect(find.text('时间同步'), findsWidgets);
@@ -104,7 +104,10 @@ void main() {
       controller.settings.launchTargetPreference,
       AppLaunchTargetPreference.lastVisitedModule,
     );
-    expect(controller.settings.sidebarPreference, AppSidebarPreference.collapsed);
+    expect(
+      controller.settings.sidebarPreference,
+      AppSidebarPreference.collapsed,
+    );
   });
 
   testWidgets('窄屏下仍可切换到布局偏好并显示对应内容', (tester) async {
@@ -126,11 +129,7 @@ void main() {
     );
     await timeSyncController.checkAtStartup(baseUrl: defaultApiBaseUrl);
 
-    await pumpPage(
-      tester,
-      controller,
-      timeSyncController: timeSyncController,
-    );
+    await pumpPage(tester, controller, timeSyncController: timeSyncController);
     await tester.tap(find.text('时间同步').first);
     await tester.pumpAndSettle();
 
@@ -163,8 +162,14 @@ class _FakeServerTimeService extends ServerTimeService {
     return ServerTimeSnapshot(
       serverUtc: DateTime.utc(2026, 4, 20, 2, 0, 0),
       serverTimezoneOffsetMinutes: 480,
-      sampledAtEpochMs:
-          DateTime.utc(2026, 4, 20, 2, 0, 0).millisecondsSinceEpoch,
+      sampledAtEpochMs: DateTime.utc(
+        2026,
+        4,
+        20,
+        2,
+        0,
+        0,
+      ).millisecondsSinceEpoch,
     );
   }
 }

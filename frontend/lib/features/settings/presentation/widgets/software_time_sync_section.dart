@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
 import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
@@ -22,76 +22,80 @@ class SoftwareTimeSyncSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = softwareSettingsController.settings;
     final state = timeSyncController.state;
-    return Column(
-      children: [
-        _buildSwitchCard(settings.timeSyncEnabled),
-        const SizedBox(height: 12),
-        _buildSummaryCard(state),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            OutlinedButton(
-              onPressed: settings.timeSyncEnabled
-                  ? () => unawaited(
-                      timeSyncController.checkAtStartup(
-                        baseUrl: apiBaseUrl,
-                        force: true,
-                      ),
-                    )
-                  : null,
-              child: const Text('立即检查并同步'),
-            ),
-            const SizedBox(width: 12),
-            TextButton(
-              onPressed: settings.timeSyncEnabled
-                  ? () => unawaited(
-                      timeSyncController.calibrateSoftwareClock(
-                        baseUrl: apiBaseUrl,
-                      ),
-                    )
-                  : null,
-              child: const Text('仅重新校准软件内时间'),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSwitchCard(bool enabled) {
-    return Card(
-      child: SwitchListTile(
-        title: const Text('启用时间同步'),
-        subtitle: const Text('启动时自动检查并在偏差超阈值时尝试修正 Windows 时间'),
-        value: enabled,
-        onChanged: (value) {
-          unawaited(softwareSettingsController.updateTimeSyncEnabled(value));
-        },
+    return MesSectionCard(
+      title: '时间同步',
+      subtitle: '服务器对时、系统改时与软件内校准',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSwitchCard(settings.timeSyncEnabled),
+          const SizedBox(height: 12),
+          _buildSummaryCard(state),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              OutlinedButton(
+                onPressed: settings.timeSyncEnabled
+                    ? () => unawaited(
+                        timeSyncController.checkAtStartup(
+                          baseUrl: apiBaseUrl,
+                          force: true,
+                        ),
+                      )
+                    : null,
+                child: const Text('立即检查并同步'),
+              ),
+              const SizedBox(width: 12),
+              TextButton(
+                onPressed: settings.timeSyncEnabled
+                    ? () => unawaited(
+                        timeSyncController.calibrateSoftwareClock(
+                          baseUrl: apiBaseUrl,
+                        ),
+                      )
+                    : null,
+                child: const Text('仅重新校准软件内时间'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
+  Widget _buildSwitchCard(bool enabled) {
+    return SwitchListTile(
+      title: const Text('启用时间同步'),
+      subtitle: const Text('启动时自动检查并在偏差超阈值时尝试修正 Windows 时间'),
+      value: enabled,
+      onChanged: (value) {
+        unawaited(softwareSettingsController.updateTimeSyncEnabled(value));
+      },
+    );
+  }
+
   Widget _buildSummaryCard(TimeSyncState state) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('同步策略摘要'),
-            const SizedBox(height: 8),
-            const Text('权威时间源：后端服务器时间'),
-            const Text('自动修正阈值：30 秒'),
-            if (state.serverUtc != null) Text('服务器时间：${_formatDateTime(state.serverUtc!)}'),
-            if (state.localUtc != null) Text('本机时间：${_formatDateTime(state.localUtc!)}'),
-            Text('当前模式：${_modeLabel(state.mode)}'),
-            if (state.drift != null) Text('当前偏差：${state.drift!.inSeconds.abs()} 秒'),
-            Text('最近同步结果：${_resultLabel(state.lastResultCode)}'),
-            if (state.lastCheckedAt != null)
-              Text('最近同步时间：${_formatDateTime(state.lastCheckedAt!)}'),
-            if (state.message != null) Text(state.message!),
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('同步策略摘要'),
+          const SizedBox(height: 8),
+          const Text('权威时间源：后端服务器时间'),
+          const Text('自动修正阈值：30 秒'),
+          if (state.serverUtc != null)
+            Text('服务器时间：${_formatDateTime(state.serverUtc!)}'),
+          if (state.localUtc != null)
+            Text('本机时间：${_formatDateTime(state.localUtc!)}'),
+          Text('当前模式：${_modeLabel(state.mode)}'),
+          if (state.drift != null)
+            Text('当前偏差：${state.drift!.inSeconds.abs()} 秒'),
+          Text('最近同步结果：${_resultLabel(state.lastResultCode)}'),
+          if (state.lastCheckedAt != null)
+            Text('最近同步时间：${_formatDateTime(state.lastCheckedAt!)}'),
+          if (state.message != null) Text(state.message!),
+        ],
       ),
     );
   }

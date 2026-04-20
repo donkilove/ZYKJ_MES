@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/settings/models/software_settings_models.dart';
 
 class SoftwareSettingsPreviewCard extends StatelessWidget {
@@ -14,37 +15,29 @@ class SoftwareSettingsPreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '预览',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+    return MesSectionCard(
+      title: '预览',
+      subtitle: '界面效果会在修改后自动应用。',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('当前主题：${_themeLabel(themePreference)}'),
+          const SizedBox(height: 4),
+          Text('当前密度：${_densityLabel(densityPreference)}'),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(10),
             ),
-            const SizedBox(height: 8),
-            Text('当前主题：${_themeLabel(themePreference)}'),
-            const SizedBox(height: 4),
-            Text('当前密度：${_densityLabel(densityPreference)}'),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                '界面效果会在修改后自动应用。',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+            child: Text(
+              '界面效果会在修改后自动应用。',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

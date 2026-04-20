@@ -19,20 +19,29 @@ class MesSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<MesTokens>()!;
+    final theme = Theme.of(context);
+    final tokens = theme.extension<MesTokens>();
     final background = switch (tone) {
-      MesSurfaceTone.normal => tokens.colors.surface,
-      MesSurfaceTone.subtle => tokens.colors.surfaceSubtle,
-      MesSurfaceTone.raised => tokens.colors.surfaceRaised,
+      MesSurfaceTone.normal =>
+        tokens?.colors.surface ?? theme.colorScheme.surfaceContainerLow,
+      MesSurfaceTone.subtle =>
+        tokens?.colors.surfaceSubtle ??
+            theme.colorScheme.surfaceContainerLowest,
+      MesSurfaceTone.raised =>
+        tokens?.colors.surfaceRaised ?? theme.colorScheme.surfaceContainerHigh,
     };
 
     return Container(
       padding: padding,
       decoration: BoxDecoration(
         color: background,
-        borderRadius: tokens.radius.md,
+        borderRadius: tokens?.radius.md ?? BorderRadius.circular(16),
         border: Border.fromBorderSide(
-          border ?? BorderSide(color: tokens.colors.border),
+          border ??
+              BorderSide(
+                color:
+                    tokens?.colors.border ?? theme.colorScheme.outlineVariant,
+              ),
         ),
       ),
       child: child,

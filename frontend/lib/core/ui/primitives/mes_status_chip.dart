@@ -33,22 +33,28 @@ class MesStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<MesTokens>()!;
+    final theme = Theme.of(context);
+    final tokens = theme.extension<MesTokens>();
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: tokens.spacing.sm,
-        vertical: tokens.spacing.xs / 2,
+        horizontal: tokens?.spacing.sm ?? 12,
+        vertical: (tokens?.spacing.xs ?? 8) / 2,
       ),
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: tokens.radius.lg,
+        borderRadius: tokens?.radius.lg ?? BorderRadius.circular(24),
       ),
       child: Text(
         label,
-        style: tokens.typography.caption.copyWith(
-          color: foregroundColor,
-          fontWeight: FontWeight.w700,
-        ),
+        style:
+            tokens?.typography.caption.copyWith(
+              color: foregroundColor,
+              fontWeight: FontWeight.w700,
+            ) ??
+            theme.textTheme.bodySmall?.copyWith(
+              color: foregroundColor,
+              fontWeight: FontWeight.w700,
+            ),
       ),
     );
   }
