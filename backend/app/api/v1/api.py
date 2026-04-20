@@ -14,6 +14,7 @@ from app.api.v1.endpoints import (
     quality,
     roles,
     sessions,
+    system,
     ui,
     users,
 )
@@ -35,3 +36,4 @@ api_router.include_router(quality.router, prefix="/quality", tags=["Quality"])
 api_router.include_router(equipment.router, prefix="/equipment", tags=["Equipment"])
 api_router.include_router(ui.router, prefix="/ui", tags=["UI"])
 api_router.include_router(messages.router, prefix="/messages", tags=["Messages"])
+api_router.include_router(system.router, prefix="/system", tags=["System"])

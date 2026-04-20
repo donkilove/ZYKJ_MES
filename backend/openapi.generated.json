@@ -16741,6 +16741,32 @@
         ]
       }
     },
+    "/api/v1/ui/home-dashboard": {
+      "get": {
+        "tags": [
+          "UI"
+        ],
+        "summary": "Get Home Dashboard",
+        "operationId": "get_home_dashboard_api_v1_ui_home_dashboard_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_HomeDashboardResult_"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/messages/unread-count": {
       "get": {
         "tags": [
@@ -17266,6 +17292,27 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/time": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Get System Time",
+        "operationId": "get_system_time_api_v1_system_time_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SystemTimeSnapshot_"
                 }
               }
             }
@@ -18177,6 +18224,28 @@
           "data"
         ],
         "title": "ApiResponse[ForceOfflineResult]"
+      },
+      "ApiResponse_HomeDashboardResult_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "$ref": "#/components/schemas/HomeDashboardResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[HomeDashboardResult]"
       },
       "ApiResponse_LoginLogListResult_": {
         "properties": {
@@ -20246,6 +20315,28 @@
           "data"
         ],
         "title": "ApiResponse[SystemMasterTemplateVersionListResult]"
+      },
+      "ApiResponse_SystemTimeSnapshot_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SystemTimeSnapshot"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[SystemTimeSnapshot]"
       },
       "ApiResponse_TemplateBatchExportResult_": {
         "properties": {
@@ -24551,6 +24642,240 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HomeDashboardDegradedBlock": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "HomeDashboardDegradedBlock"
+      },
+      "HomeDashboardMetricItem": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "target_page_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Page Code"
+          },
+          "target_tab_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Tab Code"
+          },
+          "target_route_payload_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Route Payload Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "label",
+          "value"
+        ],
+        "title": "HomeDashboardMetricItem"
+      },
+      "HomeDashboardResult": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "notice_count": {
+            "type": "integer",
+            "title": "Notice Count"
+          },
+          "todo_summary": {
+            "$ref": "#/components/schemas/HomeDashboardTodoSummary"
+          },
+          "todo_items": {
+            "items": {
+              "$ref": "#/components/schemas/HomeDashboardTodoItem"
+            },
+            "type": "array",
+            "title": "Todo Items"
+          },
+          "risk_items": {
+            "items": {
+              "$ref": "#/components/schemas/HomeDashboardMetricItem"
+            },
+            "type": "array",
+            "title": "Risk Items"
+          },
+          "kpi_items": {
+            "items": {
+              "$ref": "#/components/schemas/HomeDashboardMetricItem"
+            },
+            "type": "array",
+            "title": "Kpi Items"
+          },
+          "degraded_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/HomeDashboardDegradedBlock"
+            },
+            "type": "array",
+            "title": "Degraded Blocks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "notice_count",
+          "todo_summary",
+          "todo_items",
+          "risk_items",
+          "kpi_items",
+          "degraded_blocks"
+        ],
+        "title": "HomeDashboardResult"
+      },
+      "HomeDashboardTodoItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "category_label": {
+            "type": "string",
+            "title": "Category Label"
+          },
+          "priority_label": {
+            "type": "string",
+            "title": "Priority Label"
+          },
+          "source_module": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Module"
+          },
+          "target_page_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Page Code"
+          },
+          "target_tab_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Tab Code"
+          },
+          "target_route_payload_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Route Payload Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "category_label",
+          "priority_label"
+        ],
+        "title": "HomeDashboardTodoItem"
+      },
+      "HomeDashboardTodoSummary": {
+        "properties": {
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "pending_approval_count": {
+            "type": "integer",
+            "title": "Pending Approval Count"
+          },
+          "high_priority_count": {
+            "type": "integer",
+            "title": "High Priority Count"
+          },
+          "exception_count": {
+            "type": "integer",
+            "title": "Exception Count"
+          },
+          "overdue_count": {
+            "type": "integer",
+            "title": "Overdue Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_count",
+          "pending_approval_count",
+          "high_priority_count",
+          "exception_count",
+          "overdue_count"
+        ],
+        "title": "HomeDashboardTodoSummary"
+      },
       "LoginLogItem": {
         "properties": {
           "id": {
@@ -25415,8 +25740,8 @@
           "result_summary": {
             "type": "string",
             "enum": [
-              "ÂÆåÊàê",
-              "Â§±Ë¥•"
+              "ÕÍ≥…",
+              " ß∞‹"
             ],
             "title": "Result Summary"
           },
@@ -26467,7 +26792,7 @@
           "next_retry_at"
         ],
         "title": "MessageItem",
-        "description": "Ê∂àÊÅØÂàóË°®Êù°ÁõÆ"
+        "description": "œ˚œ¢¡–±ÌÃıƒø"
       },
       "MessageJumpResult": {
         "properties": {
@@ -33140,7 +33465,7 @@
           "created_at"
         ],
         "title": "RepairEventLogItem",
-        "description": "Áª¥‰øÆËØ¶ÊÉÖ‰∏≠ÂÖ≥ËÅîÁöÑËÆ¢Âçï‰∫ã‰ª∂Êó•ÂøóÊëòË¶Å"
+        "description": "Œ¨–ﬁœÍ«È÷–πÿ¡™µƒ∂©µ• ¬º˛»’÷æ’™“™"
       },
       "RepairOrderCompleteRequest": {
         "properties": {
@@ -34524,7 +34849,7 @@
           "repair_time"
         ],
         "title": "ScrapRelatedRepairItem",
-        "description": "Êä•Â∫üËØ¶ÊÉÖ‰∏≠ÂÖ≥ËÅîÁöÑÁª¥‰øÆÂçïÊëòË¶Å"
+        "description": "±®∑œœÍ«È÷–πÿ¡™µƒŒ¨–ﬁµ•’™“™"
       },
       "ScrapStatisticsDetailItem": {
         "properties": {
@@ -35490,6 +35815,29 @@
           "updated_at"
         ],
         "title": "SystemMasterTemplateVersionStepItem"
+      },
+      "SystemTimeSnapshot": {
+        "properties": {
+          "server_utc_iso": {
+            "type": "string",
+            "title": "Server Utc Iso"
+          },
+          "server_timezone_offset_minutes": {
+            "type": "integer",
+            "title": "Server Timezone Offset Minutes"
+          },
+          "sampled_at_epoch_ms": {
+            "type": "integer",
+            "title": "Sampled At Epoch Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "server_utc_iso",
+          "server_timezone_offset_minutes",
+          "sampled_at_epoch_ms"
+        ],
+        "title": "SystemTimeSnapshot"
       },
       "TemplateBatchExportItem": {
         "properties": {
