@@ -10,6 +10,7 @@ import 'package:mes_client/features/product/presentation/widgets/product_paramet
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_row_model.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_table.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_toolbar.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_history_dialog.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_page_header.dart';
@@ -263,5 +264,71 @@ void main() {
     expect(find.textContaining('编辑版本参数 - 产品41'), findsOneWidget);
     expect(find.text('新增参数'), findsOneWidget);
     expect(find.text('保存参数'), findsOneWidget);
+  });
+
+  testWidgets('历史弹窗展示历史列表与快照入口', (tester) async {
+    final history = ProductParameterHistoryListResult(
+      version: 1,
+      versionLabel: 'V1.0',
+      lifecycleStatus: 'draft',
+      total: 1,
+      items: [
+        ProductParameterHistoryItem(
+          id: 900,
+          productName: '产品41',
+          productCategory: '贴片',
+          version: 1,
+          versionLabel: 'V1.0',
+          remark: '调整芯片参数',
+          changeReason: '调整芯片参数',
+          changeType: 'edit',
+          parameterName: '产品芯片',
+          changedKeys: const ['产品芯片'],
+          operatorUsername: 'admin',
+          beforeSummary: '旧值',
+          afterSummary: '新值',
+          beforeSnapshot: '{"before":true}',
+          afterSnapshot: '{"after":true}',
+          createdAt: _fixedDate,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductParameterHistoryDialog(
+            row: ProductParameterVersionListItem(
+              productId: 41,
+              productName: '产品41',
+              productCategory: '贴片',
+              version: 1,
+              versionLabel: 'V1.0',
+              lifecycleStatus: 'effective',
+              isCurrentVersion: false,
+              isEffectiveVersion: true,
+              createdAt: _fixedDate,
+              parameterSummary: null,
+              parameterCount: 8,
+              matchedParameterName: '产品芯片',
+              matchedParameterCategory: '基础参数',
+              lastModifiedParameter: '产品芯片',
+              lastModifiedParameterCategory: '基础参数',
+              updatedAt: _fixedDate,
+            ),
+            history: history,
+            formatTime: (_) => '2026-04-20 08:00:00',
+            historyTypeLabel: (value) => value == 'edit' ? '编辑' : value,
+            onClose: () {},
+            onViewSnapshot: (item) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('product-parameter-history-dialog')), findsOneWidget);
+    expect(find.textContaining('参数变更历史 - 产品41 / 贴片 / V1.0'), findsOneWidget);
+    expect(find.textContaining('变更原因：调整芯片参数'), findsOneWidget);
+    expect(find.text('查看快照'), findsOneWidget);
   });
 }

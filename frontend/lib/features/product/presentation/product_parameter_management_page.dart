@@ -12,6 +12,8 @@ import 'package:mes_client/features/product/presentation/widgets/product_paramet
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_table.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_toolbar.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_history_dialog.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_history_snapshot_dialog.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_page_header.dart';
@@ -415,106 +417,23 @@ class _ProductParameterManagementPageState
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(
-            '参数变更历史 - ${row.productName} / ${row.productCategory} / ${dialogHistory.versionLabel ?? row.versionLabel}',
-          ),
-          content: SizedBox(
-            width: 760,
-            height: 480,
-            child: dialogHistory.items.isEmpty
-                ? const Center(child: Text('暂无历史记录'))
-                : ListView.separated(
-                    itemCount: dialogHistory.items.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final item = dialogHistory.items[index];
-                      final keySummary = item.changedKeys.isEmpty
-                          ? '无参数字段变化'
-                          : item.changedKeys.join(', ');
-                      final changeTypeLabel = _historyTypeLabel(
-                        item.changeType,
-                      );
-                      return ListTile(
-                        title: Text(
-                          '$changeTypeLabel / ${item.parameterName ?? '未指定参数'}',
-                        ),
-                        subtitle: Text(
-                          '产品：${item.productName}   分类：${item.productCategory.isEmpty ? '-' : item.productCategory}\n'
-                          '时间：${_formatTime(item.createdAt)}\n'
-                          '版本：${item.versionLabel ?? '-'}   操作人：${item.operatorUsername}   类型：$changeTypeLabel\n'
-                          '参数：$keySummary\n'
-                          '变更原因：${item.changeReason}\n'
-                          '变更前：${item.beforeSummary ?? '-'}\n'
-                          '变更后：${item.afterSummary ?? '-'}',
-                        ),
-                        isThreeLine: false,
-                        trailing:
-                            item.beforeSnapshot != '{}' ||
-                                item.afterSnapshot != '{}'
-                            ? TextButton(
-                                onPressed: () {
-                                  showDialog<void>(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title: const Text('变更前后快照'),
-                                      content: SizedBox(
-                                        width: 680,
-                                        height: 400,
-                                        child: SingleChildScrollView(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              const Text(
-                                                '变更前：',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              SelectableText(
-                                                item.beforeSnapshot,
-                                              ),
-                                              const SizedBox(height: 12),
-                                              const Text(
-                                                '变更后：',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              SelectableText(
-                                                item.afterSnapshot,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      actions: [
-                                        FilledButton(
-                                          onPressed: () =>
-                                              Navigator.of(ctx).pop(),
-                                          child: const Text('关闭'),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                                child: const Text('查看快照'),
-                              )
-                            : null,
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
+        return ProductParameterHistoryDialog(
+          row: row,
+          history: dialogHistory,
+          formatTime: _formatTime,
+          historyTypeLabel: _historyTypeLabel,
+          onClose: () => Navigator.of(context).pop(),
+          onViewSnapshot: (item) {
+            showDialog<void>(
+              context: context,
+              builder: (snapshotContext) {
+                return ProductParameterHistorySnapshotDialog(
+                  item: item,
+                  onClose: () => Navigator.of(snapshotContext).pop(),
+                );
+              },
+            );
+          },
         );
       },
     );
