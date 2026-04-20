@@ -23,7 +23,6 @@ class HomeDashboardTodoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final visibleItems = todoItems.take(4).toList();
     return MesSectionCard(
       title: '我的待办队列',

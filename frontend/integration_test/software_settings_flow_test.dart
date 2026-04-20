@@ -207,8 +207,14 @@ class _FakeServerTimeService extends ServerTimeService {
     return ServerTimeSnapshot(
       serverUtc: DateTime.utc(2026, 4, 20, 2, 0, 0),
       serverTimezoneOffsetMinutes: 480,
-      sampledAtEpochMs:
-          DateTime.utc(2026, 4, 20, 2, 0, 0).millisecondsSinceEpoch,
+      sampledAtEpochMs: DateTime.utc(
+        2026,
+        4,
+        20,
+        2,
+        0,
+        0,
+      ).millisecondsSinceEpoch,
     );
   }
 }
@@ -262,6 +268,30 @@ Future<void> _pumpMainShellPage(
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('软件设置页可切换到时间同步并展示统一页头', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+
+    final controller = SoftwareSettingsController(
+      service: await SoftwareSettingsService.create(),
+    );
+    await controller.load();
+
+    await _pumpMainShellPage(tester, controller: controller);
+
+    await tester.tap(
+      find.byKey(const ValueKey('main-shell-entry-software-settings')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('控制本机软件的外观、布局和时间同步偏好。'), findsOneWidget);
+
+    await tester.tap(find.text('时间同步').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('启用时间同步'), findsOneWidget);
+    expect(find.text('立即检查并同步'), findsOneWidget);
+  });
 
   testWidgets('修改软件设置后重建应用会保留主题偏好但仍显示登录页', (tester) async {
     SharedPreferences.setMockInitialValues({});

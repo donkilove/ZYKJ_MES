@@ -56,7 +56,7 @@ class MesSectionCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (trailing != null) trailing!,
+              if (trailing case final Widget trailingWidget) trailingWidget,
             ],
           ),
           MesGap.vertical(tokens?.spacing.md ?? 16),

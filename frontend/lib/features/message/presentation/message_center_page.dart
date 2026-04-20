@@ -553,7 +553,6 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final totalPages = _total == 0 ? 1 : (_total / _pageSize).ceil();
     final effectiveNow = widget.nowProvider();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

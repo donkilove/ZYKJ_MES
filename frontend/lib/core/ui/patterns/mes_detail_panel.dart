@@ -15,6 +15,6 @@ class MesDetailPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MesSectionCard(title: title, child: child, expandChild: expandChild);
+    return MesSectionCard(title: title, expandChild: expandChild, child: child);
   }
 }

@@ -67,19 +67,36 @@ void main() {
     expect(find.textContaining('测试用户'), findsWidgets);
     expect(find.byType(Badge), findsNothing);
 
-    final todoCard = find.ancestor(
-      of: find.text('我的待办队列'),
-      matching: find.byType(Card),
-    );
-
-    await tester.tap(
-      find.descendant(of: todoCard, matching: find.text('用户')).first,
-    );
+    await tester.tap(find.text('用户').first);
     await tester.pumpAndSettle();
 
     expect(find.text('个人中心'), findsWidgets);
     expect(authService.lastUsername, 'tester');
     expect(authService.lastPassword, 'Pass123');
+  });
+
+  testWidgets('登录后主壳可切换到软件设置并返回首页', (tester) async {
+    final authService = _IntegrationAuthService();
+
+    await _pumpHomeShellApp(
+      tester,
+      authService: authService,
+      messageService: _IntegrationMessageService(items: const []),
+    );
+
+    await _login(tester);
+
+    await tester.tap(
+      find.byKey(const ValueKey('main-shell-entry-software-settings')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('控制本机软件的外观、布局和时间同步偏好。'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('main-shell-menu-home')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('工作台'), findsOneWidget);
   });
 
   if (realBackendConfig.enabled) {
@@ -1458,8 +1475,14 @@ class _FakeServerTimeService extends ServerTimeService {
     return ServerTimeSnapshot(
       serverUtc: DateTime.utc(2026, 4, 20, 2, 0, 0),
       serverTimezoneOffsetMinutes: 480,
-      sampledAtEpochMs:
-          DateTime.utc(2026, 4, 20, 2, 0, 0).millisecondsSinceEpoch,
+      sampledAtEpochMs: DateTime.utc(
+        2026,
+        4,
+        20,
+        2,
+        0,
+        0,
+      ).millisecondsSinceEpoch,
     );
   }
 }

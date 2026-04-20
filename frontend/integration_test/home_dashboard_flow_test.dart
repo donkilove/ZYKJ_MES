@@ -235,8 +235,14 @@ class _FakeServerTimeService extends ServerTimeService {
     return ServerTimeSnapshot(
       serverUtc: DateTime.utc(2026, 4, 20, 2, 0, 0),
       serverTimezoneOffsetMinutes: 480,
-      sampledAtEpochMs:
-          DateTime.utc(2026, 4, 20, 2, 0, 0).millisecondsSinceEpoch,
+      sampledAtEpochMs: DateTime.utc(
+        2026,
+        4,
+        20,
+        2,
+        0,
+        0,
+      ).millisecondsSinceEpoch,
     );
   }
 }
@@ -297,6 +303,8 @@ void main() {
     await _pumpHomeDashboardShell(tester, messageService: messageService);
 
     expect(find.text('我的待办队列'), findsOneWidget);
+    expect(find.text('风险提醒'), findsOneWidget);
+    expect(find.text('关键指标'), findsOneWidget);
     expect(find.text('待办 A'), findsOneWidget);
     expect(find.text('待办 B'), findsOneWidget);
     expect(find.text('待办 C'), findsOneWidget);
