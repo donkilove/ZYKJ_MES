@@ -7,6 +7,8 @@ import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/presentation/user_management_page.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 
@@ -736,6 +738,50 @@ void main() {
     expect(find.byType(CrudPageHeader), findsOneWidget);
     expect(find.text('用户管理'), findsOneWidget);
     expect(find.byTooltip('刷新'), findsOneWidget);
+  });
+
+  testWidgets('用户管理页接入 CRUD 骨架并在筛选变化后回到第一页', (tester) async {
+    final userService = _FakeUserService(
+      initialUsers: List<UserItem>.generate(
+        12,
+        (index) => _buildUser(
+          id: index + 1,
+          username: 'user_${index + 1}',
+          roleCode: index.isEven ? 'operator' : 'production_admin',
+          roleName: index.isEven ? '操作员' : '生产管理员',
+          isActive: true,
+        ),
+      ),
+    );
+    final craftService = _FakeCraftService();
+
+    await _pumpPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    expect(find.byType(MesCrudPageScaffold), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('user-management-filter-section')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('user-management-table-section')),
+      findsOneWidget,
+    );
+    expect(find.byType(MesPaginationBar), findsOneWidget);
+
+    await tester.tap(find.text('下一页'));
+    await tester.pumpAndSettle();
+    expect(find.text('第 2 / 2 页'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('userToolbarStatusFilter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('第 1 / 1 页'), findsOneWidget);
   });
 
   testWidgets('右上角刷新仅刷新用户列表，不重复加载基础缓存', (tester) async {
@@ -2426,10 +2472,7 @@ void main() {
     await tester.tap(find.text('重置密码'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Reset@123');
-    await tester.enterText(
-      find.widgetWithText(TextFormField, '重置原因'),
-      '异常修复',
-    );
+    await tester.enterText(find.widgetWithText(TextFormField, '重置原因'), '异常修复');
     await tester.tap(find.text('确认重置'));
     await tester.pumpAndSettle();
 

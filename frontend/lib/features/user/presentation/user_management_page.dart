@@ -7,16 +7,19 @@ import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/locked_form_dialog.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_create_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_edit_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_export_task_dialog.dart';
-import 'package:mes_client/features/user/presentation/widgets/user_filter_toolbar.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_reset_password_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_action_dialogs.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_management_feedback_banner.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_management_filter_section.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_management_page_header.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_management_table_section.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_data_table.dart';
 
 typedef UserExportFileSaver =
@@ -62,10 +65,12 @@ class LegacyLegacyUserManagementPage extends StatefulWidget {
   final bool isCurrentTabVisible;
 
   @override
-  State<LegacyLegacyUserManagementPage> createState() => _LegacyLegacyUserManagementPageState();
+  State<LegacyLegacyUserManagementPage> createState() =>
+      _LegacyLegacyUserManagementPageState();
 }
 
-class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagementPage> {
+class _LegacyLegacyUserManagementPageState
+    extends State<LegacyLegacyUserManagementPage> {
   static const String _roleSystemAdmin = 'system_admin';
   static const String _deletedScopeActive = 'active';
   static const String _deletedScopeDeleted = 'deleted';
@@ -206,7 +211,6 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
     ).showSnackBar(const SnackBar(content: Text('当前账号没有操作权限')));
   }
 
-
   RoleItem? _findRoleByCode(String? roleCode) {
     if (roleCode == null) {
       return null;
@@ -281,9 +285,6 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
     return '未分配';
   }
 
-
-
-
   Future<String?> _saveExportFile({
     required String filename,
     required List<int> bytes,
@@ -306,6 +307,13 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
       format: format,
     );
   }
+
+  Future<void> _reloadCurrentPage() => _loadUsers(page: _userPage);
+
+  Future<void> _applyFiltersAndReload() => _loadUsers(page: 1);
+
+  Future<void> _handleActionSuccess() =>
+      _loadUsers(silent: true, page: _userPage);
 
   void _scheduleOnlineStatusRefresh() {
     if (!_canScheduleOnlineRefresh) {
@@ -584,10 +592,6 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
     }
   }
 
-
-
-
-
   Future<void> _confirmDeleteUser(UserItem user) async {
     if (!widget.canDeleteUser) {
       _showNoPermission();
@@ -611,9 +615,11 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
           setState(() {
             if (_deletedScope == _deletedScopeAll) {
               _users = _users
-                  .map((existing) => existing.id == user.id
-                      ? result.user.copyWith(isOnline: false)
-                      : existing)
+                  .map(
+                    (existing) => existing.id == user.id
+                        ? result.user.copyWith(isOnline: false)
+                        : existing,
+                  )
                   .toList(growable: false);
             } else {
               _users = _users
@@ -626,7 +632,7 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
             SnackBar(content: Text(formatDeleteSuccessMessage(result))),
           );
         }
-        await _loadUsers(silent: true);
+        await _handleActionSuccess();
       },
     );
   }
@@ -659,8 +665,10 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
               _total = (_total > 0) ? _total - 1 : 0;
             } else {
               _users = _users
-                  .map((existing) =>
-                      existing.id == user.id ? result.user : existing)
+                  .map(
+                    (existing) =>
+                        existing.id == user.id ? result.user : existing,
+                  )
                   .toList(growable: false);
             }
           });
@@ -668,7 +676,7 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
             SnackBar(content: Text(formatRestoreSuccessMessage(result))),
           );
         }
-        await _loadUsers(silent: true);
+        await _handleActionSuccess();
       },
     );
   }
@@ -697,12 +705,10 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
         }
       },
       onSuccess: (result) async {
-        await _loadUsers(silent: true);
+        await _handleActionSuccess();
       },
     );
   }
-
-
 
   String? get _normalizedKeyword {
     final keyword = _keywordController.text.trim();
@@ -831,7 +837,7 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
         roleLabel: _roleLabelForUser(user.roleCode, user.roleName),
         userService: _userService,
         onLogout: widget.onLogout,
-        onSuccess: () => _loadUsers(silent: true),
+        onSuccess: _handleActionSuccess,
       );
       return;
     }
@@ -854,7 +860,7 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
           stageLabelForUser: _stageLabelForUser,
           formatDialogDateTime: _formatDialogDateTime,
           onLogout: widget.onLogout,
-          onSuccess: () => _loadUsers(),
+          onSuccess: _handleActionSuccess,
         );
         return;
       case UserTableAction.disable:
@@ -870,7 +876,7 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
           roleLabel: _roleLabelForUser(user.roleCode, user.roleName),
           userService: _userService,
           onLogout: widget.onLogout,
-          onSuccess: () => _loadUsers(silent: true),
+          onSuccess: _handleActionSuccess,
         );
         return;
       case UserTableAction.delete:
@@ -887,7 +893,7 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
     final isQuerying = _queryInFlight;
     final buttons = <Widget>[
       FilledButton.icon(
-        onPressed: _loading ? null : () => _loadUsers(page: 1),
+        onPressed: _loading ? null : _applyFiltersAndReload,
         icon: AnimatedSwitcher(
           duration: const Duration(milliseconds: 150),
           transitionBuilder: (child, animation) =>
@@ -912,14 +918,14 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
         onPressed: (_loading || !widget.canCreateUser)
             ? null
             : () => showUserCreateDialog(
-                  context: context,
-                  userService: _userService,
-                  assignableRoles: _assignableRoles(),
-                  allRoles: _roles,
-                  loadEnabledStages: _loadEnabledStagesForDialog,
-                  onLogout: widget.onLogout,
-                  onSuccess: () => _loadUsers(),
-                ),
+                context: context,
+                userService: _userService,
+                assignableRoles: _assignableRoles(),
+                allRoles: _roles,
+                loadEnabledStages: _loadEnabledStagesForDialog,
+                onLogout: widget.onLogout,
+                onSuccess: _handleActionSuccess,
+              ),
         icon: const Icon(Icons.person_add),
         label: const Text('新建用户'),
       ),
@@ -969,78 +975,58 @@ class _LegacyLegacyUserManagementPageState extends State<LegacyLegacyUserManagem
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final emptyListHint = _emptyListMessage;
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(
-            title: '用户管理',
-            onRefresh: _loading ? null : _refreshUsersFromHeader,
-          ),
-          const SizedBox(height: 12),
-          UserFilterToolbar(
-            keywordController: _keywordController,
-            filterRoleCode: _filterRoleCode,
-            filterIsActive: _filterIsActive,
-            deletedScope: _deletedScope,
-            roles: _roles,
-            onFilterRoleCodeChanged: (value) {
-              setState(() => _filterRoleCode = value);
-              _loadUsers(page: 1);
-            },
-            onFilterIsActiveChanged: (value) {
-              setState(() => _filterIsActive = value);
-              _loadUsers(page: 1);
-            },
-            onFilterDeletedScopeChanged: (value) {
-              setState(() => _deletedScope = value);
-              _loadUsers(page: 1);
-            },
-            onSearch: () => _loadUsers(page: 1),
-            actions: _buildToolbarButtons(),
-          ),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          Expanded(
-            child: UserDataTable(
-              users: _users,
-              loading: _loading,
-              emptyText: emptyListHint,
-              canEditUser: widget.canEditUser,
-              canToggleUser: widget.canToggleUser,
-              canResetPassword: widget.canResetPassword,
-              canDeleteUser: widget.canDeleteUser,
-              canRestoreUser: widget.canRestoreUser,
-              myUserId: _myUserId,
-              onAction: _handleUserAction,
-            ),
-          ),
-          const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _userPage,
-            totalPages: _userTotalPages,
-            total: _total,
-            loading: _loading,
-            showTotal: false,
-            onPrevious: () => _loadUsers(page: _userPage - 1),
-            onNext: () => _loadUsers(page: _userPage + 1),
-          ),
-        ],
+    return MesCrudPageScaffold(
+      header: UserManagementPageHeader(
+        loading: _loading,
+        onRefresh: _refreshUsersFromHeader,
+      ),
+      filters: UserManagementFilterSection(
+        keywordController: _keywordController,
+        filterRoleCode: _filterRoleCode,
+        filterIsActive: _filterIsActive,
+        deletedScope: _deletedScope,
+        roles: _roles,
+        onFilterRoleCodeChanged: (value) {
+          setState(() => _filterRoleCode = value);
+          _applyFiltersAndReload();
+        },
+        onFilterIsActiveChanged: (value) {
+          setState(() => _filterIsActive = value);
+          _applyFiltersAndReload();
+        },
+        onFilterDeletedScopeChanged: (value) {
+          setState(() => _deletedScope = value);
+          _applyFiltersAndReload();
+        },
+        onSearch: _applyFiltersAndReload,
+        actions: _buildToolbarButtons(),
+      ),
+      banner: _message.isEmpty
+          ? null
+          : UserManagementFeedbackBanner(message: _message),
+      content: UserManagementTableSection(
+        users: _users,
+        loading: _loading,
+        emptyText: emptyListHint,
+        canEditUser: widget.canEditUser,
+        canToggleUser: widget.canToggleUser,
+        canResetPassword: widget.canResetPassword,
+        canDeleteUser: widget.canDeleteUser,
+        canRestoreUser: widget.canRestoreUser,
+        myUserId: _myUserId,
+        onAction: _handleUserAction,
+      ),
+      pagination: SimplePaginationBar(
+        page: _userPage,
+        totalPages: _userTotalPages,
+        total: _total,
+        loading: _loading,
+        showTotal: false,
+        onPrevious: () => _loadUsers(page: _userPage - 1),
+        onNext: () => _loadUsers(page: _userPage + 1),
       ),
     );
   }
 }
-

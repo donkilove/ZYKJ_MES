@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
+import 'package:mes_client/features/user/presentation/widgets/shared/user_module_status_chip.dart';
 
 enum UserTableAction { edit, disable, enable, resetPassword, delete, restore }
 
@@ -66,21 +67,22 @@ class UserDataTable extends StatelessWidget {
           final activeLabel = user.isDeleted
               ? '已删除'
               : user.isActive
-                  ? '启用'
-                  : '停用';
+              ? '启用'
+              : '停用';
           final activeColor = user.isDeleted
               ? theme.colorScheme.outline
               : user.isActive
-                  ? Colors.blue
-                  : Colors.red;
+              ? Colors.blue
+              : Colors.red;
           final createdAtStr = user.createdAt != null
               ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
               : '-';
           return DataRow(
             color: user.isDeleted
                 ? WidgetStatePropertyAll<Color?>(
-                    theme.colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.35),
+                    theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.35,
+                    ),
                   )
                 : null,
             cells: [
@@ -100,21 +102,21 @@ class UserDataTable extends StatelessWidget {
                 ),
               ),
               DataCell(
-                Text(
-                  statusLabel,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.w600,
-                  ),
+                UserModuleStatusChip(
+                  tone: user.isOnline
+                      ? UserModuleStatusTone.online
+                      : UserModuleStatusTone.offline,
+                  label: statusLabel,
                 ),
               ),
               DataCell(
-                Text(
-                  activeLabel,
-                  style: TextStyle(
-                    color: activeColor,
-                    fontWeight: FontWeight.w600,
-                  ),
+                UserModuleStatusChip(
+                  tone: user.isDeleted
+                      ? UserModuleStatusTone.deleted
+                      : user.isActive
+                      ? UserModuleStatusTone.active
+                      : UserModuleStatusTone.inactive,
+                  label: activeLabel,
                 ),
               ),
               DataCell(Text(createdAtStr)),
