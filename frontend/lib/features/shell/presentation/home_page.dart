@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/current_user.dart';
+import 'package:mes_client/core/ui/foundation/mes_tokens.dart';
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_header.dart';
 import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_kpi_card.dart';
@@ -232,8 +233,10 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final data = widget.dashboardData ?? _buildFallbackData();
+    final spacing =
+        Theme.of(context).extension<MesTokens>()?.spacing.md ?? 16.0;
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(spacing),
       child: LayoutBuilder(
         builder: (context, constraints) {
           if (_isDesktopLayout(constraints)) {

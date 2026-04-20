@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/current_user.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/shell/presentation/home_page.dart';
 import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_header.dart';
 import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_kpi_card.dart';
@@ -92,6 +95,7 @@ void main() {
 
     expect(find.byKey(desktopHeaderKey), findsOneWidget);
     expect(find.byType(HomeDashboardHeader), findsOneWidget);
+    expect(find.byType(MesPageHeader), findsOneWidget);
 
     expect(find.byKey(desktopMainRowKey), findsOneWidget);
     expect(find.byKey(desktopTodoPaneKey), findsOneWidget);
@@ -118,6 +122,7 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(3));
     expect(find.byKey(desktopRiskPaneKey), findsOneWidget);
     expect(find.byKey(desktopKpiPaneKey), findsOneWidget);
     expect(
@@ -134,6 +139,7 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
 
     expect(find.text('查看全部待办'), findsOneWidget);
     expect(find.text('上次刷新：12:00:00'), findsOneWidget);

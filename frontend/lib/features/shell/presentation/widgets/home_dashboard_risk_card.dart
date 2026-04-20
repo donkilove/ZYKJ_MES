@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 
 class HomeDashboardRiskCard extends StatelessWidget {
@@ -19,57 +22,24 @@ class HomeDashboardRiskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final visibleItems = riskItems.take(4).toList();
-
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '异常与风险',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: visibleItems.isEmpty
-                  ? Center(
-                      child: Text(
-                        '--',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: visibleItems.length,
-                      separatorBuilder: (_, _) => Divider(
-                        height: 1,
-                        color: theme.colorScheme.outlineVariant,
-                      ),
-                      itemBuilder: (context, index) {
-                        final item = visibleItems[index];
-                        return ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(item.label),
-                          trailing: Text(
-                            item.value,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: theme.colorScheme.error,
-                            ),
-                          ),
+    return MesSectionCard(
+      title: '风险提醒',
+      subtitle: '优先处理异常与高风险信号。',
+      child: visibleItems.isEmpty
+          ? const MesEmptyState(title: '当前没有风险提醒')
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final itemWidth = (constraints.maxWidth - 12) / 2;
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final item in visibleItems)
+                      SizedBox(
+                        width: itemWidth,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
                           onTap: item.targetPageCode == null
                               ? null
                               : () => onNavigateToPage(
@@ -77,13 +47,16 @@ class HomeDashboardRiskCard extends StatelessWidget {
                                   tabCode: item.targetTabCode,
                                   routePayloadJson: item.targetRoutePayloadJson,
                                 ),
-                        );
-                      },
-                    ),
+                          child: MesMetricCard(
+                            label: item.label,
+                            value: item.value,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
-          ],
-        ),
-      ),
     );
   }
 }
