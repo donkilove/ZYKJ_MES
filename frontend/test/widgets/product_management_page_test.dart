@@ -5,6 +5,7 @@ import 'package:mes_client/core/ui/foundation/mes_theme.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/product_management_page.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_detail_drawer.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_page_header.dart';
@@ -72,6 +73,99 @@ class _PageStructureService extends ProductService {
       ],
     );
   }
+}
+
+ProductDetailResult _buildDetailResult() {
+  return ProductDetailResult(
+    product: ProductItem(
+      id: 41,
+      name: '产品41',
+      category: '贴片',
+      remark: '用于详情验证',
+      lifecycleStatus: 'active',
+      currentVersion: 2,
+      currentVersionLabel: 'V1.1',
+      effectiveVersion: 1,
+      effectiveVersionLabel: 'V1.0',
+      effectiveAt: _fixedDate,
+      inactiveReason: null,
+      lastParameterSummary: null,
+      createdAt: _fixedDate,
+      updatedAt: _fixedDate,
+    ),
+    detailParameters: ProductParameterListResult(
+      productId: 41,
+      productName: '产品41',
+      parameterScope: 'version',
+      version: 2,
+      versionLabel: 'V1.1',
+      lifecycleStatus: 'draft',
+      total: 1,
+      items: [
+        ProductParameterItem(
+          name: '产品芯片',
+          category: '基础参数',
+          type: 'Text',
+          value: 'CHIP-X',
+          description: '详情聚合',
+          sortOrder: 1,
+          isPreset: false,
+        ),
+      ],
+    ),
+    detailParameterMessage: '当前无生效版本，详情已回退展示当前版本参数快照。',
+    latestVersionChangedAt: _fixedDate,
+    versionTotal: 1,
+    versions: [
+      ProductVersionItem(
+        version: 2,
+        versionLabel: 'V1.1',
+        lifecycleStatus: 'draft',
+        action: 'create',
+        note: '草稿版本',
+        effectiveAt: null,
+        sourceVersion: null,
+        sourceVersionLabel: null,
+        createdByUserId: 1,
+        createdByUsername: 'admin',
+        createdAt: _fixedDate,
+      ),
+    ],
+    historyTotal: 1,
+    historyItems: [
+      ProductParameterHistoryItem(
+        id: 1,
+        productName: '产品41',
+        productCategory: '贴片',
+        version: 2,
+        versionLabel: 'V1.1',
+        remark: '参数调整',
+        changeReason: '参数调整',
+        changeType: 'edit',
+        parameterName: '产品芯片',
+        changedKeys: const ['产品芯片'],
+        operatorUsername: 'admin',
+        beforeSummary: null,
+        afterSummary: null,
+        beforeSnapshot: '{}',
+        afterSnapshot: '{}',
+        createdAt: _fixedDate,
+      ),
+    ],
+    relatedInfoSections: [
+      ProductRelatedInfoSection(
+        code: 'process_templates',
+        title: '关联工艺路线',
+        total: 1,
+        items: [
+          ProductRelatedInfoItem(
+            label: '贴片主线工艺',
+            value: '版本 2 | 默认 | published',
+          ),
+        ],
+      ),
+    ],
+  );
 }
 
 void main() {
@@ -238,5 +332,34 @@ void main() {
     expect(find.byType(ProductManagementFilterSection), findsOneWidget);
     expect(find.byType(ProductManagementTableSection), findsOneWidget);
     expect(find.byType(ProductManagementFeedbackBanner), findsNothing);
+  });
+
+  testWidgets('ProductDetailDrawer 展示参数快照 关联信息和变更记录', (tester) async {
+    final detail = _buildDetailResult();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductDetailDrawer(
+            detail: detail,
+            paramSearch: '',
+            onParamSearchChanged: (_) {},
+            onClose: () {},
+            formatTime: (_) => '2026-04-20 08:00:00',
+            lifecycleLabel: (value) => value == 'active' ? '启用' : value,
+            versionLifecycleLabel: (value) => value == 'draft' ? '草稿' : value,
+            formatDisplayVersion: (value) => 'V1.${value - 1}',
+            changeTypeLabel: (value) => value == 'edit' ? '编辑' : value,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('product-detail-drawer')), findsOneWidget);
+    expect(find.textContaining('产品详情 - 产品41'), findsOneWidget);
+    expect(find.text('基本信息'), findsOneWidget);
+    expect(find.text('当前版本参数快照（V1.1）'), findsOneWidget);
+    expect(find.text('关联工艺路线'), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-history-timeline')), findsOneWidget);
   });
 }
