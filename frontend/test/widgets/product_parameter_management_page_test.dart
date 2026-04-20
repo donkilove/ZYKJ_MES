@@ -14,9 +14,10 @@ import 'package:mes_client/features/product/presentation/widgets/product_paramet
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_page_header.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_parameter_version_table_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_version_table_section.dart'
-    show ProductParameterManagementListAction;
+    show
+        ProductParameterManagementListAction,
+        ProductParameterVersionTableSection;
 import 'package:mes_client/features/product/services/product_service.dart';
 
 final DateTime _fixedDate = DateTime.parse('2026-04-20T00:00:00Z');
@@ -83,9 +84,58 @@ class _PageStructureService extends ProductService {
       ],
     );
   }
+
+  @override
+  Future<ProductParameterListResult> getProductVersionParameters({
+    required int productId,
+    required int version,
+  }) async {
+    return ProductParameterListResult(
+      productId: productId,
+      productName: '产品$productId',
+      parameterScope: 'version',
+      version: version,
+      versionLabel: 'V1.${version - 1}',
+      lifecycleStatus: 'draft',
+      total: 1,
+      items: [
+        ProductParameterItem(
+          name: '产品名称',
+          category: '基础参数',
+          type: 'Text',
+          value: '产品$productId',
+          description: '',
+          sortOrder: 1,
+          isPreset: true,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<ProductParameterHistoryListResult> listProductParameterHistory({
+    required int productId,
+    int? version,
+    required int page,
+    required int pageSize,
+  }) async {
+    return ProductParameterHistoryListResult(
+      version: version,
+      versionLabel: 'V1.${(version ?? 1) - 1}',
+      lifecycleStatus: 'draft',
+      total: 0,
+      items: const [],
+    );
+  }
 }
 
 void main() {
+  Finder popupMenuButtons() {
+    return find.byWidgetPredicate(
+      (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
+    );
+  }
+
   testWidgets('参数管理页列表态组件提供稳定页头 筛选区 反馈区和表格锚点', (tester) async {
     final keywordController = TextEditingController(text: '产品');
     addTearDown(keywordController.dispose);
@@ -330,5 +380,59 @@ void main() {
     expect(find.textContaining('参数变更历史 - 产品41 / 贴片 / V1.0'), findsOneWidget);
     expect(find.textContaining('变更原因：调整芯片参数'), findsOneWidget);
     expect(find.text('查看快照'), findsOneWidget);
+  });
+
+  testWidgets('参数管理页保留列表态 编辑态和历史弹窗入口', (tester) async {
+    tester.view.physicalSize = const Size(1800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final service = _PageStructureService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductParameterManagementPage(
+              session: AppSession(baseUrl: '', accessToken: 'token'),
+              onLogout: () {},
+              tabCode: 'product-parameter-management',
+              service: service,
+              canExportParameters: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('product-parameter-version-table-section')),
+      findsOneWidget,
+    );
+
+    await tester.tap(popupMenuButtons().first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑参数').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('product-parameter-editor-header')), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, '返回列表'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(popupMenuButtons().first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('查看历史').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('product-parameter-history-dialog')), findsOneWidget);
   });
 }

@@ -17,9 +17,10 @@ import 'package:mes_client/features/product/presentation/widgets/product_paramet
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_page_header.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_parameter_version_table_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_version_table_section.dart'
-    show ProductParameterManagementListAction;
+    show
+        ProductParameterManagementListAction,
+        ProductParameterVersionTableSection;
 import 'package:mes_client/features/product/services/product_service.dart';
 
 class ProductParameterManagementPage extends StatefulWidget {
@@ -182,21 +183,6 @@ class _ProductParameterManagementPageState
         return '回滚';
       default:
         return '编辑';
-    }
-  }
-
-  String _lifecycleLabel(String value) {
-    switch (value) {
-      case 'draft':
-        return '草稿';
-      case 'effective':
-        return '已生效';
-      case 'obsolete':
-        return '已失效';
-      case 'disabled':
-        return '已停用';
-      default:
-        return value.isEmpty ? '-' : value;
     }
   }
 
