@@ -1302,7 +1302,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('第 2 / 3 页'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('刷新'));
+      await tester.tap(find.widgetWithText(FilledButton, '刷新页面'));
       await tester.pumpAndSettle();
       expect(find.text('第 2 / 3 页'), findsOneWidget, reason: '刷新应保留当前页。');
       expect(service.pageCalls.last, 2);
@@ -1313,7 +1313,7 @@ void main() {
       expect(find.text('产品101'), findsOneWidget);
 
       service.products.removeWhere((product) => product.id == 101);
-      await tester.tap(find.byTooltip('刷新'));
+      await tester.tap(find.widgetWithText(FilledButton, '刷新页面'));
       await tester.pumpAndSettle();
 
       expect(
@@ -1445,6 +1445,7 @@ void main() {
       await tester.tap(find.text('查看详情').last);
       await tester.pumpAndSettle();
 
+      expect(find.byKey(const ValueKey('product-detail-drawer')), findsOneWidget);
       expect(find.text('产品详情 - 产品21'), findsOneWidget);
       expect(find.text('页内侧边栏展示完整详情快照'), findsOneWidget);
       expect(find.text('当前版本参数快照（V1.1）'), findsOneWidget);
@@ -1491,6 +1492,7 @@ void main() {
       await tester.tap(find.text('版本管理'));
       await tester.pumpAndSettle();
 
+      expect(find.byKey(const ValueKey('product-version-dialog')), findsOneWidget);
       await tester.tap(find.text('激活').first);
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, '确认生效'));

@@ -11,9 +11,8 @@ import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_page_header.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart'
-    show ProductManagementTableAction;
+    show ProductManagementTableAction, ProductManagementTableSection;
 import 'package:mes_client/features/product/presentation/widgets/product_detail_drawer.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_dialog.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
@@ -231,21 +230,6 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       default:
         return '编辑';
     }
-  }
-
-  ProductVersionItem? _findVersionByNumber(
-    List<ProductVersionItem>? versions,
-    int version,
-  ) {
-    if (versions == null) {
-      return null;
-    }
-    for (final item in versions) {
-      if (item.version == version) {
-        return item;
-      }
-    }
-    return null;
   }
 
   String _formatDisplayVersion(int version) {

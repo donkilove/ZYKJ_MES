@@ -9,9 +9,8 @@ import 'package:mes_client/features/product/presentation/widgets/product_detail_
 import 'package:mes_client/features/product/presentation/widgets/product_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_page_header.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart'
-    show ProductManagementTableAction;
+    show ProductManagementTableAction, ProductManagementTableSection;
 import 'package:mes_client/features/product/presentation/widgets/product_version_dialog.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
 
@@ -219,7 +218,7 @@ void main() {
                   loading: false,
                   emptyText: '暂无产品',
                   formatTime: (value) => '2026-04-20 08:00:00',
-                  buildActionItems: (_) => const [
+                  buildActionItems: (product) => const [
                     PopupMenuItem<ProductManagementTableAction>(
                       value: ProductManagementTableAction.viewDetail,
                       child: Text('查看详情'),
@@ -229,7 +228,7 @@ void main() {
                       child: Text('版本管理'),
                     ),
                   ],
-                  onSelected: (_, __) {},
+                  onSelected: (action, product) {},
                 ),
               ),
             ],
@@ -278,8 +277,8 @@ void main() {
             loading: false,
             emptyText: '暂无产品',
             formatTime: (value) => '2026-04-20 08:00:00',
-            buildActionItems: (_) => const [],
-            onSelected: (_, __) {},
+            buildActionItems: (product) => const [],
+            onSelected: (action, product) {},
           ),
         ),
       ),
@@ -465,5 +464,63 @@ void main() {
     expect(find.byKey(const ValueKey('product-version-compare-panel')), findsOneWidget);
     expect(find.textContaining('对比结果：新增 1，移除 0，变更 1'), findsOneWidget);
     expect(find.text('激活'), findsWidgets);
+  });
+
+  testWidgets('ProductManagementPage 保留详情侧栏和版本管理弹窗入口', (tester) async {
+    tester.view.physicalSize = const Size(1800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final service = _PageStructureService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductManagementPage(
+              session: AppSession(baseUrl: '', accessToken: 'token'),
+              onLogout: () {},
+              canCreateProduct: true,
+              canExportProducts: true,
+              canDeleteProduct: true,
+              canUpdateLifecycle: true,
+              canViewVersions: true,
+              canCompareVersions: true,
+              canRollbackVersion: true,
+              canManageVersions: true,
+              canActivateVersions: true,
+              canViewImpactAnalysis: true,
+              canViewParameters: true,
+              canEditParameters: true,
+              canExportParameters: true,
+              onViewParameters: (_) {},
+              onEditParameters: (_) {},
+              service: service,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final actionMenu = find.descendant(
+      of: find.byType(DataTable),
+      matching: find.byWidgetPredicate(
+        (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
+      ),
+    );
+    await tester.tap(actionMenu.first);
+    await tester.pumpAndSettle();
+    expect(find.text('查看详情'), findsOneWidget);
+    expect(find.text('版本管理'), findsOneWidget);
   });
 }
