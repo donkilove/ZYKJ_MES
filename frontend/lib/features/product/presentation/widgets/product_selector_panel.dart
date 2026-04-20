@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
-import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/core/ui/primitives/mes_status_chip.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
@@ -109,13 +108,26 @@ class ProductSelectorPanel extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 16),
-            MesPaginationBar(
-              page: page,
-              totalPages: totalPages,
-              total: total,
-              loading: loading,
-              onPrevious: onPreviousPage,
-              onNext: onNextPage,
+            Row(
+              children: [
+                IconButton(
+                  tooltip: '上一页',
+                  onPressed: loading ? null : onPreviousPage,
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                Expanded(
+                  child: Text(
+                    '第 $page / $totalPages 页',
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  tooltip: '下一页',
+                  onPressed: loading ? null : onNextPage,
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
             ),
           ],
         ),

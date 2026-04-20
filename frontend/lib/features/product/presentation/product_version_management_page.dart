@@ -2,12 +2,16 @@ import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_list_detail_shell.dart';
+import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_selector_panel.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_version_feedback_banner.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_version_page_header.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_version_table_section.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_version_toolbar.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
 
 const Map<String, String> _statusLabels = {
   'draft': '草稿',
@@ -15,14 +19,6 @@ const Map<String, String> _statusLabels = {
   'obsolete': '已失效',
   'disabled': '已停用',
   'inactive': '已失效',
-};
-
-const Map<String, Color> _statusColors = {
-  'draft': Colors.blue,
-  'effective': Colors.green,
-  'obsolete': Colors.orange,
-  'disabled': Colors.grey,
-  'inactive': Colors.orange,
 };
 
 class ProductVersionManagementPage extends StatefulWidget {
@@ -67,6 +63,7 @@ class _ProductVersionManagementPageState
   static const int _productPageSize = 50;
   bool _loadingProducts = false;
   String _productKeyword = '';
+  String _pageMessage = '';
   final TextEditingController _searchController = TextEditingController();
 
   ProductItem? _selectedProduct;
@@ -97,6 +94,12 @@ class _ProductVersionManagementPageState
     }
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   void _handleJump(ProductJumpCommand cmd) {
     widget.onJumpHandled?.call(cmd.seq);
     _selectProductById(cmd.productId);
@@ -112,28 +115,37 @@ class _ProductVersionManagementPageState
     } catch (_) {}
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   Future<void> _loadProducts() async {
-    setState(() => _loadingProducts = true);
+    setState(() {
+      _loadingProducts = true;
+      _pageMessage = '';
+    });
     try {
       final result = await _service.listProducts(
         page: _productPage,
         pageSize: _productPageSize,
         keyword: _productKeyword.isEmpty ? null : _productKeyword,
       );
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _products = result.items;
         _productTotal = result.total;
+        _pageMessage = '';
       });
-    } catch (e) {
-      if (mounted) _showError('加载产品列表失败: $e');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pageMessage = '加载产品列表失败：$error';
+      });
+      _showError('加载产品列表失败: $error');
     } finally {
-      if (mounted) setState(() => _loadingProducts = false);
+      if (mounted) {
+        setState(() => _loadingProducts = false);
+      }
     }
   }
 
@@ -146,9 +158,13 @@ class _ProductVersionManagementPageState
       _loadingVersions = true;
       _versions = [];
       _selectedVersionNumber = null;
+      _pageMessage = '';
     });
     try {
       final result = await _service.listProductVersions(productId: product.id);
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _versions = result.items;
         int? matchedVersionNumber;
@@ -163,11 +179,20 @@ class _ProductVersionManagementPageState
         _selectedVersionNumber =
             matchedVersionNumber ??
             (result.items.isEmpty ? null : result.items.first.version);
+        _pageMessage = '';
       });
-    } catch (e) {
-      if (mounted) _showError('加载版本列表失败: $e');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pageMessage = '加载版本列表失败：$error';
+      });
+      _showError('加载版本列表失败: $error');
     } finally {
-      if (mounted) setState(() => _loadingVersions = false);
+      if (mounted) {
+        setState(() => _loadingVersions = false);
+      }
     }
   }
 
@@ -184,6 +209,31 @@ class _ProductVersionManagementPageState
     return _versions.isEmpty ? null : _versions.first;
   }
 
+  ProductVersionItem? get _effectiveVersion {
+    for (final item in _versions) {
+      if (item.lifecycleStatus == 'effective') {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  bool get _hasDraftVersion {
+    for (final item in _versions) {
+      if (item.lifecycleStatus == 'draft') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  int get _productTotalPages {
+    if (_productTotal <= 0) {
+      return 1;
+    }
+    return ((_productTotal - 1) ~/ _productPageSize) + 1;
+  }
+
   void _showError(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -193,9 +243,9 @@ class _ProductVersionManagementPageState
 
   void _showSuccess(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.green),
+    );
   }
 
   Future<void> _createVersion() async {
@@ -468,6 +518,9 @@ class _ProductVersionManagementPageState
       return product;
     } catch (e) {
       if (mounted) {
+        setState(() {
+          _pageMessage = '刷新产品状态失败：$e';
+        });
         _showError('刷新产品状态失败: $e');
       }
       return null;
@@ -513,420 +566,6 @@ class _ProductVersionManagementPageState
     }
   }
 
-  Widget _buildProductList() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: '搜索产品名称',
-                    prefixIcon: Icon(Icons.search),
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (v) {
-                    _productKeyword = v.trim();
-                    _productPage = 1;
-                    _loadProducts();
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: _loadProducts,
-                tooltip: '刷新',
-              ),
-            ],
-          ),
-        ),
-        if (_loadingProducts)
-          const LinearProgressIndicator()
-        else
-          Expanded(
-            child: _products.isEmpty
-                ? const Center(child: Text('暂无产品'))
-                : ListView.builder(
-                    itemCount: _products.length,
-                    itemBuilder: (ctx, i) {
-                      final p = _products[i];
-                      final selected = _selectedProduct?.id == p.id;
-                      return ListTile(
-                        selected: selected,
-                        selectedTileColor: Theme.of(
-                          ctx,
-                        ).colorScheme.primaryContainer,
-                        title: Text(p.name, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(
-                          p.category.isEmpty ? '无分类' : p.category,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        trailing: p.lifecycleStatus == 'inactive'
-                            ? const Chip(
-                                label: Text(
-                                  '停用',
-                                  style: TextStyle(fontSize: 11),
-                                ),
-                                padding: EdgeInsets.zero,
-                              )
-                            : null,
-                        onTap: () => _loadVersions(p),
-                      );
-                    },
-                  ),
-          ),
-        if (_productTotal > _productPageSize)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left),
-                onPressed: _productPage > 1
-                    ? () {
-                        _productPage--;
-                        _loadProducts();
-                      }
-                    : null,
-              ),
-              Text(
-                '$_productPage / ${(_productTotal / _productPageSize).ceil()}',
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right),
-                onPressed: _productPage * _productPageSize < _productTotal
-                    ? () {
-                        _productPage++;
-                        _loadProducts();
-                      }
-                    : null,
-              ),
-            ],
-          ),
-      ],
-    );
-  }
-
-  Widget _buildVersionList() {
-    final product = _selectedProduct;
-    if (product == null) {
-      return const Center(child: Text('请在左侧选择产品'));
-    }
-
-    final hasDraft = _versions.any((v) => v.lifecycleStatus == 'draft');
-    final selectedVersion = _selectedVersion;
-    ProductVersionItem? effectiveRevision;
-    for (final version in _versions) {
-      if (version.lifecycleStatus == 'effective') {
-        effectiveRevision = version;
-        break;
-      }
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  product.name,
-                  style: Theme.of(context).textTheme.titleMedium,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (selectedVersion != null)
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    '当前选中：${selectedVersion.versionLabel} / ${_statusLabels[selectedVersion.lifecycleStatus] ?? selectedVersion.lifecycleStatus}',
-                    textAlign: TextAlign.right,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              const SizedBox(width: 8),
-              if (widget.canManageVersions) ...[
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('新建版本'),
-                  onPressed: hasDraft ? null : _createVersion,
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.copy, size: 16),
-                  label: const Text('复制版本'),
-                  onPressed: selectedVersion == null
-                      ? null
-                      : () => _copyVersion(selectedVersion),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.edit_note, size: 16),
-                  label: const Text('编辑版本说明'),
-                  onPressed: selectedVersion == null
-                      ? null
-                      : () => _editVersionNote(selectedVersion),
-                ),
-                const SizedBox(width: 8),
-              ],
-              if (widget.canExportVersionParameters)
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.download, size: 16),
-                  label: const Text('导出参数'),
-                  onPressed: selectedVersion == null
-                      ? null
-                      : () => _exportVersionParams(selectedVersion),
-                ),
-              if (widget.canActivateVersions) ...[
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  icon: const Icon(Icons.task_alt, size: 16),
-                  label: const Text('立即生效'),
-                  onPressed:
-                      selectedVersion == null ||
-                          selectedVersion.lifecycleStatus != 'draft'
-                      ? null
-                      : () => _activateVersion(selectedVersion),
-                ),
-              ],
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () => _loadVersions(product),
-                tooltip: '刷新',
-              ),
-            ],
-          ),
-        ),
-        if (hasDraft)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              '已存在草稿版本，请先完成或删除当前草稿后再新建版本',
-              style: TextStyle(color: Colors.orange[700], fontSize: 12),
-            ),
-          ),
-        if (effectiveRevision != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.green),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '最近一次生效结果：${effectiveRevision.versionLabel} 已生效'
-                        '${effectiveRevision.effectiveAt != null ? '（${_formatDate(effectiveRevision.effectiveAt!)}）' : ''}',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        if (effectiveRevision == null && product.lifecycleStatus == 'inactive')
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Card(
-              color: Colors.orange.withValues(alpha: 0.08),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline, color: Colors.orange),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        product.inactiveReason?.isNotEmpty == true
-                            ? product.inactiveReason!
-                            : '当前无生效版本，请先将目标版本设为生效后再恢复启用。',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        const Divider(height: 1),
-        if (_loadingVersions)
-          const LinearProgressIndicator()
-        else
-          Expanded(
-            child: _versions.isEmpty
-                ? const Center(child: Text('暂无版本记录'))
-                : SingleChildScrollView(
-                    child: DataTable(
-                      columnSpacing: 12,
-                      columns: const [
-                        DataColumn(label: Text('版本号')),
-                        DataColumn(label: Text('状态')),
-                        DataColumn(label: Text('变更摘要')),
-                        DataColumn(label: Text('来源版本')),
-                        DataColumn(label: Text('创建人')),
-                        DataColumn(label: Text('创建时间')),
-                        DataColumn(label: Text('生效时间')),
-                        DataColumn(label: Text('操作')),
-                      ],
-                      rows: _versions
-                          .map((rev) => _buildVersionRow(rev))
-                          .toList(),
-                    ),
-                  ),
-          ),
-      ],
-    );
-  }
-
-  DataRow _buildVersionRow(ProductVersionItem rev) {
-    final statusLabel =
-        _statusLabels[rev.lifecycleStatus] ?? rev.lifecycleStatus;
-    final statusColor = _statusColors[rev.lifecycleStatus] ?? Colors.grey;
-    final isDraft = rev.lifecycleStatus == 'draft';
-    final isEffective = rev.lifecycleStatus == 'effective';
-    final isObsolete = rev.lifecycleStatus == 'obsolete';
-
-    final effectiveTimeText = rev.effectiveAt != null
-        ? _formatDate(rev.effectiveAt!)
-        : '-';
-
-    return DataRow(
-      selected: _selectedVersionNumber == rev.version,
-      onSelectChanged: (_) {
-        setState(() {
-          _selectedVersionNumber = rev.version;
-        });
-      },
-      cells: [
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                rev.versionLabel,
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-              if (isEffective) ...[
-                const SizedBox(width: 4),
-                const Icon(Icons.check_circle, size: 14, color: Colors.green),
-              ],
-            ],
-          ),
-        ),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              statusLabel,
-              style: TextStyle(color: statusColor, fontSize: 12),
-            ),
-          ),
-        ),
-        DataCell(
-          Text(
-            rev.note != null && rev.note!.isNotEmpty ? rev.note! : '-',
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        DataCell(Text(rev.sourceVersionLabel ?? '-')),
-        DataCell(Text(rev.createdByUsername ?? '-')),
-        DataCell(Text(_formatDate(rev.createdAt))),
-        DataCell(Text(effectiveTimeText)),
-        DataCell(
-          (widget.canManageVersions ||
-                  widget.canActivateVersions ||
-                  widget.canExportVersionParameters)
-              ? PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, size: 18),
-                  itemBuilder: (ctx) => [
-                    const PopupMenuItem(value: 'detail', child: Text('查看详情')),
-                    if (widget.canActivateVersions && isDraft)
-                      const PopupMenuItem(
-                        value: 'activate',
-                        child: Text('立即生效'),
-                      ),
-                    if (widget.canManageVersions &&
-                        (isDraft ||
-                            isEffective ||
-                            isObsolete ||
-                            rev.lifecycleStatus == 'disabled'))
-                      const PopupMenuItem(value: 'copy', child: Text('复制版本')),
-                    if (widget.canManageVersions)
-                      const PopupMenuItem(
-                        value: 'editNote',
-                        child: Text('编辑版本说明'),
-                      ),
-                    PopupMenuItem(
-                      value: 'editParams',
-                      child: Text(isDraft ? '维护参数' : '查看参数'),
-                    ),
-                    if (widget.canExportVersionParameters)
-                      const PopupMenuItem(
-                        value: 'export',
-                        child: Text('导出版本参数'),
-                      ),
-                    if (widget.canManageVersions && (isEffective || isObsolete))
-                      const PopupMenuItem(
-                        value: 'disable',
-                        child: Text('停用版本'),
-                      ),
-                    if (widget.canManageVersions && isDraft)
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text(
-                          '删除版本',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                  ],
-                  onSelected: (action) {
-                    switch (action) {
-                      case 'detail':
-                        _showVersionDetail(rev);
-                        return;
-                      case 'activate':
-                        _activateVersion(rev);
-                        return;
-                      case 'copy':
-                        _copyVersion(rev);
-                        return;
-                      case 'editNote':
-                        _editVersionNote(rev);
-                        return;
-                      case 'editParams':
-                        _navigateToEditParams(rev);
-                        return;
-                      case 'export':
-                        _exportVersionParams(rev);
-                        return;
-                      case 'disable':
-                        _disableVersion(rev);
-                        return;
-                      case 'delete':
-                        _deleteVersion(rev);
-                        return;
-                    }
-                  },
-                )
-              : const SizedBox.shrink(),
-        ),
-      ],
-    );
-  }
-
   String _formatDate(DateTime dt) {
     final local = dt.toLocal();
     return '${local.year}-${local.month.toString().padLeft(2, '0')}-'
@@ -937,30 +576,124 @@ class _ProductVersionManagementPageState
 
   @override
   Widget build(BuildContext context) {
+    final selectedProduct = _selectedProduct;
+    final selectedVersion = _selectedVersion;
+
     return Padding(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CrudPageHeader(title: '版本管理', onRefresh: _refreshPage),
-          const SizedBox(height: 8),
+          ProductVersionPageHeader(
+            loading: _loadingProducts || _loadingVersions,
+            onRefresh: _refreshPage,
+          ),
+          const SizedBox(height: 16),
           Expanded(
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 240,
-                  child: Card(
-                    margin: EdgeInsets.zero,
-                    child: _buildProductList(),
+            child: MesListDetailShell(
+              banner: ProductVersionFeedbackBanner(
+                message: _pageMessage,
+                hasDraft: _hasDraftVersion,
+                product: selectedProduct,
+                effectiveVersion: _effectiveVersion,
+                formatDate: _formatDate,
+              ),
+              sidebar: ProductSelectorPanel(
+                searchController: _searchController,
+                loading: _loadingProducts,
+                products: _products,
+                selectedProductId: selectedProduct?.id,
+                page: _productPage,
+                totalPages: _productTotalPages,
+                total: _productTotal,
+                onSearchSubmitted: (value) {
+                  _productKeyword = value.trim();
+                  _productPage = 1;
+                  _loadProducts();
+                },
+                onRefresh: _loadProducts,
+                onSelectProduct: (product) => _loadVersions(product),
+                onPreviousPage: _productPage > 1
+                    ? () {
+                        _productPage -= 1;
+                        _loadProducts();
+                      }
+                    : null,
+                onNextPage: _productPage < _productTotalPages
+                    ? () {
+                        _productPage += 1;
+                        _loadProducts();
+                      }
+                    : null,
+              ),
+              content: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ProductVersionToolbar(
+                    product: selectedProduct,
+                    selectedVersion: selectedVersion,
+                    hasDraft: _hasDraftVersion,
+                    canManageVersions: widget.canManageVersions,
+                    canActivateVersions: widget.canActivateVersions,
+                    canExportVersionParameters:
+                        widget.canExportVersionParameters,
+                    onCreateVersion: _createVersion,
+                    onCopyVersion: () {
+                      if (selectedVersion != null) {
+                        _copyVersion(selectedVersion);
+                      }
+                    },
+                    onEditVersionNote: () {
+                      if (selectedVersion != null) {
+                        _editVersionNote(selectedVersion);
+                      }
+                    },
+                    onExportParameters: () {
+                      if (selectedVersion != null) {
+                        _exportVersionParams(selectedVersion);
+                      }
+                    },
+                    onActivateVersion: () {
+                      if (selectedVersion != null) {
+                        _activateVersion(selectedVersion);
+                      }
+                    },
+                    onRefresh: () {
+                      if (selectedProduct != null) {
+                        _loadVersions(selectedProduct);
+                      }
+                    },
                   ),
-                ),
-                Expanded(
-                  child: Card(
-                    margin: const EdgeInsets.only(left: 8),
-                    child: _buildVersionList(),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: selectedProduct == null
+                        ? const Center(child: Text('请在左侧选择产品'))
+                        : ProductVersionTableSection(
+                            versions: _versions,
+                            loading: _loadingVersions,
+                            selectedVersionNumber: _selectedVersionNumber,
+                            canManageVersions: widget.canManageVersions,
+                            canActivateVersions: widget.canActivateVersions,
+                            canExportVersionParameters:
+                                widget.canExportVersionParameters,
+                            onSelectVersion: (versionNumber) {
+                              setState(() {
+                                _selectedVersionNumber = versionNumber;
+                              });
+                            },
+                            onShowDetail: _showVersionDetail,
+                            onActivate: _activateVersion,
+                            onCopy: _copyVersion,
+                            onEditNote: _editVersionNote,
+                            onEditParameters: _navigateToEditParams,
+                            onExport: _exportVersionParams,
+                            onDisable: _disableVersion,
+                            onDelete: _deleteVersion,
+                            formatDate: _formatDate,
+                          ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

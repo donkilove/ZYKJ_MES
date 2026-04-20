@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
+import 'package:mes_client/core/ui/patterns/mes_list_detail_shell.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/product_page.dart';
+import 'package:mes_client/features/product/presentation/product_version_management_page.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_selector_panel.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_table_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_toolbar.dart';
+import 'package:mes_client/features/product/services/product_service.dart';
 
 final DateTime _fixedDate = DateTime.parse('2026-04-20T00:00:00Z');
 
@@ -54,6 +59,63 @@ ProductVersionItem _buildVersion({
     createdByUsername: 'admin',
     createdAt: _fixedDate,
   );
+}
+
+class _PageStructureService extends ProductService {
+  _PageStructureService()
+    : super(AppSession(baseUrl: '', accessToken: 'token'));
+
+  @override
+  Future<ProductListResult> listProducts({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
+  }) async {
+    return ProductListResult(
+      total: 2,
+      items: [
+        _buildProduct(id: 101, name: '产品101'),
+        _buildProduct(
+          id: 102,
+          name: '产品102',
+          lifecycleStatus: 'inactive',
+          effectiveVersion: 0,
+          inactiveReason: '当前无生效版本，请先将目标版本设为生效后再恢复启用。',
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<ProductVersionListResult> listProductVersions({
+    required int productId,
+  }) async {
+    return ProductVersionListResult(
+      total: 2,
+      items: [
+        _buildVersion(
+          version: 2,
+          label: 'V1.1',
+          lifecycleStatus: 'draft',
+          note: '草稿版本',
+        ),
+        _buildVersion(
+          version: 1,
+          label: 'V1.0',
+          lifecycleStatus: 'effective',
+          note: '当前生效',
+        ),
+      ],
+    );
+  }
 }
 
 void main() {
@@ -260,5 +322,52 @@ void main() {
     expect(find.text('维护参数'), findsOneWidget);
     expect(find.text('导出版本参数'), findsOneWidget);
     expect(find.text('删除版本'), findsOneWidget);
+  });
+
+  testWidgets('ProductVersionManagementPage 接入主从骨架并装配拆分组件', (tester) async {
+    tester.view.physicalSize = const Size(1800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final service = _PageStructureService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductVersionManagementPage(
+              session: AppSession(baseUrl: '', accessToken: 'token'),
+              onLogout: () {},
+              tabCode: productVersionManagementTabCode,
+              canManageVersions: true,
+              canActivateVersions: true,
+              canExportVersionParameters: true,
+              service: service,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('产品101'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ProductVersionPageHeader), findsOneWidget);
+    expect(find.byType(MesListDetailShell), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-selector-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-version-toolbar')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-version-table-section')),
+      findsOneWidget,
+    );
   });
 }
